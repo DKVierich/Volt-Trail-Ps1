@@ -15,56 +15,139 @@ jobs:
 
       - name: Install host build tools
         run: |
+          set -euxo pipefail
           sudo apt-get update
-          sudo apt-get install -y cmake unzip curl jq
+          sudo apt-get install -y cmake ninja-build unzip curl jq tar
 
       - name: Download and locate PSn00bSDK
         shell: bash
         run: |
           set -euo pipefail
+
           API="https://api.github.com/repos/Lameguy64/PSn00bSDK/releases/latest"
-          curl -fsSL "$API" -o "$RUNNER_TEMP/psn00bsdk-release.json"
-          URL="$(jq -r '[.assets[] | select(.name | ascii_downcase | endswith(".zip")) | select(.name | ascii_downcase | contains("linux"))][0].browser_download_url // empty' "$RUNNER_TEMP/psn00bsdk-release.json")"
-          if [ -z "$URL" ]; then
-            echo "Could not find a Linux ZIP asset in the latest release."
-            jq -r '.assets[]?.name' "$RUNNER_TEMP/psn00bsdk-release.json"
-            exit 1
-          fi
+          RELEASE_JSON="$RUNNER_TEMP/psn00bsdk-release.json"
+          curl -fsSL "$API" -o "$RELEASE_JSON"
+
           mkdir -p "$RUNNER_TEMP/psn00bsdk"
-          curl -fL "$URL" -o "$RUNNER_TEMP/psn00bsdk.zip"
-          unzip -q "$RUNNER_TEMP/psn00bsdk.zip" -d "$RUNNER_TEMP/psn00bsdk"
-          echo "SDK toolchain files found:"
-          find "$RUNNER_TEMP/psn00bsdk" -type f \( -name 'sdk.cmake' -o -name 'mipsel-none-elf-gcc' -o -name 'mkpsxiso' \) -print
-          SDK_CMAKE="$(find "$RUNNER_TEMP/psn00bsdk" -type f -name 'sdk.cmake' -print -quit)"
-          if [ -z "$SDK_CMAKE" ]; then
-            echo "The downloaded release archive does not contain sdk.cmake."
-            echo "Archive contents (first 160 paths):"
-            find "$RUNNER_TEMP/psn00bsdk" -maxdepth 5 -print | head -n 160
+          FOUND=""
+
+          # Try Linux release archives rather than assuming the first ZIP is the
+          # complete SDK. Some archives may contain only part of the toolchain.
+          while IFS=$'\t' read -r NAME URL; do
+            [ -n "${URL:-}" ] || continue
+            echo "Checking SDK asset: $NAME"
+            ARCHIVE="$RUNNER_TEMP/psn00bsdk-asset"
+            rm -f "$ARCHIVE"
+            rm -rf "$RUNNER_TEMP/psn00bsdk"
+            mkdir -p "$RUNNER_TEMP/psn00bsdk"
+            if ! curl -fsSL "$URL" -o "$ARCHIVE"; then
+              echo "Could not download $NAME; trying the next asset."
+              continue
+            fi
+
+            case "$NAME" in
+              *.zip|*.ZIP)
+                if ! unzip -q "$ARCHIVE" -d "$RUNNER_TEMP/psn00bsdk"; then
+                  echo "Could not unpack $NAME; trying the next asset."
+                  continue
+                fi
+                ;;
+              *.tar.gz|*.tgz|*.tar.xz|*.tar.bz2)
+                if ! tar -xf "$ARCHIVE" -C "$RUNNER_TEMP/psn00bsdk"; then
+                  echo "Could not unpack $NAME; trying the next asset."
+                  continue
+                fi
+                ;;
+              *)
+                continue
+                ;;
+            esac
+
+            FOUND="$(find "$RUNNER_TEMP/psn00bsdk" -type f -path '*/lib/libpsn00b/cmake/sdk.cmake' -print -quit)"
+            if [ -n "$FOUND" ]; then
+              echo "Using SDK asset: $NAME"
+              break
+            fi
+            echo "$NAME does not contain lib/libpsn00b/cmake/sdk.cmake."
+          done < <(
+            jq -r '
+              .assets[]
+              | select((.name | ascii_downcase | contains("linux")))
+              | select(
+                  (.name | ascii_downcase | endswith(".zip")) or
+                  (.name | ascii_downcase | endswith(".tar.gz")) or
+                  (.name | ascii_downcase | endswith(".tgz")) or
+                  (.name | ascii_downcase | endswith(".tar.xz")) or
+                  (.name | ascii_downcase | endswith(".tar.bz2"))
+                )
+              | [.name, .browser_download_url] | @tsv
+            ' "$RELEASE_JSON"
+          )
+
+          if [ -z "$FOUND" ]; then
+            echo "::error::No Linux release archive contained lib/libpsn00b/cmake/sdk.cmake."
+            echo "Available release assets:"
+            jq -r '.assets[]?.name' "$RELEASE_JSON"
+            echo "This usually means the selected release asset is not the complete PSn00bSDK package."
             exit 1
           fi
-          echo "PSN00BSDK_CMAKE=$SDK_CMAKE" >> "$GITHUB_ENV"
-          SDK_BIN="$(find "$RUNNER_TEMP/psn00bsdk" -type f -name 'mipsel-none-elf-gcc' -print -quit | xargs -r dirname)"
-          if [ -n "$SDK_BIN" ]; then echo "$SDK_BIN" >> "$GITHUB_PATH"; fi
+
+          SDK_ROOT="${FOUND%/lib/libpsn00b/cmake/sdk.cmake}"
+          SDK_BIN="$(find "$SDK_ROOT" -type f -name 'mipsel-none-elf-gcc' -print -quit | xargs -r dirname)"
+          MKPSXISO="$(find "$SDK_ROOT" -type f -name 'mkpsxiso' -print -quit)"
+
+          if [ -z "$SDK_BIN" ]; then
+            echo "::error::SDK archive contains sdk.cmake but not mipsel-none-elf-gcc."
+            exit 1
+          fi
+
+          echo "PSN00BSDK_CMAKE=$FOUND" >> "$GITHUB_ENV"
+          echo "PSN00BSDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$SDK_BIN" >> "$GITHUB_PATH"
+
+          if [ -n "$MKPSXISO" ]; then
+            chmod +x "$MKPSXISO" || true
+            echo "$(dirname "$MKPSXISO")" >> "$GITHUB_PATH"
+          fi
+
+          # PSn00bSDK's toolchain also uses this variable in some configurations.
+          echo "PSN00BSDK_LIBS=$SDK_ROOT/lib/libpsn00b" >> "$GITHUB_ENV"
 
       - name: Verify project and SDK
+        shell: bash
         run: |
+          set -euxo pipefail
           test -f CMakeLists.txt
           test -f src/main.c
           test -f iso.xml
-          cmake --version
           test -f "$PSN00BSDK_CMAKE"
+          command -v mipsel-none-elf-gcc
           mipsel-none-elf-gcc --version
-          mkpsxiso --help || true
+          cmake --version
+          if command -v mkpsxiso >/dev/null 2>&1; then
+            mkpsxiso --help || true
+          else
+            echo "::warning::mkpsxiso was not found on PATH; ISO generation may fail if the project requires it."
+          fi
 
       - name: Configure and build
+        shell: bash
         run: |
-          cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE"
+          set -euxo pipefail
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPSN00BSDK_TARGET=mipsel-none-elf
           cmake --build build --verbose
 
       - name: List generated PlayStation files
         if: success()
+        shell: bash
         run: |
-          find build -type f \( -iname '*.bin' -o -iname '*.cue' -o -iname '*.exe' \) -printf '%p (%s bytes)\n'
+          find build -type f \( \
+            -iname '*.bin' -o -iname '*.cue' -o -iname '*.exe' -o \
+            -iname '*.iso' -o -iname '*.img' -o -iname '*.elf' \
+          \) -printf '%p (%s bytes)\n' || true
 
       - name: Upload build artifacts
         if: success()
@@ -75,5 +158,8 @@ jobs:
             build/**/*.bin
             build/**/*.cue
             build/**/*.exe
+            build/**/*.iso
+            build/**/*.img
+            build/**/*.elf
           if-no-files-found: error
           retention-days: 14
