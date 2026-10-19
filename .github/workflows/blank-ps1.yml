@@ -1,7 +1,6 @@
 name: Build Volt Trail PS1 image
 
 on:
-  # Manually start the build from GitHub's Actions tab.
   workflow_dispatch:
 
 permissions:
@@ -10,7 +9,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Check out Volt Trail
         uses: actions/checkout@v4
@@ -25,42 +23,42 @@ jobs:
         run: |
           set -euo pipefail
           API="https://api.github.com/repos/Lameguy64/PSn00bSDK/releases/latest"
-          URL="$(curl -fsSL "$API" | jq -r '.assets[] | select((.name | ascii_downcase | contains("linux")) and (.name | endswith(".zip"))) | .browser_download_url' | head -n 1)"
-
-          if [ -z "$URL" ] || [ "$URL" = "null" ]; then
-            echo "No Linux ZIP asset found in the latest PSn00bSDK release."
-            echo "Check the release assets at https://github.com/Lameguy64/PSn00bSDK/releases"
+          curl -fsSL "$API" -o "$RUNNER_TEMP/psn00bsdk-release.json"
+          URL="$(jq -r '[.assets[] | select(.name | ascii_downcase | endswith(".zip")) | select(.name | ascii_downcase | contains("linux"))][0].browser_download_url // empty' "$RUNNER_TEMP/psn00bsdk-release.json")"
+          if [ -z "$URL" ]; then
+            echo "Could not find a Linux ZIP asset in the latest release."
+            jq -r '.assets[]?.name' "$RUNNER_TEMP/psn00bsdk-release.json"
             exit 1
           fi
-
           mkdir -p "$RUNNER_TEMP/psn00bsdk"
           curl -fL "$URL" -o "$RUNNER_TEMP/psn00bsdk.zip"
           unzip -q "$RUNNER_TEMP/psn00bsdk.zip" -d "$RUNNER_TEMP/psn00bsdk"
-
-          SDK_CMAKE="$(find "$RUNNER_TEMP/psn00bsdk" -path '*/lib/libpsn00b/cmake/sdk.cmake' -print -quit)"
+          echo "SDK toolchain files found:"
+          find "$RUNNER_TEMP/psn00bsdk" -type f \( -name 'sdk.cmake' -o -name 'mipsel-none-elf-gcc' -o -name 'mkpsxiso' \) -print
+          SDK_CMAKE="$(find "$RUNNER_TEMP/psn00bsdk" -type f -name 'sdk.cmake' -print -quit)"
           if [ -z "$SDK_CMAKE" ]; then
-            echo "Could not find lib/libpsn00b/cmake/sdk.cmake in the downloaded SDK."
-            find "$RUNNER_TEMP/psn00bsdk" -maxdepth 4 -type f | head -n 100
+            echo "The downloaded release archive does not contain sdk.cmake."
+            echo "Archive contents (first 160 paths):"
+            find "$RUNNER_TEMP/psn00bsdk" -maxdepth 5 -print | head -n 160
             exit 1
           fi
+          echo "PSN00BSDK_CMAKE=$SDK_CMAKE" >> "$GITHUB_ENV"
+          SDK_BIN="$(find "$RUNNER_TEMP/psn00bsdk" -type f -name 'mipsel-none-elf-gcc' -print -quit | xargs -r dirname)"
+          if [ -n "$SDK_BIN" ]; then echo "$SDK_BIN" >> "$GITHUB_PATH"; fi
 
-          SDK_ROOT="${SDK_CMAKE%/lib/libpsn00b/cmake/sdk.cmake}"
-          echo "PSN00BSDK=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "$SDK_ROOT/bin" >> "$GITHUB_PATH"
-          echo "Located SDK at: $SDK_ROOT"
-
-      - name: Verify required files and tools
+      - name: Verify project and SDK
         run: |
           test -f CMakeLists.txt
           test -f src/main.c
           test -f iso.xml
           cmake --version
+          test -f "$PSN00BSDK_CMAKE"
           mipsel-none-elf-gcc --version
           mkpsxiso --help || true
 
       - name: Configure and build
         run: |
-          cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK/lib/libpsn00b/cmake/sdk.cmake"
+          cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE"
           cmake --build build --verbose
 
       - name: List generated PlayStation files
