@@ -65,7 +65,61 @@ jobs:
           echo "Project source directory: $PROJECT_DIR"
           find "$PROJECT_DIR" -maxdepth 2 -type f -print
 
-      - name: Download and locate PSn00bSDK
+      
+      - name: Apply Volt-Trail V8 diagnostic fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
+          code = path.read_text()
+
+          old = """        draw_hud();
+        PutDispEnv(&disp[db]);
+        PutDrawEnv(&draw[db]);
+        DrawOTag(ot[db] + (OT_LEN - 1));"""
+
+          new = """        PutDispEnv(&disp[db]);
+        PutDrawEnv(&draw[db]);
+        {
+            TILE *tile = &debug_tile[db];
+            setTile(tile);
+            setXY0(tile, 280, 8);
+            setWH(tile, 30, 24);
+            if (pad & PAD_CROSS)
+                setRGB0(tile, 0, 255, 50);
+            else if (pad & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT))
+                setRGB0(tile, 255, 225, 0);
+            else
+                setRGB0(tile, 255, 30, 60);
+            addPrim(ot[db], tile);
+        }
+        DrawOTag(ot[db] + (OT_LEN - 1));
+        DrawSync(0);
+        draw_hud();"""
+
+          if old not in code:
+              raise RuntimeError("V7 graphics block not found")
+
+          code = code.replace(
+              "static DISPENV disp[2];",
+              "static TILE debug_tile[2];\nstatic DISPENV disp[2];", 1
+          )
+          code = code.replace(
+              "VECTOR camera_pos = {0, -10, CAMERA_Z, 0};",
+              "VECTOR camera_pos = {0, -10, CAMERA_Z};", 1
+          )
+          code = code.replace(
+              "VOLT TRAIL: SHARDS OF THE STORM  /  PS1",
+              "VOLT TRAIL V8 - CONTROLLER TEST", 1
+          )
+          code = code.replace(old, new, 1)
+          path.write_text(code)
+          print("Volt-Trail V8 diagnostic patch applied")
+          PY
+  - name: Download and locate PSn00bSDK
         shell: bash
         run: |
           set -euo pipefail
