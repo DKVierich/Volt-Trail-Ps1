@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V20 Dragon Codex Fixed
+name: Build Volt Trail PS1 V21 Dragon Team Codex
 
 on:
   workflow_dispatch:
@@ -745,6 +745,538 @@ jobs:
           print("Dragon Codex, game saves and battle controls kept")
           PY
 
+      - name: Add V21 three-dragon team and detailed Codex
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+
+          path = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+          code = path.read_text(encoding='utf-8')
+
+          def once(old, new):
+              global code
+              n = code.count(old)
+              if n != 1:
+                  raise RuntimeError(f'V21 expected exactly one {old[:90]!r}, found {n}')
+              code = code.replace(old, new, 1)
+
+          def function_body_span(src, fname):
+              match = re.search(r'\bstatic\s+(?:void|int)\s+'+re.escape(fname)+r'\s*\([^;]*?\)\s*\{',src)
+              if not match:
+                  raise RuntimeError('Function missing: '+fname)
+              start = match.start()
+              op = src.index('{', match.start(), match.end())
+              depth = 0
+              in_quote = False
+              in_char = False
+              in_line_comment = False
+              in_block_comment = False
+              escaped = False
+              i = op
+              while i < len(src):
+                  ch=src[i]; nextch=src[i+1] if i+1<len(src) else ''
+                  if in_line_comment:
+                      if ch == '\n':in_line_comment=False
+                  elif in_block_comment:
+                      if ch=='*' and nextch=='/': in_block_comment=False;i+=1
+                  elif in_quote or in_char:
+                      if escaped:escaped=False
+                      elif ch=='\\':escaped=True
+                      elif in_quote and ch=='"':in_quote=False
+                      elif in_char and ch=="'":in_char=False
+                  elif ch=='/' and nextch=='/':in_line_comment=True;i+=1
+                  elif ch=='/' and nextch=='*':in_block_comment=True;i+=1
+                  elif ch=='"':in_quote=True
+                  elif ch=="'":in_char=True
+                  elif ch=='{':depth+=1
+                  elif ch=='}':
+                      depth-=1
+                      if depth==0:return start,op,i+1
+                  i+=1
+              raise RuntimeError('Unclosed function '+fname)
+
+          # Visible version and menu label.
+          once('VOLT TRAIL V20 - %s','VOLT TRAIL V21 - %s')
+          once('VOLT TRAIL V20 - MENUE','VOLT TRAIL V21 - MENUE')
+          once('"%c MONSTER\\n\\n"','"%c DRACHEN\\n\\n"')
+
+          # State MUST appear before the save/load functions.
+          state = r'''
+          /* V21 team: at most 3 carried dragons, others remain in the codex. */
+          #define VT_V21_SAVE_MAGIC 0x56323150u
+          static int vt_v21_ready = 0;
+          static int vt_v21_count = 1;
+          static int vt_v21_party[3] = {0, -1, -1};
+          static int vt_v21_hp[5] = {24, 24, 24, 24, 24};
+          static int vt_v21_active = 0;
+          static int vt_v21_team_cursor = 0;
+          static int vt_v21_codex_cursor = 0;
+          static int vt_v21_force_switch = 0;
+          static int vt_v21_force_cursor = 0;
+          '''
+          once('static int vt_v20_attack_kind = 0;', 'static int vt_v20_attack_kind = 0;\n' + state.rstrip())
+
+          # Functions are inserted AFTER the existing V20 dragon-ownership logic.
+          helpers = r'''
+          static int vt_v21_party_position(int species) {
+              int i;
+              for (i = 0; i < vt_v21_count; i++)
+                  if (vt_v21_party[i] == species) return i;
+              return -1;
+          }
+
+          static void vt_v21_autofill(void) {
+              int species;
+              for (species = 1; species < 5 && vt_v21_count < 3; species++) {
+                  if (vt_v20_owned(species) && vt_v21_party_position(species) < 0) {
+                      vt_v21_party[vt_v21_count++] = species;
+                  }
+              }
+          }
+
+          static void vt_v21_setup(void) {
+              int species;
+              int old_active = vt_v20_active_dragon;
+              int old_hp = companion_hp;
+              if (vt_v21_ready) return;
+              vt_v21_count = 1;
+              vt_v21_party[0] = 0;
+              vt_v21_party[1] = -1;
+              vt_v21_party[2] = -1;
+              for (species = 0; species < 5; species++) vt_v21_hp[species] = 24;
+              if (old_active < 0 || old_active > 4 || !vt_v20_owned(old_active))
+                  old_active = 0;
+              vt_v21_autofill();
+              if (vt_v21_party_position(old_active) < 0) {
+                  /* An old V20 save may have a dragon beyond the first three. */
+                  vt_v21_party[vt_v21_count - 1] = old_active;
+              }
+              vt_v21_active = vt_v21_party_position(old_active);
+              if (vt_v21_active < 0) vt_v21_active = 0;
+              if (old_hp < 0) old_hp = 0;
+              if (old_hp > 24) old_hp = 24;
+              vt_v21_hp[old_active] = old_hp;
+              vt_v20_active_dragon = vt_v21_party[vt_v21_active];
+              companion_hp = vt_v21_hp[vt_v20_active_dragon];
+              vt_v21_team_cursor = vt_v21_active;
+              vt_v21_force_switch = 0;
+              vt_v21_ready = 1;
+          }
+
+          static int vt_v21_can_switch_to(int position) {
+              int species;
+              if (position < 0 || position >= vt_v21_count) return 0;
+              species = vt_v21_party[position];
+              if (species < 0 || species > 4) return 0;
+              return vt_v21_hp[species] > 0;
+          }
+
+          static int vt_v21_switch_to(int position) {
+              int old_species;
+              int new_species;
+              if (!vt_v21_can_switch_to(position)) return 0;
+              old_species = vt_v21_party[vt_v21_active];
+              if (old_species >= 0 && old_species < 5) {
+                  if (companion_hp < 0) companion_hp = 0;
+                  if (companion_hp > 24) companion_hp = 24;
+                  vt_v21_hp[old_species] = companion_hp;
+              }
+              vt_v21_active = position;
+              new_species = vt_v21_party[position];
+              vt_v20_active_dragon = new_species;
+              companion_hp = vt_v21_hp[new_species];
+              vt_v21_team_cursor = position;
+              return 1;
+          }
+
+          static void vt_v21_next_dragon(void) {
+              int i;
+              int pos;
+              for (i = 1; i < vt_v21_count; i++) {
+                  pos = (vt_v21_active + i) % vt_v21_count;
+                  if (vt_v21_can_switch_to(pos)) {
+                      vt_v21_switch_to(pos);
+                      return;
+                  }
+              }
+          }
+
+          static int vt_v21_alive_reserve(void) {
+              int i;
+              for (i = 0; i < vt_v21_count; i++) {
+                  if (i != vt_v21_active && vt_v21_can_switch_to(i)) return i;
+              }
+              return -1;
+          }
+
+          static void vt_v21_post_frame(void) {
+              int species;
+              int pos;
+              vt_v21_setup();
+              vt_v21_autofill();
+              species = vt_v21_party[vt_v21_active];
+              if (species >= 0 && species < 5) {
+                  if (companion_hp < 0) companion_hp = 0;
+                  if (companion_hp > 24) companion_hp = 24;
+                  vt_v21_hp[species] = companion_hp;
+              }
+              /* The original game sets mode=3 when the active dragon is knocked out. */
+              if (game_mode == 3 && !vt_v21_force_switch) {
+                  pos = vt_v21_alive_reserve();
+                  if (pos >= 0) {
+                      vt_v21_force_switch = 1;
+                      vt_v21_force_cursor = pos;
+                      game_mode = 1;
+                      vt_menu_open = 0;
+                      vt_menu_page = 0;
+                  }
+              }
+          }
+
+          static const char *vt_v21_element(int species) {
+              switch (species) {
+                  case 0: case 1: return "BLITZ";
+                  case 2: return "PFLANZE";
+                  case 3: return "FEUER";
+                  case 4: return "WASSER";
+                  case 5: return "EIS";
+                  default: return "UNBEKANNT";
+              }
+          }
+
+          static const char *vt_v21_description(int species) {
+              switch (species) {
+                  case 0: return "KLEINER ELEKTRODRACHE";
+                  case 1: return "STARKER STURMDRACHE";
+                  case 2: return "HUETER DES WALDES";
+                  case 3: return "DRACHE DES FEUERS";
+                  case 4: return "DRACHE DES WASSERS";
+                  case 5: return "DRACHE DES EISES";
+                  default: return "NOCH UNENTDECKT";
+              }
+          }
+
+          static int vt_v21_codex_species_owned(int codex_species) {
+              if (codex_species == 0) return 1;
+              if (codex_species == 1) return evolved != 0;
+              return vt_v20_owned(codex_species - 1);
+          }
+
+          static void vt_v21_codex_add_to_team(void) {
+              int selected = vt_v21_codex_cursor;
+              int species = selected < 2 ? 0 : selected - 1;
+              int position;
+              if (!vt_v21_codex_species_owned(selected)) {
+                  vt_menu_message = "NOCH NICHT GEFANGEN";
+                  return;
+              }
+              position = vt_v21_party_position(species);
+              if (position >= 0) {
+                  vt_menu_message = "BEREITS IM TEAM";
+                  return;
+              }
+              if (vt_v21_count < 3) {
+                  vt_v21_party[vt_v21_count++] = species;
+                  vt_menu_message = "DRACHE IM TEAM";
+              } else {
+                  /* Replace a reserve dragon, never the active one. */
+                  position = vt_v21_active == 2 ? 1 : 2;
+                  vt_v21_party[position] = species;
+                  vt_menu_message = "RESERVE AUSGETAUSCHT";
+              }
+              vt_v21_hp[species] = 24;
+          }
+          '''
+          once('static const char *vt_v20_entry(int species) {', helpers + '\nstatic const char *vt_v20_entry(int species) {')
+
+          # Restore slots and individual HP without changing the existing save checksum.
+          # Save extension starts at word 26, beyond the V20 extension ending at 25.
+          save_entry = 'words[25] = words[22] ^ words[23] ^ words[24] ^ 0xdec0de20u;'
+          save_extended = r'''
+                        words[26] = VT_V21_SAVE_MAGIC;
+                        words[27] = (uint32_t)vt_v21_count;
+                        words[28] = (uint32_t)(vt_v21_party[0] & 255) |
+                                    ((uint32_t)(vt_v21_party[1] & 255) << 8) |
+                                    ((uint32_t)(vt_v21_party[2] & 255) << 16);
+                        /* HP for all five caught species, even those in reserve. */
+                        if (vt_v21_ready && vt_v21_active >= 0 &&
+                            vt_v21_active < vt_v21_count) {
+                            int species = vt_v21_party[vt_v21_active];
+                            vt_v21_hp[species] = companion_hp;
+                        }
+                        words[29] = (uint32_t)(vt_v21_hp[0] & 255) |
+                                    ((uint32_t)(vt_v21_hp[1] & 255) << 8) |
+                                    ((uint32_t)(vt_v21_hp[2] & 255) << 16) |
+                                    ((uint32_t)(vt_v21_hp[3] & 255) << 24);
+                        words[30] = (uint32_t)vt_v21_hp[4];
+                        words[31] = (uint32_t)vt_v21_active;
+                        words[32] = words[26] ^ words[27] ^ words[28] ^
+                                    words[29] ^ words[30] ^ words[31] ^ 0x8d53c4b1u;
+          '''
+          once(save_entry, save_entry + '\n' + save_extended.rstrip())
+
+          # Insert restore into the existing real vt_load_game function right before return 1.
+          a,b,end=function_body_span(code,'vt_load_game')
+          load_fragment=code[b:end]
+          if load_fragment.count('return 1;')!=1:raise RuntimeError('Unexpected V20 load return')
+          restore=r'''
+                        /* Backward compatible: V17-V20 saves have no V21 team block. */
+                        vt_v21_ready = 0;
+                        if (w[26] == VT_V21_SAVE_MAGIC &&
+                            w[32] == (w[26] ^ w[27] ^ w[28] ^
+                                      w[29] ^ w[30] ^ w[31] ^ 0x8d53c4b1u) &&
+                            w[27] >= 1 && w[27] <= 3 && w[31] < w[27]) {
+                            int i;
+                            int count = (int)w[27];
+                            int valid = 1;
+                            int ids[3];
+                            int health[5];
+                            ids[0] = (int)(w[28] & 255u);
+                            ids[1] = (int)((w[28] >> 8) & 255u);
+                            ids[2] = (int)((w[28] >> 16) & 255u);
+                            for (i = 0; i < 4; i++)
+                                health[i] = (int)((w[29] >> (i * 8)) & 255u);
+                            health[4] = (int)w[30];
+                            for (i = 0; i < 5; i++)
+                                if (health[i] > 24) valid = 0;
+                            for (i = 0; i < count; i++) {
+                                int k;
+                                int species = ids[i];
+                                if (species < 0 || species > 4) valid = 0;
+                                for (k = 0; k < i; k++)
+                                    if (ids[k] == species) valid = 0;
+                                if (species > 0 &&
+                                    !(vt_v19_mask & (1u << (species - 1))) &&
+                                    !(species == 1 && caught_mosslet)) valid = 0;
+                            }
+                            if (valid) {
+                                vt_v21_count = count;
+                                for (i = 0; i < 3; i++)
+                                    vt_v21_party[i] = i < count ? ids[i] : -1;
+                                for (i = 0; i < 5; i++) vt_v21_hp[i] = health[i];
+                                vt_v21_active = (int)w[31];
+                                vt_v20_active_dragon = vt_v21_party[vt_v21_active];
+                                companion_hp = vt_v21_hp[vt_v20_active_dragon];
+                                vt_v21_team_cursor = vt_v21_active;
+                                vt_v21_ready = 1;
+                            }
+                        }
+                        vt_v21_force_switch = 0;
+          '''
+          load_fragment=load_fragment.replace('return 1;', restore+'\n              return 1;',1)
+          code=code[:b]+load_fragment+code[end:]
+
+          # Modify in-world active dragon switching to respect the carried team and HP.
+          main=code.index('int main(void) {')
+          before,after=code[:main],code[main:]
+          if after.count('vt_v20_next_dragon();')!=1:raise RuntimeError('V20 L1 battle switch call missing')
+          after=after.replace('vt_v20_next_dragon();','vt_v21_next_dragon();',1)
+          code=before+after
+
+          # New main-menu team page: only 1-3 carried dragons, with individual HP.
+          a,b,end=function_body_span(code,'draw_hud')
+          hud=code[b:end]
+          start = hud.find('} else if (vt_menu_page == 1) {')
+          stop = hud.find('} else if (vt_menu_page == 2) {',start)
+          if start<0 or stop<0:raise RuntimeError('Team HUD page not found')
+          team_hud=r'''} else if (vt_menu_page == 1) {
+                                int i;
+                                FntPrint(2, "DEINE DRACHEN %d/3\n\n", vt_v21_count);
+                                for (i = 0; i < vt_v21_count; i++) {
+                                    int species = vt_v21_party[i];
+                                    FntPrint(2, "%c%c %s %d/24 HP\n\n",
+                                        vt_v21_team_cursor == i ? '>' : ' ',
+                                        vt_v21_active == i ? '*' : ' ',
+                                        vt_v20_dragon_name(species),
+                                        vt_v21_hp[species]);
+                                }
+                                FntPrint(2, "X WAHL / DREIECK ZURUECK\n");
+
+                            '''
+          hud=hud[:start]+team_hud+hud[stop:]
+
+          # Codex with pagination (3 rows at a time) plus an X detail page.
+          start = hud.find('} else if (vt_menu_page == 4) {')
+          stop = hud.find('} else if (vt_menu_page == 1) {',start)
+          if start<0 or stop<0:raise RuntimeError('Codex HUD page not found')
+          codex_hud=r'''} else if (vt_menu_page == 4) {
+                                int i;
+                                int first = (vt_v21_codex_cursor / 3) * 3;
+                                FntPrint(2, "DRACHEN KODEX  %d/6\n\n",
+                                    vt_v21_codex_cursor + 1);
+                                for (i = first; i < first + 3 && i < 6; i++) {
+                                    FntPrint(2, "%c %-8s %s\n\n",
+                                        vt_v21_codex_cursor == i ? '>' : ' ',
+                                        vt_v20_entry_name(i), vt_v20_entry(i));
+                                }
+                                FntPrint(2, "X DETAILS / DREIECK ZURUECK\n");
+
+                            } else if (vt_menu_page == 5) {
+                                int species = vt_v21_codex_cursor;
+                                FntPrint(2, "DRACHEN INFO\n\n");
+                                FntPrint(2, "%s\n\n", vt_v20_entry_name(species));
+                                FntPrint(2, "ELEMENT: %s\n\n", vt_v21_element(species));
+                                FntPrint(2, "STATUS: %s\n\n", vt_v20_entry(species));
+                                if (!strcmp(vt_v20_entry(species), "???"))
+                                    FntPrint(2, "NOCH NICHT ENTDECKT\n\n");
+                                else
+                                    FntPrint(2, "%s\n\n", vt_v21_description(species));
+                                if (vt_v21_codex_species_owned(species))
+                                    FntPrint(2, "VIERECK INS TEAM\n");
+                                FntPrint(2, "%s\n", vt_menu_message);
+                                FntPrint(2, "DREIECK ZURUECK\n");
+
+                            '''
+          hud=hud[:start]+codex_hud+hud[stop:]
+
+          # Knockout screen appears independently of the START menu.
+          needle='if (vt_menu_open) {'
+          if hud.count(needle)!=1: raise RuntimeError('Menu HUD condition changed')
+          forced_hud=r'''if (vt_v21_force_switch) {
+                        int i;
+                        FntPrint(0, "DEIN DRACHE IST BESIEGT!\n\n");
+                        FntPrint(0, "WAEHLE DEN NAECHSTEN DRACHEN\n");
+                        FntPrint(2, "DRACHEN WECHSELN\n\n");
+                        for (i = 0; i < vt_v21_count; i++) {
+                            int species = vt_v21_party[i];
+                            if (vt_v21_hp[species] > 0)
+                                FntPrint(2, "%c %s HP %d/24\n\n",
+                                    vt_v21_force_cursor == i ? '>' : ' ',
+                                    vt_v20_dragon_name(species), vt_v21_hp[species]);
+                        }
+                        FntPrint(2, "D-PAD WAHL / X EINWECHSELN\n");
+                        FntFlush(0);
+                        FntFlush(2);
+                        return;
+                    }
+                    '''
+          hud=hud.replace(needle,forced_hud+needle,1)
+          code=code[:b]+hud+code[end:]
+
+          # Draw the same dark panel for the forced-switch screen.
+          a,b,end=function_body_span(code,'vt_draw_menu_panel')
+          panel=code[b:end]
+          if panel.count('if (!vt_menu_open)')!=1:
+              raise RuntimeError('Menu background visibility marker changed')
+          panel=panel.replace('if (!vt_menu_open)', 'if (!vt_menu_open && !vt_v21_force_switch)',1)
+          code=code[:b]+panel+code[end:]
+
+          # Modify the existing START menu controls, preserving save/load and items.
+          main=code.index('int main(void) {')
+          ctl_start=code.find('if (vt_menu_open) {',main)
+          ctl_end=code.find('/* Never send menu keys',ctl_start)
+          if ctl_start<0 or ctl_end<0:raise RuntimeError('Main menu controller block not found')
+          ctl=code[ctl_start:ctl_end]
+          old='if (vt_menu_page != 0) {'
+          if ctl.count(old)!=1:raise RuntimeError('Back-navigation condition changed')
+          ctl=ctl.replace(old,'if (vt_menu_page == 5) {\n                          vt_menu_page = 4;\n                      } else if (vt_menu_page != 0) {',1)
+          old='vt_v20_menu_dragon = vt_v20_active_dragon;'
+          if ctl.count(old)!=1:raise RuntimeError('Team cursor init marker changed')
+          ctl=ctl.replace(old,'vt_v21_team_cursor = vt_v21_active;',1)
+          # Replace sub-menu team handling without disturbing item page (2).
+          start=ctl.find('} else if (vt_menu_page == 1) {')
+          stop=ctl.find('} else if (vt_menu_page == 2 &&',start)
+          if start<0 or stop<0:raise RuntimeError('Team input boundaries not found')
+          team_control=r'''} else if (vt_menu_page == 4) {
+                                if (pressed & PAD_UP)
+                                    vt_v21_codex_cursor = (vt_v21_codex_cursor + 5) % 6;
+                                if (pressed & PAD_DOWN)
+                                    vt_v21_codex_cursor = (vt_v21_codex_cursor + 1) % 6;
+                                if (pressed & PAD_CROSS) {
+                                    vt_menu_page = 5;
+                                    vt_menu_message = "";
+                                }
+                            } else if (vt_menu_page == 5) {
+                                if (pressed & PAD_SQUARE)
+                                    vt_v21_codex_add_to_team();
+                            } else if (vt_menu_page == 1) {
+                                if ((pressed & PAD_UP) && vt_v21_count > 0)
+                                    vt_v21_team_cursor =
+                                        (vt_v21_team_cursor + vt_v21_count - 1) % vt_v21_count;
+                                if ((pressed & PAD_DOWN) && vt_v21_count > 0)
+                                    vt_v21_team_cursor =
+                                        (vt_v21_team_cursor + 1) % vt_v21_count;
+                                if (pressed & PAD_CROSS) {
+                                    if (vt_v21_switch_to(vt_v21_team_cursor))
+                                        vt_menu_message = "DRACHE EINGEWECHSELT";
+                                    else
+                                        vt_menu_message = "DRACHE BESIEGT";
+                                }
+                            '''
+          ctl=ctl[:start]+team_control+ctl[stop:]
+          code=code[:ctl_start]+ctl+code[ctl_end:]
+
+          # Initialize team and process forced switching BEFORE the older game input.
+          # This also prevents X used to switch from attacking on the same frame.
+          key='        previous_pad = pad;'
+          control=r'''
+                  vt_v21_setup();
+                  if (vt_v21_force_switch) {
+                      int direction;
+                      if (pressed & (PAD_UP | PAD_DOWN)) {
+                          direction = (pressed & PAD_DOWN) ? 1 : -1;
+                          {
+                              int n;
+                              for (n = 1; n <= vt_v21_count; n++) {
+                                  int pos = (vt_v21_force_cursor +
+                                             vt_v21_count + direction * n) % vt_v21_count;
+                                  if (vt_v21_can_switch_to(pos)) {
+                                      vt_v21_force_cursor = pos;
+                                      break;
+                                  }
+                              }
+                          }
+                      }
+                      if ((pressed & PAD_CROSS) &&
+                          vt_v21_switch_to(vt_v21_force_cursor)) {
+                          vt_v21_force_switch = 0;
+                      }
+                      pressed = 0;
+                      pad = 0;
+                  }
+                  /* Original X recovery restores all team dragons after a full defeat. */
+                  if (game_mode == 3 && (pressed & PAD_CROSS)) {
+                      int i;
+                      for (i = 0; i < vt_v21_count; i++)
+                          vt_v21_hp[vt_v21_party[i]] = 24;
+                      companion_hp = 24;
+                  }
+          '''
+          once(key,key+'\n'+control.rstrip())
+
+          # Update team and check for a fainted dragon before rendering the scene.
+          post_anchor='        /* Camera follows the player;'
+          if code.count(post_anchor)!=1:
+              raise RuntimeError('Camera/rendering post-loop anchor changed')
+          once(post_anchor, '        vt_v21_post_frame();\n\n'+post_anchor)
+
+          # Show carried team size in existing status display (not all captured species).
+          code = code.replace('1 + vt_v19_caught_count()', 'vt_v21_count')
+
+          # Validate source contents.
+          required = [
+              'VOLT TRAIL V21', 'DRACHEN KODEX', '"%c DRACHEN\\n\\n"',
+              'vt_v21_count', 'vt_v21_party[3]', 'vt_v21_force_switch',
+              'vt_v21_codex_cursor', 'vt_v21_codex_add_to_team',
+              'vt_v21_post_frame();', 'vt_v21_next_dragon();',
+              'VT_V21_SAVE_MAGIC', 'vt_save_game(void)', 'vt_load_game(void)',
+              'InitCARD(1);', 'PAD_SQUARE', 'PAD_CIRCLE', 'PAD_TRIANGLE',
+              'vt_play_intro();', 'FntFlush(2);'
+          ]
+          for marker in required:
+              if marker not in code:
+                  raise RuntimeError('V21 feature missing: '+marker)
+          path.write_text(code,encoding='utf-8')
+          print('V21: START menu DRACHEN only lists carried party (max 3)')
+          print('V21: KO forces selection of a living reserve dragon')
+          print('V21: per-species HP and party persisted in compatible save extension')
+          print('V21: codex scroll, X details, elements, descriptions and captured status')
+          print('V21: extra captured dragons remain in codex and can replace bench')
+          PY
+
       - name: Install PSn00bSDK
         shell: bash
         run: |
@@ -752,7 +1284,7 @@ jobs:
           python3 "$RUNNER_TEMP/run_previous_step.py" \
             "Install PSn00bSDK"
 
-      - name: Build Volt Trail V20 Fixed
+      - name: Build Volt Trail V21
         shell: bash
         run: |
           set -euxo pipefail
@@ -779,10 +1311,10 @@ jobs:
           done
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V20
+      - name: Upload Volt Trail V21
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V20-Dragon-Codex-Fixed
+          name: VoltTrail-PS1-V21-Dragon-Team-Codex-Fixed
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
