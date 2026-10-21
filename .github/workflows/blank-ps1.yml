@@ -1,5 +1,5 @@
 
-name: Build Volt Trail PS1 V9 with Intro
+name: Build Volt Trail PS1 V10 HD Intro
 
 on:
   workflow_dispatch:
@@ -20,7 +20,9 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build unzip curl jq tar ffmpeg
+          sudo apt-get install -y \
+            cmake ninja-build unzip curl jq tar \
+            ffmpeg python3-pil
 
       - name: Prepare Volt Trail sources
         shell: bash
@@ -36,11 +38,12 @@ jobs:
           fi
 
           if [ ! -f "$VIDEO" ]; then
-            echo "::error::Intro MP4 missing in repository root"
+            echo "::error::DKVierich intro MP4 missing"
             exit 1
           fi
 
-          DEST="$RUNNER_TEMP/volttrail-project"
+          DEST="$RUNNER_TEMP/volttrail-v10"
+          rm -rf "$DEST"
           mkdir -p "$DEST"
           unzip -q "$ZIP" -d "$DEST"
 
@@ -54,76 +57,166 @@ jobs:
           PROJECT_DIR="$(dirname "$CMAKE_FILE")"
 
           for f in CMakeLists.txt src/main.c iso.xml system.cnf; do
-            test -f "$PROJECT_DIR/$f" || exit 1
+            if [ ! -f "$PROJECT_DIR/$f" ]; then
+              echo "::error::Missing project file: $f"
+              exit 1
+            fi
           done
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Convert intro to PS1 frames
+      - name: Convert HD intro to PS1 format
         shell: bash
         run: |
           set -euo pipefail
 
           python3 - <<'PY'
           import os
-          import struct
           import subprocess
           from pathlib import Path
+          from PIL import Image
 
-          video = Path(os.environ["GITHUB_WORKSPACE"]) / "DKVierich_Produktion_PS1_Intro_original.mp4"
-          output = Path(os.environ["RUNNER_TEMP"]) / "intro.raw"
+          root = Path(os.environ["GITHUB_WORKSPACE"])
           project = Path(os.environ["PROJECT_DIR"])
+
+          video = root / "DKVierich_Produktion_PS1_Intro_original.mp4"
+          raw_file = Path(os.environ["RUNNER_TEMP"]) / "intro_v10.rgb"
           header = project / "src/volttrail_intro_data.h"
 
-          width, height = 160, 120
-          frame_bytes = width * height * 2
+          WIDTH = 224
+          HEIGHT = 168
+          FPS = 6
+          MAX_FRAMES = 30
+          FRAME_PIXELS = WIDTH * HEIGHT
+          RGB_BYTES = FRAME_PIXELS * 3
 
           subprocess.run([
-              "ffmpeg", "-hide_banner", "-loglevel", "error",
-              "-y", "-i", str(video),
+              "ffmpeg",
+              "-hide_banner",
+              "-loglevel", "error",
+              "-y",
+              "-i", str(video),
               "-t", "5",
-              "-vf", "fps=6,scale=160:120:flags=bilinear",
-              "-an", "-pix_fmt", "bgr555le",
-              "-f", "rawvideo", str(output)
+              "-vf",
+              "fps=6,"
+              "scale=224:168:flags=lanczos:"
+              "force_original_aspect_ratio=decrease,"
+              "pad=224:168:(ow-iw)/2:(oh-ih)/2:black,"
+              "eq=contrast=1.08:saturation=1.12",
+              "-an",
+              "-pix_fmt", "rgb24",
+              "-f", "rawvideo",
+              str(raw_file)
           ], check=True)
 
-          raw = output.read_bytes()
-          if not raw or len(raw) % frame_bytes:
-              raise RuntimeError("Video conversion produced invalid frames")
+          raw = raw_file.read_bytes()
 
-          count = min(len(raw) // frame_bytes, 30)
+          if not raw or len(raw) % RGB_BYTES != 0:
+              raise RuntimeError("Invalid intro video frames")
+
+          count = min(len(raw) // RGB_BYTES, MAX_FRAMES)
+          if count == 0:
+              raise RuntimeError("Intro contains no frames")
 
           with header.open("w", encoding="ascii") as f:
               f.write("#ifndef VOLTTRAIL_INTRO_DATA_H\n")
               f.write("#define VOLTTRAIL_INTRO_DATA_H\n")
               f.write("#define VT_INTRO_FRAME_COUNT %d\n" % count)
-              f.write("static const unsigned short vt_intro_frames")
-              f.write("[VT_INTRO_FRAME_COUNT][19200]")
-              f.write(" __attribute__((aligned(4))) = {\n")
+
+              f.write(
+                  "static const unsigned char vt_intro_frames"
+                  "[VT_INTRO_FRAME_COUNT][37632]"
+                  " __attribute__((aligned(4))) = {\n"
+              )
+
+              palettes = []
 
               for frame in range(count):
-                  chunk = raw[
-                      frame * frame_bytes:(frame + 1) * frame_bytes
-                  ]
-                  pixels = struct.unpack("<19200H", chunk)
+                  start = frame * RGB_BYTES
+                  chunk = raw[start:start + RGB_BYTES]
+
+                  image = Image.frombytes(
+                      "RGB", (WIDTH, HEIGHT), chunk
+                  )
+
+                  indexed = image.quantize(
+                      colors=256,
+                      method=Image.Quantize.MEDIANCUT
+                  )
+
+                  pixels = indexed.tobytes()
+                  palette = indexed.getpalette() or []
+                  psx_palette = []
+
+                  for i in range(256):
+                      p = i * 3
+
+                      if p + 2 < len(palette):
+                          r = palette[p]
+                          g = palette[p + 1]
+                          b = palette[p + 2]
+                      else:
+                          r = g = b = 0
+
+                      psx = (
+                          (r >> 3) |
+                          ((g >> 3) << 5) |
+                          ((b >> 3) << 10) |
+                          0x8000
+                      )
+
+                      psx_palette.append(psx)
+
+                  palettes.append(psx_palette)
+
                   f.write("{\n")
-                  for i in range(0, len(pixels), 16):
-                      values = pixels[i:i+16]
-                      f.write(",".join(
-                          "0x%04x" % (v | 0x8000)
-                          for v in values
-                      ))
+
+                  for i in range(0, len(pixels), 24):
+                      values = pixels[i:i + 24]
+                      f.write(
+                          ",".join(
+                              "0x%02x" % value
+                              for value in values
+                          )
+                      )
                       f.write(",\n")
+
                   f.write("},\n")
 
-              f.write("};\n#endif\n")
+              f.write("};\n")
 
-          print("Intro frames:", count)
-          print("Generated header:", header)
-          print("Raw frame bytes:", count * frame_bytes)
+              f.write(
+                  "static const unsigned short vt_intro_palettes"
+                  "[VT_INTRO_FRAME_COUNT][256]"
+                  " __attribute__((aligned(4))) = {\n"
+              )
+
+              for palette in palettes:
+                  f.write("{\n")
+
+                  for i in range(0, 256, 16):
+                      f.write(
+                          ",".join(
+                              "0x%04x" % value
+                              for value in palette[i:i + 16]
+                          )
+                      )
+                      f.write(",\n")
+
+                  f.write("},\n")
+
+              f.write("};\n")
+              f.write("#endif\n")
+
+          memory = count * (FRAME_PIXELS + 512)
+          print("V10 intro frames:", count)
+          print("Resolution:", WIDTH, "x", HEIGHT)
+          print("Colors per frame: 256")
+          print("Intro data bytes:", memory)
+          print("Header created:", header)
           PY
 
-      - name: Add intro player to Volt Trail
+      - name: Apply V10 intro and clean HUD
         shell: bash
         run: |
           set -euo pipefail
@@ -137,26 +230,157 @@ jobs:
 
           def replace_once(old, new):
               global code
+
               if code.count(old) != 1:
-                  raise RuntimeError("Source marker not found: " + old)
+                  raise RuntimeError(
+                      "V10 patch marker not found: " + old
+                  )
+
               code = code.replace(old, new, 1)
 
           replace_once(
               "#include <stdio.h>",
-              '#include <stdio.h>\n#include "volttrail_intro_data.h"'
+              '#include <stdio.h>\n'
+              '#include "volttrail_intro_data.h"'
           )
 
-          intro = r'''
+          ui_code = r'''
+          /* Two dark HUD panels, drawn in front of 3D geometry. */
+          static void vt_draw_panel(int y, int height) {
+              TILE *tile;
+              unsigned int aligned;
+
+              aligned = (prim_used + 3u) & ~3u;
+
+              if (aligned + sizeof(TILE) >
+                  sizeof(prim_arena[db])) {
+                  return;
+              }
+
+              tile = (TILE *)(prim_arena[db] + aligned);
+              prim_used = aligned + sizeof(TILE);
+
+              setTile(tile);
+              setXY0(tile, 0, y);
+              setWH(tile, SCREEN_W, height);
+              setRGB0(tile, 12, 18, 38);
+
+              addPrim(ot[db], tile);
+          }
+
+          static void vt_draw_panels(void) {
+              vt_draw_panel(0, 64);
+              vt_draw_panel(190, 50);
+          }
+
+          static void draw_hud(void) {
+              const char *area;
+
+              area = region == 0 ? "SUNMEADOW" :
+                  (region == 1 ?
+                   "CRYSTAL PASS" : "STORM ARENA");
+
+              FntPrint(0,
+                  "VOLT TRAIL V10 - %s\n",
+                  area
+              );
+
+              FntPrint(0,
+                  "SPARKIT L%d HP %d/24%s\n",
+                  companion_level,
+                  companion_hp,
+                  evolved ? " VOLTIGON" : ""
+              );
+
+              FntPrint(0,
+                  "BADGE %d/1 TEAM %d STEPS %d\n",
+                  badges,
+                  1 + caught_mosslet,
+                  step_count
+              );
+
+              if (game_mode == 0) {
+                  FntPrint(1,
+                      "D-PAD MOVE  X BATTLE\n"
+                  );
+                  FntPrint(1,
+                      "START RESET\n"
+                  );
+
+              } else if (game_mode == 1) {
+                  const char *enemy;
+
+                  enemy = encounter_kind == 2 ?
+                      "ARENA LEADER" :
+                      (encounter_kind == 1 ?
+                       "TRAINER" : "MOSSLET");
+
+                  FntPrint(1,
+                      "%s L%d HP %d/%d\n",
+                      enemy,
+                      enemy_level,
+                      wild_hp,
+                      enemy_max_hp
+                  );
+
+                  if (action_flash > 0) {
+                      FntPrint(1,
+                          "%s\n",
+                          last_action == 1 ?
+                          "SUPER EFFECTIVE!" :
+                          (last_action == 2 ?
+                           "CAPTURED!" : "ACTION!")
+                      );
+                  } else {
+                      FntPrint(1,
+                          "X ATTACK O CATCH (%d)\n",
+                          capture_attempts
+                      );
+                  }
+
+              } else if (game_mode == 2) {
+                  FntPrint(1,
+                      "VICTORY! X CONTINUE\n"
+                  );
+                  FntPrint(1,
+                      "YOUR TEAM GETS STRONGER\n"
+                  );
+
+              } else if (game_mode == 3) {
+                  FntPrint(1,
+                      "SPARKIT NEEDS REST\n"
+                  );
+                  FntPrint(1,
+                      "PRESS X TO RECOVER\n"
+                  );
+              }
+
+              FntFlush(-1);
+          }
+          '''
+
+          intro_code = r'''
+          /* Play higher-resolution 8-bit indexed PS1 intro. */
           static void vt_play_intro(void) {
               DISPENV intro_disp;
               DRAWENV intro_draw;
-              RECT texture = {320, 0, 160, 120};
+
+              RECT texture = {320, 0, 112, 168};
+              RECT clut = {320, 200, 256, 1};
+
               POLY_FT4 quad;
               u_long intro_ot[2];
-              int frame, wait;
 
-              SetDefDispEnv(&intro_disp, 0, 240, 320, 240);
-              SetDefDrawEnv(&intro_draw, 0, 240, 320, 240);
+              int frame;
+              int wait;
+
+              SetDefDispEnv(
+                  &intro_disp, 0, 240, 320, 240
+              );
+
+              SetDefDrawEnv(
+                  &intro_draw, 0, 240, 320, 240
+              );
 
               intro_draw.isbg = 1;
               intro_draw.r0 = 0;
@@ -165,24 +389,49 @@ jobs:
 
               setPolyFT4(&quad);
               setRGB0(&quad, 128, 128, 128);
-              setXY4(&quad,
-                  0, 0, 319, 0, 0, 239, 319, 239);
-              setUV4(&quad,
-                  0, 0, 159, 0, 0, 119, 159, 119);
-              setTPage(&quad, 2, 0, 320, 0);
+
+              setXY4(
+                  &quad,
+                  0, 0,
+                  319, 0,
+                  0, 239,
+                  319, 239
+              );
+
+              setUV4(
+                  &quad,
+                  0, 0,
+                  223, 0,
+                  0, 167,
+                  223, 167
+              );
+
+              setTPage(&quad, 1, 0, 320, 0);
+              setClut(&quad, 320, 200);
 
               PutDrawEnv(&intro_draw);
               PutDispEnv(&intro_disp);
               SetDispMask(1);
 
-              for (frame = 0;
-                   frame < VT_INTRO_FRAME_COUNT;
-                   frame++) {
+              for (
+                  frame = 0;
+                  frame < VT_INTRO_FRAME_COUNT;
+                  frame++
+              ) {
                   DrawSync(0);
+
+                  LoadImage(
+                      &clut,
+                      (const uint32_t *)
+                      vt_intro_palettes[frame]
+                  );
+
                   LoadImage(
                       &texture,
-                      (const uint32_t *)vt_intro_frames[frame]
+                      (const uint32_t *)
+                      vt_intro_frames[frame]
                   );
+
                   DrawSync(0);
 
                   ClearOTagR(intro_ot, 2);
@@ -199,9 +448,29 @@ jobs:
           }
           '''
 
-          replace_once(
+          start = code.find(
+              "static void draw_hud(void) {"
+          )
+
+          end = code.find(
               "int main(void) {",
-              intro + "\nint main(void) {"
+              start
+          )
+
+          if start < 0 or end < 0:
+              raise RuntimeError("Original HUD not found")
+
+          code = (
+              code[:start] +
+              ui_code + "\n" +
+              intro_code + "\n" +
+              code[end:]
+          )
+
+          replace_once(
+              "FntOpen(8, 8, 304, 100, 0, 512);",
+              "FntOpen(8, 8, 304, 56, 0, 256);\n"
+              "    FntOpen(8, 194, 304, 42, 0, 128);"
           )
 
           replace_once(
@@ -218,6 +487,7 @@ jobs:
           )
 
           new_end = (
+              "        vt_draw_panels();\n"
               "        PutDispEnv(&disp[db]);\n"
               "        PutDrawEnv(&draw[db]);\n"
               "        DrawOTag(ot[db] + (OT_LEN - 1));\n"
@@ -228,12 +498,12 @@ jobs:
           replace_once(old_end, new_end)
 
           replace_once(
-              "VOLT TRAIL: SHARDS OF THE STORM  /  PS1",
-              "VOLT TRAIL V9 / DKVierich Produktion"
+              "VECTOR camera_pos = {0, -10, CAMERA_Z, 0};",
+              "VECTOR camera_pos = {0, -10, CAMERA_Z};"
           )
 
           src.write_text(code, encoding="utf-8")
-          print("Volt Trail intro integrated successfully")
+          print("V10 improved intro and HUD applied")
           PY
 
       - name: Download PSn00bSDK
@@ -243,6 +513,7 @@ jobs:
 
           API="https://api.github.com/repos/Lameguy64/PSn00bSDK/releases/latest"
           META="$RUNNER_TEMP/sdk-release.json"
+
           curl -fsSL "$API" -o "$META"
 
           FOUND=""
@@ -252,6 +523,7 @@ jobs:
 
             ARCHIVE="$RUNNER_TEMP/sdk-asset"
             SDK_DIR="$RUNNER_TEMP/psn00bsdk"
+
             rm -rf "$SDK_DIR"
             mkdir -p "$SDK_DIR"
 
@@ -261,58 +533,82 @@ jobs:
 
             case "$NAME" in
               *.zip|*.ZIP)
-                unzip -q "$ARCHIVE" -d "$SDK_DIR" || continue
+                unzip -q "$ARCHIVE" \
+                  -d "$SDK_DIR" || continue
                 ;;
               *.tar.gz|*.tgz|*.tar.xz|*.tar.bz2)
-                tar -xf "$ARCHIVE" -C "$SDK_DIR" || continue
+                tar -xf "$ARCHIVE" \
+                  -C "$SDK_DIR" || continue
                 ;;
               *)
                 continue
                 ;;
             esac
 
-            FOUND="$(find "$SDK_DIR" -type f -path '*/lib/libpsn00b/cmake/sdk.cmake' -print -quit)"
+            FOUND="$(find "$SDK_DIR" \
+              -type f \
+              -path '*/lib/libpsn00b/cmake/sdk.cmake' \
+              -print -quit)"
+
             if [ -n "$FOUND" ]; then
               break
             fi
+
           done < <(
             jq -r '
               .assets[]
-              | select((.name | ascii_downcase | contains("linux")))
               | select(
-                  (.name | ascii_downcase | endswith(".zip")) or
-                  (.name | ascii_downcase | endswith(".tar.gz")) or
-                  (.name | ascii_downcase | endswith(".tgz")) or
-                  (.name | ascii_downcase | endswith(".tar.xz")) or
-                  (.name | ascii_downcase | endswith(".tar.bz2"))
+                  (.name | ascii_downcase |
+                   contains("linux"))
                 )
-              | [.name, .browser_download_url] | @tsv
+              | select(
+                  (.name | ascii_downcase |
+                   endswith(".zip")) or
+                  (.name | ascii_downcase |
+                   endswith(".tar.gz")) or
+                  (.name | ascii_downcase |
+                   endswith(".tgz")) or
+                  (.name | ascii_downcase |
+                   endswith(".tar.xz")) or
+                  (.name | ascii_downcase |
+                   endswith(".tar.bz2"))
+                )
+              | [.name, .browser_download_url]
+              | @tsv
             ' "$META"
           )
 
           if [ -z "$FOUND" ]; then
-            echo "::error::PSn00bSDK missing"
+            echo "::error::PSn00bSDK not found"
             exit 1
           fi
 
           SDK_ROOT="${FOUND%/lib/libpsn00b/cmake/sdk.cmake}"
-          SDK_BIN="$(find "$SDK_ROOT" -name mipsel-none-elf-gcc -print -quit | xargs -r dirname)"
+
+          SDK_BIN="$(find "$SDK_ROOT" \
+            -name mipsel-none-elf-gcc \
+            -print -quit | xargs -r dirname)"
 
           if [ -z "$SDK_BIN" ]; then
-            echo "::error::PS1 compiler missing"
+            echo "::error::PS1 compiler not found"
             exit 1
           fi
 
-          echo "PSN00BSDK_CMAKE=$FOUND" >> "$GITHUB_ENV"
+          echo "PSN00BSDK_CMAKE=$FOUND" \
+            >> "$GITHUB_ENV"
+
           echo "$SDK_BIN" >> "$GITHUB_PATH"
 
-          MKPSXISO="$(find "$SDK_ROOT" -name mkpsxiso -print -quit)"
+          MKPSXISO="$(find "$SDK_ROOT" \
+            -name mkpsxiso -print -quit)"
+
           if [ -n "$MKPSXISO" ]; then
             chmod +x "$MKPSXISO"
-            echo "$(dirname "$MKPSXISO")" >> "$GITHUB_PATH"
+            echo "$(dirname "$MKPSXISO")" \
+              >> "$GITHUB_PATH"
           fi
 
-      - name: Compile Volt Trail with Intro
+      - name: Build Volt Trail V10
         shell: bash
         run: |
           set -euxo pipefail
@@ -323,27 +619,37 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE" \
             -DCMAKE_BUILD_TYPE=Release
 
-          cmake --build "$GITHUB_WORKSPACE/build" --verbose
+          cmake --build \
+            "$GITHUB_WORKSPACE/build" \
+            --verbose
 
-      - name: Collect PS1 image
+      - name: Collect PS1 files
         shell: bash
         run: |
           set -euo pipefail
+
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
 
-          for file in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
+          for file in \
+            VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf
+          do
             SOURCE="$GITHUB_WORKSPACE/build/$file"
+
             if [ ! -s "$SOURCE" ]; then
               echo "::error::Missing PS1 file: $file"
               exit 1
             fi
-            cp "$SOURCE" "$GITHUB_WORKSPACE/artifacts/"
+
+            cp "$SOURCE" \
+              "$GITHUB_WORKSPACE/artifacts/"
           done
 
-      - name: Upload Volt Trail V9 Intro
+          ls -lh "$GITHUB_WORKSPACE/artifacts"
+
+      - name: Upload Volt Trail V10
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V9-Intro
+          name: VoltTrail-PS1-V10-HD-Intro
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
