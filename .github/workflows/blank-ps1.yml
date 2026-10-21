@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V23 Active Dragon Field
+name: Build Volt Trail PS1 V24.1 Abenteuerwelt
 
 on:
   workflow_dispatch:
@@ -1770,6 +1770,479 @@ jobs:
           print('V23: Intro, controls, fights, party HP and save files preserved')
           PY
 
+      - name: Expand V24 world and improve retro adventure graphics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+          code = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new):
+              global code
+              n = code.count(old)
+              if n != 1:
+                  raise RuntimeError(f'V24 anchor expected once, found {n}: {old[:100]!r}')
+              code = code.replace(old, new, 1)
+
+          replace_once('VOLT TRAIL V23 - %s', 'VOLT TRAIL V24 - %s')
+          replace_once('VOLT TRAIL V23 - MENUE', 'VOLT TRAIL V24 - MENUE')
+
+          code, n = re.subn(r'#define\s+WORLD_LIMIT\s+\d+', '#define WORLD_LIMIT 1600', code, count=1)
+          if n != 1:
+              raise RuntimeError('WORLD_LIMIT definition missing')
+
+          helpers = r'''
+          /* V24: A much larger retro-adventure overworld inspired by the sense of
+           * scale of late-N64/PS1 fantasy games. The art remains original low-poly.
+           */
+          static void vt_v24_ground_patch(int x0, int z0, int step, int nx, int nz,
+                                          int r1, int g1, int b1,
+                                          int r2, int g2, int b2) {
+              int zi, xi;
+              for (zi = 0; zi < nz; zi++) {
+                  for (xi = 0; xi < nx; xi++) {
+                      int wx = x0 + xi * step;
+                      int wz = z0 + zi * step;
+                      SVECTOR a = {wx - px, 35, wz - pz, 0};
+                      SVECTOR b = {wx + step - px, 35, wz - pz, 0};
+                      SVECTOR c = {wx - px, 35, wz + step - pz, 0};
+                      SVECTOR d = {wx + step - px, 35, wz + step - pz, 0};
+                      if (((xi + zi) & 1) == 0) {
+                          draw_triangle3(&a, &c, &b, r1, g1, b1);
+                          draw_triangle3(&b, &c, &d, r2, g2, b2);
+                      } else {
+                          draw_triangle3(&a, &c, &b, r2, g2, b2);
+                          draw_triangle3(&b, &c, &d, r1, g1, b1);
+                      }
+                  }
+              }
+          }
+
+          static void vt_v24_peak(int x, int z, int width, int height,
+                                  int r, int g, int b) {
+              SVECTOR a = {x - width - px, 38, z - pz, 0};
+              SVECTOR b0 = {x + width - px, 38, z - pz, 0};
+              SVECTOR c = {x - px, 38 - height, z - 42 - pz, 0};
+              SVECTOR d = {x - px, 38, z + 34 - pz, 0};
+              draw_triangle3(&a, &c, &b0, r, g, b);
+              draw_triangle3(&a, &d, &c, r * 3 / 4, g * 3 / 4, b * 3 / 4);
+              draw_triangle3(&c, &d, &b0, r / 2, g / 2, b / 2);
+          }
+
+          static void vt_v24_tree(int x, int z, int scale, int variant) {
+              int rr = 35, gg = 140, bb = 70;
+              draw_box(x, 14, z, 9 + scale / 6, 96, 62, 38);
+              if (variant == 1) { rr = 28; gg = 164; bb = 84; }
+              if (variant == 2) { rr = 44; gg = 154; bb = 98; }
+              vt_pyramid(x, -18, z, 14 + scale / 4, 34 + scale, rr, gg, bb);
+              vt_pyramid(x, -36, z + 6, 10 + scale / 5, 26 + scale / 2,
+                         rr + 8, gg + 10, bb + 8);
+          }
+
+          static void vt_v24_house(int x, int z, int body_r, int body_g, int body_b,
+                                   int roof_r, int roof_g, int roof_b) {
+              draw_box(x, 18, z, 30, body_r, body_g, body_b);
+              draw_box(x, 6, z - 3, 8, 45, 85, 210);
+              vt_pyramid(x, -10, z, 34, 26, roof_r, roof_g, roof_b);
+          }
+
+          static void vt_v24_ruin_arch(int x, int z, int r, int g, int b) {
+              draw_box(x - 18, 6, z, 10, r, g, b);
+              draw_box(x + 18, 6, z, 10, r, g, b);
+              draw_box(x, -18, z, 12, r, g, b);
+          }
+
+          static void vt_v24_path_band(int z, int width, int r, int g, int b) {
+              int x0 = -width;
+              int x1 = width;
+              SVECTOR a = {x0 - px, 34, z - pz, 0};
+              SVECTOR b0 = {x1 - px, 34, z - pz, 0};
+              SVECTOR c = {x0 - px, 34, z + 70 - pz, 0};
+              SVECTOR d = {x1 - px, 34, z + 70 - pz, 0};
+              draw_triangle3(&a, &c, &b0, r, g, b);
+              draw_triangle3(&b0, &c, &d, r * 4 / 5, g * 4 / 5, b * 4 / 5);
+          }
+
+          static void vt_v24_draw_overworld(void) {
+              int z;
+              int i;
+
+              /* Broad field with more depth than the original prototype. */
+              vt_v24_ground_patch(-720, 40, 90, 16, 12, 34, 108, 58, 26, 92, 48);
+              vt_v24_ground_patch(-480, 1120, 120, 8, 4, 38, 98, 64, 30, 88, 54);
+
+              /* Main road through the region. */
+              for (z = 60; z <= 760; z += 70) {
+                  int width = 84 + (z / 24);
+                  vt_v24_path_band(z, width, 118, 91, 60);
+              }
+
+              /* Distant mountains and horizon landmarks. */
+              for (i = -3; i <= 3; i++) {
+                  vt_v24_peak(i * 210, 760 + (i & 1) * 70,
+                              110 + (i & 1) * 30,
+                              140 + (i + 3) * 8,
+                              42, 110, 108);
+              }
+              vt_v24_peak(-620, 920, 180, 210, 34, 86, 102);
+              vt_v24_peak(620, 950, 210, 240, 46, 98, 118);
+
+              if (region == 0) {
+                  /* Sunmeadow: wide village valley. */
+                  vt_v24_house(-210, 300, 138, 102, 64, 191, 84, 58);
+                  vt_v24_house(0, 325, 162, 124, 74, 228, 182, 82);
+                  vt_v24_house(205, 295, 136, 101, 70, 184, 86, 62);
+                  vt_v24_house(-95, 430, 150, 112, 72, 194, 88, 60);
+                  vt_v24_house(118, 440, 142, 108, 69, 204, 96, 65);
+                  draw_box(0, 2, 520, 18, 64, 126, 235);
+                  vt_v24_ruin_arch(0, 610, 156, 149, 132);
+                  for (i = -6; i <= 6; i++) {
+                      vt_v24_tree(-500 + i * 85, 250 + ((i & 1) ? 40 : -20), 10 + (i & 3) * 2, i % 3);
+                      vt_v24_tree(-540 + i * 90, 520 + ((i & 1) ? -10 : 36), 13 + ((i + 1) & 3) * 2, (i + 1) % 3);
+                  }
+              } else if (region == 1) {
+                  /* Crystal Pass: canyon-like travel route. */
+                  for (i = -4; i <= 4; i++) {
+                      vt_v24_peak(-520, 240 + i * 120, 92, 122 + (i & 1) * 24, 68, 92, 118);
+                      vt_v24_peak(520, 240 + i * 120, 92, 126 + ((i + 1) & 1) * 20, 74, 100, 126);
+                  }
+                  for (i = -3; i <= 3; i++) {
+                      draw_box(-180 + i * 120, 12, 320 + i * 80, 18, 98, 188, 228);
+                      vt_pyramid(-180 + i * 120, -18, 320 + i * 80, 10, 32, 124, 228, 255);
+                      draw_box(210 - i * 110, 18, 380 + i * 70, 15, 112, 194, 235);
+                      vt_pyramid(210 - i * 110, -16, 380 + i * 70, 9, 28, 138, 238, 255);
+                  }
+                  vt_v24_ruin_arch(0, 690, 150, 156, 170);
+              } else {
+                  /* Storm Arena: huge approach and arena gate. */
+                  draw_box(-180, 16, 540, 54, 110, 66, 42);
+                  draw_box(180, 16, 540, 54, 110, 66, 42);
+                  draw_box(0, -8, 560, 40, 222, 167, 68);
+                  draw_box(-128, 40, 540, 20, 235, 176, 78);
+                  draw_box(128, 40, 540, 20, 235, 176, 78);
+                  for (i = -3; i <= 3; i++) {
+                      draw_box(i * 95, 16, 280 + i * 55, 14, 108, 110, 126);
+                      vt_pyramid(i * 95, -14, 280 + i * 55, 8, 20, 190, 200, 245);
+                  }
+                  vt_v24_peak(-360, 860, 120, 180, 50, 82, 92);
+                  vt_v24_peak(360, 830, 120, 190, 48, 80, 100);
+              }
+          }
+          '''
+
+          replace_once('static void draw_hud(void) {', helpers + '\nstatic void draw_hud(void) {')
+
+          code, _ = re.subn(r'if \(pz > 420 && region < 2\)', 'if (pz > 1120 && region < 2)', code)
+          code, _ = re.subn(r'if \(pz < -420 && region > 0\)', 'if (pz < -1120 && region > 0)', code)
+          code, _ = re.subn(r'if \(region==0 && step_count>20\) region=1;', 'if (region==0 && step_count>120) region=1;', code)
+          code, _ = re.subn(r'if \(region==1 && step_count>45\) region=2;', 'if (region==1 && step_count>260) region=2;', code)
+
+          replace_once('        draw_hud();', '        vt_v24_draw_overworld();\n        draw_hud();')
+
+          required = [
+              'VOLT TRAIL V24', 'vt_v24_draw_overworld();',
+              'vt_v24_ground_patch(', 'vt_v24_house(', 'vt_v24_peak(',
+              'PAD_TRIANGLE', 'vt_play_intro();', 'vt_v23_field_dragon();'
+          ]
+          for marker in required:
+              if marker not in code:
+                  raise RuntimeError('Missing V24 feature: ' + marker)
+
+          path.write_text(code, encoding='utf-8')
+          print('V24 ready: larger adventure-scale overworld added')
+          print('V24 ready: wide fields, village, pass and arena approach added')
+          print('V24 ready: V23 dragons, party, codex, menu and intro preserved')
+          PY
+
+      - name: Apply V24.1 wide camera villages villagers and connected roads
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          source = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+          code = source.read_text(encoding='utf-8')
+
+          def once(old, new):
+              global code
+              n=code.count(old)
+              if n != 1:
+                  raise RuntimeError('V24.1 marker unexpected: %r count=%d' % (old[:80], n))
+              code=code.replace(old,new,1)
+
+          def function_range(s, name):
+              pat = r'\bstatic\s+void\s+' + re.escape(name) + r'\s*\([^;]*?\)\s*\{'
+              ms = list(re.finditer(pat,s))
+              if len(ms) != 1: raise RuntimeError('Function '+name+' count='+str(len(ms)))
+              a=ms[0].start(); op=s.index('{',a); depth=0
+              quote=None; escape=False; block=False; line=False
+              i=op
+              while i<len(s):
+                  c=s[i]; nextc=s[i+1] if i+1<len(s) else ''
+                  if line:
+                      if c=='\n':line=False
+                  elif block:
+                      if c=='*' and nextc=='/':block=False;i+=1
+                  elif quote:
+                      if escape: escape=False
+                      elif c=='\\':escape=True
+                      elif c==quote:quote=None
+                  elif c=='/' and nextc=='/':line=True;i+=1
+                  elif c=='/' and nextc=='*':block=True;i+=1
+                  elif c in '"\'':quote=c
+                  elif c=='{':depth+=1
+                  elif c=='}':
+                      depth-=1
+                      if depth==0:return a,i+1
+                  i+=1
+              raise RuntimeError('Unclosed function '+name)
+
+          once('VOLT TRAIL V24 - %s','VOLT TRAIL V24.1 - %s')
+          once('VOLT TRAIL V24 - MENUE','VOLT TRAIL V24.1 - MENUE')
+          once('#define WORLD_LIMIT 1600','#define WORLD_LIMIT 2100')
+          once('#define CAMERA_Z 190','#define CAMERA_Z 255')
+          # Lift the camera slightly for a more adventurous, overlooking perspective.
+          once('VECTOR camera_pos = {0, -10, CAMERA_Z, 0};',
+               'VECTOR camera_pos = {0, -28, CAMERA_Z, 0};')
+          # Richer blue background, without changing V23 menus or PS1 rendering state.
+          for i in (0,1):
+              old=f'draw[{i}].r0 = 10; draw[{i}].g0 = 15; draw[{i}].b0 = 35;'
+              new=f'draw[{i}].r0 = 24; draw[{i}].g0 = 53; draw[{i}].b0 = 102;'
+              once(old,new)
+
+          new_helpers = r'''
+          /* V24.1 scene details: draw only places near the player to preserve PS1 RAM/GPU time. */
+          static int vt_v241_visible(int x, int z, int distance) {
+              int dx=x-px;
+              int dz=z-pz;
+              return dx>-distance && dx<distance && dz>-220 && dz<1120;
+          }
+
+          static void vt_v241_flat(int x1,int z1,int x2,int z2,int y,int r,int g,int b) {
+              SVECTOR a={x1-px,y,z1-pz,0};
+              SVECTOR c={x1-px,y,z2-pz,0};
+              SVECTOR d={x2-px,y,z2-pz,0};
+              SVECTOR e={x2-px,y,z1-pz,0};
+              draw_triangle3(&a,&c,&e,r,g,b);
+              draw_triangle3(&e,&c,&d,r*4/5,g*4/5,b*4/5);
+          }
+
+          static void vt_v241_path(int x1,int z1,int x2,int z2,int width) {
+              /* A continuous, walkable looking road strip between map landmarks. */
+              if (!vt_v241_visible((x1+x2)/2,(z1+z2)/2,950)) return;
+              if (x1==x2) {
+                  vt_v241_flat(x1-width,z1,x1+width,z2,33,164,123,80);
+              } else {
+                  vt_v241_flat(x1,z1-width,x2,z1+width,33,163,121,76);
+              }
+          }
+
+          static void vt_v241_building(int x,int z,int size,int roof,int style) {
+              if (!vt_v241_visible(x,z,800))return;
+              draw_box(x,4,z,size,178,142,94);
+              draw_box(x,-15,z-3,size/2,201,173,115);
+              vt_pyramid(x,-size+4,z,size+10,size/2+8,
+                         roof==0?168:218,roof==0?76:152,roof==0?55:79);
+              /* Dark wooden door, windows, simple chimney. */
+              draw_box(x,13,z-size-1,8,45,77,151);
+              draw_box(x-size/2,-1,z-size+4,6,238,201,94);
+              draw_box(x+size/2,-1,z-size+4,6,238,201,94);
+              if (style) draw_box(x+size/2, -size, z+size/2,9,122,119,107);
+          }
+
+          static void vt_v241_npc(int x,int z,int tint) {
+              /* Decorative villagers; the existing dialogue-capable NPCs remain intact. */
+              if (!vt_v241_visible(x,z,760))return;
+              draw_box(x,18,z,10,tint?156:45,tint?72:117,tint?78:198);
+              draw_box(x,-1,z-2,8,218,170,115);
+              draw_box(x-10,19,z,4,210,162,111);
+              draw_box(x+10,19,z,4,210,162,111);
+          }
+
+          static void vt_v241_sign(int x,int z) {
+              if (!vt_v241_visible(x,z,700))return;
+              draw_box(x,15,z,5,123,86,55);
+              draw_box(x,-10,z,13,192,151,81);
+          }
+
+          static void vt_v241_fence(int x,int z) {
+              if (!vt_v241_visible(x,z,730))return;
+              draw_box(x,24,z,5,115,74,43);
+              draw_box(x+30,24,z,5,115,74,43);
+              draw_box(x+15,13,z,6,166,104,59);
+          }
+
+          static void vt_v241_tree_at(int x,int z,int seed) {
+              if (!vt_v241_visible(x,z,900))return;
+              vt_v24_tree(x,z,17+(seed%4)*3,seed%3);
+          }
+
+          static void vt_v241_ruins(int x,int z) {
+              if (!vt_v241_visible(x,z,950))return;
+              vt_v24_ruin_arch(x,z,160,161,171);
+              draw_box(x-45,25,z+25,14,134,140,156);
+              draw_box(x+42,25,z+20,11,135,141,153);
+          }
+
+          static void vt_v241_bridge(int z) {
+              int i;
+              if (!vt_v241_visible(0,z,850))return;
+              /* Blue river and a broad raised wooden crossing on the main road. */
+              vt_v241_flat(-760,z-85,760,z+85,34,37,108,176);
+              vt_v241_flat(-115,z-95,115,z+95,28,154,112,73);
+              for (i=-2;i<=2;i++) {
+                  draw_box(-122,9,z+i*43,5,130,83,52);
+                  draw_box(122,9,z+i*43,5,130,83,52);
+              }
+          }
+
+          static void vt_v241_ground(void) {
+              int gx=(px/110)*110-660;
+              int gz=(pz/110)*110-110;
+              /* Stream terrain around player rather than drawing the entire map at once. */
+              if (region==1) vt_v24_ground_patch(gx,gz,110,12,11,64,109,94,48,92,83);
+              else if (region==2) vt_v24_ground_patch(gx,gz,110,12,11,79,105,73,65,91,65);
+              else vt_v24_ground_patch(gx,gz,110,12,11,57,132,72,39,112,59);
+          }
+          '''
+          # Recreate the V24 world function with additional locations and paths, retaining
+          # its original function name (the V24 workflow already calls that name in main).
+          new_world = r'''static void vt_v24_draw_overworld(void) {
+              int i, z;
+              vt_v241_ground();
+
+              /* The same north/south road runs through Sunmeadow, Crystal Pass and Arena. */
+              for (z=-480;z<2250;z+=100) vt_v241_path(0,z,0,z+100,85);
+              /* Side roads connect the village, lookout and ruins rather than isolated islands. */
+              vt_v241_path(-550,370,550,370,56);
+              vt_v241_path(-450,850,450,850,45);
+              vt_v241_path(-400,1100,400,1100,46);
+
+              /* Forest edges frame a long navigable clearing without filling every polygon. */
+              for (i=-3;i<19;i++) {
+                  int seed=i+8;
+                  z=i*145;
+                  vt_v241_tree_at(-290-(seed*53%115),z+((seed&1)*35),seed);
+                  vt_v241_tree_at(290+(seed*61%145),z+((seed&1)*35),seed+1);
+                  if ((seed&3)==0) {
+                      vt_v241_tree_at(-515,z+30,seed+2);
+                      vt_v241_tree_at(510,z+70,seed+3);
+                  }
+              }
+
+              /* Original polygon mountains, drawn as recognizable distant destinations. */
+              for (i=-2;i<=2;i++) {
+                  int zz=1270+((i+2)&1)*75;
+                  int xx=i*350;
+                  if (vt_v241_visible(xx,zz,1600))
+                      vt_v24_peak(xx,zz,190,220+(i+2)*17,62,99,139);
+              }
+
+              if(region==0) {
+                  /* SUNMEADOW: larger village, crossroad, bridge, lookout and ruins. */
+                  vt_v241_building(-205,265,43,0,1);
+                  vt_v241_building(15,330,52,1,1);
+                  vt_v241_building(208,280,42,0,0);
+                  vt_v241_building(-380,395,49,1,0);
+                  vt_v241_building(365,397,46,0,1);
+                  vt_v241_building(-100,500,37,0,0);
+                  vt_v241_building(165,495,38,1,0);
+                  vt_v241_sign(-110,170);
+                  vt_v241_sign(140,465);
+                  vt_v241_fence(-130,230);
+                  vt_v241_fence(140,230);
+                  vt_v241_fence(-130,540);
+                  vt_v241_fence(140,540);
+                  vt_v241_npc(-115,328,0);
+                  vt_v241_npc(120,368,1);
+                  vt_v241_npc(-300,465,1);
+                  vt_v241_npc(255,490,0);
+                  vt_v241_bridge(715);
+                  vt_v241_ruins(350,880);
+                  vt_v241_ruins(-295,1110);
+              } else if(region==1) {
+                  /* CRYSTAL PASS: tall rock silhouettes and crystal outcrops. */
+                  for (i=-4;i<=8;i++) {
+                      z=i*160+120;
+                      if(vt_v241_visible(-480,z,1050))vt_v24_peak(-480,z,125,165,88,112,152);
+                      if(vt_v241_visible(480,z,1050))vt_v24_peak(480,z,125,175,75,108,153);
+                      if(vt_v241_visible(-250,z,800)) {
+                          draw_box(-250,12,z,17,87,181,206);
+                          vt_pyramid(-250,-20,z,17,52,133,219,244);
+                      }
+                      if(vt_v241_visible(250,z,800)) {
+                          draw_box(250,12,z,17,109,195,216);
+                          vt_pyramid(250,-20,z,17,50,147,220,248);
+                      }
+                  }
+                  vt_v241_ruins(-190,780);
+                  vt_v241_sign(122,250);
+                  vt_v241_npc(-115,335,0);
+                  vt_v241_npc(115,585,1);
+              } else {
+                  /* STORM ARENA: wide gate, approach road, stone watchtowers. */
+                  vt_v241_building(-390,365,53,0,1);
+                  vt_v241_building(370,375,53,0,1);
+                  if(vt_v241_visible(0,875,990)) {
+                      draw_box(-165,12,875,60,141,89,60);
+                      draw_box(165,12,875,60,141,89,60);
+                      draw_box(0,-35,875,66,216,161,74);
+                      vt_pyramid(-165,-70,875,65,80,210,115,67);
+                      vt_pyramid(165,-70,875,65,80,210,115,67);
+                  }
+                  vt_v241_ruins(-330,740);
+                  vt_v241_ruins(335,715);
+                  vt_v241_sign(115,265);
+                  vt_v241_npc(-115,420,0);
+                  vt_v241_npc(125,550,1);
+              }
+          }'''
+
+          # Put helper definitions immediately before the old world function.
+          old_def='static void vt_v24_draw_overworld(void) {'
+          once(old_def,new_helpers+'\n'+old_def)
+          a,b=function_range(code,'vt_v24_draw_overworld')
+          code=code[:a]+new_world+code[b:]
+
+          # Avoid large scene geometry being placed over the player by moving the
+          # overworld call ahead of character meshes (directly after ground).
+          once('        vt_v24_draw_overworld();\n        draw_hud();', '        draw_hud();')
+          once('        draw_ground();', '        draw_ground();\n        vt_v24_draw_overworld();')
+
+          # The original V17 memory-card reader rejected coordinates outside +/-500.
+          # A larger world must also accept the larger coordinates when loading saves.
+          # Keep the 17-word checksum and all existing save fields unchanged.
+          for axis in (2,3):
+              for operator, old_limit in (('<','-500'),('>','500')):
+                  old='(int32_t)w[%d] %s %s' % (axis,operator,old_limit)
+                  new='(int32_t)w[%d] %s %s' % (axis,operator,('-WORLD_LIMIT' if operator=='<' else 'WORLD_LIMIT'))
+                  once(old,new)
+
+          # The old world used 1120 as region transition for walkable roads; preserve it.
+          required=[
+              'VOLT TRAIL V24.1', 'vt_v241_ground();', 'vt_v241_bridge(715);',
+              'vt_v241_building(', 'vt_v241_npc(', 'vt_v241_path(',
+              'vt_v241_visible(', 'vt_v24_draw_overworld();',
+              '#define CAMERA_Z 255', 'vt_v23_field_dragon();',
+              'vt_v21_party[3]', 'vt_save_game(void)', 'vt_load_game(void)',
+              'InitCARD(1);', 'vt_play_intro();',
+          ]
+          for term in required:
+              if term not in code: raise RuntimeError('Missing V24.1 feature: '+term)
+          source.write_text(code,encoding='utf-8')
+          print('V24.1 large low-poly world ready')
+          print('V24.1 wider camera, large buildings, villagers, signs, bridges and paths')
+          print('Original V23/V24 gameplay, dragon team, codex, intro and saves untouched')
+          PY
+
       - name: Install PSn00bSDK 0.24 directly
         shell: bash
         run: |
@@ -1824,7 +2297,7 @@ jobs:
           echo "CMake toolchain: $SDK_CMAKE"
           echo "PS1 compiler: $SDK_COMPILER"
 
-      - name: Build Volt Trail V23
+      - name: Build Volt Trail V24.1
         shell: bash
         run: |
           set -euxo pipefail
@@ -1851,10 +2324,10 @@ jobs:
           done
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V23
+      - name: Upload Volt Trail V24.1
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V23-Aktiver-Drache-Feld
+          name: VoltTrail-PS1-V24-1-Abenteuerwelt
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
