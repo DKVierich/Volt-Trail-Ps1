@@ -1,5 +1,5 @@
 
-name: Build Volt Trail PS1 V14 Fixed
+name: Build Volt Trail PS1 V15 NPC World
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Install tools
+      - name: Install build tools
         shell: bash
         run: |
           set -euo pipefail
@@ -24,16 +24,16 @@ jobs:
             cmake ninja-build unzip curl jq tar \
             ffmpeg python3-pil python3-yaml
 
-      - name: Prepare working V13 project
+      - name: Prepare V14 project
         shell: bash
         run: |
           set -euo pipefail
 
-          V13_COMMIT="ae833b495606ae72abfb53ef4fd65a95f9a51e50"
+          V14_COMMIT="72105db036c6bea156fa2a44900866d835d799f4"
 
           curl --retry 3 -fsSL \
-            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$V13_COMMIT/.github/workflows/blank-ps1.yml" \
-            -o "$RUNNER_TEMP/v13.yml"
+            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$V14_COMMIT/.github/workflows/blank-ps1.yml" \
+            -o "$RUNNER_TEMP/v14.yml"
 
           python3 - <<'PY'
           import os
@@ -41,33 +41,33 @@ jobs:
           from pathlib import Path
           import yaml
 
-          path = Path(os.environ["RUNNER_TEMP"]) / "v13.yml"
-          data = yaml.safe_load(path.read_text())
+          workflow = Path(os.environ["RUNNER_TEMP"]) / "v14.yml"
+          data = yaml.safe_load(workflow.read_text())
 
           steps = data["jobs"]["build"]["steps"]
+          name = "Prepare working V13 project"
 
           matches = [
               step for step in steps
-              if step.get("name") ==
-              "Prepare project and V12 backup"
+              if step.get("name") == name
           ]
 
           if len(matches) != 1:
-              raise RuntimeError("V13 preparation not found")
+              raise RuntimeError("V14 preparation missing")
 
           subprocess.run(
               [
                   "bash", "-euo", "pipefail",
                   "-c", matches[0]["run"]
               ],
-              env=os.environ.copy(),
-              check=True
+              check=True,
+              env=os.environ.copy()
           )
 
-          print("V13 project prepared")
+          print("V14 source project prepared")
           PY
 
-      - name: Restore V13 intro and gameplay
+      - name: Restore working V14 game
         shell: bash
         run: |
           set -euo pipefail
@@ -78,346 +78,428 @@ jobs:
           from pathlib import Path
           import yaml
 
-          path = Path(os.environ["RUNNER_TEMP"]) / "v13.yml"
+          workflow = Path(os.environ["RUNNER_TEMP"]) / "v14.yml"
           steps = yaml.safe_load(
-              path.read_text()
+              workflow.read_text()
           )["jobs"]["build"]["steps"]
 
-          for wanted in [
-              "Restore working V12 game and intro",
-              "Apply V13 camera and 3D animation"
-          ]:
+          names = [
+              "Restore V13 intro and gameplay",
+              "Apply corrected V14 3D graphics"
+          ]
+
+          for name in names:
               matches = [
                   step for step in steps
-                  if step.get("name") == wanted
+                  if step.get("name") == name
               ]
 
               if len(matches) != 1:
                   raise RuntimeError(
-                      "V13 step not found: " + wanted
+                      "V14 step not found: " + name
                   )
+
+              print("Restoring:", name, flush=True)
 
               subprocess.run(
                   [
                       "bash", "-euo", "pipefail",
                       "-c", matches[0]["run"]
                   ],
-                  env=os.environ.copy(),
-                  check=True
+                  check=True,
+                  env=os.environ.copy()
               )
 
-          print("V13 intro and gameplay restored")
+          print("Working V14 game restored")
           PY
 
-      - name: Apply corrected V14 3D graphics
+      - name: Add V15 NPCs and larger world
         shell: bash
         run: |
           set -euo pipefail
 
           python3 - <<'PY'
           import os
-          import re
           from pathlib import Path
 
-          path = (
-              Path(os.environ["PROJECT_DIR"])
-              / "src" / "main.c"
-          )
-
+          path = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
           code = path.read_text(encoding="utf-8")
 
           def replace_once(old, new):
               global code
 
-              if code.count(old) != 1:
+              count = code.count(old)
+
+              if count != 1:
                   raise RuntimeError(
-                      "V14 source marker missing: " +
-                      old[:75]
+                      "V15 source marker missing: "
+                      + old[:75]
+                      + " matches=" + str(count)
                   )
 
               code = code.replace(old, new, 1)
 
-          # New version title.
+          # Update version.
           replace_once(
-              "VOLT TRAIL V13 - %s",
-              "VOLT TRAIL V14 - %s"
+              "VOLT TRAIL V14 - %s",
+              "VOLT TRAIL V15 - %s"
           )
 
-          # Slightly larger game view.
+          # Extend the ground across all three regions.
           replace_once(
-              "gte_SetGeomScreen(225);",
-              "gte_SetGeomScreen(235);"
+              "for (z = 80; z <= 420; z += 55)",
+              "for (z = 25; z <= 475; z += 55)"
           )
 
-          # Detailed player with walking arms and legs.
-          player_code = r'''
-          static void vt_player(int x, int z) {
-              int stride = 0;
+          replace_once(
+              "for (x = -220; x < 221; x += 55)",
+              "for (x = -275; x < 276; x += 55)"
+          )
 
-              if (vt_walk_phase != 0) {
-                  stride = vt_walk_phase < 16 ? 5 : -5;
+          # Additional character, house and dialogue
+          # functions. All objects are PS1 low-poly.
+          npc_code = r'''
+          static int vt_npc_near = -1;
+          static int vt_npc_dialog = -1;
+
+          static const int vt_npc_area[4] = {
+              0, 0, 1, 2
+          };
+
+          static const int vt_npc_x[4] = {
+              -65, 90, -80, 70
+          };
+
+          static const int vt_npc_z[4] = {
+              170, 260, 240, 290
+          };
+
+          static int vt_find_npc(void) {
+              int i;
+              int nearest = -1;
+              int best_distance = 88 * 88;
+
+              for (i = 0; i < 4; i++) {
+                  int dx;
+                  int dz;
+                  int distance;
+
+                  if (vt_npc_area[i] != region) {
+                      continue;
+                  }
+
+                  dx = px - vt_npc_x[i];
+                  dz = pz - vt_npc_z[i];
+
+                  distance = dx * dx + dz * dz;
+
+                  if (distance <= best_distance) {
+                      best_distance = distance;
+                      nearest = i;
+                  }
               }
 
-              /* Body and clothing. */
+              return nearest;
+          }
+
+          static const char *vt_npc_text(int id) {
+              switch (id) {
+                  case 0:
+                      return "GUIDE: WELCOME TO SUNMEADOW!";
+                  case 1:
+                      return "VILLAGER: SPARKIT IS SPECIAL!";
+                  case 2:
+                      return "SCOUT: FOLLOW THE CRYSTALS!";
+                  case 3:
+                      return "GUARD: THE ARENA AWAITS YOU!";
+                  default:
+                      return "HELLO, TRAVELER!";
+              }
+          }
+
+          static void vt_npc_model(
+              int x, int z,
+              int shirt_r, int shirt_g, int shirt_b
+          ) {
+              /* Clothing. */
               draw_box(
-                  x, 19, z, 12,
-                  45, 101, 211
+                  x, 20, z, 11,
+                  shirt_r, shirt_g, shirt_b
               );
 
               /* Head. */
               draw_box(
                   x, -1, z - 2, 9,
-                  231, 179, 129
+                  226, 178, 127
               );
 
-              /* Hair. */
-              draw_box(
-                  x, -11, z - 1, 9,
-                  79, 49, 32
+              /* Hair or hat. */
+              vt_pyramid(
+                  x, -11, z,
+                  14, 12,
+                  91, 61, 45
               );
 
-              /* Moving arms. */
+              /* Arms. */
               draw_box(
-                  x - 17, 18 + stride, z,
-                  5, 54, 116, 223
-              );
-
-              draw_box(
-                  x + 17, 18 - stride, z,
-                  5, 54, 116, 223
-              );
-
-              /* Hands. */
-              draw_box(
-                  x - 17, 27 + stride, z,
-                  4, 222, 171, 126
+                  x - 15, 18, z,
+                  5, shirt_r, shirt_g, shirt_b
               );
 
               draw_box(
-                  x + 17, 27 - stride, z,
-                  4, 222, 171, 126
+                  x + 15, 18, z,
+                  5, shirt_r, shirt_g, shirt_b
               );
 
-              /* Walking legs. */
+              /* Legs. */
               draw_box(
-                  x - 7, 36 - stride, z,
-                  6, 35, 52, 109
-              );
-
-              draw_box(
-                  x + 7, 36 + stride, z,
-                  6, 35, 52, 109
-              );
-
-              /* Shoes. */
-              draw_box(
-                  x - 7, 46 - stride, z - 3,
-                  5, 47, 42, 43
+                  x - 6, 38, z,
+                  5, 47, 57, 92
               );
 
               draw_box(
-                  x + 7, 46 + stride, z - 3,
-                  5, 47, 42, 43
+                  x + 6, 38, z,
+                  5, 47, 57, 92
               );
           }
 
+          static void vt_house(
+              int x, int z, int style
+          ) {
+              int r = style ? 142 : 159;
+              int g = style ? 92 : 114;
+              int b = style ? 76 : 68;
+
+              /* Main structure. */
+              draw_box(
+                  x, 25, z, 23,
+                  r, g, b
+              );
+
+              /* Roof. */
+              vt_pyramid(
+                  x, 0, z,
+                  32, 25,
+                  style ? 172 : 183,
+                  80, 53
+              );
+
+              /* Front door. */
+              draw_box(
+                  x, 26, z - 25, 9,
+                  54, 65, 111
+              );
+
+              /* Side windows. */
+              draw_box(
+                  x - 17, 8, z - 24, 5,
+                  230, 194, 78
+              );
+
+              draw_box(
+                  x + 17, 8, z - 24, 5,
+                  230, 194, 78
+              );
+          }
+
+          static void vt_draw_new_world(void) {
+              /* Distant houses and vegetation. */
+              vt_house(-205, 405, 0);
+              vt_house(205, 420, 1);
+
+              vt_tree(-250, 170);
+              vt_tree(250, 215);
+              vt_tree(-250, 450);
+              vt_tree(250, 465);
+
+              /* Roadside bushes. */
+              vt_pyramid(
+                  -105, 32, 170,
+                  12, 17, 43, 145, 68
+              );
+
+              vt_pyramid(
+                  110, 32, 190,
+                  12, 17, 47, 154, 70
+              );
+
+              /* Characters in their own regions. */
+              if (region == 0) {
+                  vt_npc_model(
+                      -65, 170, 83, 101, 214
+                  );
+
+                  vt_npc_model(
+                      90, 260, 195, 114, 66
+                  );
+              }
+
+              if (region == 1) {
+                  vt_npc_model(
+                      -80, 240, 99, 174, 184
+                  );
+
+                  vt_crystal(140, 380);
+                  vt_crystal(-175, 290);
+              }
+
+              if (region == 2) {
+                  vt_npc_model(
+                      70, 290, 192, 67, 65
+                  );
+
+                  vt_pyramid(
+                      0, -12, 410,
+                      30, 42,
+                      225, 153, 54
+                  );
+              }
+          }
           '''
 
           replace_once(
-              "static void vt_mosslet(",
-              player_code + "\nstatic void vt_mosslet("
-          )
-
-          # V14 FIX:
-          # Find Sparkit's actual call without relying
-          # on its exact indentation.
-          marker = (
-              "/* Player marker and detailed "
-              "V12 creatures. */"
-          )
-
-          if code.count(marker) != 1:
-              raise RuntimeError(
-                  "Player scene marker not found"
-              )
-
-          start = code.index(marker)
-
-          match = re.search(
-              r"\bvt_sparkit\s*\(",
-              code[start:]
-          )
-
-          if match is None:
-              raise RuntimeError(
-                  "Sparkit scene call not found"
-              )
-
-          end = start + match.start()
-
-          # Replace only the two old player boxes.
-          # Keep the existing Sparkit and battle code.
-          new_scene = (
-              "/* V14 animated human player. */\n"
-              "              vt_player("
-              "px, pz + 73);\n\n"
-              "              "
-          )
-
-          code = (
-              code[:start] +
-              new_scene +
-              code[end:]
-          )
-
-          # Add colorful cheek markings to Sparkit.
-          spark_start = code.index(
-              "static void vt_sparkit(int x, int z) {"
-          )
-
-          spark_end = code.index(
-              "static void vt_player(",
-              spark_start
-          )
-
-          spark = code[spark_start:spark_end]
-          closing = spark.rfind("}")
-
-          if closing < 0:
-              raise RuntimeError(
-                  "Sparkit model is incomplete"
-              )
-
-          cheek_details = r'''
-              /* Orange cheek markings. */
-              draw_box(
-                  x - 12, 6 - bounce, z - 13,
-                  3, 244, 111, 42
-              );
-
-              draw_box(
-                  x + 12, 6 - bounce, z - 13,
-                  3, 244, 111, 42
-              );
-          '''
-
-          spark = (
-              spark[:closing] +
-              cheek_details + "\n" +
-              spark[closing:]
-          )
-
-          code = (
-              code[:spark_start] +
-              spark +
-              code[spark_end:]
-          )
-
-          # Extra face and leaf details for Mosslet.
-          moss_start = code.index(
-              "static void vt_mosslet("
-          )
-
-          moss_end = code.index(
               "static void vt_draw_panel(",
-              moss_start
+              npc_code + "\nstatic void vt_draw_panel("
           )
 
-          moss = code[moss_start:moss_end]
-          closing = moss.rfind("}")
-
-          if closing < 0:
-              raise RuntimeError(
-                  "Mosslet model is incomplete"
-              )
-
-          moss_details = r'''
-              /* Dark eyes. */
-              draw_box(
-                  x - 6, 1, z - 17,
-                  3, 19, 37, 31
-              );
-
-              draw_box(
-                  x + 6, 1, z - 17,
-                  3, 19, 37, 31
-              );
-
-              /* Leaves beside the head. */
-              vt_pyramid(
-                  x - 15, 5, z + 4,
-                  8, 17, 50, 159, 67
-              );
-
-              vt_pyramid(
-                  x + 15, 5, z + 4,
-                  8, 17, 50, 159, 67
-              );
-          '''
-
-          moss = (
-              moss[:closing] +
-              moss_details + "\n" +
-              moss[closing:]
-          )
-
-          code = (
-              code[:moss_start] +
-              moss +
-              code[moss_end:]
-          )
-
-          # Expand the world with trees and bushes.
-          scenery = (
-              "vt_gate(310);\n"
-              "              vt_tree(-210, 115);\n"
-              "              vt_tree(210, 125);\n"
-              "              vt_tree(-230, 355);\n"
-              "              vt_tree(230, 365);\n"
-              "\n"
-              "              vt_pyramid(\n"
-              "                  -82, 31, 175,\n"
-              "                  12, 19, 39, 141, 61\n"
-              "              );\n"
-              "\n"
-              "              vt_pyramid(\n"
-              "                  82, 31, 185,\n"
-              "                  12, 19, 47, 154, 69\n"
-              "              );"
-          )
-
+          # Place the extended scenery into the
+          # working V14 rendering sequence.
           replace_once(
               "vt_gate(310);",
-              scenery
+              "vt_gate(310);\n"
+              "              vt_draw_new_world();"
           )
 
-          # Preserve the existing gameplay systems.
+          # Read NPC interaction before existing
+          # movement and battle logic.
+          controls_code = (
+              "        vt_npc_near = vt_find_npc();\n"
+              "\n"
+              "        if (game_mode != 0) {\n"
+              "            vt_npc_dialog = -1;\n"
+              "        }\n"
+              "\n"
+              "        if (\n"
+              "            game_mode == 0 &&\n"
+              "            (pressed & PAD_TRIANGLE)\n"
+              "        ) {\n"
+              "            if (vt_npc_dialog >= 0) {\n"
+              "                vt_npc_dialog = -1;\n"
+              "            } else if (vt_npc_near >= 0) {\n"
+              "                vt_npc_dialog = vt_npc_near;\n"
+              "            }\n"
+              "        }\n"
+              "\n"
+              "        if (\n"
+              "            vt_npc_dialog >= 0 &&\n"
+              "            (pressed & PAD_CROSS)\n"
+              "        ) {\n"
+              "            vt_npc_dialog = -1;\n"
+              "            pressed &= ~PAD_CROSS;\n"
+              "        }\n"
+              "\n"
+              "        if (pressed & PAD_START) {\n"
+              "            vt_npc_dialog = -1;\n"
+              "        }\n"
+              "\n"
+          )
+
+          replace_once(
+              "        if (action_flash > 0) action_flash--;",
+              controls_code
+              + "        if (action_flash > 0) action_flash--;"
+          )
+
+          # Update ONLY the exploration part
+          # of the lower HUD.
+          hud_start = code.index(
+              "static void draw_hud(void) {"
+          )
+
+          start_marker = (
+              "              if (game_mode == 0) {"
+          )
+
+          next_marker = (
+              "              } else if (game_mode == 1) {"
+          )
+
+          start = code.index(
+              start_marker, hud_start
+          )
+
+          end = code.index(
+              next_marker, start
+          )
+
+          exploration_hud = r'''
+              if (game_mode == 0) {
+                  if (vt_npc_dialog >= 0) {
+                      FntPrint(
+                          1, "%s\n\n",
+                          vt_npc_text(vt_npc_dialog)
+                      );
+
+                      FntPrint(
+                          1, "TRIANGLE CLOSE\n"
+                      );
+
+                  } else if (vt_npc_near >= 0) {
+                      FntPrint(
+                          1, "TRIANGLE TALK X BATTLE\n\n"
+                      );
+
+                      FntPrint(
+                          1, "D-PAD MOVE\n"
+                      );
+
+                  } else {
+                      FntPrint(
+                          1, "D-PAD MOVE X BATTLE\n\n"
+                      );
+
+                      FntPrint(
+                          1, "TRIANGLE TALK / START RESET\n"
+                      );
+                  }
+          '''
+
+          code = (
+              code[:start]
+              + exploration_hud
+              + code[end:]
+          )
+
+          # Ensure V14 gameplay still exists.
           required = [
-              "VOLT TRAIL V14",
+              "VOLT TRAIL V15",
+              "vt_play_intro();",
               "vt_player(px, pz + 73);",
               "vt_sparkit(",
               "vt_mosslet(",
               "vt_walk_phase",
-              "vt_play_intro();",
+              "PAD_TRIANGLE",
+              "vt_npc_model(",
+              "vt_npc_text(",
               "FntFlush(0);",
               "FntFlush(1);"
           ]
 
-          for item in required:
-              if item not in code:
+          for marker in required:
+              if marker not in code:
                   raise RuntimeError(
-                      "Missing feature: " + item
+                      "Missing V15 feature: " + marker
                   )
 
           path.write_text(
               code, encoding="utf-8"
           )
 
-          print("Volt Trail V14 graphics applied")
-          print("Animated player added")
-          print("Sparkit and Mosslet improved")
-          print("Additional trees and bushes added")
-          print("Intro and controls preserved")
+          print("Volt Trail V15 source completed")
+          print("Four NPC characters added")
+          print("Triangle-button conversations added")
+          print("Larger world and new houses added")
+          print("V14 intro and gameplay preserved")
           PY
 
       - name: Install PSn00bSDK
@@ -431,10 +513,10 @@ jobs:
           from pathlib import Path
           import yaml
 
-          path = Path(os.environ["RUNNER_TEMP"]) / "v13.yml"
+          workflow = Path(os.environ["RUNNER_TEMP"]) / "v14.yml"
 
           steps = yaml.safe_load(
-              path.read_text()
+              workflow.read_text()
           )["jobs"]["build"]["steps"]
 
           matches = [
@@ -444,7 +526,7 @@ jobs:
 
           if len(matches) != 1:
               raise RuntimeError(
-                  "PSn00bSDK setup missing"
+                  "V14 SDK setup missing"
               )
 
           subprocess.run(
@@ -452,12 +534,14 @@ jobs:
                   "bash", "-euo", "pipefail",
                   "-c", matches[0]["run"]
               ],
-              env=os.environ.copy(),
-              check=True
+              check=True,
+              env=os.environ.copy()
           )
+
+          print("PSn00bSDK ready")
           PY
 
-      - name: Build Volt Trail V14
+      - name: Build Volt Trail V15
         shell: bash
         run: |
           set -euxo pipefail
@@ -487,7 +571,7 @@ jobs:
             SOURCE="$GITHUB_WORKSPACE/build/$file"
 
             if [ ! -s "$SOURCE" ]; then
-              echo "::error::Missing game file: $file"
+              echo "::error::Missing PS1 file: $file"
               exit 1
             fi
 
@@ -497,10 +581,10 @@ jobs:
 
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V14
+      - name: Upload Volt Trail V15
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V14-Fixed
+          name: VoltTrail-PS1-V15-NPC-World
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
