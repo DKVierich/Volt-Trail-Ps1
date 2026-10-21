@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V21 Dragon Team SDK Fix
+name: Build Volt Trail PS1 V22 Battle Continuation
 
 on:
   workflow_dispatch:
@@ -1277,6 +1277,317 @@ jobs:
           print('V21: extra captured dragons remain in codex and can replace bench')
           PY
 
+      - name: Apply V22 persistent fainting and battle switching
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+          code = path.read_text(encoding='utf-8')
+
+
+          def replace_once(old, new):
+              global code
+              n = code.count(old)
+              if n != 1:
+                  raise RuntimeError(f'V22 marker expected once, found {n}: {old[:85]!r}')
+              code = code.replace(old, new, 1)
+
+
+          def function_span(source, name, return_type=None):
+              # Braces inside comments and strings are ignored.
+              rt = r'(?:void|int)' if return_type is None else re.escape(return_type)
+              reg = r'\b(?:static\s+)?' + rt + r'\s+' + re.escape(name) + r'\s*\([^;]*?\)\s*\{'
+              matches = list(re.finditer(reg, source))
+              if len(matches) != 1:
+                  raise RuntimeError(f'Cannot locate {name} definition (found {len(matches)})')
+              start = matches[0].start()
+              op = source.index('{', matches[0].start(), matches[0].end())
+              level = 0
+              i = op
+              quoted = False
+              char_quoted = False
+              line_comment = False
+              block_comment = False
+              escaped = False
+              while i < len(source):
+                  c = source[i]
+                  following = source[i+1] if i+1 < len(source) else ''
+                  if line_comment:
+                      if c == '\n': line_comment = False
+                  elif block_comment:
+                      if c == '*' and following == '/': block_comment = False; i += 1
+                  elif quoted or char_quoted:
+                      if escaped: escaped = False
+                      elif c == '\\': escaped = True
+                      elif quoted and c == '"': quoted = False
+                      elif char_quoted and c == "'": char_quoted = False
+                  elif c == '/' and following == '/': line_comment = True; i += 1
+                  elif c == '/' and following == '*': block_comment = True; i += 1
+                  elif c == '"': quoted = True
+                  elif c == "'": char_quoted = True
+                  elif c == '{': level += 1
+                  elif c == '}':
+                      level -= 1
+                      if level == 0: return start, op, i+1
+                  i += 1
+              raise RuntimeError('Unclosed C block: ' + name)
+
+
+          def replace_function_section(name, old, new):
+              global code
+              a, op, end = function_span(code, name)
+              part = code[a:end]
+              n = part.count(old)
+              if n != 1:
+                  raise RuntimeError(f'{name} subsection expected once, found {n}: {old[:85]!r}')
+              part = part.replace(old, new, 1)
+              code = code[:a] + part + code[end:]
+
+
+          # A new save-format number is unnecessary: the V21 party block already
+          # saves per-species HP, including zero. Keep compatibility with V21.
+          replace_once('VOLT TRAIL V21 - %s', 'VOLT TRAIL V22 - %s')
+          replace_once('VOLT TRAIL V21 - MENUE', 'VOLT TRAIL V22 - MENUE')
+
+          # Fix the exploit where removing a fainted dragon from the three-member
+          # party and adding it again through the Codex gives it 24 HP for free.
+          replace_function_section(
+              'vt_v21_codex_add_to_team',
+              '    vt_v21_hp[species] = 24;',
+              '    /* HP is retained, including zero for a knocked-out dragon. */'
+          )
+
+          # Add actual knockout and manual revival helpers after the V21 ownership,
+          # save-state, and party-management declarations. Each species keeps its
+          # individual HP independently of its position in the party.
+          helpers = r'''
+          /* V22: A defeated dragon remains at zero HP until explicitly healed. */
+          static void vt_v22_knockout(void) {
+              int species;
+              int reserve;
+
+              vt_v21_setup();
+              species = vt_v21_party[vt_v21_active];
+              companion_hp = 0;
+              if (species >= 0 && species < 5)
+                  vt_v21_hp[species] = 0;
+
+              reserve = vt_v21_alive_reserve();
+              if (reserve >= 0) {
+                  /* Preserve wild_hp and encounter_kind: the battle is NOT reset. */
+                  vt_v21_force_switch = 1;
+                  vt_v21_force_cursor = reserve;
+                  game_mode = 1;
+                  vt_menu_open = 0;
+                  vt_menu_page = 0;
+              } else {
+                  /* No living teammate: show defeat screen, without healing. */
+                  vt_v21_force_switch = 0;
+                  game_mode = 3;
+              }
+          }
+
+          /* V22: Square in the DRACHEN menu uses one potion on the chosen dragon.
+           * This works even at 0 HP and is the only free-roaming way to revive
+           * a defeated party member. Never change unrelated team members' HP. */
+          static void vt_v22_heal_selected(int position) {
+              int species;
+              int health;
+
+              vt_v21_setup();
+              if (position < 0 || position >= vt_v21_count) {
+                  vt_menu_message = "KEIN DRACHE GEWAEHLT";
+                  return;
+              }
+              species = vt_v21_party[position];
+              if (species < 0 || species > 4) return;
+
+              if (vt_potions <= 0) {
+                  vt_menu_message = "KEINE HEILTRAENKE MEHR";
+                  return;
+              }
+
+              health = vt_v21_hp[species];
+              if (position == vt_v21_active) health = companion_hp;
+              if (health >= 24) {
+                  vt_menu_message = "DRACHE BEREITS GESUND";
+                  return;
+              }
+
+              vt_potions--;
+              health += 10;
+              if (health > 24) health = 24;
+              vt_v21_hp[species] = health;
+              if (position == vt_v21_active) companion_hp = health;
+              vt_menu_message = health > 0 ?
+                  "DRACHE GEHEILT / WIEDER FIT" : "DRACHE GEHEILT";
+          }
+          '''
+          replace_once('static void vt_v21_post_frame(void) {', helpers + '\nstatic void vt_v21_post_frame(void) {')
+
+          # Remove the V21 shortcut that silently healed every dragon for free
+          # on the defeat screen, BEFORE the original combat code handled X.
+          old_recovery = re.compile(
+              r'/\*\s*Original X recovery restores all team dragons after a full defeat\.\s*\*/'
+              r'\s*if\s*\(\s*game_mode\s*==\s*3\s*&&\s*\(\s*pressed\s*&\s*PAD_CROSS\s*\)\s*\)\s*\{'
+              r'\s*int\s+i\s*;\s*for\s*\(\s*i\s*=\s*0\s*;\s*i\s*<\s*vt_v21_count\s*;\s*i\+\+\s*\)'
+              r'\s*vt_v21_hp\[vt_v21_party\[i\]\]\s*=\s*24\s*;'
+              r'\s*companion_hp\s*=\s*24\s*;\s*\}', re.M
+          )
+          code, n = old_recovery.subn('/* V22: Never revive the whole party after defeat. */', code)
+          if n != 1:
+              raise RuntimeError(f'V21 automatic party recovery block not found: {n}')
+
+          # The original game-over X handler also heals the active dragon and
+          # exits battle. Replace it by a non-healing return to the world.
+          a, op, end = function_span(code, 'main', 'int')
+          main = code[a:end]
+          pattern = re.compile(
+              r'\}\s*else\s+if\s*\(\s*game_mode\s*==\s*3\s*&&\s*\(\s*pressed\s*&\s*PAD_CROSS\s*\)\s*\)\s*\{'
+              r'\s*companion_hp\s*=\s*24\s*;\s*game_mode\s*=\s*0\s*;\s*px\s*=\s*0\s*;\s*pz\s*=\s*0\s*;'
+              r'\s*\}', re.M
+          )
+          main, n = pattern.subn(
+              '''} else if (game_mode == 3 && (pressed & PAD_CROSS)) {
+                      /* The party is still fainted. Return to heal via START. */
+                      game_mode = 0;
+                      vt_v21_force_switch = 0;
+                      vt_menu_open = 0;
+                      vt_menu_page = 0;
+                  }''', main
+          )
+          if n != 1:
+              raise RuntimeError(f'Original game-over heal branch not found: {n}')
+
+          # Do NOT heal the active dragon after each victory automatically.
+          # Keeping actual battle damage makes individual HP meaningful.
+          win_pattern = re.compile(
+              r'(\}\s*else\s+if\s*\(\s*game_mode\s*==\s*2\s*&&\s*\(\s*pressed\s*&\s*PAD_CROSS\s*\)\s*\)\s*\{)'
+              r'(?P<body>.*?)'
+              r'(?=\}\s*else\s+if\s*\(\s*game_mode\s*==\s*3\s*&&)', re.S
+          )
+          win_match = win_pattern.search(main)
+          if not win_match:
+              raise RuntimeError('Victory handler not found')
+          win_body = win_match.group('body')
+          win_body, count = re.subn(r'\bcompanion_hp\s*=\s*24\s*;',
+                                    '/* V22: Keep battle HP until a potion heals it. */', win_body)
+          if count != 1:
+              raise RuntimeError(f'Expected one auto-heal in victory, got {count}')
+          main = main[:win_match.start('body')] + win_body + main[win_match.end('body'):]
+
+          # Enforce knockout as soon as a combat action drops health to zero,
+          # before the old mode-3 defeat path can close or reset the battle.
+          post_anchor = '        vt_v21_post_frame();'
+          if main.count(post_anchor) != 1:
+              raise RuntimeError('V21 end-of-frame party updater not found')
+          main = main.replace(post_anchor, '''        if (game_mode == 3 && companion_hp <= 0) {
+                      vt_v22_knockout();
+                  }
+                  vt_v21_post_frame();''', 1)
+
+          # The game cannot start a new battle with an unconscious active dragon.
+          # Switch to the first living reserve if there is one; otherwise prevent
+          # the battle until the player manually heals a party member.
+          before_battle = r'''        if (game_mode == 0 && (pressed & PAD_SQUARE) &&
+                      companion_hp <= 0 && !vt_menu_open) {
+                      int alive = vt_v21_alive_reserve();
+                      if (alive >= 0) {
+                          vt_v21_switch_to(alive);
+                      } else {
+                          pressed &= ~PAD_SQUARE;
+                          vt_menu_message = "ALLE DRACHEN KO - HEILEN";
+                      }
+                  }
+          '''
+          anchor = '        if (action_flash > 0) action_flash--;'
+          if main.count(anchor) != 1:
+              raise RuntimeError('Original battle controls marker missing')
+          main = main.replace(anchor, before_battle + anchor, 1)
+
+          # Never allow an unhealed knocked-out dragon to take a turn while the
+          # force-switch selection is on screen; the V21 input code already clears
+          # pressed and pad during forced switching.
+          code = code[:a] + main + code[end:]
+
+          # Manual potion in the three-dragon team page. X continues to switch;
+          # Square heals the currently highlighted dragon (including fainted ones).
+          a, op, end = function_span(code, 'main', 'int')
+          main = code[a:end]
+          start = main.find('} else if (vt_menu_page == 1) {')
+          stop = main.find('} else if (vt_menu_page == 2 &&', start)
+          if start < 0 or stop < 0:
+              raise RuntimeError('V21 team submenu controls missing')
+          team_controls = main[start:stop]
+          if team_controls.count('vt_v21_switch_to(vt_v21_team_cursor)') != 1:
+              raise RuntimeError('V21 team selection logic unexpectedly changed')
+          # Append Square handling at the bottom of the DRACHEN submenu.
+          team_controls += '''    if (pressed & PAD_SQUARE) {
+                  vt_v22_heal_selected(vt_v21_team_cursor);
+              }
+              '''
+          main = main[:start] + team_controls + main[stop:]
+          code = code[:a] + main + code[end:]
+
+          # Update team help to show Square = heal, X = switch, Triangle = back.
+          replace_function_section(
+              'draw_hud',
+              'FntPrint(2, "X WAHL / DREIECK ZURUECK\\n");',
+              'FntPrint(2, "X WECHSEL / VIERECK HEILEN\\n");\n'
+              '                      FntPrint(2, "%s\\n", vt_menu_message);\n'
+              '                      FntPrint(2, "DREIECK ZURUECK\\n");'
+          )
+
+          # Replace only the defeat-state HUD content. Keep all other HUD pages.
+          a, op, end = function_span(code, 'draw_hud')
+          hud = code[a:end]
+          mode = re.search(r'\}\s*else\s+if\s*\(\s*game_mode\s*==\s*3\s*\)\s*\{', hud)
+          if mode:
+              start = mode.end()
+              i = start
+              nesting = 1
+              while i < len(hud) and nesting:
+                  if hud[i] == '{': nesting += 1
+                  elif hud[i] == '}': nesting -= 1
+                  i += 1
+              if nesting != 0:
+                  raise RuntimeError('Cannot close game-over HUD branch')
+              hud = (hud[:start] + '''
+                        FntPrint(1, "ALLE DRACHEN BESIEGT!\\n");
+                        FntPrint(1, "X ZURUECK - DRACHEN HEILEN\\n");
+                    ''' + hud[i-1:])
+              code = code[:a] + hud + code[end:]
+          else:
+              print('NOTE: Existing victory/defeat HUD differs; game-over notice unchanged.')
+
+          # Leave existing memory card storage intact: V21 stores HP for each of
+          # the five species (including 0) inside its validated save extension.
+          required = [
+              'VOLT TRAIL V22', 'vt_v21_hp[5]', 'vt_v21_party[3]',
+              'vt_v22_knockout();', 'vt_v22_heal_selected(vt_v21_team_cursor)',
+              'vt_v21_force_switch = 1;', 'vt_v21_can_switch_to(',
+              'VT_V21_SAVE_MAGIC', 'vt_save_game(void)', 'vt_load_game(void)',
+              'InitCARD(1);', 'PAD_SQUARE', 'PAD_CROSS', 'PAD_CIRCLE',
+              'vt_play_intro();'
+          ]
+          for term in required:
+              if term not in code:
+                  raise RuntimeError('V22 required feature missing: ' + term)
+
+          path.write_text(code, encoding='utf-8')
+          print('V22: Defeated dragons persist at 0 HP until an item revives them')
+          print('V22: Forced replacement keeps enemy HP and battle state intact')
+          print('V22: Full party defeat ends battle; X returns to exploration without a heal')
+          print('V22: Square in DRACHEN menu heals selected dragon using a potion')
+          print('V22: Winning does not automatically refill HP')
+          print('V22: Save format unchanged; 0 HP persisted and compatible with V21')
+          PY
+
       - name: Install PSn00bSDK 0.24 directly
         shell: bash
         run: |
@@ -1331,7 +1642,7 @@ jobs:
           echo "CMake toolchain: $SDK_CMAKE"
           echo "PS1 compiler: $SDK_COMPILER"
 
-      - name: Build Volt Trail V21
+      - name: Build Volt Trail V22
         shell: bash
         run: |
           set -euxo pipefail
@@ -1358,10 +1669,10 @@ jobs:
           done
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V21
+      - name: Upload Volt Trail V22
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V21-Dragon-Team-Codex-Fixed
+          name: VoltTrail-PS1-V22-Battle-Continuation-Codex-Fixed
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
