@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V24.1 Kamera Fix
+name: Build Volt Trail PS1 V24.1 Grafik Fix
 
 on:
   workflow_dispatch:
@@ -1959,7 +1959,7 @@ jobs:
           print('V24 ready: V23 dragons, party, codex, menu and intro preserved')
           PY
 
-      - name: Apply V24.1 wide camera villages villagers and connected roads
+      - name: Apply V24.1 camera background villages and roads fixed
         shell: bash
         run: |
           set -euo pipefail
@@ -2026,11 +2026,27 @@ jobs:
               print('Camera height unchanged; wider CAMERA_Z=255 is applied.')
           else:
               print('Camera height adjusted for the wider view.')
-          # Richer blue background, without changing V23 menus or PS1 rendering state.
-          for i in (0,1):
-              old=f'draw[{i}].r0 = 10; draw[{i}].g0 = 15; draw[{i}].b0 = 35;'
-              new=f'draw[{i}].r0 = 24; draw[{i}].g0 = 53; draw[{i}].b0 = 102;'
-              once(old,new)
+          # The V23 source may set RGB colors on one line, several lines,
+          # or use different starting values. Change only existing DRAWENV fields.
+          # Never make a cosmetic sky-color change block the entire build.
+          for i in (0, 1):
+              count = 0
+              for channel, value in (('r0', 24), ('g0', 53), ('b0', 102)):
+                  pattern = re.compile(
+                      r'(\bdraw\s*\[\s*' + str(i) + r'\s*\]\s*\.\s*'
+                      + channel + r'\s*=\s*)\d+(\s*;)'
+                  )
+                  code, replaced = pattern.subn(
+                      lambda m, v=value: m.group(1) + str(v) + m.group(2),
+                      code, count=1
+                  )
+                  count += replaced
+              if count not in (0, 3):
+                  print('NOTICE: Only', count, 'color channels found for DRAWENV', i)
+              elif count == 0:
+                  print('NOTICE: DRAWENV', i, 'uses another background setup; keeping it.')
+              else:
+                  print('DRAWENV', i, 'background color updated.')
 
           new_helpers = r'''
           /* V24.1 scene details: draw only places near the player to preserve PS1 RAM/GPU time. */
@@ -2311,7 +2327,7 @@ jobs:
           echo "CMake toolchain: $SDK_CMAKE"
           echo "PS1 compiler: $SDK_COMPILER"
 
-      - name: Build Volt Trail V24.1
+      - name: Build Volt Trail V24.1 Grafik Fix
         shell: bash
         run: |
           set -euxo pipefail
@@ -2338,10 +2354,10 @@ jobs:
           done
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V24.1
+      - name: Upload Volt Trail V24.1 Grafik Fix
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V24-1-Kamera-Fix
+          name: VoltTrail-PS1-V24-1-Grafik-Fix
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
