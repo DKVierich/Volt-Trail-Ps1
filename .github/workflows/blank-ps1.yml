@@ -1,5 +1,5 @@
 
-name: Build Volt Trail PS1 V8
+name: Build Volt Trail PS1 V9 with Intro
 
 on:
   workflow_dispatch:
@@ -20,88 +20,220 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build unzip curl jq tar
+          sudo apt-get install -y cmake ninja-build unzip curl jq tar ffmpeg
 
-      - name: Prepare project sources
+      - name: Prepare Volt Trail sources
         shell: bash
         run: |
           set -euo pipefail
 
-          if [ -f "$GITHUB_WORKSPACE/CMakeLists.txt" ]; then
-            PROJECT_DIR="$GITHUB_WORKSPACE"
-          else
-            ZIP_FILE="$GITHUB_WORKSPACE/VoltTrail_PS1_AndroidReady_V7.zip"
+          ZIP="$GITHUB_WORKSPACE/VoltTrail_PS1_AndroidReady_V7.zip"
+          VIDEO="$GITHUB_WORKSPACE/DKVierich_Produktion_PS1_Intro_original.mp4"
 
-            if [ ! -f "$ZIP_FILE" ]; then
-              echo "::error::V7 project ZIP not found"
-              exit 1
-            fi
-
-            EXTRACT_DIR="$RUNNER_TEMP/volttrail-project"
-            mkdir -p "$EXTRACT_DIR"
-            unzip -q "$ZIP_FILE" -d "$EXTRACT_DIR"
-
-            CMAKE_FILE="$(find "$EXTRACT_DIR" -name CMakeLists.txt -type f -print -quit)"
-
-            if [ -z "$CMAKE_FILE" ]; then
-              echo "::error::CMakeLists.txt missing"
-              exit 1
-            fi
-
-            PROJECT_DIR="$(dirname "$CMAKE_FILE")"
+          if [ ! -f "$ZIP" ]; then
+            echo "::error::V7 project ZIP missing"
+            exit 1
           fi
 
-          for file in CMakeLists.txt src/main.c iso.xml system.cnf; do
-            if [ ! -f "$PROJECT_DIR/$file" ]; then
-              echo "::error::Missing file: $file"
-              exit 1
-            fi
+          if [ ! -f "$VIDEO" ]; then
+            echo "::error::Intro MP4 missing in repository root"
+            exit 1
+          fi
+
+          DEST="$RUNNER_TEMP/volttrail-project"
+          mkdir -p "$DEST"
+          unzip -q "$ZIP" -d "$DEST"
+
+          CMAKE_FILE="$(find "$DEST" -type f -name CMakeLists.txt -print -quit)"
+
+          if [ -z "$CMAKE_FILE" ]; then
+            echo "::error::CMakeLists.txt missing"
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$CMAKE_FILE")"
+
+          for f in CMakeLists.txt src/main.c iso.xml system.cnf; do
+            test -f "$PROJECT_DIR/$f" || exit 1
           done
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Apply Volt Trail V8 controller test
+      - name: Convert intro to PS1 frames
         shell: bash
         run: |
           set -euo pipefail
+
+          python3 - <<'PY'
+          import os
+          import struct
+          import subprocess
+          from pathlib import Path
+
+          video = Path(os.environ["GITHUB_WORKSPACE"]) / "DKVierich_Produktion_PS1_Intro_original.mp4"
+          output = Path(os.environ["RUNNER_TEMP"]) / "intro.raw"
+          project = Path(os.environ["PROJECT_DIR"])
+          header = project / "src/volttrail_intro_data.h"
+
+          width, height = 160, 120
+          frame_bytes = width * height * 2
+
+          subprocess.run([
+              "ffmpeg", "-hide_banner", "-loglevel", "error",
+              "-y", "-i", str(video),
+              "-t", "5",
+              "-vf", "fps=6,scale=160:120:flags=bilinear",
+              "-an", "-pix_fmt", "bgr555le",
+              "-f", "rawvideo", str(output)
+          ], check=True)
+
+          raw = output.read_bytes()
+          if not raw or len(raw) % frame_bytes:
+              raise RuntimeError("Video conversion produced invalid frames")
+
+          count = min(len(raw) // frame_bytes, 30)
+
+          with header.open("w", encoding="ascii") as f:
+              f.write("#ifndef VOLTTRAIL_INTRO_DATA_H\n")
+              f.write("#define VOLTTRAIL_INTRO_DATA_H\n")
+              f.write("#define VT_INTRO_FRAME_COUNT %d\n" % count)
+              f.write("static const unsigned short vt_intro_frames")
+              f.write("[VT_INTRO_FRAME_COUNT][19200]")
+              f.write(" __attribute__((aligned(4))) = {\n")
+
+              for frame in range(count):
+                  chunk = raw[
+                      frame * frame_bytes:(frame + 1) * frame_bytes
+                  ]
+                  pixels = struct.unpack("<19200H", chunk)
+                  f.write("{\n")
+                  for i in range(0, len(pixels), 16):
+                      values = pixels[i:i+16]
+                      f.write(",".join(
+                          "0x%04x" % (v | 0x8000)
+                          for v in values
+                      ))
+                      f.write(",\n")
+                  f.write("},\n")
+
+              f.write("};\n#endif\n")
+
+          print("Intro frames:", count)
+          print("Generated header:", header)
+          print("Raw frame bytes:", count * frame_bytes)
+          PY
+
+      - name: Add intro player to Volt Trail
+        shell: bash
+        run: |
+          set -euo pipefail
+
           python3 - <<'PY'
           import os
           from pathlib import Path
 
-          path = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
-          code = path.read_text()
+          src = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
+          code = src.read_text(encoding="utf-8")
 
-          marker = "        previous_pad = pad;"
+          def replace_once(old, new):
+              global code
+              if code.count(old) != 1:
+                  raise RuntimeError("Source marker not found: " + old)
+              code = code.replace(old, new, 1)
 
-          if code.count(marker) != 1:
-              raise RuntimeError("Controller code not found")
-
-          patch = (
-              "\n"
-              "        draw[db].r0 = 90;\n"
-              "        draw[db].g0 = 0;\n"
-              "        draw[db].b0 = 150;\n"
-              "        if (pad & PAD_CROSS) {\n"
-              "            draw[db].r0 = 0;\n"
-              "            draw[db].g0 = 120;\n"
-              "            draw[db].b0 = 0;\n"
-              "        } else if (pad & (PAD_LEFT | PAD_RIGHT | PAD_UP | PAD_DOWN)) {\n"
-              "            draw[db].r0 = 120;\n"
-              "            draw[db].g0 = 120;\n"
-              "            draw[db].b0 = 0;\n"
-              "        }\n"
+          replace_once(
+              "#include <stdio.h>",
+              '#include <stdio.h>\n#include "volttrail_intro_data.h"'
           )
 
-          code = code.replace(marker, marker + patch, 1)
+          intro = r'''
+          static void vt_play_intro(void) {
+              DISPENV intro_disp;
+              DRAWENV intro_draw;
+              RECT texture = {320, 0, 160, 120};
+              POLY_FT4 quad;
+              u_long intro_ot[2];
+              int frame, wait;
 
-          code = code.replace(
+              SetDefDispEnv(&intro_disp, 0, 240, 320, 240);
+              SetDefDrawEnv(&intro_draw, 0, 240, 320, 240);
+
+              intro_draw.isbg = 1;
+              intro_draw.r0 = 0;
+              intro_draw.g0 = 0;
+              intro_draw.b0 = 0;
+
+              setPolyFT4(&quad);
+              setRGB0(&quad, 128, 128, 128);
+              setXY4(&quad,
+                  0, 0, 319, 0, 0, 239, 319, 239);
+              setUV4(&quad,
+                  0, 0, 159, 0, 0, 119, 159, 119);
+              setTPage(&quad, 2, 0, 320, 0);
+
+              PutDrawEnv(&intro_draw);
+              PutDispEnv(&intro_disp);
+              SetDispMask(1);
+
+              for (frame = 0;
+                   frame < VT_INTRO_FRAME_COUNT;
+                   frame++) {
+                  DrawSync(0);
+                  LoadImage(
+                      &texture,
+                      (const uint32_t *)vt_intro_frames[frame]
+                  );
+                  DrawSync(0);
+
+                  ClearOTagR(intro_ot, 2);
+                  addPrim(intro_ot, &quad);
+
+                  PutDrawEnv(&intro_draw);
+                  DrawOTag(intro_ot + 1);
+                  DrawSync(0);
+
+                  for (wait = 0; wait < 10; wait++) {
+                      VSync(0);
+                  }
+              }
+          }
+          '''
+
+          replace_once(
+              "int main(void) {",
+              intro + "\nint main(void) {"
+          )
+
+          replace_once(
+              "    gte_SetGeomScreen(180);",
+              "    gte_SetGeomScreen(180);\n"
+              "    vt_play_intro();"
+          )
+
+          old_end = (
+              "        draw_hud();\n"
+              "        PutDispEnv(&disp[db]);\n"
+              "        PutDrawEnv(&draw[db]);\n"
+              "        DrawOTag(ot[db] + (OT_LEN - 1));"
+          )
+
+          new_end = (
+              "        PutDispEnv(&disp[db]);\n"
+              "        PutDrawEnv(&draw[db]);\n"
+              "        DrawOTag(ot[db] + (OT_LEN - 1));\n"
+              "        DrawSync(0);\n"
+              "        draw_hud();"
+          )
+
+          replace_once(old_end, new_end)
+
+          replace_once(
               "VOLT TRAIL: SHARDS OF THE STORM  /  PS1",
-              "VOLT TRAIL V8 - CONTROLLER TEST",
-              1
+              "VOLT TRAIL V9 / DKVierich Produktion"
           )
 
-          path.write_text(code)
-          print("Volt Trail V8 diagnostic code applied")
+          src.write_text(code, encoding="utf-8")
+          print("Volt Trail intro integrated successfully")
           PY
 
       - name: Download PSn00bSDK
@@ -110,8 +242,8 @@ jobs:
           set -euo pipefail
 
           API="https://api.github.com/repos/Lameguy64/PSn00bSDK/releases/latest"
-          RELEASE_JSON="$RUNNER_TEMP/sdk-release.json"
-          curl -fsSL "$API" -o "$RELEASE_JSON"
+          META="$RUNNER_TEMP/sdk-release.json"
+          curl -fsSL "$API" -o "$META"
 
           FOUND=""
 
@@ -119,11 +251,9 @@ jobs:
             [ -n "${URL:-}" ] || continue
 
             ARCHIVE="$RUNNER_TEMP/sdk-asset"
-            EXTRACT_DIR="$RUNNER_TEMP/psn00bsdk"
-
-            rm -f "$ARCHIVE"
-            rm -rf "$EXTRACT_DIR"
-            mkdir -p "$EXTRACT_DIR"
+            SDK_DIR="$RUNNER_TEMP/psn00bsdk"
+            rm -rf "$SDK_DIR"
+            mkdir -p "$SDK_DIR"
 
             if ! curl -fsSL "$URL" -o "$ARCHIVE"; then
               continue
@@ -131,18 +261,17 @@ jobs:
 
             case "$NAME" in
               *.zip|*.ZIP)
-                unzip -q "$ARCHIVE" -d "$EXTRACT_DIR" || continue
+                unzip -q "$ARCHIVE" -d "$SDK_DIR" || continue
                 ;;
               *.tar.gz|*.tgz|*.tar.xz|*.tar.bz2)
-                tar -xf "$ARCHIVE" -C "$EXTRACT_DIR" || continue
+                tar -xf "$ARCHIVE" -C "$SDK_DIR" || continue
                 ;;
               *)
                 continue
                 ;;
             esac
 
-            FOUND="$(find "$EXTRACT_DIR" -type f -path '*/lib/libpsn00b/cmake/sdk.cmake' -print -quit)"
-
+            FOUND="$(find "$SDK_DIR" -type f -path '*/lib/libpsn00b/cmake/sdk.cmake' -print -quit)"
             if [ -n "$FOUND" ]; then
               break
             fi
@@ -158,11 +287,11 @@ jobs:
                   (.name | ascii_downcase | endswith(".tar.bz2"))
                 )
               | [.name, .browser_download_url] | @tsv
-            ' "$RELEASE_JSON"
+            ' "$META"
           )
 
           if [ -z "$FOUND" ]; then
-            echo "::error::PSn00bSDK not found"
+            echo "::error::PSn00bSDK missing"
             exit 1
           fi
 
@@ -170,7 +299,7 @@ jobs:
           SDK_BIN="$(find "$SDK_ROOT" -name mipsel-none-elf-gcc -print -quit | xargs -r dirname)"
 
           if [ -z "$SDK_BIN" ]; then
-            echo "::error::PS1 compiler not found"
+            echo "::error::PS1 compiler missing"
             exit 1
           fi
 
@@ -178,13 +307,12 @@ jobs:
           echo "$SDK_BIN" >> "$GITHUB_PATH"
 
           MKPSXISO="$(find "$SDK_ROOT" -name mkpsxiso -print -quit)"
-
           if [ -n "$MKPSXISO" ]; then
             chmod +x "$MKPSXISO"
             echo "$(dirname "$MKPSXISO")" >> "$GITHUB_PATH"
           fi
 
-      - name: Configure and build PS1 game
+      - name: Compile Volt Trail with Intro
         shell: bash
         run: |
           set -euxo pipefail
@@ -197,30 +325,25 @@ jobs:
 
           cmake --build "$GITHUB_WORKSPACE/build" --verbose
 
-      - name: Collect PS1 game files
+      - name: Collect PS1 image
         shell: bash
         run: |
           set -euo pipefail
-
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
 
           for file in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
             SOURCE="$GITHUB_WORKSPACE/build/$file"
-
             if [ ! -s "$SOURCE" ]; then
-              echo "::error::Missing game file: $file"
+              echo "::error::Missing PS1 file: $file"
               exit 1
             fi
-
             cp "$SOURCE" "$GITHUB_WORKSPACE/artifacts/"
           done
 
-          ls -lh "$GITHUB_WORKSPACE/artifacts"
-
-      - name: Upload Volt Trail V8
+      - name: Upload Volt Trail V9 Intro
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V8-Test
+          name: VoltTrail-PS1-V9-Intro
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
