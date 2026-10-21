@@ -1,5 +1,5 @@
 
-name: Build Volt Trail PS1 V13
+name: Build Volt Trail PS1 V13 Fixed
 
 on:
   workflow_dispatch:
@@ -32,20 +32,20 @@ jobs:
           ZIP="$GITHUB_WORKSPACE/VoltTrail_PS1_AndroidReady_V7.zip"
           VIDEO="$GITHUB_WORKSPACE/DKVierich_Produktion_PS1_Intro_original.mp4"
 
-          test -f "$ZIP" || {
+          if [ ! -f "$ZIP" ]; then
             echo "::error::Original V7 ZIP missing"
             exit 1
-          }
+          fi
 
-          test -f "$VIDEO" || {
+          if [ ! -f "$VIDEO" ]; then
             echo "::error::Intro video missing"
             exit 1
-          }
+          fi
 
-          COMMIT="9fe565d33d905521e42d05b09ad6bfbe5b9bc3a5"
+          V12_COMMIT="9fe565d33d905521e42d05b09ad6bfbe5b9bc3a5"
 
           curl --retry 3 -fsSL \
-            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$COMMIT/.github/workflows/blank-ps1.yml" \
+            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$V12_COMMIT/.github/workflows/blank-ps1.yml" \
             -o "$RUNNER_TEMP/v12.yml"
 
           DEST="$RUNNER_TEMP/v13-project"
@@ -61,8 +61,11 @@ jobs:
 
           PROJECT_DIR="$(dirname "$CMAKE_FILE")"
 
-          for f in CMakeLists.txt src/main.c iso.xml system.cnf; do
-            test -f "$PROJECT_DIR/$f" || exit 1
+          for file in CMakeLists.txt src/main.c iso.xml system.cnf; do
+            if [ ! -f "$PROJECT_DIR/$file" ]; then
+              echo "::error::Missing $file"
+              exit 1
+            fi
           done
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
@@ -78,33 +81,48 @@ jobs:
           from pathlib import Path
           import yaml
 
-          path = Path(os.environ["RUNNER_TEMP"]) / "v12.yml"
-          steps = yaml.safe_load(path.read_text())["jobs"]["build"]["steps"]
+          workflow = Path(os.environ["RUNNER_TEMP"]) / "v12.yml"
 
-          for wanted in [
+          data = yaml.safe_load(
+              workflow.read_text(encoding="utf-8")
+          )
+
+          steps = data["jobs"]["build"]["steps"]
+
+          wanted_steps = [
               "Convert DKVierich intro",
               "Apply V12 graphics and gameplay"
-          ]:
-              matches = [
+          ]
+
+          for wanted in wanted_steps:
+              matching = [
                   step for step in steps
                   if step.get("name") == wanted
               ]
 
-              if len(matches) != 1:
-                  raise RuntimeError("Missing V12 step: " + wanted)
+              if len(matching) != 1:
+                  raise RuntimeError(
+                      "V12 step missing: " + wanted
+                  )
 
-              print("Running:", wanted, flush=True)
+              print("Executing:", wanted, flush=True)
 
               subprocess.run(
-                  ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
-                  check=True,
-                  env=os.environ.copy()
+                  [
+                      "bash",
+                      "-euo",
+                      "pipefail",
+                      "-c",
+                      matching[0]["run"]
+                  ],
+                  env=os.environ.copy(),
+                  check=True
               )
 
           print("V12 game and intro restored")
           PY
 
-      - name: Apply V13 graphics improvements
+      - name: Apply V13 camera and 3D animation
         shell: bash
         run: |
           set -euo pipefail
@@ -113,40 +131,50 @@ jobs:
           import os
           from pathlib import Path
 
-          path = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
+          path = (
+              Path(os.environ["PROJECT_DIR"])
+              / "src"
+              / "main.c"
+          )
+
           code = path.read_text(encoding="utf-8")
 
           def replace_once(old, new):
               global code
 
-              if code.count(old) != 1:
+              count = code.count(old)
+
+              if count != 1:
                   raise RuntimeError(
-                      "Source marker not found: " + old[:80]
+                      "Patch marker mismatch: "
+                      + old[:70]
+                      + " - count "
+                      + str(count)
                   )
 
               code = code.replace(old, new, 1)
 
-          # Move the camera projection closer.
+          # Improve the camera projection.
           replace_once(
               "gte_SetGeomScreen(180);",
               "gte_SetGeomScreen(225);"
           )
 
-          # Update game title.
+          # Update the version shown in the HUD.
           replace_once(
               "VOLT TRAIL V12 - %s",
               "VOLT TRAIL V13 - %s"
           )
 
-          # Add a walking animation state.
+          # Add a new animation variable.
           replace_once(
               "static void vt_sparkit(int x, int z) {",
               "static int vt_walk_phase = 0;\n\n"
               "static void vt_sparkit(int x, int z) {"
           )
 
-          # Replace Sparkit's static model with
-          # a gently animated version.
+          # Replace the Sparkit model with
+          # an animated version.
           start = code.index(
               "static void vt_sparkit(int x, int z) {"
           )
@@ -159,8 +187,7 @@ jobs:
           sparkit = r'''
           static void vt_sparkit(int x, int z) {
               int bounce = 0;
-              int left_lift = 0;
-              int right_lift = 0;
+              int foot = 0;
 
               if (vt_walk_phase != 0) {
                   if (
@@ -171,13 +198,13 @@ jobs:
                   }
 
                   if (vt_walk_phase < 16) {
-                      left_lift = 5;
+                      foot = 4;
                   } else {
-                      right_lift = 5;
+                      foot = -4;
                   }
               }
 
-              /* Body */
+              /* Yellow body */
               draw_box(
                   x, 20 - bounce, z, 14,
                   238, 181, 38
@@ -189,45 +216,50 @@ jobs:
                   255, 211, 65
               );
 
-              /* Ears */
+              /* Left ear */
               vt_pyramid(
                   x - 10, -6 - bounce, z - 3,
-                  7, 23, 255, 203, 42
+                  7, 23,
+                  255, 203, 42
               );
 
+              /* Right ear */
               vt_pyramid(
                   x + 10, -6 - bounce, z - 3,
-                  7, 23, 255, 203, 42
+                  7, 23,
+                  255, 203, 42
               );
 
-              /* Eyes */
+              /* Left eye */
               draw_box(
                   x - 6, -1 - bounce, z - 14,
                   3, 22, 31, 52
               );
 
+              /* Right eye */
               draw_box(
                   x + 6, -1 - bounce, z - 14,
                   3, 22, 31, 52
               );
 
-              /* Electric tail */
+              /* Tail */
               draw_box(
                   x + 19, 18 - bounce, z + 5,
                   7, 244, 148, 25
               );
 
-              /* Animated feet */
+              /* Animated left foot */
               draw_box(
                   x - 8,
-                  34 - bounce - left_lift,
+                  34 - bounce - foot,
                   z - 2,
                   5, 180, 110, 35
               );
 
+              /* Animated right foot */
               draw_box(
                   x + 8,
-                  34 - bounce - right_lift,
+                  34 - bounce + foot,
                   z - 2,
                   5, 180, 110, 35
               );
@@ -235,36 +267,54 @@ jobs:
 
           '''
 
-          code = code[:start] + sparkit + code[end:]
-
-          # Animate only when the D-pad is pressed.
-          replace_once(
-              "        draw_ground();",
-              """
-          if (
-            game_mode == 0 &&
-            (pad & (PAD_LEFT | PAD_RIGHT | PAD_UP | PAD_DOWN))
-          ) {
-            vt_walk_phase = (vt_walk_phase + 1) & 31;
-          } else {
-            vt_walk_phase = 0;
-          }
-
-          draw_ground();
-              """.rstrip()
+          code = (
+              code[:start]
+              + sparkit
+              + code[end:]
           )
 
-          # More recognizable features for Mosslet.
-          start = code.index("static void vt_mosslet(")
-          end = code.index("static void vt_draw_panel(", start)
+          # Animate Sparkit only when moving.
+          # Construct the C source using Python
+          # strings to avoid YAML indentation errors.
+          walking_code = (
+              "        if (\n"
+              "            game_mode == 0 &&\n"
+              "            (pad & (PAD_LEFT | PAD_RIGHT | "
+              "PAD_UP | PAD_DOWN))\n"
+              "        ) {\n"
+              "            vt_walk_phase = "
+              "(vt_walk_phase + 1) & 31;\n"
+              "        } else {\n"
+              "            vt_walk_phase = 0;\n"
+              "        }\n"
+              "\n"
+          )
+
+          replace_once(
+              "        draw_ground();",
+              walking_code
+              + "        draw_ground();"
+          )
+
+          # Add a leafy crest and feet to Mosslet.
+          start = code.index(
+              "static void vt_mosslet("
+          )
+
+          end = code.index(
+              "static void vt_draw_panel(",
+              start
+          )
 
           mosslet = code[start:end]
           closing = mosslet.rfind("}")
 
           if closing < 0:
-              raise RuntimeError("Mosslet model invalid")
+              raise RuntimeError(
+                  "Mosslet function not found"
+              )
 
-          extra = r'''
+          details = r'''
               /* Leaf crest */
               vt_pyramid(
                   x, -13, z + 1,
@@ -272,12 +322,13 @@ jobs:
                   49, 170, 78
               );
 
-              /* Small feet */
+              /* Left foot */
               draw_box(
                   x - 10, 38, z,
                   6, 40, 113, 54
               );
 
+              /* Right foot */
               draw_box(
                   x + 10, 38, z,
                   6, 40, 113, 54
@@ -285,52 +336,46 @@ jobs:
           '''
 
           mosslet = (
-              mosslet[:closing] +
-              extra + "\n" +
-              mosslet[closing:]
+              mosslet[:closing]
+              + details
+              + "\n"
+              + mosslet[closing:]
           )
 
-          code = code[:start] + mosslet + code[end:]
+          code = (
+              code[:start]
+              + mosslet
+              + code[end:]
+          )
 
-          # Add trees and smaller foreground plants.
+          # Extra trees and a closer entrance.
+          scenery = (
+              "vt_tree(-185, 145);\n"
+              "              vt_tree(185, 155);\n"
+              "              vt_tree(-230, 405);\n"
+              "              vt_tree(230, 420);\n"
+              "              vt_gate(310);"
+          )
+
           replace_once(
-              "              vt_gate(335);",
-              """
-              /* More vegetation */
-              vt_tree(-185, 145);
-              vt_tree(185, 155);
-              vt_tree(-230, 405);
-              vt_tree(230, 420);
-
-              vt_pyramid(
-                  -88, 29, 205,
-                  15, 18,
-                  38, 138, 68
-              );
-
-              vt_pyramid(
-                  88, 29, 205,
-                  15, 18,
-                  42, 151, 72
-              );
-
-              /* Slightly closer arena gate */
-              vt_gate(310);
-              """.rstrip()
+              "vt_gate(335);",
+              scenery
           )
 
-          # Additional crystals.
+          # Extra crystals in the mountain area.
+          crystals = (
+              "vt_crystal(-90, 235);\n"
+              "                  vt_crystal(-170, 185);\n"
+              "                  vt_crystal(170, 205);"
+          )
+
           replace_once(
-              "                  vt_crystal(-90, 235);",
-              """
-                  vt_crystal(-90, 235);
-                  vt_crystal(-170, 185);
-                  vt_crystal(170, 205);
-              """.rstrip()
+              "vt_crystal(-90, 235);",
+              crystals
           )
 
-          # Verify essential features are still present.
-          checks = [
+          # Verify important systems.
+          required = [
               "VOLT TRAIL V13",
               "vt_walk_phase",
               "gte_SetGeomScreen(225)",
@@ -339,19 +384,23 @@ jobs:
               "vt_play_intro();"
           ]
 
-          for marker in checks:
+          for marker in required:
               if marker not in code:
                   raise RuntimeError(
-                      "Required feature missing: " + marker
+                      "Missing game feature: "
+                      + marker
                   )
 
-          path.write_text(code, encoding="utf-8")
+          path.write_text(
+              code,
+              encoding="utf-8"
+          )
 
-          print("V13 graphics successfully applied")
-          print("Sparkit walking animation added")
-          print("Mosslet details added")
-          print("Camera and vegetation improved")
-          print("V12 intro and gameplay preserved")
+          print("V13 graphics patch complete")
+          print("Animated Sparkit added")
+          print("New Mosslet details added")
+          print("Camera and landscape improved")
+          print("Intro, controls and battle logic kept")
           PY
 
       - name: Install PSn00bSDK
@@ -365,8 +414,14 @@ jobs:
           from pathlib import Path
           import yaml
 
-          path = Path(os.environ["RUNNER_TEMP"]) / "v12.yml"
-          steps = yaml.safe_load(path.read_text())["jobs"]["build"]["steps"]
+          path = (
+              Path(os.environ["RUNNER_TEMP"])
+              / "v12.yml"
+          )
+
+          steps = yaml.safe_load(
+              path.read_text(encoding="utf-8")
+          )["jobs"]["build"]["steps"]
 
           matches = [
               step for step in steps
@@ -374,13 +429,23 @@ jobs:
           ]
 
           if len(matches) != 1:
-              raise RuntimeError("V12 SDK setup not found")
+              raise RuntimeError(
+                  "Original PSn00bSDK setup missing"
+              )
 
           subprocess.run(
-              ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
+              [
+                  "bash",
+                  "-euo",
+                  "pipefail",
+                  "-c",
+                  matches[0]["run"]
+              ],
               check=True,
               env=os.environ.copy()
           )
+
+          print("PSn00bSDK setup complete")
           PY
 
       - name: Build Volt Trail V13
@@ -388,21 +453,31 @@ jobs:
         run: |
           set -euxo pipefail
 
-          cmake -S "$PROJECT_DIR" \
+          cmake \
+            -S "$PROJECT_DIR" \
             -B "$GITHUB_WORKSPACE/build" \
             -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE" \
             -DCMAKE_BUILD_TYPE=Release
 
-          cmake --build "$GITHUB_WORKSPACE/build" --verbose
+          cmake --build \
+            "$GITHUB_WORKSPACE/build" \
+            --verbose
 
       - name: Collect PS1 files
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/artifacts"
 
-          for file in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
+          mkdir -p \
+            "$GITHUB_WORKSPACE/artifacts"
+
+          for file in \
+            VTRAIL.bin \
+            VTRAIL.cue \
+            VTRAIL.exe \
+            VTRAIL.elf
+          do
             SOURCE="$GITHUB_WORKSPACE/build/$file"
 
             if [ ! -s "$SOURCE" ]; then
@@ -410,15 +485,17 @@ jobs:
               exit 1
             fi
 
-            cp "$SOURCE" "$GITHUB_WORKSPACE/artifacts/"
+            cp "$SOURCE" \
+              "$GITHUB_WORKSPACE/artifacts/"
           done
 
-          ls -lh "$GITHUB_WORKSPACE/artifacts"
+          ls -lh \
+            "$GITHUB_WORKSPACE/artifacts"
 
       - name: Upload Volt Trail V13
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V13-Animated-World
+          name: VoltTrail-PS1-V13-Fixed
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
