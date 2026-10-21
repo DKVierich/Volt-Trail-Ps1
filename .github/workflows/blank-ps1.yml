@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V24.3 Kamera Kampfanzeige
+name: Build Volt Trail PS1 V24.3 Kampf Grafik Fix
 
 on:
   workflow_dispatch:
@@ -2386,31 +2386,59 @@ jobs:
           #
           # Replacing this one function keeps all HP, combat and game states intact.
           def function_range(source_code, name):
-              signature = "static void " + name + "(void) {"
-              first = source_code.find(signature)
-              if first < 0 or source_code.find(signature, first + 1) >= 0:
-                  raise RuntimeError("C function not found uniquely: " + name)
-              opening = source_code.index("{", first)
+              # C braces inside comments or quoted strings do not close a function.
+              # The previous parser failed on apostrophes in comments like
+              # "Sparkit's HP bar" and reported false 'Unbalanced braces'.
+              pattern = re.compile(
+                  r"\bstatic\s+void\s+" + re.escape(name)
+                  + r"\s*\(\s*void\s*\)\s*\{"
+              )
+              matches = list(pattern.finditer(source_code))
+              if len(matches) != 1:
+                  raise RuntimeError(
+                      "C function declaration not unique: " + name
+                      + " (" + str(len(matches)) + ")"
+                  )
+
+              start = matches[0].start()
+              opening = source_code.rfind("{", start, matches[0].end())
               depth = 0
-              quote = None
-              escaped = False
-              for i in range(opening, len(source_code)):
+              i = opening
+              mode = "code"
+              while i < len(source_code):
                   ch = source_code[i]
-                  if quote:
-                      if escaped:
-                          escaped = False
-                      elif ch == "\\":
-                          escaped = True
-                      elif ch == quote:
-                          quote = None
-                  elif ch in ("'", '"'):
-                      quote = ch
+                  next_ch = source_code[i + 1] if i + 1 < len(source_code) else ""
+                  if mode == "line_comment":
+                      if ch == "\n":
+                          mode = "code"
+                  elif mode == "block_comment":
+                      if ch == "*" and next_ch == "/":
+                          mode = "code"
+                          i += 1
+                  elif mode in ("string", "character"):
+                      if ch == "\\":
+                          i += 1
+                      elif (mode == "string" and ch == '"') or (
+                          mode == "character" and ch == "'"
+                      ):
+                          mode = "code"
+                  elif ch == "/" and next_ch == "/":
+                      mode = "line_comment"
+                      i += 1
+                  elif ch == "/" and next_ch == "*":
+                      mode = "block_comment"
+                      i += 1
+                  elif ch == '"':
+                      mode = "string"
+                  elif ch == "'":
+                      mode = "character"
                   elif ch == "{":
                       depth += 1
                   elif ch == "}":
                       depth -= 1
                       if depth == 0:
-                          return first, i + 1
+                          return start, i + 1
+                  i += 1
               raise RuntimeError("Unbalanced braces in " + name)
 
           clean_battle_bars = r"""
@@ -2551,7 +2579,7 @@ jobs:
       - name: Upload Volt Trail V24.3
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V24-3-Kamera-Kampfanzeige
+          name: VoltTrail-PS1-V24-3-Kampf-Grafik-Fix
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
