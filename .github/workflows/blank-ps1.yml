@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V24.2 3D Landschaft
+name: Build Volt Trail PS1 V24.2 Kamera Fix
 
 on:
   workflow_dispatch:
@@ -2309,14 +2309,24 @@ jobs:
 
           # Slightly larger geometry projection compensates for the long-distance
           # camera, leaving a spacious view without shrinking the player too much.
-          once('gte_SetGeomScreen(180);', 'gte_SetGeomScreen(205);')
+          # Earlier releases may set a different projection distance (e.g. 180,
+          # 205 or 220). Update the existing projection call regardless of its value.
+          import re
+          projection = re.compile(r'\bgte_SetGeomScreen\s*\(\s*\d+\s*\)\s*;')
+          code, projection_count = projection.subn('gte_SetGeomScreen(205);', code, count=1)
+          if projection_count == 0:
+              # Some source revisions use another projection initializer:
+              # do not abort an otherwise working build for a cosmetic tweak.
+              print('V24.2: Projection initializer differs, keeping original.')
+          else:
+              print('V24.2: Projection distance adjusted to 205.')
 
           # The V24.1 draw order (ground, props, characters, HUD) is preserved.
           # The existing nearby terrain streaming already draws ground all around
           # the player; it becomes visible once the camera is pitched downward.
           needed = [
               'VOLT TRAIL V24.2', 'camera_rot.vx = 170;',
-              'camera_pos.vy = 110;', 'gte_SetGeomScreen(205);',
+              'camera_pos.vy = 110;',
               'vt_v24_draw_overworld();', 'vt_v241_ground();',
               'vt_v241_bridge(715);', 'vt_v21_party[3]',
               'vt_v23_field_dragon();', 'vt_save_game(void)',
@@ -2387,7 +2397,7 @@ jobs:
           echo "CMake toolchain: $SDK_CMAKE"
           echo "PS1 compiler: $SDK_COMPILER"
 
-      - name: Build Volt Trail V24.2 3D Landschaft
+      - name: Build Volt Trail V24.2 Kamera Fix
         shell: bash
         run: |
           set -euxo pipefail
@@ -2417,7 +2427,7 @@ jobs:
       - name: Upload Volt Trail V24.2
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V24-2-3D-Landschaft
+          name: VoltTrail-PS1-V24-2-Kamera-Fix
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
