@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V22 Battle Continuation
+name: Build Volt Trail PS1 V23 Active Dragon Field
 
 on:
   workflow_dispatch:
@@ -1588,6 +1588,188 @@ jobs:
           print('V22: Save format unchanged; 0 HP persisted and compatible with V21')
           PY
 
+      - name: Apply V23 selected living dragon in overworld
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+          code = path.read_text(encoding='utf-8')
+
+          def once(old, new):
+              global code
+              n=code.count(old)
+              if n!=1:
+                  raise RuntimeError(f'V23 marker expected once, found {n}: {old[:110]!r}')
+              code=code.replace(old,new,1)
+
+          def span(source,name):
+              pattern=r'\bstatic\s+(?:void|int)\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
+              matches=list(re.finditer(pattern,source))
+              if len(matches)!=1:
+                  raise RuntimeError(f'V23 function {name} expected once, found {len(matches)}')
+              a=matches[0].start()
+              op=source.index('{',a,matches[0].end())
+              depth=0
+              quoted=False
+              char_quoted=False
+              escaped=False
+              line_comment=False
+              block_comment=False
+              j=op
+              while j<len(source):
+                  c=source[j]
+                  nextc=source[j+1] if j+1<len(source) else ''
+                  if line_comment:
+                      if c=='\n': line_comment=False
+                  elif block_comment:
+                      if c=='*' and nextc=='/':block_comment=False;j+=1
+                  elif quoted or char_quoted:
+                      if escaped:escaped=False
+                      elif c=='\\':escaped=True
+                      elif quoted and c=='"':quoted=False
+                      elif char_quoted and c=="'":char_quoted=False
+                  elif c=='/' and nextc=='/':line_comment=True;j+=1
+                  elif c=='/' and nextc=='*':block_comment=True;j+=1
+                  elif c=='"':quoted=True
+                  elif c=="'":char_quoted=True
+                  elif c=='{':depth+=1
+                  elif c=='}':
+                      depth-=1
+                      if depth==0:return a,j+1
+                  j+=1
+              raise RuntimeError('Unclosed C function '+name)
+
+          once('VOLT TRAIL V22 - %s','VOLT TRAIL V23 - %s')
+          once('VOLT TRAIL V22 - MENUE','VOLT TRAIL V23 - MENUE')
+
+          # Reordering the actual carried party is important. The first team slot and the
+          # visible field companion must agree with the player's selected living dragon.
+          switch_code = r'''static int vt_v21_switch_to(int position) {
+              int old_species;
+              int new_species;
+              int i;
+
+              vt_v21_setup();
+              if (!vt_v21_can_switch_to(position)) return 0;
+
+              old_species = vt_v21_party[vt_v21_active];
+              if (old_species >= 0 && old_species < 5) {
+                  if (companion_hp < 0) companion_hp = 0;
+                  if (companion_hp > 24) companion_hp = 24;
+                  vt_v21_hp[old_species] = companion_hp;
+              }
+
+              new_species = vt_v21_party[position];
+
+              /* Bring the chosen dragon to slot 1; retain all other team members. */
+              for (i = position; i > 0; i--)
+                  vt_v21_party[i] = vt_v21_party[i - 1];
+              vt_v21_party[0] = new_species;
+
+              vt_v21_active = 0;
+              vt_v20_active_dragon = new_species;
+              companion_hp = vt_v21_hp[new_species];
+              vt_v21_team_cursor = 0;
+              return 1;
+          }'''
+          a,b=span(code,'vt_v21_switch_to')
+          assert 'vt_v21_active = position;' in code[a:b]
+          code=code[:a]+switch_code+code[b:]
+
+          helpers=r'''
+          /* V23: Keep the selected, living dragon at the front of the team.
+           * If the active dragon has 0 HP outside battle, use a living teammate.
+           * Never heal a KO dragon or force a dead dragon to follow the player. */
+          static void vt_v23_check_field_leader(void) {
+              int species;
+              int position;
+
+              if (game_mode != 0 || vt_v21_force_switch) return;
+              vt_v21_setup();
+              if (vt_v21_count <= 0 || vt_v21_active < 0 ||
+                  vt_v21_active >= vt_v21_count) return;
+
+              species = vt_v21_party[vt_v21_active];
+              if (species < 0 || species > 4) return;
+
+              if (companion_hp > 0) return;
+
+              vt_v21_hp[species] = 0;
+              companion_hp = 0;
+
+              /* Prefer an available living dragon, including a healed teammate. */
+              for (position = 0; position < vt_v21_count; position++) {
+                  if (position != vt_v21_active && vt_v21_can_switch_to(position)) {
+                      vt_v21_switch_to(position);
+                      return;
+                  }
+              }
+              /* Everyone is at 0 HP: the player walks without a dragon until healed. */
+          }
+
+          /* Return -1 when no living companion should be drawn in the overworld. */
+          static int vt_v23_field_dragon(void) {
+              if (!vt_v21_ready || vt_v21_count < 1 ||
+                  vt_v21_active < 0 || vt_v21_active >= vt_v21_count ||
+                  companion_hp <= 0) return -1;
+              return vt_v21_party[vt_v21_active];
+          }
+          '''
+          once('static void vt_v22_knockout(void) {',helpers+'\nstatic void vt_v22_knockout(void) {')
+
+          # This is the frame boundary just before the 3-D scene is rendered in V22.
+          once('        vt_v21_post_frame();',
+               '        vt_v21_post_frame();\n'
+               '        vt_v23_check_field_leader();')
+
+          # Use the actual chosen team member for overworld and battle companion geometry.
+          # A 0 HP follower is intentionally omitted (never appear next to the trainer).
+          render_pattern = re.compile(
+              r'if\s*\(\s*vt_v20_active_dragon\s*==\s*0\s*\)\s*\{'
+              r'\s*vt_sparkit\s*\(\s*px\s*\+\s*26\s*,\s*pz\s*\+\s*105\s*\)\s*;'
+              r'\s*\}\s*else\s*\{'
+              r'\s*vt_v19_wild_dragon\s*\(\s*px\s*\+\s*26\s*,\s*pz\s*\+\s*105\s*,'
+              r'\s*vt_v20_active_dragon\s*-\s*1\s*\)\s*;'
+              r'\s*\}', re.M)
+          replace_render=r'''{
+                      int field_dragon = vt_v23_field_dragon();
+                      if (field_dragon == 0) {
+                          vt_sparkit(px + 26, pz + 105);
+                      } else if (field_dragon > 0) {
+                          vt_v19_wild_dragon(px + 26, pz + 105,
+                                             field_dragon - 1);
+                      }
+                  }'''
+          code,n=render_pattern.subn(lambda m:replace_render,code)
+          if n!=1:raise RuntimeError(f'V23 active follower drawing location not found uniquely: {n}')
+
+          # The additional Voltigon evolution spike belongs only to the displayed dragon.
+          # Otherwise KO Voltigon would still appear as a floating piece in the field.
+          spike_pat=re.compile(r'if\s*\(\s*evolved\s*&&\s*vt_v20_active_dragon\s*==\s*0\s*\)')
+          code,n=spike_pat.subn('if (evolved && vt_v23_field_dragon() == 0)',code)
+          if n > 1:raise RuntimeError(f'V23 ambiguous evolution render anchors: {n}')
+
+          required=['VOLT TRAIL V23','vt_v23_check_field_leader();',
+                    'vt_v23_field_dragon();','vt_v21_party[0] = new_species;',
+                    'vt_v22_knockout();','vt_v22_heal_selected(vt_v21_team_cursor)',
+                    'vt_save_game(void)','vt_load_game(void)','InitCARD(1);',
+                    'PAD_CROSS','PAD_SQUARE','PAD_TRIANGLE','vt_play_intro();']
+          for needle in required:
+              if needle not in code:raise RuntimeError('V23 expected feature missing: '+needle)
+          path.write_text(code,encoding='utf-8')
+          print('V23: Selected living dragon moves to front of party')
+          print('V23: Overworld and battle render the selected active dragon')
+          print('V23: KO dragon at 0 HP is never drawn as the follower')
+          print('V23: If another party dragon is healthy, switch to it in the field')
+          print('V23: When all dragons are KO the player has no companion until healed')
+          print('V23: Intro, controls, fights, party HP and save files preserved')
+          PY
+
       - name: Install PSn00bSDK 0.24 directly
         shell: bash
         run: |
@@ -1642,7 +1824,7 @@ jobs:
           echo "CMake toolchain: $SDK_CMAKE"
           echo "PS1 compiler: $SDK_COMPILER"
 
-      - name: Build Volt Trail V22
+      - name: Build Volt Trail V23
         shell: bash
         run: |
           set -euxo pipefail
@@ -1669,10 +1851,10 @@ jobs:
           done
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V22
+      - name: Upload Volt Trail V23
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V22-Battle-Continuation-Codex-Fixed
+          name: VoltTrail-PS1-V23-Aktiver-Drache-Feld
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
