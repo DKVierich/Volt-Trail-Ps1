@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V20 Dragon Codex
+name: Build Volt Trail PS1 V20 Dragon Codex Fixed
 
 on:
   workflow_dispatch:
@@ -688,6 +688,63 @@ jobs:
           print('Elemental damage/effects: lightning, leaf, fire, water, ice')
           PY
 
+      - name: Fix V20 C function declaration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          source = (
+              Path(os.environ["PROJECT_DIR"])
+              / "src" / "main.c"
+          )
+          code = source.read_text(encoding="utf-8")
+
+          # C requires a declaration before the first call.
+          # Accept either whitespace style of the restored source.
+          import re
+          prototype = "static int vt_v20_owned(int slot);"
+          function = re.search(
+              r"(?m)^\s*static\s+int\s+vt_load_game\s*"
+              r"\(\s*void\s*\)\s*\{",
+              code
+          )
+          definition = re.search(
+              r"(?m)^\s*static\s+int\s+vt_v20_owned\s*"
+              r"\(\s*int\s+slot\s*\)\s*\{",
+              code
+          )
+          if function is None or definition is None:
+              raise RuntimeError("V20 save/load source markers missing")
+          if function.start() >= definition.start():
+              raise RuntimeError("Unexpected C function order")
+          if prototype in code:
+              raise RuntimeError("C prototype already inserted")
+          code = (
+              code[:function.start()]
+              + prototype + "\n\n"
+              + code[function.start():]
+          )
+
+          for marker in (
+              "VOLT TRAIL V20",
+              "DRACHEN KODEX",
+              "vt_v20_seen_mask",
+              "vt_v20_active_dragon",
+              "vt_v20_attack_damage();",
+              "vt_save_game(void)",
+              "InitCARD(1);",
+          ):
+              if marker not in code:
+                  raise RuntimeError("Missing gameplay feature: " + marker)
+
+          source.write_text(code, encoding="utf-8")
+          print("Fixed C declaration of vt_v20_owned")
+          print("Dragon Codex, game saves and battle controls kept")
+          PY
+
       - name: Install PSn00bSDK
         shell: bash
         run: |
@@ -695,7 +752,7 @@ jobs:
           python3 "$RUNNER_TEMP/run_previous_step.py" \
             "Install PSn00bSDK"
 
-      - name: Build Volt Trail V20
+      - name: Build Volt Trail V20 Fixed
         shell: bash
         run: |
           set -euxo pipefail
@@ -725,7 +782,7 @@ jobs:
       - name: Upload Volt Trail V20
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V20-Dragon-Codex
+          name: VoltTrail-PS1-V20-Dragon-Codex-Fixed
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
