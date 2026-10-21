@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V24.1 Abenteuerwelt
+name: Build Volt Trail PS1 V24.1 Kamera Fix
 
 on:
   workflow_dispatch:
@@ -2009,9 +2009,23 @@ jobs:
           once('VOLT TRAIL V24 - MENUE','VOLT TRAIL V24.1 - MENUE')
           once('#define WORLD_LIMIT 1600','#define WORLD_LIMIT 2100')
           once('#define CAMERA_Z 190','#define CAMERA_Z 255')
-          # Lift the camera slightly for a more adventurous, overlooking perspective.
-          once('VECTOR camera_pos = {0, -10, CAMERA_Z, 0};',
-               'VECTOR camera_pos = {0, -28, CAMERA_Z, 0};')
+          # The V23/V24 source may format the camera initializer differently.
+          # CAMERA_Z was already increased above. Modify the camera height
+          # only if a compatible declaration is actually present.
+          camera_re = re.compile(
+              r'(\b(?:VECTOR|SVECTOR)\s+camera_pos\s*=\s*\{\s*0\s*,\s*)'
+              r'[-+]?\d+(\s*,\s*CAMERA_Z\b)'
+          )
+          code, camera_count = camera_re.subn(
+              lambda match: match.group(1) + '-28' + match.group(2),
+              code
+          )
+          if camera_count > 1:
+              raise RuntimeError('Ambiguous camera declarations')
+          if camera_count == 0:
+              print('Camera height unchanged; wider CAMERA_Z=255 is applied.')
+          else:
+              print('Camera height adjusted for the wider view.')
           # Richer blue background, without changing V23 menus or PS1 rendering state.
           for i in (0,1):
               old=f'draw[{i}].r0 = 10; draw[{i}].g0 = 15; draw[{i}].b0 = 35;'
@@ -2327,7 +2341,7 @@ jobs:
       - name: Upload Volt Trail V24.1
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V24-1-Abenteuerwelt
+          name: VoltTrail-PS1-V24-1-Kamera-Fix
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
