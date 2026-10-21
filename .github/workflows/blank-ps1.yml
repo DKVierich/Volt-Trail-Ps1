@@ -1,5 +1,5 @@
 
-name: Build Volt Trail PS1 V18 Dragon Edition
+name: Build Volt Trail PS1 V18 Dragon Fix
 
 on:
   workflow_dispatch:
@@ -19,710 +19,191 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           sudo apt-get update
           sudo apt-get install -y \
             cmake ninja-build unzip curl jq tar \
             ffmpeg python3-pil python3-yaml
 
-      - name: Load working V17 controller fix
+      - name: Load original V18 build
         shell: bash
         run: |
           set -euo pipefail
 
-          V17_COMMIT="b78ee9c4a135e95305a5db1098330747af11302a"
+          V18_COMMIT="3c8af158a543c87b33cb09e6e7cac25cc2f597da"
 
           curl --retry 3 -fsSL \
-            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$V17_COMMIT/.github/workflows/blank-ps1.yml" \
-            -o "$RUNNER_TEMP/v17-fixed.yml"
+            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$V18_COMMIT/.github/workflows/blank-ps1.yml" \
+            -o "$RUNNER_TEMP/v18-original.yml"
 
-          python3 - <<'PY'
+          cat > "$RUNNER_TEMP/run_v18_step.py" <<'PY'
           import os
+          import sys
+          import subprocess
           from pathlib import Path
+
           import yaml
 
-          path = Path(os.environ["RUNNER_TEMP"]) / "v17-fixed.yml"
-          data = yaml.safe_load(path.read_text())
+          workflow = (
+              Path(os.environ["RUNNER_TEMP"])
+              / "v18-original.yml"
+          )
 
-          names = [
-              step.get("name")
-              for step in data["jobs"]["build"]["steps"]
+          data = yaml.safe_load(
+              workflow.read_text(encoding="utf-8")
+          )
+
+          steps = data["jobs"]["build"]["steps"]
+
+          wanted = sys.argv[1]
+
+          matches = [
+              step for step in steps
+              if step.get("name") == wanted
           ]
 
-          required = [
-              "Load original V17 instructions",
-              "Prepare original project",
-              "Restore working V16 game",
-              "Restore V17 menu and repair controller",
-              "Install PSn00bSDK"
-          ]
+          if len(matches) != 1:
+              raise RuntimeError(
+                  "V18 build step not found: " + wanted
+              )
 
-          for name in required:
-              if names.count(name) != 1:
-                  raise RuntimeError(
-                      "V17 step missing: " + name
-                  )
+          print("Running:", wanted, flush=True)
 
-          print("Verified working V17 build workflow")
+          subprocess.run(
+              [
+                  "bash",
+                  "-euo",
+                  "pipefail",
+                  "-c",
+                  matches[0]["run"]
+              ],
+              env=os.environ.copy(),
+              check=True
+          )
           PY
+
+          python3 "$RUNNER_TEMP/run_v18_step.py" \
+            "Load working V17 controller fix"
 
       - name: Prepare game project
         shell: bash
         run: |
           set -euo pipefail
 
-          python3 - <<'PY'
-          import os
-          import subprocess
-          from pathlib import Path
-          import yaml
+          python3 "$RUNNER_TEMP/run_v18_step.py" \
+            "Prepare game project"
 
-          path = Path(os.environ["RUNNER_TEMP"]) / "v17-fixed.yml"
-          steps = yaml.safe_load(
-              path.read_text()
-          )["jobs"]["build"]["steps"]
+      - name: Restore V17 intro and gameplay
+        shell: bash
+        run: |
+          set -euo pipefail
 
-          for wanted in [
-              "Load original V17 instructions",
-              "Prepare original project"
-          ]:
-              matches = [
-                  step for step in steps
-                  if step.get("name") == wanted
-              ]
+          python3 "$RUNNER_TEMP/run_v18_step.py" \
+            "Restore V17 game intro and menu"
 
-              if len(matches) != 1:
-                  raise RuntimeError(wanted)
+      - name: Restore V18 dragons and graphics
+        shell: bash
+        run: |
+          set -euo pipefail
 
-              print("Running:", wanted, flush=True)
+          python3 "$RUNNER_TEMP/run_v18_step.py" \
+            "Apply V18 dragon models and UI"
 
-              subprocess.run(
-                  [
-                      "bash", "-euo", "pipefail",
-                      "-c", matches[0]["run"]
-                  ],
-                  env=os.environ.copy(),
-                  check=True
-              )
-          PY
-
-      - name: Restore V17 game intro and menu
+      - name: Repair V18 battle menu compiler error
         shell: bash
         run: |
           set -euo pipefail
 
           python3 - <<'PY'
           import os
-          import subprocess
-          from pathlib import Path
-          import yaml
-
-          path = Path(os.environ["RUNNER_TEMP"]) / "v17-fixed.yml"
-          steps = yaml.safe_load(
-              path.read_text()
-          )["jobs"]["build"]["steps"]
-
-          for wanted in [
-              "Restore working V16 game",
-              "Restore V17 menu and repair controller"
-          ]:
-              matches = [
-                  step for step in steps
-                  if step.get("name") == wanted
-              ]
-
-              if len(matches) != 1:
-                  raise RuntimeError(wanted)
-
-              print("Restoring:", wanted, flush=True)
-
-              subprocess.run(
-                  [
-                      "bash", "-euo", "pipefail",
-                      "-c", matches[0]["run"]
-                  ],
-                  env=os.environ.copy(),
-                  check=True
-              )
-
-          print("Working V17 restored successfully")
-          PY
-
-      - name: Apply V18 dragon models and UI
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          python3 - <<'PY'
-          import os
-          import re
-          import textwrap
           from pathlib import Path
 
-          path = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
-          code = path.read_text(encoding="utf-8")
+          source = (
+              Path(os.environ["PROJECT_DIR"])
+              / "src"
+              / "main.c"
+          )
 
-          def replace_once(old, new):
-              global code
-              count = code.count(old)
+          code = source.read_text(
+              encoding="utf-8"
+          )
 
-              if count != 1:
-                  raise RuntimeError(
-                      "V18 source marker mismatch: "
-                      + old[:70]
-                      + " count=" + str(count)
-                  )
+          # The battle HP-bar renderer appears
+          # before the main-menu state variable
+          # is defined in the original V17 code.
+          #
+          # Add a forward declaration.
+          # The existing initialized definition
+          # stays in place.
 
-              code = code.replace(old, new, 1)
+          marker = (
+              "static void "
+              "vt_v18_battle_bars(void) {"
+          )
 
-          def replace_function(name, body):
-              global code
+          declaration = (
+              "static int vt_menu_open;\n\n"
+              + marker
+          )
 
-              pattern = (
-                  r"\bstatic\s+void\s+"
-                  + re.escape(name)
-                  + r"\s*\([^;]*?\)\s*\{"
+          if code.count(marker) != 1:
+              raise RuntimeError(
+                  "V18 battle renderer not found "
+                  "exactly once"
               )
 
-              matches = list(re.finditer(pattern, code))
-
-              if len(matches) != 1:
-                  raise RuntimeError(
-                      "Function not found: " + name
-                  )
-
-              opening = code.index(
-                  "{", matches[0].start()
+          if code.count(
+              "static int vt_menu_open = 0;"
+          ) != 1:
+              raise RuntimeError(
+                  "Original menu state missing"
               )
 
-              depth = 0
-              closing = -1
-
-              for index in range(opening, len(code)):
-                  char = code[index]
-
-                  if char == "{":
-                      depth += 1
-                  elif char == "}":
-                      depth -= 1
-
-                      if depth == 0:
-                          closing = index + 1
-                          break
-
-              if closing < 0:
-                  raise RuntimeError(
-                      "Unclosed function: " + name
-                  )
-
-              code = (
-                  code[:matches[0].start()]
-                  + textwrap.dedent(body).strip()
-                  + code[closing:]
-              )
-
-          # Change the title but leave gameplay intact.
-          replace_once(
-              "VOLT TRAIL V17 - %s",
-              "VOLT TRAIL V18 - %s"
+          code = code.replace(
+              marker,
+              declaration,
+              1
           )
 
-          replace_once(
-              "VOLT TRAIL V17 - MENUE",
-              "VOLT TRAIL V18 - MENUE"
-          )
-
-          # New reusable PS1 dragon polygon helpers.
-          helpers = r'''
-          static int vt_v18_tick = 0;
-
-          static void vt_dragon_wing(
-              int x, int z, int side,
-              int span, int flap,
-              int r, int g, int b
-          ) {
-              SVECTOR a = {
-                  x - px + side * 8,
-                  -2,
-                  z - pz + 9, 0
-              };
-
-              SVECTOR tip = {
-                  x - px + side * span,
-                  -19 - flap,
-                  z - pz + 17, 0
-              };
-
-              SVECTOR edge = {
-                  x - px + side * (span - 10),
-                  13,
-                  z - pz + 30, 0
-              };
-
-              SVECTOR root = {
-                  x - px + side * 8,
-                  16,
-                  z - pz + 18, 0
-              };
-
-              draw_triangle3(
-                  &a, &tip, &edge,
-                  r, g, b
-              );
-
-              draw_triangle3(
-                  &a, &edge, &root,
-                  r * 3 / 4,
-                  g * 3 / 4,
-                  b * 3 / 4
-              );
-          }
-
-          static void vt_dragon_eyes(
-              int x, int y, int z,
-              int spacing
-          ) {
-              draw_box(
-                  x - spacing, y, z,
-                  3, 22, 32, 55
-              );
-
-              draw_box(
-                  x + spacing, y, z,
-                  3, 22, 32, 55
-              );
-          }
-
-          static void vt_dragon_sparks(
-              int x, int z
-          ) {
-              int offset;
-
-              if (
-                  game_mode != 1 ||
-                  action_flash <= 0
-              ) {
-                  return;
-              }
-
-              offset = (vt_v18_tick / 3) & 7;
-
-              vt_pyramid(
-                  x - 29,
-                  -18 - offset,
-                  z - 10,
-                  5, 13,
-                  255, 232, 63
-              );
-
-              vt_pyramid(
-                  x + 27,
-                  -11 + offset,
-                  z - 13,
-                  5, 13,
-                  255, 180, 38
-              );
-          }
-
-          static void vt_v18_tile(
-              int x, int y,
-              int width, int height,
-              int r, int g, int b
-          ) {
-              TILE *tile;
-              unsigned int aligned;
-
-              if (width <= 0 || height <= 0) {
-                  return;
-              }
-
-              aligned = (prim_used + 3u) & ~3u;
-
-              if (
-                  aligned + sizeof(TILE) >
-                  sizeof(prim_arena[db])
-              ) {
-                  return;
-              }
-
-              tile = (TILE *)
-                  (prim_arena[db] + aligned);
-
-              prim_used = aligned + sizeof(TILE);
-
-              setTile(tile);
-              setXY0(tile, x, y);
-              setWH(tile, width, height);
-              setRGB0(tile, r, g, b);
-
-              addPrim(ot[db], tile);
-          }
-
-          static void vt_v18_battle_bars(void) {
-              int hero_hp;
-              int enemy_hp;
-              int enemy_max;
-
-              if (
-                  game_mode != 1 ||
-                  vt_menu_open
-              ) {
-                  return;
-              }
-
-              hero_hp = companion_hp;
-              enemy_hp = wild_hp;
-              enemy_max = enemy_max_hp;
-
-              if (hero_hp < 0) hero_hp = 0;
-              if (hero_hp > 24) hero_hp = 24;
-
-              if (enemy_max < 1) enemy_max = 1;
-              if (enemy_hp < 0) enemy_hp = 0;
-              if (enemy_hp > enemy_max) {
-                  enemy_hp = enemy_max;
-              }
-
-              /* Two small HP bars over the battlefield. */
-              vt_v18_tile(
-                  12, 156, 296, 29,
-                  15, 26, 49
-              );
-
-              /* Sparkit's HP bar, on the left. */
-              vt_v18_tile(
-                  18, 165, 128, 9,
-                  61, 51, 51
-              );
-
-              vt_v18_tile(
-                  18, 165,
-                  128 * hero_hp / 24, 9,
-                  48, 187, 110
-              );
-
-              /* Enemy HP bar, on the right. */
-              vt_v18_tile(
-                  174, 165, 128, 9,
-                  61, 51, 51
-              );
-
-              vt_v18_tile(
-                  174, 165,
-                  128 * enemy_hp / enemy_max,
-                  9,
-                  action_flash > 0 ?
-                      241 : 208,
-                  action_flash > 0 ?
-                      196 : 83,
-                  64
-              );
-          }
-          '''
-
-          replace_once(
-              "static void vt_sparkit(int x, int z) {",
-              textwrap.dedent(helpers).strip()
-              + "\n\n"
-              + "static void vt_sparkit(int x, int z) {"
-          )
-
-          # Sparkit / Voltigon as an electric dragon.
-          sparkit = r'''
-          static void vt_sparkit(int x, int z) {
-              int grown = evolved != 0;
-              int flap = (vt_v18_tick / 6) & 1;
-              int bounce = 0;
-              int r = grown ? 245 : 239;
-              int g = grown ? 139 : 192;
-              int b = grown ? 45 : 57;
-              int wing_span = grown ? 49 : 36;
-              int head_size = grown ? 14 : 11;
-
-              if (vt_walk_phase != 0) {
-                  bounce = vt_walk_phase < 16 ? 3 : 0;
-              }
-
-              /* Dragon torso and long neck. */
-              draw_box(
-                  x, 19 - bounce, z,
-                  grown ? 18 : 15,
-                  r, g, b
-              );
-
-              draw_box(
-                  x, 1 - bounce, z - 7,
-                  10, r, g, b
-              );
-
-              /* Dragon head and elongated snout. */
-              draw_box(
-                  x, -13 - bounce, z - 14,
-                  head_size,
-                  255, 203, 66
-              );
-
-              draw_box(
-                  x, -10 - bounce, z - 27,
-                  7, 255, 171, 53
-              );
-
-              vt_dragon_eyes(
-                  x, -14 - bounce,
-                  z - 29, 7
-              );
-
-              /* Two long dragon horns. */
-              vt_pyramid(
-                  x - 9, -20 - bounce,
-                  z - 12,
-                  6, grown ? 25 : 19,
-                  253, 222, 84
-              );
-
-              vt_pyramid(
-                  x + 9, -20 - bounce,
-                  z - 12,
-                  6, grown ? 25 : 19,
-                  253, 222, 84
-              );
-
-              /* Flapping angular wings. */
-              vt_dragon_wing(
-                  x, z, -1,
-                  wing_span,
-                  flap ? 8 : -3,
-                  grown ? 232 : 242,
-                  grown ? 88 : 137,
-                  47
-              );
-
-              vt_dragon_wing(
-                  x, z, 1,
-                  wing_span,
-                  flap ? -3 : 8,
-                  grown ? 232 : 242,
-                  grown ? 88 : 137,
-                  47
-              );
-
-              /* Long segmented tail. */
-              draw_box(
-                  x + 13, 21 - bounce,
-                  z + 20, 10,
-                  r, g, b
-              );
-
-              draw_box(
-                  x + 21, 17 - bounce,
-                  z + 36, 7,
-                  r, g, b
-              );
-
-              vt_pyramid(
-                  x + 26, 14 - bounce,
-                  z + 46,
-                  9, 20,
-                  255, 218, 64
-              );
-
-              /* Dragon feet. */
-              draw_box(
-                  x - 12, 36 - bounce,
-                  z - 4, 7,
-                  r, g, b
-              );
-
-              draw_box(
-                  x + 12, 36 - bounce,
-                  z - 4, 7,
-                  r, g, b
-              );
-
-              vt_dragon_sparks(x, z);
-          }
-          '''
-
-          replace_function("vt_sparkit", sparkit)
-
-          # Mosslet becomes a small forest dragon.
-          mosslet = r'''
-          static void vt_mosslet(
-              int x, int z, int kind
-          ) {
-              int r = kind == 2 ? 199 : 68;
-              int g = kind == 2 ? 77 : 168;
-              int b = kind == 2 ? 73 : 91;
-              int flap = (vt_v18_tick / 8) & 1;
-
-              /* Small dragon body and neck. */
-              draw_box(
-                  x, 23, z, 14, r, g, b
-              );
-
-              draw_box(
-                  x, 6, z - 8,
-                  10, r, g, b
-              );
-
-              /* Head and snout. */
-              draw_box(
-                  x, -7, z - 13,
-                  11, r, g, b
-              );
-
-              draw_box(
-                  x, -5, z - 24,
-                  6, r, g, b
-              );
-
-              vt_dragon_eyes(
-                  x, -10, z - 26, 6
-              );
-
-              /* Leaf-shaped horns. */
-              vt_pyramid(
-                  x - 8, -16, z - 12,
-                  6, 19,
-                  42, 184, 71
-              );
-
-              vt_pyramid(
-                  x + 8, -16, z - 12,
-                  6, 19,
-                  42, 184, 71
-              );
-
-              /* Forest dragon wings. */
-              vt_dragon_wing(
-                  x, z, -1, 37,
-                  flap ? 7 : 0,
-                  r, g, b
-              );
-
-              vt_dragon_wing(
-                  x, z, 1, 37,
-                  flap ? 0 : 7,
-                  r, g, b
-              );
-
-              /* Rear tail and pointed leaf tip. */
-              draw_box(
-                  x + 9, 23, z + 20,
-                  9, r, g, b
-              );
-
-              vt_pyramid(
-                  x + 12, 19, z + 29,
-                  8, 19,
-                  38, 155, 66
-              );
-
-              /* Clawed feet. */
-              draw_box(
-                  x - 11, 39, z,
-                  6, r, g, b
-              );
-
-              draw_box(
-                  x + 11, 39, z,
-                  6, r, g, b
-              );
-          }
-          '''
-
-          replace_function("vt_mosslet", mosslet)
-
-          # Make the dragons move even while standing.
-          replace_once(
-              "        previous_pad = pad;",
-              "        previous_pad = pad;\n"
-              "        vt_v18_tick++;"
-          )
-
-          # Draw battle HP bars, keeping the
-          # working V17 main-menu renderer.
-          replace_once(
-              "        vt_draw_panels();",
-              "        vt_draw_panels();\n"
-              "        vt_v18_battle_bars();"
-          )
-
-          # Improve spacing inside the main menu.
-          menu_lines = [
-              ("MONSTER", "MONSTER"),
-              ("ITEMS", "ITEMS"),
-              ("SPEICHERN", "SPEICHERN"),
-              ("LADEN", "LADEN")
-          ]
-
-          for old_label, new_label in menu_lines:
-              old = '"%c ' + old_label + '\\n"'
-              new = '"%c ' + new_label + '\\n\\n"'
-              replace_once(old, new)
-
-          replace_once(
-              '"HAUPTMENUE\\n\\n"',
-              '"DRACHEN-MENUE\\n\\n"'
-          )
-
-          replace_once(
-              '"MEINE MONSTER\\n\\n"',
-              '"MEINE DRACHEN\\n\\n"'
-          )
-
-          replace_once(
-              '"MOSSLET: %s\\n"',
-              '"WALDDRACHE: %s\\n\\n"'
-          )
-
-          replace_once(
-              '"FANGKAPSELN: %d\\n"',
-              '"FANGKAPSELN: %d\\n\\n"'
-          )
-
-          replace_once(
-              '"HEILTRANK: %d\\n"',
-              '"HEILTRANK: %d\\n\\n"'
-          )
-
-          # Restore the appropriate V17 menu,
-          # controller, quests and Memory Card.
+          # Confirm that important V18
+          # features remain present.
           required = [
               "VOLT TRAIL V18",
               "vt_dragon_wing(",
               "vt_dragon_sparks(",
               "vt_v18_battle_bars();",
-              "vt_sparkit(",
-              "vt_mosslet(",
               "vt_menu_open",
+              "vt_menu_choice",
               "vt_save_game(void)",
               "vt_load_game(void)",
               "InitCARD(1);",
+              "PAD_CROSS",
               "PAD_SQUARE",
               "PAD_CIRCLE",
               "PAD_TRIANGLE",
-              "PAD_CROSS",
-              "vt_play_intro();",
-              "FntFlush(0);",
-              "FntFlush(1);",
-              "FntFlush(2);"
+              "PAD_START",
+              "vt_play_intro();"
           ]
 
-          for marker in required:
-              if marker not in code:
+          for feature in required:
+              if feature not in code:
                   raise RuntimeError(
-                      "V18 feature missing: " + marker
+                      "Required feature missing: "
+                      + feature
                   )
 
-          path.write_text(code, encoding="utf-8")
+          source.write_text(
+              code,
+              encoding="utf-8"
+          )
 
-          print("V18 Dragon Edition source ready")
-          print("Electric dragon Sparkit / Voltigon")
-          print("Forest dragon Mosslet")
-          print("Dragon wings, horns, tails")
-          print("Animated dragon wings and battle sparks")
-          print("Improved menu spacing and HP bars")
-          print("V17 controls, quests and save system kept")
+          print("V18 COMPILER FIX APPLIED")
+          print("Forward declaration added")
+          print("Dragon models preserved")
+          print("Battle HP bars preserved")
+          print("Main menu preserved")
+          print("Memory Card functions preserved")
+          print("Controller fix preserved")
           PY
 
       - name: Install PSn00bSDK
@@ -730,38 +211,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          python3 - <<'PY'
-          import os
-          import subprocess
-          from pathlib import Path
-          import yaml
+          python3 "$RUNNER_TEMP/run_v18_step.py" \
+            "Install PSn00bSDK"
 
-          path = Path(os.environ["RUNNER_TEMP"]) / "v17-fixed.yml"
-          steps = yaml.safe_load(
-              path.read_text()
-          )["jobs"]["build"]["steps"]
-
-          matches = [
-              step for step in steps
-              if step.get("name") == "Install PSn00bSDK"
-          ]
-
-          if len(matches) != 1:
-              raise RuntimeError(
-                  "Working SDK setup missing"
-              )
-
-          subprocess.run(
-              [
-                  "bash", "-euo", "pipefail",
-                  "-c", matches[0]["run"]
-              ],
-              env=os.environ.copy(),
-              check=True
-          )
-          PY
-
-      - name: Build Volt Trail V18
+      - name: Build Volt Trail V18 Fixed
         shell: bash
         run: |
           set -euxo pipefail
@@ -777,7 +230,7 @@ jobs:
             "$GITHUB_WORKSPACE/build" \
             --verbose
 
-      - name: Collect game files
+      - name: Collect PS1 game files
         shell: bash
         run: |
           set -euo pipefail
@@ -785,13 +238,15 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
 
           for file in \
-            VTRAIL.bin VTRAIL.cue \
-            VTRAIL.exe VTRAIL.elf
+            VTRAIL.bin \
+            VTRAIL.cue \
+            VTRAIL.exe \
+            VTRAIL.elf
           do
             SOURCE="$GITHUB_WORKSPACE/build/$file"
 
             if [ ! -s "$SOURCE" ]; then
-              echo "::error::Missing game file: $file"
+              echo "::error::Missing file: $file"
               exit 1
             fi
 
@@ -801,10 +256,10 @@ jobs:
 
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V18
+      - name: Upload Volt Trail V18 Fixed
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V18-Dragon-Edition
+          name: VoltTrail-PS1-V18-Dragon-Fix
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
