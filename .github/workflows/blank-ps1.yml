@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V24.1 Grafik Fix
+name: Build Volt Trail PS1 V24.2 3D Landschaft
 
 on:
   workflow_dispatch:
@@ -2273,6 +2273,66 @@ jobs:
           print('Original V23/V24 gameplay, dragon team, codex, intro and saves untouched')
           PY
 
+      - name: V24.2 Tilt camera and show true ground perspective
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          source = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+          code = source.read_text(encoding='utf-8')
+
+          def once(old, new):
+              global code
+              count = code.count(old)
+              if count != 1:
+                  raise RuntimeError('V24.2 camera anchor not found uniquely: '
+                                     + repr(old) + ' count=' + str(count))
+              code = code.replace(old, new, 1)
+
+          # Keep all existing characters, NPCs, missions, combat, menu and save format.
+          once('VOLT TRAIL V24.1 - %s', 'VOLT TRAIL V24.2 - %s')
+          once('VOLT TRAIL V24.1 - MENUE', 'VOLT TRAIL V24.2 - MENUE')
+
+          # The previous camera was almost horizontal, making all terrain appear
+          # as a thin strip near the horizon. Pitch downward approximately 15 deg
+          # (PS1 uses 4096 angular units per full revolution), then move the
+          # camera upwards so near grass and the paths fill the lower screen.
+          # Set these immediately before the real rendering matrix is generated;
+          # this is more robust than matching the initial camera declarations.
+          once('RotMatrix(&camera_rot, &m);',
+               'camera_rot.vx = 170;  /* approx. 15 degrees towards ground */\n'
+               '        camera_pos.vy = 110; /* camera above the landscape */\n'
+               '        RotMatrix(&camera_rot, &m);')
+
+          # Slightly larger geometry projection compensates for the long-distance
+          # camera, leaving a spacious view without shrinking the player too much.
+          once('gte_SetGeomScreen(180);', 'gte_SetGeomScreen(205);')
+
+          # The V24.1 draw order (ground, props, characters, HUD) is preserved.
+          # The existing nearby terrain streaming already draws ground all around
+          # the player; it becomes visible once the camera is pitched downward.
+          needed = [
+              'VOLT TRAIL V24.2', 'camera_rot.vx = 170;',
+              'camera_pos.vy = 110;', 'gte_SetGeomScreen(205);',
+              'vt_v24_draw_overworld();', 'vt_v241_ground();',
+              'vt_v241_bridge(715);', 'vt_v21_party[3]',
+              'vt_v23_field_dragon();', 'vt_save_game(void)',
+              'vt_load_game(void)', 'InitCARD(1);', 'vt_play_intro();'
+          ]
+          for marker in needed:
+              if marker not in code:
+                  raise RuntimeError('V24.2 expected feature missing: ' + marker)
+
+          source.write_text(code, encoding='utf-8')
+          print('V24.2: camera pitched down, elevated and projection improved')
+          print('V24.2: nearby terrain and long roads can fill more screen height')
+          print('V24.2: V24.1 villages, forests, bridge and mountain props kept')
+          print('V24.2: dragon team, battles, codex, intro and saves unchanged')
+          PY
+
       - name: Install PSn00bSDK 0.24 directly
         shell: bash
         run: |
@@ -2327,7 +2387,7 @@ jobs:
           echo "CMake toolchain: $SDK_CMAKE"
           echo "PS1 compiler: $SDK_COMPILER"
 
-      - name: Build Volt Trail V24.1 Grafik Fix
+      - name: Build Volt Trail V24.2 3D Landschaft
         shell: bash
         run: |
           set -euxo pipefail
@@ -2354,10 +2414,10 @@ jobs:
           done
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V24.1 Grafik Fix
+      - name: Upload Volt Trail V24.2
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V24-1-Grafik-Fix
+          name: VoltTrail-PS1-V24-2-3D-Landschaft
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
