@@ -1,5 +1,5 @@
 
-name: Build Volt Trail PS1 V12 3D World
+name: Build Volt Trail PS1 V13
 
 on:
   workflow_dispatch:
@@ -15,16 +15,16 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Install build tools
+      - name: Install tools
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y \
             cmake ninja-build unzip curl jq tar \
-            ffmpeg python3-pil
+            ffmpeg python3-pil python3-yaml
 
-      - name: Prepare original project
+      - name: Prepare project and V12 backup
         shell: bash
         run: |
           set -euo pipefail
@@ -33,23 +33,29 @@ jobs:
           VIDEO="$GITHUB_WORKSPACE/DKVierich_Produktion_PS1_Intro_original.mp4"
 
           test -f "$ZIP" || {
-            echo "::error::V7 ZIP missing"
+            echo "::error::Original V7 ZIP missing"
             exit 1
           }
 
           test -f "$VIDEO" || {
-            echo "::error::Intro MP4 missing"
+            echo "::error::Intro video missing"
             exit 1
           }
 
-          DEST="$RUNNER_TEMP/volttrail-v12"
+          COMMIT="9fe565d33d905521e42d05b09ad6bfbe5b9bc3a5"
+
+          curl --retry 3 -fsSL \
+            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$COMMIT/.github/workflows/blank-ps1.yml" \
+            -o "$RUNNER_TEMP/v12.yml"
+
+          DEST="$RUNNER_TEMP/v13-project"
           mkdir -p "$DEST"
           unzip -q "$ZIP" -d "$DEST"
 
-          CMAKE_FILE="$(find "$DEST" -name CMakeLists.txt -type f -print -quit)"
+          CMAKE_FILE="$(find "$DEST" -type f -name CMakeLists.txt -print -quit)"
 
           if [ -z "$CMAKE_FILE" ]; then
-            echo "::error::CMakeLists.txt missing"
+            echo "::error::Project files missing"
             exit 1
           fi
 
@@ -61,7 +67,7 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Convert DKVierich intro
+      - name: Restore working V12 game and intro
         shell: bash
         run: |
           set -euo pipefail
@@ -70,132 +76,35 @@ jobs:
           import os
           import subprocess
           from pathlib import Path
-          from PIL import Image
+          import yaml
 
-          root = Path(os.environ["GITHUB_WORKSPACE"])
-          project = Path(os.environ["PROJECT_DIR"])
+          path = Path(os.environ["RUNNER_TEMP"]) / "v12.yml"
+          steps = yaml.safe_load(path.read_text())["jobs"]["build"]["steps"]
 
-          video = root / "DKVierich_Produktion_PS1_Intro_original.mp4"
-          raw_file = Path(os.environ["RUNNER_TEMP"]) / "intro_v12.rgb"
-          header = project / "src/volttrail_intro_data.h"
+          for wanted in [
+              "Convert DKVierich intro",
+              "Apply V12 graphics and gameplay"
+          ]:
+              matches = [
+                  step for step in steps
+                  if step.get("name") == wanted
+              ]
 
-          WIDTH = 224
-          HEIGHT = 168
-          PIXELS = WIDTH * HEIGHT
-          RGB_BYTES = PIXELS * 3
-          MAX_FRAMES = 30
+              if len(matches) != 1:
+                  raise RuntimeError("Missing V12 step: " + wanted)
 
-          subprocess.run([
-              "ffmpeg",
-              "-hide_banner",
-              "-loglevel", "error",
-              "-y",
-              "-i", str(video),
-              "-t", "5",
-              "-vf",
-              "fps=6,"
-              "scale=224:168:flags=lanczos:"
-              "force_original_aspect_ratio=decrease,"
-              "pad=224:168:(ow-iw)/2:(oh-ih)/2:black,"
-              "eq=contrast=1.08:saturation=1.12",
-              "-an",
-              "-pix_fmt", "rgb24",
-              "-f", "rawvideo",
-              str(raw_file)
-          ], check=True)
+              print("Running:", wanted, flush=True)
 
-          raw = raw_file.read_bytes()
-
-          if not raw or len(raw) % RGB_BYTES:
-              raise RuntimeError("Intro conversion failed")
-
-          count = min(len(raw) // RGB_BYTES, MAX_FRAMES)
-          palettes = []
-
-          with header.open("w", encoding="ascii") as f:
-              f.write("#ifndef VOLTTRAIL_INTRO_DATA_H\n")
-              f.write("#define VOLTTRAIL_INTRO_DATA_H\n")
-              f.write("#define VT_INTRO_FRAME_COUNT %d\n" % count)
-
-              f.write(
-                  "static const unsigned char vt_intro_frames"
-                  "[VT_INTRO_FRAME_COUNT][37632]"
-                  " __attribute__((aligned(4))) = {\n"
+              subprocess.run(
+                  ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
+                  check=True,
+                  env=os.environ.copy()
               )
 
-              for frame in range(count):
-                  start = frame * RGB_BYTES
-                  chunk = raw[start:start + RGB_BYTES]
-
-                  img = Image.frombytes(
-                      "RGB", (WIDTH, HEIGHT), chunk
-                  )
-
-                  indexed = img.quantize(
-                      colors=256,
-                      method=Image.Quantize.MEDIANCUT
-                  )
-
-                  colors = indexed.getpalette() or []
-                  psx_palette = []
-
-                  for i in range(256):
-                      p = i * 3
-
-                      if p + 2 < len(colors):
-                          r, g, b = colors[p:p + 3]
-                      else:
-                          r = g = b = 0
-
-                      value = (
-                          (r >> 3) |
-                          ((g >> 3) << 5) |
-                          ((b >> 3) << 10) |
-                          0x8000
-                      )
-
-                      psx_palette.append(value)
-
-                  palettes.append(psx_palette)
-                  pixels = indexed.tobytes()
-
-                  f.write("{\n")
-
-                  for i in range(0, len(pixels), 24):
-                      values = pixels[i:i + 24]
-                      f.write(",".join(
-                          "0x%02x" % x for x in values
-                      ))
-                      f.write(",\n")
-
-                  f.write("},\n")
-
-              f.write("};\n")
-
-              f.write(
-                  "static const unsigned short vt_intro_palettes"
-                  "[VT_INTRO_FRAME_COUNT][256]"
-                  " __attribute__((aligned(4))) = {\n"
-              )
-
-              for palette in palettes:
-                  f.write("{\n")
-
-                  for i in range(0, 256, 16):
-                      f.write(",".join(
-                          "0x%04x" % x
-                          for x in palette[i:i + 16]
-                      ))
-                      f.write(",\n")
-
-                  f.write("},\n")
-
-              f.write("};\n#endif\n")
-
-          print("HD intro generated:", count, "frames")
+          print("V12 game and intro restored")
           PY
 
-      - name: Apply V12 graphics and gameplay
+      - name: Apply V13 graphics improvements
         shell: bash
         run: |
           set -euo pipefail
@@ -204,719 +113,277 @@ jobs:
           import os
           from pathlib import Path
 
-          src = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
-          code = src.read_text(encoding="utf-8")
+          path = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
+          code = path.read_text(encoding="utf-8")
 
           def replace_once(old, new):
               global code
 
               if code.count(old) != 1:
                   raise RuntimeError(
-                      "Source marker missing: " + old[:100]
+                      "Source marker not found: " + old[:80]
                   )
 
               code = code.replace(old, new, 1)
 
+          # Move the camera projection closer.
           replace_once(
-              "#include <stdio.h>",
-              '#include <stdio.h>\n'
-              '#include "volttrail_intro_data.h"'
+              "gte_SetGeomScreen(180);",
+              "gte_SetGeomScreen(225);"
           )
 
-          # More colorful ground, with a central path.
+          # Update game title.
           replace_once(
-              "            draw_triangle3(&a,&c,&b, 28, 92, 52);\n"
-              "            draw_triangle3(&b,&c,&d, 24, 78, 45);",
-              """
-            {
-                int shade = ((x / 55) + (z / 55)) & 1;
-                int r, g, bl;
-
-                if (x >= -55 && x < 55) {
-                    r = shade ? 134 : 119;
-                    g = shade ? 104 : 89;
-                    bl = shade ? 65 : 54;
-                } else if (region == 1) {
-                    r = shade ? 47 : 38;
-                    g = shade ? 98 : 87;
-                    bl = shade ? 121 : 107;
-                } else if (region == 2) {
-                    r = shade ? 69 : 57;
-                    g = shade ? 98 : 82;
-                    bl = shade ? 82 : 72;
-                } else {
-                    r = shade ? 39 : 29;
-                    g = shade ? 119 : 100;
-                    bl = shade ? 59 : 47;
-                }
-
-                draw_triangle3(&a, &c, &b, r, g, bl);
-                draw_triangle3(
-                    &b, &c, &d,
-                    r * 4 / 5,
-                    g * 4 / 5,
-                    bl * 4 / 5
-                );
-            }
-              """.rstrip()
+              "VOLT TRAIL V12 - %s",
+              "VOLT TRAIL V13 - %s"
           )
 
-          # Custom low-poly objects.
-          graphics = r'''
-          static void vt_pyramid(
-              int wx, int wy, int wz,
-              int radius, int height,
-              int r, int g, int b
-          ) {
-              SVECTOR a = {
-                  wx - radius - px,
-                  wy,
-                  wz - radius - pz, 0
-              };
-              SVECTOR c = {
-                  wx + radius - px,
-                  wy,
-                  wz - radius - pz, 0
-              };
-              SVECTOR d = {
-                  wx - radius - px,
-                  wy,
-                  wz + radius - pz, 0
-              };
-              SVECTOR e = {
-                  wx + radius - px,
-                  wy,
-                  wz + radius - pz, 0
-              };
-              SVECTOR tip = {
-                  wx - px,
-                  wy - height,
-                  wz - pz, 0
-              };
+          # Add a walking animation state.
+          replace_once(
+              "static void vt_sparkit(int x, int z) {",
+              "static int vt_walk_phase = 0;\n\n"
+              "static void vt_sparkit(int x, int z) {"
+          )
 
-              draw_triangle3(&a, &tip, &c, r, g, b);
-              draw_triangle3(
-                  &c, &tip, &e,
-                  r * 3 / 4, g * 3 / 4, b * 3 / 4
-              );
-              draw_triangle3(
-                  &e, &tip, &d,
-                  r * 4 / 5, g * 4 / 5, b * 4 / 5
-              );
-              draw_triangle3(
-                  &d, &tip, &a,
-                  r * 2 / 3, g * 2 / 3, b * 2 / 3
-              );
-          }
+          # Replace Sparkit's static model with
+          # a gently animated version.
+          start = code.index(
+              "static void vt_sparkit(int x, int z) {"
+          )
 
-          static void vt_tree(int x, int z) {
-              draw_box(x, 24, z, 11, 108, 72, 39);
-              vt_pyramid(
-                  x, 17, z, 25, 34,
-                  30, 136, 65
-              );
-              vt_pyramid(
-                  x, -3, z, 20, 33,
-                  49, 163, 73
-              );
-          }
+          end = code.index(
+              "static void vt_mosslet(",
+              start
+          )
 
-          static void vt_crystal(int x, int z) {
-              draw_box(x, 25, z, 8, 40, 93, 115);
-              vt_pyramid(
-                  x, 14, z, 16, 37,
-                  71, 211, 231
-              );
-          }
-
-          static void vt_gate(int z) {
-              draw_box(
-                  -45, 15, z, 19,
-                  175, 115, 49
-              );
-              draw_box(
-                  45, 15, z, 19,
-                  175, 115, 49
-              );
-
-              draw_box(
-                  0, 21, z + 5, 25,
-                  34, 89, 220
-              );
-
-              vt_pyramid(
-                  0, -8, z, 68, 25,
-                  244, 173, 65
-              );
-          }
-
+          sparkit = r'''
           static void vt_sparkit(int x, int z) {
+              int bounce = 0;
+              int left_lift = 0;
+              int right_lift = 0;
+
+              if (vt_walk_phase != 0) {
+                  if (
+                      vt_walk_phase >= 8 &&
+                      vt_walk_phase < 24
+                  ) {
+                      bounce = 5;
+                  }
+
+                  if (vt_walk_phase < 16) {
+                      left_lift = 5;
+                  } else {
+                      right_lift = 5;
+                  }
+              }
+
+              /* Body */
               draw_box(
-                  x, 20, z, 14,
+                  x, 20 - bounce, z, 14,
                   238, 181, 38
               );
 
+              /* Head */
               draw_box(
-                  x, 2, z - 4, 12,
+                  x, 2 - bounce, z - 4, 12,
                   255, 211, 65
               );
 
+              /* Ears */
               vt_pyramid(
-                  x - 10, -6, z - 3,
-                  7, 23,
-                  255, 203, 42
+                  x - 10, -6 - bounce, z - 3,
+                  7, 23, 255, 203, 42
               );
 
               vt_pyramid(
-                  x + 10, -6, z - 3,
-                  7, 23,
-                  255, 203, 42
+                  x + 10, -6 - bounce, z - 3,
+                  7, 23, 255, 203, 42
               );
 
+              /* Eyes */
               draw_box(
-                  x - 6, -1, z - 14,
+                  x - 6, -1 - bounce, z - 14,
                   3, 22, 31, 52
               );
 
               draw_box(
-                  x + 6, -1, z - 14,
+                  x + 6, -1 - bounce, z - 14,
                   3, 22, 31, 52
               );
 
+              /* Electric tail */
               draw_box(
-                  x + 19, 18, z + 5,
+                  x + 19, 18 - bounce, z + 5,
                   7, 244, 148, 25
               );
+
+              /* Animated feet */
+              draw_box(
+                  x - 8,
+                  34 - bounce - left_lift,
+                  z - 2,
+                  5, 180, 110, 35
+              );
+
+              draw_box(
+                  x + 8,
+                  34 - bounce - right_lift,
+                  z - 2,
+                  5, 180, 110, 35
+              );
           }
 
-          static void vt_mosslet(
-              int x, int z, int kind
-          ) {
-              int r = kind == 2 ? 193 : 74;
-              int g = kind == 2 ? 74 : 162;
-              int b = kind == 2 ? 67 : 93;
-
-              draw_box(x, 23, z, 16, r, g, b);
-              draw_box(
-                  x, 4, z - 4, 13,
-                  r, g, b
-              );
-
-              vt_pyramid(
-                  x - 9, -4, z,
-                  8, 20,
-                  r, g, b
-              );
-
-              vt_pyramid(
-                  x + 9, -4, z,
-                  8, 20,
-                  r, g, b
-              );
-
-              draw_box(
-                  x - 6, 1, z - 15,
-                  3, 22, 35, 46
-              );
-
-              draw_box(
-                  x + 6, 1, z - 15,
-                  3, 22, 35, 46
-              );
-          }
           '''
 
-          marker = "static void draw_hud(void) {"
+          code = code[:start] + sparkit + code[end:]
 
-          if code.count(marker) != 1:
-              raise RuntimeError("HUD marker missing")
+          # Animate only when the D-pad is pressed.
+          replace_once(
+              "        draw_ground();",
+              """
+        if (
+            game_mode == 0 &&
+            (pad & (PAD_LEFT | PAD_RIGHT | PAD_UP | PAD_DOWN))
+        ) {
+            vt_walk_phase = (vt_walk_phase + 1) & 31;
+        } else {
+            vt_walk_phase = 0;
+        }
 
-          code = code.replace(
-              marker, graphics + "\n" + marker, 1
+        draw_ground();
+              """.rstrip()
           )
 
-          # Replace the original scenery.
-          start = code.find(
-              "        /* Distinct landmarks for three connected areas. */"
-          )
+          # More recognizable features for Mosslet.
+          start = code.index("static void vt_mosslet(")
+          end = code.index("static void vt_draw_panel(", start)
 
-          end = code.find(
-              "        /* Player, Sparkit and wild creature",
-              start
-          )
+          mosslet = code[start:end]
+          closing = mosslet.rfind("}")
 
-          if start < 0 or end < 0:
-              raise RuntimeError("Scenery section missing")
+          if closing < 0:
+              raise RuntimeError("Mosslet model invalid")
 
-          scenery = r'''
-              /* New V12 low-poly fantasy world. */
-              vt_tree(-155, 180);
-              vt_tree(145, 195);
-              vt_tree(-190, 315);
-              vt_tree(185, 345);
+          extra = r'''
+              /* Leaf crest */
+              vt_pyramid(
+                  x, -13, z + 1,
+                  11, 19,
+                  49, 170, 78
+              );
 
-              vt_tree(-245, 255);
-              vt_tree(245, 280);
-
-              vt_gate(335);
+              /* Small feet */
+              draw_box(
+                  x - 10, 38, z,
+                  6, 40, 113, 54
+              );
 
               draw_box(
-                  -108, 25, 278, 27,
-                  125, 86, 57
+                  x + 10, 38, z,
+                  6, 40, 113, 54
               );
+          '''
+
+          mosslet = (
+              mosslet[:closing] +
+              extra + "\n" +
+              mosslet[closing:]
+          )
+
+          code = code[:start] + mosslet + code[end:]
+
+          # Add trees and smaller foreground plants.
+          replace_once(
+              "              vt_gate(335);",
+              """
+              /* More vegetation */
+              vt_tree(-185, 145);
+              vt_tree(185, 155);
+              vt_tree(-230, 405);
+              vt_tree(230, 420);
+
               vt_pyramid(
-                  -108, 3, 278,
-                  35, 25,
-                  170, 80, 49
+                  -88, 29, 205,
+                  15, 18,
+                  38, 138, 68
               );
 
-              draw_box(
-                  119, 25, 285, 27,
-                  120, 79, 53
-              );
               vt_pyramid(
-                  119, 3, 285,
-                  35, 25,
-                  176, 79, 48
+                  88, 29, 205,
+                  15, 18,
+                  42, 151, 72
               );
 
-              if (region == 1) {
+              /* Slightly closer arena gate */
+              vt_gate(310);
+              """.rstrip()
+          )
+
+          # Additional crystals.
+          replace_once(
+              "                  vt_crystal(-90, 235);",
+              """
                   vt_crystal(-90, 235);
-                  vt_crystal(95, 245);
-                  vt_crystal(-152, 365);
-                  vt_crystal(151, 375);
-              }
-
-              if (region == 2) {
-                  draw_box(
-                      -125, 19, 310, 36,
-                      174, 65, 46
-                  );
-                  draw_box(
-                      125, 19, 310, 36,
-                      174, 65, 46
-                  );
-
-                  vt_pyramid(
-                      0, -23, 370,
-                      45, 45,
-                      244, 181, 61
-                  );
-              }
-
-          '''
-
-          code = code[:start] + scenery + code[end:]
-
-          # Replace box placeholders with creatures.
-          start = code.find(
-              "        /* Player, Sparkit and wild creature"
-          )
-          end = code.find(
-              "        draw_hud();",
-              start
+                  vt_crystal(-170, 185);
+                  vt_crystal(170, 205);
+              """.rstrip()
           )
 
-          if start < 0 or end < 0:
-              raise RuntimeError("Creature scene missing")
+          # Verify essential features are still present.
+          checks = [
+              "VOLT TRAIL V13",
+              "vt_walk_phase",
+              "gte_SetGeomScreen(225)",
+              "FntFlush(0);",
+              "FntFlush(1);",
+              "vt_play_intro();"
+          ]
 
-          creatures = r'''
-              /* Player marker and detailed V12 creatures. */
-              draw_box(
-                  px, 17, pz + 73, 12,
-                  56, 101, 212
-              );
+          for marker in checks:
+              if marker not in code:
+                  raise RuntimeError(
+                      "Required feature missing: " + marker
+                  )
 
-              draw_box(
-                  px, -1, pz + 73, 9,
-                  221, 179, 131
-              );
+          path.write_text(code, encoding="utf-8")
 
-              vt_sparkit(
-                  px + 26, pz + 105
-              );
-
-              if (evolved) {
-                  vt_pyramid(
-                      px + 26, -25, pz + 105,
-                      15, 18,
-                      255, 122, 31
-                  );
-              }
-
-              if (game_mode == 1) {
-                  vt_mosslet(
-                      px - 38,
-                      pz + 135,
-                      encounter_kind
-                  );
-              }
-
-          '''
-
-          code = code[:start] + creatures + code[end:]
-
-          # Keep the working V11-style double HUD.
-          hud = r'''
-          static void vt_draw_panel(int y, int height) {
-              TILE *tile;
-              unsigned int aligned;
-
-              aligned = (prim_used + 3u) & ~3u;
-
-              if (aligned + sizeof(TILE) >
-                  sizeof(prim_arena[db])) {
-                  return;
-              }
-
-              tile = (TILE *)(prim_arena[db] + aligned);
-              prim_used = aligned + sizeof(TILE);
-
-              setTile(tile);
-              setXY0(tile, 0, y);
-              setWH(tile, SCREEN_W, height);
-              setRGB0(tile, 12, 18, 38);
-
-              addPrim(ot[db], tile);
-          }
-
-          static void vt_draw_panels(void) {
-              vt_draw_panel(0, 64);
-              vt_draw_panel(190, 50);
-          }
-
-          static void draw_hud(void) {
-              const char *area;
-
-              area = region == 0 ?
-                  "SUNMEADOW" :
-                  (region == 1 ?
-                   "CRYSTAL PASS" : "STORM ARENA");
-
-              FntPrint(
-                  0, "VOLT TRAIL V12 - %s\n\n",
-                  area
-              );
-
-              FntPrint(
-                  0, "SPARKIT L%d HP %d/24%s\n\n",
-                  companion_level,
-                  companion_hp,
-                  evolved ? " VOLTIGON" : ""
-              );
-
-              FntPrint(
-                  0, "BADGE %d/1 TEAM %d STEPS %d\n",
-                  badges,
-                  1 + caught_mosslet,
-                  step_count
-              );
-
-              if (game_mode == 0) {
-                  FntPrint(
-                      1, "D-PAD MOVE X BATTLE\n\n"
-                  );
-                  FntPrint(
-                      1, "START RESET\n"
-                  );
-              } else if (game_mode == 1) {
-                  const char *enemy;
-
-                  enemy = encounter_kind == 2 ?
-                      "ARENA LEADER" :
-                      (encounter_kind == 1 ?
-                       "TRAINER" : "MOSSLET");
-
-                  FntPrint(
-                      1, "%s L%d HP %d/%d\n\n",
-                      enemy, enemy_level,
-                      wild_hp, enemy_max_hp
-                  );
-
-                  if (action_flash > 0) {
-                      FntPrint(
-                          1, "%s\n",
-                          last_action == 1 ?
-                          "SUPER EFFECTIVE!" :
-                          (last_action == 2 ?
-                           "CAPTURED!" : "ACTION!")
-                      );
-                  } else {
-                      FntPrint(
-                          1, "X ATTACK O CATCH (%d)\n",
-                          capture_attempts
-                      );
-                  }
-              } else if (game_mode == 2) {
-                  FntPrint(
-                      1, "VICTORY! X CONTINUE\n\n"
-                  );
-                  FntPrint(
-                      1, "TEAM GETS STRONGER\n"
-                  );
-              } else if (game_mode == 3) {
-                  FntPrint(
-                      1, "SPARKIT NEEDS REST\n\n"
-                  );
-                  FntPrint(
-                      1, "X RECOVER\n"
-                  );
-              }
-
-              FntFlush(0);
-              FntFlush(1);
-          }
-          '''
-
-          start = code.find(
-              "static void draw_hud(void) {"
-          )
-          end = code.find(
-              "int main(void) {",
-              start
-          )
-
-          if start < 0 or end < 0:
-              raise RuntimeError("HUD replacement failed")
-
-          code = code[:start] + hud + "\n" + code[end:]
-
-          # Preserve V11 intro rendering.
-          intro = r'''
-          static void vt_play_intro(void) {
-              DISPENV intro_disp;
-              DRAWENV intro_draw;
-
-              RECT texture = {320, 0, 112, 168};
-              RECT clut = {320, 200, 256, 1};
-
-              POLY_FT4 quad;
-              u_long intro_ot[2];
-
-              int frame, wait;
-
-              SetDefDispEnv(
-                  &intro_disp, 0, 240, 320, 240
-              );
-              SetDefDrawEnv(
-                  &intro_draw, 0, 240, 320, 240
-              );
-
-              intro_draw.isbg = 1;
-              intro_draw.r0 = 0;
-              intro_draw.g0 = 0;
-              intro_draw.b0 = 0;
-
-              setPolyFT4(&quad);
-              setRGB0(&quad, 128, 128, 128);
-
-              setXY4(
-                  &quad,
-                  0, 0, 319, 0,
-                  0, 239, 319, 239
-              );
-              setUV4(
-                  &quad,
-                  0, 0, 223, 0,
-                  0, 167, 223, 167
-              );
-
-              setTPage(&quad, 1, 0, 320, 0);
-              setClut(&quad, 320, 200);
-
-              PutDrawEnv(&intro_draw);
-              PutDispEnv(&intro_disp);
-              SetDispMask(1);
-
-              for (
-                  frame = 0;
-                  frame < VT_INTRO_FRAME_COUNT;
-                  frame++
-              ) {
-                  DrawSync(0);
-
-                  LoadImage(
-                      &clut,
-                      (const uint32_t *)
-                      vt_intro_palettes[frame]
-                  );
-
-                  LoadImage(
-                      &texture,
-                      (const uint32_t *)
-                      vt_intro_frames[frame]
-                  );
-
-                  DrawSync(0);
-
-                  ClearOTagR(intro_ot, 2);
-                  addPrim(intro_ot, &quad);
-
-                  PutDrawEnv(&intro_draw);
-                  DrawOTag(intro_ot + 1);
-                  DrawSync(0);
-
-                  for (wait = 0; wait < 10; wait++) {
-                      VSync(0);
-                  }
-              }
-          }
-          '''
-
-          replace_once(
-              "int main(void) {",
-              intro + "\nint main(void) {"
-          )
-
-          replace_once(
-              "FntOpen(8, 8, 304, 100, 0, 512);",
-              "FntOpen(8, 8, 304, 56, 0, 256);\n"
-              "    FntOpen(8, 194, 304, 42, 0, 128);"
-          )
-
-          replace_once(
-              "    gte_SetGeomScreen(180);",
-              "    gte_SetGeomScreen(180);\n"
-              "    vt_play_intro();"
-          )
-
-          replace_once(
-              "VECTOR camera_pos = {0, -10, CAMERA_Z, 0};",
-              "VECTOR camera_pos = {0, -10, CAMERA_Z};"
-          )
-
-          replace_once(
-              "draw[0].isbg = 1; draw[0].r0 = 10; draw[0].g0 = 15; draw[0].b0 = 35;",
-              "draw[0].isbg = 1; draw[0].r0 = 8; draw[0].g0 = 24; draw[0].b0 = 48;"
-          )
-
-          replace_once(
-              "draw[1].isbg = 1; draw[1].r0 = 10; draw[1].g0 = 15; draw[1].b0 = 35;",
-              "draw[1].isbg = 1; draw[1].r0 = 8; draw[1].g0 = 24; draw[1].b0 = 48;"
-          )
-
-          replace_once(
-              "        draw_hud();\n"
-              "        PutDispEnv(&disp[db]);\n"
-              "        PutDrawEnv(&draw[db]);\n"
-              "        DrawOTag(ot[db] + (OT_LEN - 1));",
-              "        vt_draw_panels();\n"
-              "        PutDispEnv(&disp[db]);\n"
-              "        PutDrawEnv(&draw[db]);\n"
-              "        DrawOTag(ot[db] + (OT_LEN - 1));\n"
-              "        DrawSync(0);\n"
-              "        draw_hud();"
-          )
-
-          src.write_text(code, encoding="utf-8")
-
-          print("Volt Trail V12 source prepared")
-          print("3D trees, creatures, paths and gate added")
-          print("HD intro and double HUD preserved")
+          print("V13 graphics successfully applied")
+          print("Sparkit walking animation added")
+          print("Mosslet details added")
+          print("Camera and vegetation improved")
+          print("V12 intro and gameplay preserved")
           PY
 
-      - name: Download PSn00bSDK
+      - name: Install PSn00bSDK
         shell: bash
         run: |
           set -euo pipefail
 
-          API="https://api.github.com/repos/Lameguy64/PSn00bSDK/releases/latest"
-          META="$RUNNER_TEMP/sdk-release.json"
+          python3 - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+          import yaml
 
-          curl -fsSL "$API" -o "$META"
+          path = Path(os.environ["RUNNER_TEMP"]) / "v12.yml"
+          steps = yaml.safe_load(path.read_text())["jobs"]["build"]["steps"]
 
-          FOUND=""
+          matches = [
+              step for step in steps
+              if step.get("name") == "Download PSn00bSDK"
+          ]
 
-          while IFS=$'\t' read -r NAME URL; do
-            [ -n "${URL:-}" ] || continue
+          if len(matches) != 1:
+              raise RuntimeError("V12 SDK setup not found")
 
-            ARCHIVE="$RUNNER_TEMP/sdk-asset"
-            SDK_DIR="$RUNNER_TEMP/psn00bsdk"
-
-            rm -rf "$SDK_DIR"
-            mkdir -p "$SDK_DIR"
-
-            if ! curl -fsSL "$URL" -o "$ARCHIVE"; then
-              continue
-            fi
-
-            case "$NAME" in
-              *.zip|*.ZIP)
-                unzip -q "$ARCHIVE" \
-                  -d "$SDK_DIR" || continue
-                ;;
-              *.tar.gz|*.tgz|*.tar.xz|*.tar.bz2)
-                tar -xf "$ARCHIVE" \
-                  -C "$SDK_DIR" || continue
-                ;;
-              *)
-                continue
-                ;;
-            esac
-
-            FOUND="$(find "$SDK_DIR" \
-              -type f \
-              -path '*/lib/libpsn00b/cmake/sdk.cmake' \
-              -print -quit)"
-
-            if [ -n "$FOUND" ]; then
-              break
-            fi
-          done < <(
-            jq -r '
-              .assets[]
-              | select(
-                  (.name | ascii_downcase |
-                   contains("linux"))
-                )
-              | select(
-                  (.name | ascii_downcase |
-                   endswith(".zip")) or
-                  (.name | ascii_downcase |
-                   endswith(".tar.gz")) or
-                  (.name | ascii_downcase |
-                   endswith(".tgz")) or
-                  (.name | ascii_downcase |
-                   endswith(".tar.xz")) or
-                  (.name | ascii_downcase |
-                   endswith(".tar.bz2"))
-                )
-              | [.name, .browser_download_url]
-              | @tsv
-            ' "$META"
+          subprocess.run(
+              ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
+              check=True,
+              env=os.environ.copy()
           )
+          PY
 
-          if [ -z "$FOUND" ]; then
-            echo "::error::PSn00bSDK missing"
-            exit 1
-          fi
-
-          SDK_ROOT="${FOUND%/lib/libpsn00b/cmake/sdk.cmake}"
-
-          SDK_BIN="$(find "$SDK_ROOT" \
-            -name mipsel-none-elf-gcc \
-            -print -quit | xargs -r dirname)"
-
-          if [ -z "$SDK_BIN" ]; then
-            echo "::error::PS1 compiler missing"
-            exit 1
-          fi
-
-          echo "PSN00BSDK_CMAKE=$FOUND" \
-            >> "$GITHUB_ENV"
-
-          echo "$SDK_BIN" >> "$GITHUB_PATH"
-
-          MKPSXISO="$(find "$SDK_ROOT" \
-            -name mkpsxiso -print -quit)"
-
-          if [ -n "$MKPSXISO" ]; then
-            chmod +x "$MKPSXISO"
-            echo "$(dirname "$MKPSXISO")" \
-              >> "$GITHUB_PATH"
-          fi
-
-      - name: Build Volt Trail V12
+      - name: Build Volt Trail V13
         shell: bash
         run: |
           set -euxo pipefail
@@ -927,20 +394,15 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE" \
             -DCMAKE_BUILD_TYPE=Release
 
-          cmake --build \
-            "$GITHUB_WORKSPACE/build" \
-            --verbose
+          cmake --build "$GITHUB_WORKSPACE/build" --verbose
 
       - name: Collect PS1 files
         shell: bash
         run: |
           set -euo pipefail
-
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
 
-          for file in \
-            VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf
-          do
+          for file in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
             SOURCE="$GITHUB_WORKSPACE/build/$file"
 
             if [ ! -s "$SOURCE" ]; then
@@ -948,16 +410,15 @@ jobs:
               exit 1
             fi
 
-            cp "$SOURCE" \
-              "$GITHUB_WORKSPACE/artifacts/"
+            cp "$SOURCE" "$GITHUB_WORKSPACE/artifacts/"
           done
 
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V12
+      - name: Upload Volt Trail V13
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V12-3D-World
+          name: VoltTrail-PS1-V13-Animated-World
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
