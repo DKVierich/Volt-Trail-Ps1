@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V19 Dragon Battles Fixed
+name: Build Volt Trail PS1 V20 Dragon Codex
 
 on:
   workflow_dispatch:
@@ -326,6 +326,368 @@ jobs:
           print("V18 controller, intro, quests and menu preserved")
           PY
 
+      - name: Add V20 Dragon Codex and elemental battles
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          path=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+          code=path.read_text(encoding='utf-8')
+
+          def replace_once(old,new):
+           global code
+           n=code.count(old)
+           if n!=1: raise RuntimeError(f'V20 marker mismatch {old[:85]!r}: {n}')
+           code=code.replace(old,new,1)
+
+          replace_once('VOLT TRAIL V19 - %s','VOLT TRAIL V20 - %s')
+          replace_once('VOLT TRAIL V19 - MENUE','VOLT TRAIL V20 - MENUE')
+
+          # World state for the codex: four wild species, plus starter/evolution
+          replace_once('static unsigned int vt_v19_mask = 0;', '''static unsigned int vt_v19_mask = 0;
+
+          /* Discoveries and the chosen battle dragon. */
+          static unsigned int vt_v20_seen_mask = 0;
+          static int vt_v20_active_dragon = 0;
+          static int vt_v20_menu_dragon = 0;
+          static int vt_v20_attack_timer = 0;
+          static int vt_v20_attack_kind = 0;
+          '''.rstrip())
+
+          helpers=r'''
+          /* Dragon slots: 0 starter, 1 Mosslet, 2 Flamyr, 3 Aquar, 4 Glacir. */
+          static const char *vt_v20_dragon_name(int slot) {
+              switch (slot) {
+                  case 0: return evolved ? "VOLTIGON" : "SPARKIT";
+                  case 1: return "MOSSLET";
+                  case 2: return "FLAMYR";
+                  case 3: return "AQUAR";
+                  case 4: return "GLACIR";
+                  default: return "UNBEKANNT";
+              }
+          }
+
+          static int vt_v20_owned(int slot) {
+              if (slot == 0) return 1;
+              if (slot < 1 || slot > 4) return 0;
+              if (slot == 1 && caught_mosslet) return 1;
+              return (vt_v19_mask & (1u << (slot - 1))) != 0;
+          }
+
+          static const char *vt_v20_entry(int species) {
+              unsigned int bit;
+              if (species == 0) return "GEFANGEN"; /* Starter Sparkit */
+              if (species == 1) return evolved ? "GEFANGEN" : "???";
+              if (species < 2 || species > 5) return "???";
+              bit = 1u << (species - 2);
+              if (vt_v19_mask & bit) return "GEFANGEN";
+              if (species == 2 && caught_mosslet) return "GEFANGEN";
+              if (vt_v20_seen_mask & bit) return "GESEHEN";
+              return "???";
+          }
+
+          static const char *vt_v20_entry_name(int species) {
+              if (species == 0) return "SPARKIT";
+              if (species == 1) return evolved ? "VOLTIGON" : "???";
+              if (!(vt_v20_seen_mask & (1u << (species - 2))) &&
+                  !vt_v20_owned(species - 1)) return "???";
+              switch (species) {
+                  case 2: return "MOSSLET";
+                  case 3: return "FLAMYR";
+                  case 4: return "AQUAR";
+                  case 5: return "GLACIR";
+              }
+              return "???";
+          }
+
+          static void vt_v20_next_dragon(void) {
+              int try_slot;
+              int slot;
+              for (try_slot = 1; try_slot <= 5; try_slot++) {
+                  slot = (vt_v20_active_dragon + try_slot) % 5;
+                  if (vt_v20_owned(slot)) {
+                      vt_v20_active_dragon = slot;
+                      return;
+                  }
+              }
+          }
+
+          /* Each selected dragon has its own elemental attack. */
+          static int vt_v20_attack_damage(void) {
+              int damage = evolved ? 13 :
+                  (companion_level >= enemy_level ? 10 : 7);
+              int slot = vt_v20_active_dragon;
+              if (slot == 1) damage = 8 + companion_level / 2;  /* Leaf */
+              if (slot == 2) damage = 10 + companion_level / 2; /* Fire */
+              if (slot == 3) damage = 9 + companion_level / 2;  /* Water */
+              if (slot == 4) damage = 9 + companion_level / 2;  /* Ice */
+
+              /* Simple first elemental advantages against wild dragons. */
+              if (encounter_kind == 0) {
+                  if ((slot == 0 && vt_v19_kind == 2) ||
+                      (slot == 1 && vt_v19_kind == 2) ||
+                      (slot == 2 && vt_v19_kind == 3) ||
+                      (slot == 3 && vt_v19_kind == 1) ||
+                      (slot == 4 && vt_v19_kind == 2)) damage += 4;
+              }
+              return damage;
+          }
+
+          static void vt_v20_element_effect(int x, int z) {
+              int t = vt_v20_attack_timer;
+              int r = 255, g = 221, b = 58;
+              int i;
+              if (!t || game_mode != 1 || vt_menu_open) return;
+              if (vt_v20_attack_kind == 1) {r=68; g=202; b=98;}
+              if (vt_v20_attack_kind == 2) {r=247; g=88; b=35;}
+              if (vt_v20_attack_kind == 3) {r=50; g=158; b=247;}
+              if (vt_v20_attack_kind == 4) {r=162; g=235; b=252;}
+              for (i = 0; i < 4; i++) {
+                  int side = (i & 1) ? 1 : -1;
+                  int rise = ((20 - t + i * 3) & 15);
+                  vt_pyramid(x + side * (9 + i * 9),
+                             -13 - rise, z - 15 - i * 4,
+                             5 + (i & 1) * 2, 12 + rise,
+                             r, g, b);
+              }
+          }
+          '''
+          # Existing V19 render code is defined before draw_hud. Add V20 code
+          # after V17 menu state and all 3D helper function declarations.
+          replace_once('static void draw_hud(void) {',helpers+'\nstatic void draw_hud(void) {')
+
+          # Register observations at the moment a battle begins. This includes
+          # NPC trainers/arena, whose current models are Mosslet variants.
+          kind_marker='vt_v19_kind = (encounter + region) & 3;'
+          if code.count(kind_marker)!=1: raise RuntimeError('Encounter marker missing')
+          start=code.index(kind_marker)
+          end=code.find('game_mode=1;',start,start+1800)
+          if end<0: raise RuntimeError('Battle-entry point missing')
+          code=code[:end]+('game_mode=1;\n'
+           '                if (encounter_kind == 0) {\n'
+           '                    vt_v20_seen_mask |= 1u << vt_v19_kind;\n'
+           '                } else {\n'
+           '                    /* NPC battle: the displayed opponent is a Mosslet. */\n'
+           '                    vt_v20_seen_mask |= 1u;\n'
+           '                }')+code[end+len('game_mode=1;'):]
+
+          # Make the companion visibly change when the user chooses a captured dragon.
+          pattern=r'vt_sparkit\s*\(\s*px\s*\+\s*26\s*,\s*pz\s*\+\s*105\s*\);'
+          replacement='''if (vt_v20_active_dragon == 0) {
+                            vt_sparkit(px + 26, pz + 105);
+                        } else {
+                            vt_v19_wild_dragon(px + 26, pz + 105,
+                                               vt_v20_active_dragon - 1);
+                        }'''
+          code,n=re.subn(pattern,replacement,code)
+          if n!=1: raise RuntimeError(f'Companion draw marker missing: {n}')
+          # Keep Voltigon's extra horn only while Voltigon is the selected dragon.
+          loc=code.index('vt_v20_active_dragon - 1);')
+          p=code.find('if (evolved) {',loc,loc+700)
+          if p!=-1:code=code[:p]+'if (evolved && vt_v20_active_dragon == 0) {'+code[p+len('if (evolved) {'):]
+
+          # Distinct element damage and animation, without altering battle buttons.
+          pattern=r'int damage\s*=\s*evolved\s*\?\s*13\s*:\s*\(companion_level\s*>=\s*enemy_level\s*\?\s*10\s*:\s*7\);'
+          main_begin = code.index('int main(void) {')
+          combat_code = code[main_begin:]
+          combat_code,n=re.subn(pattern,('int damage = vt_v20_attack_damage();\n'
+           '                vt_v20_attack_timer = 24;\n'
+           '                vt_v20_attack_kind = vt_v20_active_dragon;'),combat_code)
+          if n!=1:raise RuntimeError(f'Elemental battle attack location missing: {n}')
+          code=code[:main_begin]+combat_code
+          replace_once('        vt_v18_tick++;',
+                       '        vt_v18_tick++;\n'
+                       '        if (vt_v20_attack_timer > 0) vt_v20_attack_timer--;')
+          # Show effect after the landscape draws.
+          replace_once('        vt_v18_battle_bars();',
+                       '        vt_v20_element_effect(px - 38, pz + 135);\n'
+                       '        vt_v18_battle_bars();')
+
+          # Always allow quick dragon-switch in battle without replacing X/O/Square.
+          key='        previous_pad = pad;'
+          replace_once(key,key+'''\n
+                  if (game_mode == 1 && !vt_menu_open &&
+                      (pressed & PAD_L1)) {
+                      vt_v20_next_dragon();
+                      pressed &= ~PAD_L1;
+                  }
+          ''')
+
+          # Save codex seen states and the active dragon in an independent extension
+          # to existing V17/V18/V19 block. First 22 words stay unchanged for compatibility.
+          replace_once('words[21] = words[19] ^ words[20] ^ 0xa592c3d6u;',
+          '''words[21] = words[19] ^ words[20] ^ 0xa592c3d6u;
+                        words[22] = 0x5632304bu;
+                        words[23] = (vt_v20_seen_mask | vt_v19_mask |
+                                      (caught_mosslet ? 1u : 0u)) & 15u;
+                        words[24] = (uint32_t)vt_v20_active_dragon;
+                        words[25] = words[22] ^ words[23] ^ words[24] ^ 0xdec0de20u;''')
+          # Restore V19 block first; insert the V20 addendum immediately after V19
+          # validation branch to avoid overriding old saves.
+          old='vt_v19_mask = caught_mosslet ? 1u : 0u;'
+          pos=code.index(old)
+          brace=code.find('}',pos,pos+180)
+          if brace<0:raise RuntimeError('V19 load extension end missing')
+          load_extra='''
+                        if (w[22] == 0x5632304bu &&
+                            w[25] == (w[22] ^ w[23] ^ w[24] ^ 0xdec0de20u) &&
+                            (w[23] & ~15u) == 0 && w[24] <= 4) {
+                            vt_v20_seen_mask = w[23];
+                            vt_v20_active_dragon = (int)w[24];
+                        } else {
+                            /* Older saves: known captures are discovered. */
+                            vt_v20_seen_mask = vt_v19_mask |
+                                (caught_mosslet ? 1u : 0u);
+                            vt_v20_active_dragon = 0;
+                        }
+                        vt_v20_seen_mask |= vt_v19_mask |
+                            (caught_mosslet ? 1u : 0u);
+                        if (!vt_v20_owned(vt_v20_active_dragon))
+                            vt_v20_active_dragon = 0;
+          '''
+          code=code[:brace+1]+load_extra+code[brace+1:]
+
+          # Revise only the rendered menu in draw_hud.
+          hud_start=code.index('static void draw_hud(void) {')
+          menu_start=code.index('if (vt_menu_open) {',hud_start)
+          menu_end=code.index('FntFlush(0);',menu_start)
+          menu=code[menu_start:menu_end]
+          if 'DRACHEN-MENUE' not in menu:raise RuntimeError('V19 main menu missing')
+          if '"%c MONSTER\\n\\n"' not in menu:raise RuntimeError('Monster menu label mismatch')
+
+          # Shift the four existing menu rows down one slot.
+          shifts=[]
+          def shift_choice(m):
+           shifts.append(m.group(1))
+           return 'vt_menu_choice == '+str(int(m.group(1))+1)
+          menu=re.sub(r'vt_menu_choice\s*==\s*([0-3])',shift_choice,menu)
+          if sorted(shifts)!=['0','1','2','3']:
+           raise RuntimeError('Unexpected main menu selections: '+repr(shifts))
+          line=menu.index('"%c MONSTER\\n\\n"')
+          beg=menu.rfind('FntPrint(',0,line)
+          if beg<0:raise RuntimeError('Monster row call not found')
+          codex_row='''FntPrint(
+                                    2, "%c DRACHEN KODEX\\n\\n",
+                                    vt_menu_choice == 0 ? '>' : ' '
+                                );
+                                '''
+          menu=menu[:beg]+codex_row+menu[beg:]
+
+          # A separate codex page, always the first item.
+          if_marker='} else if (vt_menu_page == 1) {'
+          if menu.count(if_marker)!=1:raise RuntimeError('Monster-page start marker changed')
+          codex_page='''} else if (vt_menu_page == 4) {
+                                FntPrint(2, "DRACHEN KODEX\\n\\n");
+                                FntPrint(2, "SPARKIT: GEFANGEN\\n");
+                                FntPrint(2, "%s: %s\\n",
+                                    vt_v20_entry_name(1), vt_v20_entry(1));
+                                FntPrint(2, "%s: %s\\n",
+                                    vt_v20_entry_name(2), vt_v20_entry(2));
+                                FntPrint(2, "%s: %s\\n",
+                                    vt_v20_entry_name(3), vt_v20_entry(3));
+                                FntPrint(2, "%s: %s\\n",
+                                    vt_v20_entry_name(4), vt_v20_entry(4));
+                                FntPrint(2, "%s: %s\\n\\n",
+                                    vt_v20_entry_name(5), vt_v20_entry(5));
+                                FntPrint(2, "GESEHEN / GEFANGEN / ???\\n");
+                                FntPrint(2, "DREIECK ZURUECK\\n");
+
+                            '''+if_marker
+          menu=menu.replace(if_marker,codex_page,1)
+
+          # Replace the cramped old monster submenu with a selectable team list.
+          start=menu.find(if_marker)
+          end=menu.find('} else if (vt_menu_page == 2) {',start)
+          if start<0 or end<0:raise RuntimeError('Monster submenu boundaries changed')
+          team_page='''} else if (vt_menu_page == 1) {
+                                int i;
+                                FntPrint(2, "MEINE DRACHEN - X WAHL\\n\\n");
+                                for (i = 0; i < 5; i++) {
+                                    FntPrint(2, "%c%c %s %s\\n",
+                                        vt_v20_menu_dragon == i ? '>' : ' ',
+                                        vt_v20_active_dragon == i ? '*' : ' ',
+                                        vt_v20_dragon_name(i),
+                                        vt_v20_owned(i) ? "JA" : "--");
+                                }
+                                FntPrint(2, "* AKTIV / DREIECK ZURUECK\\n");
+
+                            '''
+          menu=menu[:start]+team_page+menu[end:]
+          code=code[:menu_start]+menu+code[menu_end:]
+
+          # Main menu logic (within the main loop), update choice wrap and add codex.
+          main=code.index('int main(void) {')
+          ctl_start=code.index('if (vt_menu_open) {',main)
+          ctl_end=code.index('/* Never send menu keys',ctl_start)
+          ctl=code[ctl_start:ctl_end]
+          if ctl.count('vt_menu_choice = 3;')!=1 or ctl.count('vt_menu_choice > 3')!=1:
+           raise RuntimeError('Main-menu up/down anchor mismatched')
+          ctl=ctl.replace('vt_menu_choice = 3;','vt_menu_choice = 4;',1)
+          ctl=ctl.replace('vt_menu_choice > 3','vt_menu_choice > 4',1)
+          choices=[]
+          def shift_controls(m):
+           choices.append(m.group(1))
+           return 'vt_menu_choice == '+str(int(m.group(1))+1)
+          ctl=re.sub(r'vt_menu_choice\s*==\s*([0-3])',shift_controls,ctl)
+          if sorted(choices)!=['0','1','2']:
+           raise RuntimeError('Controller choice markers changed: '+str(choices))
+          # Fourth load action is in an else branch, no explicit ==3 comparison.
+          old='if (vt_menu_choice == 1) {'
+          if ctl.count(old)!=1:raise RuntimeError('Main-menu selection first branch missing')
+          ctl=ctl.replace(old,'''if (vt_menu_choice == 0) {
+                                        vt_menu_page = 4;
+                                    } else if (vt_menu_choice == 1) {''',1)
+          # On entering the team page, select current member.
+          old='vt_menu_page = 1;'
+          if ctl.count(old)!=1: raise RuntimeError('Monster menu selection changed')
+          ctl=ctl.replace(old,old+'\n                              vt_v20_menu_dragon = vt_v20_active_dragon;',1)
+          # Add team selection using up/down and X, keep potions unchanged.
+          pattern=r'\}\s*else if\s*\(\s*vt_menu_page\s*==\s*2\s*&&\s*\(pressed\s*&\s*PAD_CROSS\)\s*\)\s*\{'
+          add='''} else if (vt_menu_page == 1) {
+                                if (pressed & PAD_UP)
+                                    vt_v20_menu_dragon =
+                                        (vt_v20_menu_dragon + 4) % 5;
+                                if (pressed & PAD_DOWN)
+                                    vt_v20_menu_dragon =
+                                        (vt_v20_menu_dragon + 1) % 5;
+                                if (pressed & PAD_CROSS) {
+                                    if (vt_v20_owned(vt_v20_menu_dragon)) {
+                                        vt_v20_active_dragon = vt_v20_menu_dragon;
+                                        vt_menu_message = "DRACHE GEWECHSELT";
+                                    } else {
+                                        vt_menu_message = "NOCH NICHT GEFANGEN";
+                                    }
+                                }
+                            } else if (vt_menu_page == 2 && (pressed & PAD_CROSS)) {'''
+          ctl,n=re.subn(pattern,add,ctl)
+          if n!=1:raise RuntimeError('Monster-page controls insertion failed: '+str(n))
+          code=code[:ctl_start]+ctl+code[ctl_end:]
+
+          # Show the currently selected dragon rather than always labeling it Sparkit.
+          pattern=r'FntPrint\(\s*0,\s*"SPARKIT L%d HP %d/24%s\\n\\n",\s*companion_level,\s*companion_hp,\s*evolved\s*\?\s*" VOLTIGON"\s*:\s*""\s*\);'
+          repl='FntPrint(0, "%s L%d HP %d/24\\n\\n",\n                       vt_v20_dragon_name(vt_v20_active_dragon),\n                       companion_level, companion_hp);'
+          code,n=re.subn(pattern,lambda m:repl,code)
+          if n!=1:print('WARNING: top HUD name not changed',n)
+
+          # In battle, L1 switches between all previously caught dragon species;
+          # the selected dragon defines which elemental attack Square performs.
+          required=['VOLT TRAIL V20','DRACHEN KODEX','vt_v20_entry(',
+                    'vt_v20_active_dragon','vt_v20_seen_mask',
+                    'vt_v20_attack_damage();','vt_v20_element_effect(',
+                    'vt_save_game(void)','vt_load_game(void)',
+                    'InitCARD(1);','PAD_SQUARE','PAD_CIRCLE',
+                    'vt_play_intro();']
+          for marker in required:
+           if marker not in code:raise RuntimeError('V20 missing feature '+marker)
+          path.write_text(code,encoding='utf-8')
+          print('V20 patched: first START item DRACHEN KODEX, seen/captured status')
+          print('NPC and wild dragon encounters tracked; persistence added')
+          print('Monster team selection and L1 battle switching added')
+          print('Elemental damage/effects: lightning, leaf, fire, water, ice')
+          PY
+
       - name: Install PSn00bSDK
         shell: bash
         run: |
@@ -333,7 +695,7 @@ jobs:
           python3 "$RUNNER_TEMP/run_previous_step.py" \
             "Install PSn00bSDK"
 
-      - name: Build Volt Trail V19
+      - name: Build Volt Trail V20
         shell: bash
         run: |
           set -euxo pipefail
@@ -360,10 +722,10 @@ jobs:
           done
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V19
+      - name: Upload Volt Trail V20
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V19-Dragon-Battles-Fixed
+          name: VoltTrail-PS1-V20-Dragon-Codex
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
