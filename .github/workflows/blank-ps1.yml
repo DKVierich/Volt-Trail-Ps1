@@ -1,4 +1,5 @@
-name: Build Volt Trail PS1 image
+
+name: Build Volt Trail PS1 V8
 
 on:
   workflow_dispatch:
@@ -9,14 +10,15 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Check out Volt Trail
+      - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Install host build tools
+      - name: Install build tools
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build unzip curl jq tar
 
@@ -25,50 +27,43 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Support either a repository containing the project files directly,
-          # or the current repository layout where the source is stored in a ZIP.
           if [ -f "$GITHUB_WORKSPACE/CMakeLists.txt" ]; then
             PROJECT_DIR="$GITHUB_WORKSPACE"
           else
-            ZIP_FILE="$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -iname 'VoltTrail_PS1_AndroidReady*.zip' -print -quit)"
-            if [ -z "$ZIP_FILE" ]; then
-              echo "::error::No root CMakeLists.txt and no VoltTrail_PS1_AndroidReady*.zip were found."
-              echo "Commit the project ZIP to the repository root, or put CMakeLists.txt, src/main.c, iso.xml and system.cnf there."
-              ls -la "$GITHUB_WORKSPACE"
+            ZIP_FILE="$GITHUB_WORKSPACE/VoltTrail_PS1_AndroidReady_V7.zip"
+
+            if [ ! -f "$ZIP_FILE" ]; then
+              echo "::error::V7 project ZIP not found"
               exit 1
             fi
 
-            echo "Extracting project archive: $(basename "$ZIP_FILE")"
             EXTRACT_DIR="$RUNNER_TEMP/volttrail-project"
-            rm -rf "$EXTRACT_DIR"
             mkdir -p "$EXTRACT_DIR"
             unzip -q "$ZIP_FILE" -d "$EXTRACT_DIR"
 
-            CMAKE_FILE="$(find "$EXTRACT_DIR" -type f -name CMakeLists.txt -print -quit)"
+            CMAKE_FILE="$(find "$EXTRACT_DIR" -name CMakeLists.txt -type f -print -quit)"
+
             if [ -z "$CMAKE_FILE" ]; then
-              echo "::error::The ZIP does not contain CMakeLists.txt."
-              find "$EXTRACT_DIR" -maxdepth 4 -type f -print
+              echo "::error::CMakeLists.txt missing"
               exit 1
             fi
+
             PROJECT_DIR="$(dirname "$CMAKE_FILE")"
           fi
 
-          for required in CMakeLists.txt src/main.c iso.xml system.cnf; do
-            if [ ! -f "$PROJECT_DIR/$required" ]; then
-              echo "::error::Required project file is missing: $PROJECT_DIR/$required"
-              find "$PROJECT_DIR" -maxdepth 3 -type f -print
+          for file in CMakeLists.txt src/main.c iso.xml system.cnf; do
+            if [ ! -f "$PROJECT_DIR/$file" ]; then
+              echo "::error::Missing file: $file"
               exit 1
             fi
           done
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Project source directory: $PROJECT_DIR"
-          find "$PROJECT_DIR" -maxdepth 2 -type f -print
 
-      
-      - name: Apply Volt-Trail V8 diagnostic fix
+      - name: Apply Volt Trail V8 controller test
         shell: bash
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           import os
           from pathlib import Path
@@ -76,84 +71,70 @@ jobs:
           path = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
           code = path.read_text()
 
-          old = """        draw_hud();
-         PutDispEnv(&disp[db]);
-         PutDrawEnv(&draw[db]);
-         DrawOTag(ot[db] + (OT_LEN - 1));"""
+          marker = "        previous_pad = pad;"
 
-          new = """        PutDispEnv(&disp[db]);
-         PutDrawEnv(&draw[db]);
-         {
-            TILE *tile = &debug_tile[db];
-            setTile(tile);
-            setXY0(tile, 280, 8);
-            setWH(tile, 30, 24);
-            if (pad & PAD_CROSS)
-                setRGB0(tile, 0, 255, 50);
-            else if (pad & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT))
-                setRGB0(tile, 255, 225, 0);
-            else
-                setRGB0(tile, 255, 30, 60);
-            addPrim(ot[db], tile);
-         }
-         DrawOTag(ot[db] + (OT_LEN - 1));
-         DrawSync(0);
-         draw_hud();"""
+          if code.count(marker) != 1:
+              raise RuntimeError("Controller code not found")
 
-          if old not in code:
-              raise RuntimeError("V7 graphics block not found")
-
-          code = code.replace(
-              "static DISPENV disp[2];",
-              "static TILE debug_tile[2];\nstatic DISPENV disp[2];", 1
+          patch = (
+              "\n"
+              "        draw[db].r0 = 90;\n"
+              "        draw[db].g0 = 0;\n"
+              "        draw[db].b0 = 150;\n"
+              "        if (pad & PAD_CROSS) {\n"
+              "            draw[db].r0 = 0;\n"
+              "            draw[db].g0 = 120;\n"
+              "            draw[db].b0 = 0;\n"
+              "        } else if (pad & (PAD_LEFT | PAD_RIGHT | PAD_UP | PAD_DOWN)) {\n"
+              "            draw[db].r0 = 120;\n"
+              "            draw[db].g0 = 120;\n"
+              "            draw[db].b0 = 0;\n"
+              "        }\n"
           )
-          code = code.replace(
-              "VECTOR camera_pos = {0, -10, CAMERA_Z, 0};",
-              "VECTOR camera_pos = {0, -10, CAMERA_Z};", 1
-          )
+
+          code = code.replace(marker, marker + patch, 1)
+
           code = code.replace(
               "VOLT TRAIL: SHARDS OF THE STORM  /  PS1",
-              "VOLT TRAIL V8 - CONTROLLER TEST", 1
+              "VOLT TRAIL V8 - CONTROLLER TEST",
+              1
           )
-          code = code.replace(old, new, 1)
+
           path.write_text(code)
-          print("Volt-Trail V8 diagnostic patch applied")
+          print("Volt Trail V8 diagnostic code applied")
           PY
-      - name: Download and locate PSn00bSDK
+
+      - name: Download PSn00bSDK
         shell: bash
         run: |
           set -euo pipefail
 
           API="https://api.github.com/repos/Lameguy64/PSn00bSDK/releases/latest"
-          RELEASE_JSON="$RUNNER_TEMP/psn00bsdk-release.json"
+          RELEASE_JSON="$RUNNER_TEMP/sdk-release.json"
           curl -fsSL "$API" -o "$RELEASE_JSON"
 
           FOUND=""
+
           while IFS=$'\t' read -r NAME URL; do
             [ -n "${URL:-}" ] || continue
-            echo "Checking SDK asset: $NAME"
-            ARCHIVE="$RUNNER_TEMP/psn00bsdk-asset"
+
+            ARCHIVE="$RUNNER_TEMP/sdk-asset"
             EXTRACT_DIR="$RUNNER_TEMP/psn00bsdk"
+
             rm -f "$ARCHIVE"
             rm -rf "$EXTRACT_DIR"
             mkdir -p "$EXTRACT_DIR"
+
             if ! curl -fsSL "$URL" -o "$ARCHIVE"; then
-              echo "Could not download $NAME; trying next asset."
               continue
             fi
 
             case "$NAME" in
               *.zip|*.ZIP)
-                if ! unzip -q "$ARCHIVE" -d "$EXTRACT_DIR"; then
-                  echo "Could not unpack $NAME; trying next asset."
-                  continue
-                fi
+                unzip -q "$ARCHIVE" -d "$EXTRACT_DIR" || continue
                 ;;
               *.tar.gz|*.tgz|*.tar.xz|*.tar.bz2)
-                if ! tar -xf "$ARCHIVE" -C "$EXTRACT_DIR"; then
-                  echo "Could not unpack $NAME; trying next asset."
-                  continue
-                fi
+                tar -xf "$ARCHIVE" -C "$EXTRACT_DIR" || continue
                 ;;
               *)
                 continue
@@ -161,11 +142,10 @@ jobs:
             esac
 
             FOUND="$(find "$EXTRACT_DIR" -type f -path '*/lib/libpsn00b/cmake/sdk.cmake' -print -quit)"
+
             if [ -n "$FOUND" ]; then
-              echo "Using SDK asset: $NAME"
               break
             fi
-            echo "$NAME does not contain lib/libpsn00b/cmake/sdk.cmake."
           done < <(
             jq -r '
               .assets[]
@@ -182,82 +162,65 @@ jobs:
           )
 
           if [ -z "$FOUND" ]; then
-            echo "::error::No Linux release archive contained lib/libpsn00b/cmake/sdk.cmake."
-            echo "Available release assets:"
-            jq -r '.assets[]?.name' "$RELEASE_JSON"
+            echo "::error::PSn00bSDK not found"
             exit 1
           fi
 
           SDK_ROOT="${FOUND%/lib/libpsn00b/cmake/sdk.cmake}"
           SDK_BIN="$(find "$SDK_ROOT" -name mipsel-none-elf-gcc -print -quit | xargs -r dirname)"
+
           if [ -z "$SDK_BIN" ]; then
-            echo "::error::SDK archive contains sdk.cmake but no mipsel-none-elf-gcc compiler."
+            echo "::error::PS1 compiler not found"
             exit 1
           fi
 
           echo "PSN00BSDK_CMAKE=$FOUND" >> "$GITHUB_ENV"
-          echo "PSN00BSDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "$SDK_BIN" >> "$GITHUB_PATH"
 
           MKPSXISO="$(find "$SDK_ROOT" -name mkpsxiso -print -quit)"
+
           if [ -n "$MKPSXISO" ]; then
-            chmod +x "$MKPSXISO" || true
+            chmod +x "$MKPSXISO"
             echo "$(dirname "$MKPSXISO")" >> "$GITHUB_PATH"
           fi
 
-      - name: Verify project and SDK
+      - name: Configure and build PS1 game
         shell: bash
         run: |
           set -euxo pipefail
-          test -f "$PROJECT_DIR/CMakeLists.txt"
-          test -f "$PROJECT_DIR/src/main.c"
-          test -f "$PROJECT_DIR/iso.xml"
-          test -f "$PROJECT_DIR/system.cnf"
-          test -f "$PSN00BSDK_CMAKE"
-          command -v mipsel-none-elf-gcc
-          mipsel-none-elf-gcc --version
-          cmake --version
-          if command -v mkpsxiso >/dev/null 2>&1; then
-            mkpsxiso --help || true
-          else
-            echo "::warning::mkpsxiso was not found on PATH; ISO generation may fail if the project requires it."
-          fi
 
-      - name: Configure and build
-        shell: bash
-        run: |
-          set -euxo pipefail
-          rm -rf "$GITHUB_WORKSPACE/build"
-          cmake -S "$PROJECT_DIR" -B "$GITHUB_WORKSPACE/build" -G Ninja \
+          cmake -S "$PROJECT_DIR" \
+            -B "$GITHUB_WORKSPACE/build" \
+            -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE" \
             -DCMAKE_BUILD_TYPE=Release
+
           cmake --build "$GITHUB_WORKSPACE/build" --verbose
 
-      - name: Collect generated PlayStation files
-        if: success()
+      - name: Collect PS1 game files
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf "$GITHUB_WORKSPACE/artifacts"
-          mkdir -p "$GITHUB_WORKSPACE/artifacts"
-          while IFS= read -r -d '' FILE; do
-            echo "Artifact: $FILE ($(stat -c '%s' "$FILE") bytes)"
-            cp -f "$FILE" "$GITHUB_WORKSPACE/artifacts/"
-          done < <(find "$GITHUB_WORKSPACE/build" -type f \( \
-            -iname '*.bin' -o -iname '*.cue' -o -iname '*.exe' -o \
-            -iname '*.iso' -o -iname '*.img' -o -iname '*.elf' \
-          \) -print0)
-          if ! find "$GITHUB_WORKSPACE/artifacts" -maxdepth 1 -type f -print -quit | grep -q .; then
-            echo "::error::Build finished but no .bin/.cue/.exe/.iso/.img/.elf files were generated."
-            find "$GITHUB_WORKSPACE/build" -maxdepth 4 -type f -print
-            exit 1
-          fi
 
-      - name: Upload build artifacts
-        if: success()
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+
+          for file in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
+            SOURCE="$GITHUB_WORKSPACE/build/$file"
+
+            if [ ! -s "$SOURCE" ]; then
+              echo "::error::Missing game file: $file"
+              exit 1
+            fi
+
+            cp "$SOURCE" "$GITHUB_WORKSPACE/artifacts/"
+          done
+
+          ls -lh "$GITHUB_WORKSPACE/artifacts"
+
+      - name: Upload Volt Trail V8
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-build
+          name: VoltTrail-PS1-V8-Test
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
