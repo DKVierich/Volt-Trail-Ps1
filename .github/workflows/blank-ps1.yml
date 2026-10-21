@@ -1,5 +1,4 @@
-
-name: Build Volt Trail PS1 V18 Dragon Fix
+name: Build Volt Trail PS1 V19 Dragon Battles
 
 on:
   workflow_dispatch:
@@ -19,247 +18,330 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           sudo apt-get update
           sudo apt-get install -y \
             cmake ninja-build unzip curl jq tar \
             ffmpeg python3-pil python3-yaml
 
-      - name: Load original V18 build
+      - name: Load working V18 instructions
         shell: bash
         run: |
           set -euo pipefail
 
-          V18_COMMIT="3c8af158a543c87b33cb09e6e7cac25cc2f597da"
+          V18_COMMIT="343091814e0c9771e5c885b75377b9af439f746e"
 
           curl --retry 3 -fsSL \
             "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$V18_COMMIT/.github/workflows/blank-ps1.yml" \
-            -o "$RUNNER_TEMP/v18-original.yml"
+            -o "$RUNNER_TEMP/v18-fixed.yml"
 
-          cat > "$RUNNER_TEMP/run_v18_step.py" <<'PY'
+          cat > "$RUNNER_TEMP/run_previous_step.py" <<'PY'
           import os
-          import sys
           import subprocess
+          import sys
           from pathlib import Path
-
           import yaml
 
-          workflow = (
-              Path(os.environ["RUNNER_TEMP"])
-              / "v18-original.yml"
-          )
-
-          data = yaml.safe_load(
-              workflow.read_text(encoding="utf-8")
-          )
-
-          steps = data["jobs"]["build"]["steps"]
-
-          wanted = sys.argv[1]
-
-          matches = [
-              step for step in steps
-              if step.get("name") == wanted
-          ]
-
+          source = Path(os.environ["RUNNER_TEMP"]) / "v18-fixed.yml"
+          steps = yaml.safe_load(source.read_text())["jobs"]["build"]["steps"]
+          name = sys.argv[1]
+          matches = [step for step in steps if step.get("name") == name]
           if len(matches) != 1:
-              raise RuntimeError(
-                  "V18 build step not found: " + wanted
-              )
-
-          print("Running:", wanted, flush=True)
-
+              raise RuntimeError("V18 step missing: " + name)
+          print("Running:", name, flush=True)
           subprocess.run(
-              [
-                  "bash",
-                  "-euo",
-                  "pipefail",
-                  "-c",
-                  matches[0]["run"]
-              ],
-              env=os.environ.copy(),
-              check=True
+              ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
+              env=os.environ.copy(), check=True
           )
           PY
 
-          python3 "$RUNNER_TEMP/run_v18_step.py" \
-            "Load working V17 controller fix"
+          python3 "$RUNNER_TEMP/run_previous_step.py" \
+            "Load original V18 build"
 
-      - name: Prepare game project
+      - name: Restore V18 dragons intro and menu
         shell: bash
         run: |
           set -euo pipefail
+          for name in \
+            "Prepare game project" \
+            "Restore V17 intro and gameplay" \
+            "Restore V18 dragons and graphics" \
+            "Repair V18 battle menu compiler error"
+          do
+            python3 "$RUNNER_TEMP/run_previous_step.py" "$name"
+          done
 
-          python3 "$RUNNER_TEMP/run_v18_step.py" \
-            "Prepare game project"
-
-      - name: Restore V17 intro and gameplay
+      - name: Add V19 dragon species and battle effects
         shell: bash
         run: |
           set -euo pipefail
-
-          python3 "$RUNNER_TEMP/run_v18_step.py" \
-            "Restore V17 game intro and menu"
-
-      - name: Restore V18 dragons and graphics
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          python3 "$RUNNER_TEMP/run_v18_step.py" \
-            "Apply V18 dragon models and UI"
-
-      - name: Repair V18 battle menu compiler error
-        shell: bash
-        run: |
-          set -euo pipefail
-
           python3 - <<'PY'
           import os
+          import re
           from pathlib import Path
 
-          source = (
-              Path(os.environ["PROJECT_DIR"])
-              / "src"
-              / "main.c"
-          )
+          path = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
+          code = path.read_text(encoding="utf-8")
 
-          code = source.read_text(
-              encoding="utf-8"
-          )
-
-          # The battle HP-bar renderer appears
-          # before the main-menu state variable
-          # is defined in the original V17 code.
-          #
-          # Add a forward declaration.
-          # The existing initialized definition
-          # stays in place.
-
-          marker = (
-              "static void "
-              "vt_v18_battle_bars(void) {"
-          )
-
-          declaration = (
-              "static int vt_menu_open;\n\n"
-              + marker
-          )
-
-          if code.count(marker) != 1:
-              raise RuntimeError(
-                  "V18 battle renderer not found "
-                  "exactly once"
-              )
-
-          if code.count(
-              "static int vt_menu_open = 0;"
-          ) != 1:
-              raise RuntimeError(
-                  "Original menu state missing"
-              )
-
-          code = code.replace(
-              marker,
-              declaration,
-              1
-          )
-
-          # Confirm that important V18
-          # features remain present.
-          required = [
-              "VOLT TRAIL V18",
-              "vt_dragon_wing(",
-              "vt_dragon_sparks(",
-              "vt_v18_battle_bars();",
-              "vt_menu_open",
-              "vt_menu_choice",
-              "vt_save_game(void)",
-              "vt_load_game(void)",
-              "InitCARD(1);",
-              "PAD_CROSS",
-              "PAD_SQUARE",
-              "PAD_CIRCLE",
-              "PAD_TRIANGLE",
-              "PAD_START",
-              "vt_play_intro();"
-          ]
-
-          for feature in required:
-              if feature not in code:
+          def replace_once(old, new):
+              global code
+              count = code.count(old)
+              if count != 1:
                   raise RuntimeError(
-                      "Required feature missing: "
-                      + feature
+                      "V19 expected one occurrence of " + repr(old[:70])
+                      + "; found " + str(count)
                   )
+              code = code.replace(old, new, 1)
 
-          source.write_text(
-              code,
-              encoding="utf-8"
+          replace_once("VOLT TRAIL V18 - %s", "VOLT TRAIL V19 - %s")
+          replace_once("VOLT TRAIL V18 - MENUE", "VOLT TRAIL V19 - MENUE")
+
+          dragon_code = r'''
+          /* V19: 0 Mosslet, 1 Flamyr, 2 Aquar, 3 Glacir. */
+          static int vt_v19_kind = 0;
+          static unsigned int vt_v19_mask = 0;
+
+          static const char *vt_v19_name(int kind) {
+              switch (kind) {
+                  case 1: return "FLAMYR";
+                  case 2: return "AQUAR";
+                  case 3: return "GLACIR";
+                  default: return "MOSSLET";
+              }
+          }
+
+          static int vt_v19_caught_count(void) {
+              unsigned int mask = vt_v19_mask;
+              int i;
+              int count = 0;
+              if (caught_mosslet) mask |= 1u;
+              for (i = 0; i < 4; i++) {
+                  if (mask & (1u << i)) count++;
+              }
+              return count;
+          }
+
+          static void vt_v19_hit_effect(int x, int z) {
+              int wave;
+              if (game_mode != 1 || action_flash <= 0) return;
+              wave = (30 - action_flash) & 15;
+
+              /* Electrical flashes around the enemy dragon. */
+              vt_pyramid(
+                  x - 25, -10 - wave, z - 23,
+                  6, 22, 250, 228, 54
+              );
+              vt_pyramid(
+                  x + 23, -19 + wave, z - 27,
+                  6, 18, 94, 219, 251
+              );
+              vt_pyramid(
+                  x, -31, z - 31,
+                  5 + wave / 4, 13, 255, 247, 138
+              );
+          }
+
+          static void vt_v19_wild_dragon(int x, int z, int kind) {
+              int r = 62;
+              int g = 172;
+              int b = 92;
+              int flap = (vt_v18_tick / 7) & 1;
+
+              if (kind == 1) {
+                  r = 225; g = 87; b = 46;
+              } else if (kind == 2) {
+                  r = 61; g = 139; b = 221;
+              } else if (kind == 3) {
+                  r = 135; g = 216; b = 232;
+              }
+
+              /* Body, neck, dragon head and long muzzle. */
+              draw_box(x, 23, z, 15, r, g, b);
+              draw_box(x, 5, z - 8, 10, r, g, b);
+              draw_box(x, -7, z - 16, 12, r, g, b);
+              draw_box(x, -5, z - 29, 6, r, g, b);
+              vt_dragon_eyes(x, -10, z - 31, 7);
+
+              /* Horns and two animated wings. */
+              vt_pyramid(x - 9, -16, z - 12,
+                         6, 22, r, g, b);
+              vt_pyramid(x + 9, -16, z - 12,
+                         6, 22, r, g, b);
+              vt_dragon_wing(x, z, -1, 39,
+                             flap ? 9 : -1, r, g, b);
+              vt_dragon_wing(x, z, 1, 39,
+                             flap ? -1 : 9, r, g, b);
+
+              /* Long tail, feet and pointed spikes. */
+              draw_box(x + 12, 23, z + 23, 9, r, g, b);
+              draw_box(x + 17, 18, z + 36, 6, r, g, b);
+              vt_pyramid(x + 19, 17, z + 42,
+                         8, 19, r, g, b);
+              draw_box(x - 10, 39, z, 6, r, g, b);
+              draw_box(x + 10, 39, z, 6, r, g, b);
+
+              vt_v19_hit_effect(x, z);
+          }
+          '''
+
+          # Keep all original dragon and menu functions in place.
+          replace_once(
+              "static void vt_sparkit(int x, int z) {",
+              dragon_code + "\nstatic void vt_sparkit(int x, int z) {"
           )
 
-          print("V18 COMPILER FIX APPLIED")
-          print("Forward declaration added")
-          print("Dragon models preserved")
-          print("Battle HP bars preserved")
-          print("Main menu preserved")
-          print("Memory Card functions preserved")
-          print("Controller fix preserved")
+          # Pick different species for wild encounters, without
+          # modifying how trainer and arena fights work.
+          replace_once(
+              "                encounter++;",
+              "                encounter++;\n"
+              "                vt_v19_kind = (encounter + region) & 3;"
+          )
+
+          # Wild encounters use the species-specific 3D model.
+          call_pattern = (
+              r"vt_mosslet\s*\(\s*px\s*-\s*38\s*,\s*"
+              r"pz\s*\+\s*135\s*,\s*encounter_kind\s*\);"
+          )
+          replacement = (
+              "if (encounter_kind == 0) {\n"
+              "                      vt_v19_wild_dragon(\n"
+              "                          px - 38, pz + 135, vt_v19_kind\n"
+              "                      );\n"
+              "                  } else {\n"
+              "                      vt_mosslet(\n"
+              "                          px - 38, pz + 135, encounter_kind\n"
+              "                      );\n"
+              "                  }"
+          )
+          code, count = re.subn(call_pattern, replacement, code)
+          if count != 1:
+              raise RuntimeError("Wild dragon drawing call missing")
+
+          # Keep special enemy labels for trainers and leaders.
+          replace_once(
+              '"TRAINER" : "MOSSLET");',
+              '"TRAINER" : vt_v19_name(vt_v19_kind));'
+          )
+
+          # Record successful captures without overwriting the
+          # older Mosslet quest and Memory Card format.
+          replace_once(
+              "if (encounter_kind==0) caught_mosslet=1;",
+              "if (encounter_kind==0) {\n"
+              "                        vt_v19_mask |= 1u << vt_v19_kind;\n"
+              "                        if (vt_v19_kind == 0) caught_mosslet=1;\n"
+              "                    }"
+          )
+
+          # Display the true total number of captured species.
+          if code.count("1 + caught_mosslet") < 2:
+              raise RuntimeError("Team-counter anchors missing")
+          code = code.replace(
+              "1 + caught_mosslet", "1 + vt_v19_caught_count()"
+          )
+
+          # Monster menu: show all collected dragon species.
+          team_pattern = r'(?m)^(\s*)FntPrint\(\s*2,\s*"TEAM: %d MONSTER\\n"'
+          match = re.search(team_pattern, code)
+          if not match:
+              raise RuntimeError("Monster submenu missing")
+          indent = match.group(1)
+          new_lines = (
+              'FntPrint(\n'
+              '    2, "FLAMYR:%s AQUAR:%s\\n",\n'
+              '    (vt_v19_mask & 2u) ? "JA" : "NEIN",\n'
+              '    (vt_v19_mask & 4u) ? "JA" : "NEIN"\n'
+              ');\n'
+              'FntPrint(\n'
+              '    2, "GLACIR:%s\\n",\n'
+              '    (vt_v19_mask & 8u) ? "JA" : "NEIN"\n'
+              ');\n'
+          )
+          new_lines = "\n".join(
+              indent + line if line else line
+              for line in new_lines.rstrip("\n").split("\n")
+          ) + "\n"
+          code = code[:match.start()] + new_lines + code[match.start():]
+
+          # Store an extension in the unused part of the original
+          # PS1 save block. The original checksum and its first 19
+          # words remain unchanged, so V17/V18 saves still load.
+          replace_once(
+              "words[18] = vt_save_checksum(words);",
+              "words[18] = vt_save_checksum(words);\n"
+              "              words[19] = 0x56313944u;\n"
+              "              words[20] = vt_v19_mask | (caught_mosslet ? 1u : 0u);\n"
+              "              words[21] = words[19] ^ words[20] ^ 0xa592c3d6u;"
+          )
+
+          replace_once(
+              "caught_mosslet = (int)w[7];",
+              "caught_mosslet = (int)w[7];\n"
+              "              if (w[19] == 0x56313944u &&\n"
+              "                  w[21] == (w[19] ^ w[20] ^ 0xa592c3d6u) &&\n"
+              "                  (w[20] & ~15u) == 0) {\n"
+              "                  vt_v19_mask = w[20];\n"
+              "              } else {\n"
+              "                  vt_v19_mask = caught_mosslet ? 1u : 0u;\n"
+              "              }"
+          )
+
+          required = [
+              "VOLT TRAIL V19", "vt_v19_wild_dragon(",
+              "vt_v19_hit_effect(", "vt_v19_caught_count(",
+              "vt_save_game(void)", "vt_load_game(void)",
+              "InitCARD(1);", "vt_menu_open",
+              "vt_play_intro();", "PAD_SQUARE", "PAD_CIRCLE"
+          ]
+          for marker in required:
+              if marker not in code:
+                  raise RuntimeError("Missing V19 feature: " + marker)
+
+          path.write_text(code, encoding="utf-8")
+          print("V19 ready: Flamyr, Aquar and Glacir added")
+          print("Battle lightning effects added")
+          print("Old saves remain compatible")
+          print("V18 controller, intro, quests and menu preserved")
           PY
 
       - name: Install PSn00bSDK
         shell: bash
         run: |
           set -euo pipefail
-
-          python3 "$RUNNER_TEMP/run_v18_step.py" \
+          python3 "$RUNNER_TEMP/run_previous_step.py" \
             "Install PSn00bSDK"
 
-      - name: Build Volt Trail V18 Fixed
+      - name: Build Volt Trail V19
         shell: bash
         run: |
           set -euxo pipefail
-
           cmake \
             -S "$PROJECT_DIR" \
             -B "$GITHUB_WORKSPACE/build" \
             -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE" \
             -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$GITHUB_WORKSPACE/build" --verbose
 
-          cmake --build \
-            "$GITHUB_WORKSPACE/build" \
-            --verbose
-
-      - name: Collect PS1 game files
+      - name: Collect PS1 files
         shell: bash
         run: |
           set -euo pipefail
-
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
-
-          for file in \
-            VTRAIL.bin \
-            VTRAIL.cue \
-            VTRAIL.exe \
-            VTRAIL.elf
-          do
+          for file in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
             SOURCE="$GITHUB_WORKSPACE/build/$file"
-
             if [ ! -s "$SOURCE" ]; then
-              echo "::error::Missing file: $file"
+              echo "::error::Missing PS1 file: $file"
               exit 1
             fi
-
-            cp "$SOURCE" \
-              "$GITHUB_WORKSPACE/artifacts/"
+            cp "$SOURCE" "$GITHUB_WORKSPACE/artifacts/"
           done
-
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V18 Fixed
+      - name: Upload Volt Trail V19
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V18-Dragon-Fix
+          name: VoltTrail-PS1-V19-Dragon-Battles
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
