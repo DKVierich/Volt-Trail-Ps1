@@ -1,5 +1,5 @@
 
-name: Build Volt Trail PS1 V14 3D Characters
+name: Build Volt Trail PS1 V14 Fixed
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Install required tools
+      - name: Install tools
         shell: bash
         run: |
           set -euo pipefail
@@ -43,24 +43,28 @@ jobs:
 
           path = Path(os.environ["RUNNER_TEMP"]) / "v13.yml"
           data = yaml.safe_load(path.read_text())
+
           steps = data["jobs"]["build"]["steps"]
 
-          wanted = "Prepare project and V12 backup"
           matches = [
               step for step in steps
-              if step.get("name") == wanted
+              if step.get("name") ==
+              "Prepare project and V12 backup"
           ]
 
           if len(matches) != 1:
-              raise RuntimeError("V13 preparation missing")
+              raise RuntimeError("V13 preparation not found")
 
           subprocess.run(
-              ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
+              [
+                  "bash", "-euo", "pipefail",
+                  "-c", matches[0]["run"]
+              ],
               env=os.environ.copy(),
               check=True
           )
 
-          print("V13 project preparation completed")
+          print("V13 project prepared")
           PY
 
       - name: Restore V13 intro and gameplay
@@ -75,15 +79,14 @@ jobs:
           import yaml
 
           path = Path(os.environ["RUNNER_TEMP"]) / "v13.yml"
-          data = yaml.safe_load(path.read_text())
-          steps = data["jobs"]["build"]["steps"]
+          steps = yaml.safe_load(
+              path.read_text()
+          )["jobs"]["build"]["steps"]
 
-          wanted_steps = [
+          for wanted in [
               "Restore working V12 game and intro",
               "Apply V13 camera and 3D animation"
-          ]
-
-          for wanted in wanted_steps:
+          ]:
               matches = [
                   step for step in steps
                   if step.get("name") == wanted
@@ -91,33 +94,34 @@ jobs:
 
               if len(matches) != 1:
                   raise RuntimeError(
-                      "Required V13 step missing: " + wanted
+                      "V13 step not found: " + wanted
                   )
 
-              print("Running:", wanted, flush=True)
-
               subprocess.run(
-                  ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
+                  [
+                      "bash", "-euo", "pipefail",
+                      "-c", matches[0]["run"]
+                  ],
                   env=os.environ.copy(),
                   check=True
               )
 
-          print("V13 intro, controls and gameplay restored")
+          print("V13 intro and gameplay restored")
           PY
 
-      - name: Apply V14 graphics and characters
+      - name: Apply corrected V14 3D graphics
         shell: bash
         run: |
           set -euo pipefail
 
           python3 - <<'PY'
           import os
+          import re
           from pathlib import Path
 
           path = (
               Path(os.environ["PROJECT_DIR"])
-              / "src"
-              / "main.c"
+              / "src" / "main.c"
           )
 
           code = path.read_text(encoding="utf-8")
@@ -125,31 +129,27 @@ jobs:
           def replace_once(old, new):
               global code
 
-              count = code.count(old)
-              if count != 1:
+              if code.count(old) != 1:
                   raise RuntimeError(
-                      "V14 source marker not found: "
-                      + old[:80]
-                      + " (matches: "
-                      + str(count)
-                      + ")"
+                      "V14 source marker missing: " +
+                      old[:75]
                   )
 
               code = code.replace(old, new, 1)
 
-          # Update the version number.
+          # New version title.
           replace_once(
               "VOLT TRAIL V13 - %s",
               "VOLT TRAIL V14 - %s"
           )
 
-          # Slightly closer camera.
+          # Slightly larger game view.
           replace_once(
               "gte_SetGeomScreen(225);",
               "gte_SetGeomScreen(235);"
           )
 
-          # Create a detailed, animated player.
+          # Detailed player with walking arms and legs.
           player_code = r'''
           static void vt_player(int x, int z) {
               int stride = 0;
@@ -158,31 +158,30 @@ jobs:
                   stride = vt_walk_phase < 16 ? 5 : -5;
               }
 
-              /* Blue shirt and jacket. */
+              /* Body and clothing. */
               draw_box(
-                  x, 19, z,
-                  12, 45, 101, 211
+                  x, 19, z, 12,
+                  45, 101, 211
               );
 
-              /* Human head. */
+              /* Head. */
               draw_box(
-                  x, -1, z - 2,
-                  9, 231, 179, 129
+                  x, -1, z - 2, 9,
+                  231, 179, 129
               );
 
-              /* Brown hair. */
+              /* Hair. */
               draw_box(
-                  x, -11, z - 1,
-                  9, 79, 49, 32
+                  x, -11, z - 1, 9,
+                  79, 49, 32
               );
 
-              /* Left arm. */
+              /* Moving arms. */
               draw_box(
                   x - 17, 18 + stride, z,
                   5, 54, 116, 223
               );
 
-              /* Right arm. */
               draw_box(
                   x + 17, 18 - stride, z,
                   5, 54, 116, 223
@@ -199,7 +198,7 @@ jobs:
                   4, 222, 171, 126
               );
 
-              /* Animated trousers and legs. */
+              /* Walking legs. */
               draw_box(
                   x - 7, 36 - stride, z,
                   6, 35, 52, 109
@@ -221,46 +220,61 @@ jobs:
                   5, 47, 42, 43
               );
           }
+
           '''
 
-          # Insert the new player function
-          # before Mosslet's function.
           replace_once(
               "static void vt_mosslet(",
               player_code + "\nstatic void vt_mosslet("
           )
 
-          # Replace the old two-box player.
-          start_marker = (
-              "/* Player marker and detailed V12 creatures. */"
+          # V14 FIX:
+          # Find Sparkit's actual call without relying
+          # on its exact indentation.
+          marker = (
+              "/* Player marker and detailed "
+              "V12 creatures. */"
           )
 
-          if code.count(start_marker) != 1:
-              raise RuntimeError("Old player section not found")
+          if code.count(marker) != 1:
+              raise RuntimeError(
+                  "Player scene marker not found"
+              )
 
-          start = code.index(start_marker)
+          start = code.index(marker)
 
-          # Find the existing Sparkit call in this scene.
-          end = code.index(
-              "              vt_sparkit(",
-              start
+          match = re.search(
+              r"\bvt_sparkit\s*\(",
+              code[start:]
           )
 
+          if match is None:
+              raise RuntimeError(
+                  "Sparkit scene call not found"
+              )
+
+          end = start + match.start()
+
+          # Replace only the two old player boxes.
+          # Keep the existing Sparkit and battle code.
           new_scene = (
-              "/* Animated V14 player model. */\n"
-              "              vt_player(px, pz + 73);\n\n"
+              "/* V14 animated human player. */\n"
+              "              vt_player("
+              "px, pz + 73);\n\n"
+              "              "
           )
 
           code = (
-              code[:start]
-              + new_scene
-              + code[end:]
+              code[:start] +
+              new_scene +
+              code[end:]
           )
 
-          # Add more features to Sparkit's face.
+          # Add colorful cheek markings to Sparkit.
           spark_start = code.index(
               "static void vt_sparkit(int x, int z) {"
           )
+
           spark_end = code.index(
               "static void vt_player(",
               spark_start
@@ -270,10 +284,12 @@ jobs:
           closing = spark.rfind("}")
 
           if closing < 0:
-              raise RuntimeError("Sparkit function invalid")
+              raise RuntimeError(
+                  "Sparkit model is incomplete"
+              )
 
-          spark_details = r'''
-              /* Small orange cheek markings. */
+          cheek_details = r'''
+              /* Orange cheek markings. */
               draw_box(
                   x - 12, 6 - bounce, z - 13,
                   3, 244, 111, 42
@@ -286,22 +302,22 @@ jobs:
           '''
 
           spark = (
-              spark[:closing]
-              + spark_details
-              + "\n"
-              + spark[closing:]
+              spark[:closing] +
+              cheek_details + "\n" +
+              spark[closing:]
           )
 
           code = (
-              code[:spark_start]
-              + spark
-              + code[spark_end:]
+              code[:spark_start] +
+              spark +
+              code[spark_end:]
           )
 
-          # Add more details to Mosslet.
+          # Extra face and leaf details for Mosslet.
           moss_start = code.index(
               "static void vt_mosslet("
           )
+
           moss_end = code.index(
               "static void vt_draw_panel(",
               moss_start
@@ -311,7 +327,9 @@ jobs:
           closing = moss.rfind("}")
 
           if closing < 0:
-              raise RuntimeError("Mosslet function invalid")
+              raise RuntimeError(
+                  "Mosslet model is incomplete"
+              )
 
           moss_details = r'''
               /* Dark eyes. */
@@ -325,7 +343,7 @@ jobs:
                   3, 19, 37, 31
               );
 
-              /* Extra leaf details. */
+              /* Leaves beside the head. */
               vt_pyramid(
                   x - 15, 5, z + 4,
                   8, 17, 50, 159, 67
@@ -338,41 +356,30 @@ jobs:
           '''
 
           moss = (
-              moss[:closing]
-              + moss_details
-              + "\n"
-              + moss[closing:]
+              moss[:closing] +
+              moss_details + "\n" +
+              moss[closing:]
           )
 
           code = (
-              code[:moss_start]
-              + moss
-              + code[moss_end:]
+              code[:moss_start] +
+              moss +
+              code[moss_end:]
           )
 
-          # Add more scenery near the path.
-          extra_scenery = (
+          # Expand the world with trees and bushes.
+          scenery = (
               "vt_gate(310);\n"
               "              vt_tree(-210, 115);\n"
               "              vt_tree(210, 125);\n"
               "              vt_tree(-230, 355);\n"
               "              vt_tree(230, 365);\n"
               "\n"
-              "              /* Door and window details. */\n"
-              "              draw_box(\n"
-              "                  -108, 15, 246, 9,\n"
-              "                  49, 60, 113\n"
-              "              );\n"
-              "              draw_box(\n"
-              "                  119, 15, 255, 9,\n"
-              "                  49, 60, 113\n"
-              "              );\n"
-              "\n"
-              "              /* Small roadside bushes. */\n"
               "              vt_pyramid(\n"
               "                  -82, 31, 175,\n"
               "                  12, 19, 39, 141, 61\n"
               "              );\n"
+              "\n"
               "              vt_pyramid(\n"
               "                  82, 31, 185,\n"
               "                  12, 19, 47, 154, 69\n"
@@ -381,10 +388,10 @@ jobs:
 
           replace_once(
               "vt_gate(310);",
-              extra_scenery
+              scenery
           )
 
-          # Verify the important old features.
+          # Preserve the existing gameplay systems.
           required = [
               "VOLT TRAIL V14",
               "vt_player(px, pz + 73);",
@@ -396,19 +403,21 @@ jobs:
               "FntFlush(1);"
           ]
 
-          for marker in required:
-              if marker not in code:
+          for item in required:
+              if item not in code:
                   raise RuntimeError(
-                      "Important feature missing: " + marker
+                      "Missing feature: " + item
                   )
 
-          path.write_text(code, encoding="utf-8")
+          path.write_text(
+              code, encoding="utf-8"
+          )
 
-          print("Volt Trail V14 graphics patch complete")
-          print("Animated 3D player added")
+          print("Volt Trail V14 graphics applied")
+          print("Animated player added")
           print("Sparkit and Mosslet improved")
-          print("Landscape details added")
-          print("V13 intro and controls preserved")
+          print("Additional trees and bushes added")
+          print("Intro and controls preserved")
           PY
 
       - name: Install PSn00bSDK
@@ -423,8 +432,10 @@ jobs:
           import yaml
 
           path = Path(os.environ["RUNNER_TEMP"]) / "v13.yml"
-          data = yaml.safe_load(path.read_text())
-          steps = data["jobs"]["build"]["steps"]
+
+          steps = yaml.safe_load(
+              path.read_text()
+          )["jobs"]["build"]["steps"]
 
           matches = [
               step for step in steps
@@ -432,10 +443,15 @@ jobs:
           ]
 
           if len(matches) != 1:
-              raise RuntimeError("V13 SDK setup missing")
+              raise RuntimeError(
+                  "PSn00bSDK setup missing"
+              )
 
           subprocess.run(
-              ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
+              [
+                  "bash", "-euo", "pipefail",
+                  "-c", matches[0]["run"]
+              ],
               env=os.environ.copy(),
               check=True
           )
@@ -446,7 +462,8 @@ jobs:
         run: |
           set -euxo pipefail
 
-          cmake -S "$PROJECT_DIR" \
+          cmake \
+            -S "$PROJECT_DIR" \
             -B "$GITHUB_WORKSPACE/build" \
             -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE" \
@@ -464,12 +481,13 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
 
           for file in \
-            VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf
+            VTRAIL.bin VTRAIL.cue \
+            VTRAIL.exe VTRAIL.elf
           do
             SOURCE="$GITHUB_WORKSPACE/build/$file"
 
             if [ ! -s "$SOURCE" ]; then
-              echo "::error::Missing PS1 file: $file"
+              echo "::error::Missing game file: $file"
               exit 1
             fi
 
@@ -482,7 +500,7 @@ jobs:
       - name: Upload Volt Trail V14
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V14-3D-Characters
+          name: VoltTrail-PS1-V14-Fixed
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
