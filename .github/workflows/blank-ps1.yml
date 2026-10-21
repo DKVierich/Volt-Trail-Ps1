@@ -1,5 +1,5 @@
 
-name: Build Volt Trail PS1 V11 HUD Fix
+name: Build Volt Trail PS1 V12 3D World
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ jobs:
             cmake ninja-build unzip curl jq tar \
             ffmpeg python3-pil
 
-      - name: Prepare Volt Trail sources
+      - name: Prepare original project
         shell: bash
         run: |
           set -euo pipefail
@@ -32,22 +32,21 @@ jobs:
           ZIP="$GITHUB_WORKSPACE/VoltTrail_PS1_AndroidReady_V7.zip"
           VIDEO="$GITHUB_WORKSPACE/DKVierich_Produktion_PS1_Intro_original.mp4"
 
-          if [ ! -f "$ZIP" ]; then
-            echo "::error::V7 project ZIP missing"
+          test -f "$ZIP" || {
+            echo "::error::V7 ZIP missing"
             exit 1
-          fi
+          }
 
-          if [ ! -f "$VIDEO" ]; then
-            echo "::error::DKVierich intro MP4 missing"
+          test -f "$VIDEO" || {
+            echo "::error::Intro MP4 missing"
             exit 1
-          fi
+          }
 
-          DEST="$RUNNER_TEMP/volttrail-v11"
-          rm -rf "$DEST"
+          DEST="$RUNNER_TEMP/volttrail-v12"
           mkdir -p "$DEST"
           unzip -q "$ZIP" -d "$DEST"
 
-          CMAKE_FILE="$(find "$DEST" -type f -name CMakeLists.txt -print -quit)"
+          CMAKE_FILE="$(find "$DEST" -name CMakeLists.txt -type f -print -quit)"
 
           if [ -z "$CMAKE_FILE" ]; then
             echo "::error::CMakeLists.txt missing"
@@ -57,15 +56,12 @@ jobs:
           PROJECT_DIR="$(dirname "$CMAKE_FILE")"
 
           for f in CMakeLists.txt src/main.c iso.xml system.cnf; do
-            if [ ! -f "$PROJECT_DIR/$f" ]; then
-              echo "::error::Missing project file: $f"
-              exit 1
-            fi
+            test -f "$PROJECT_DIR/$f" || exit 1
           done
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Convert improved intro to PS1 format
+      - name: Convert DKVierich intro
         shell: bash
         run: |
           set -euo pipefail
@@ -80,14 +76,14 @@ jobs:
           project = Path(os.environ["PROJECT_DIR"])
 
           video = root / "DKVierich_Produktion_PS1_Intro_original.mp4"
-          raw_file = Path(os.environ["RUNNER_TEMP"]) / "intro_v11.rgb"
+          raw_file = Path(os.environ["RUNNER_TEMP"]) / "intro_v12.rgb"
           header = project / "src/volttrail_intro_data.h"
 
           WIDTH = 224
           HEIGHT = 168
+          PIXELS = WIDTH * HEIGHT
+          RGB_BYTES = PIXELS * 3
           MAX_FRAMES = 30
-          FRAME_PIXELS = WIDTH * HEIGHT
-          RGB_BYTES = FRAME_PIXELS * 3
 
           subprocess.run([
               "ffmpeg",
@@ -110,13 +106,11 @@ jobs:
 
           raw = raw_file.read_bytes()
 
-          if not raw or len(raw) % RGB_BYTES != 0:
-              raise RuntimeError("Invalid intro video frames")
+          if not raw or len(raw) % RGB_BYTES:
+              raise RuntimeError("Intro conversion failed")
 
           count = min(len(raw) // RGB_BYTES, MAX_FRAMES)
-
-          if count == 0:
-              raise RuntimeError("Intro contains no frames")
+          palettes = []
 
           with header.open("w", encoding="ascii") as f:
               f.write("#ifndef VOLTTRAIL_INTRO_DATA_H\n")
@@ -129,55 +123,49 @@ jobs:
                   " __attribute__((aligned(4))) = {\n"
               )
 
-              palettes = []
-
               for frame in range(count):
                   start = frame * RGB_BYTES
                   chunk = raw[start:start + RGB_BYTES]
 
-                  image = Image.frombytes(
+                  img = Image.frombytes(
                       "RGB", (WIDTH, HEIGHT), chunk
                   )
 
-                  indexed = image.quantize(
+                  indexed = img.quantize(
                       colors=256,
                       method=Image.Quantize.MEDIANCUT
                   )
 
-                  pixels = indexed.tobytes()
-                  palette = indexed.getpalette() or []
+                  colors = indexed.getpalette() or []
                   psx_palette = []
 
                   for i in range(256):
                       p = i * 3
 
-                      if p + 2 < len(palette):
-                          r = palette[p]
-                          g = palette[p + 1]
-                          b = palette[p + 2]
+                      if p + 2 < len(colors):
+                          r, g, b = colors[p:p + 3]
                       else:
                           r = g = b = 0
 
-                      psx = (
+                      value = (
                           (r >> 3) |
                           ((g >> 3) << 5) |
                           ((b >> 3) << 10) |
                           0x8000
                       )
 
-                      psx_palette.append(psx)
+                      psx_palette.append(value)
 
                   palettes.append(psx_palette)
+                  pixels = indexed.tobytes()
+
                   f.write("{\n")
 
                   for i in range(0, len(pixels), 24):
                       values = pixels[i:i + 24]
-                      f.write(
-                          ",".join(
-                              "0x%02x" % value
-                              for value in values
-                          )
-                      )
+                      f.write(",".join(
+                          "0x%02x" % x for x in values
+                      ))
                       f.write(",\n")
 
                   f.write("},\n")
@@ -194,26 +182,20 @@ jobs:
                   f.write("{\n")
 
                   for i in range(0, 256, 16):
-                      f.write(
-                          ",".join(
-                              "0x%04x" % value
-                              for value in palette[i:i + 16]
-                          )
-                      )
+                      f.write(",".join(
+                          "0x%04x" % x
+                          for x in palette[i:i + 16]
+                      ))
                       f.write(",\n")
 
                   f.write("},\n")
 
-              f.write("};\n")
-              f.write("#endif\n")
+              f.write("};\n#endif\n")
 
-          print("V11 intro frames:", count)
-          print("Resolution:", WIDTH, "x", HEIGHT)
-          print("Colors per frame: 256")
-          print("Header created:", header)
+          print("HD intro generated:", count, "frames")
           PY
 
-      - name: Apply V11 intro and HUD fix
+      - name: Apply V12 graphics and gameplay
         shell: bash
         run: |
           set -euo pipefail
@@ -230,7 +212,7 @@ jobs:
 
               if code.count(old) != 1:
                   raise RuntimeError(
-                      "V11 patch marker not found: " + old
+                      "Source marker missing: " + old[:100]
                   )
 
               code = code.replace(old, new, 1)
@@ -241,8 +223,341 @@ jobs:
               '#include "volttrail_intro_data.h"'
           )
 
-          ui_code = r'''
-          /* Dark HUD panels, drawn in front of 3D geometry. */
+          # More colorful ground, with a central path.
+          replace_once(
+              "            draw_triangle3(&a,&c,&b, 28, 92, 52);\n"
+              "            draw_triangle3(&b,&c,&d, 24, 78, 45);",
+              """
+            {
+                int shade = ((x / 55) + (z / 55)) & 1;
+                int r, g, bl;
+
+                if (x >= -55 && x < 55) {
+                    r = shade ? 134 : 119;
+                    g = shade ? 104 : 89;
+                    bl = shade ? 65 : 54;
+                } else if (region == 1) {
+                    r = shade ? 47 : 38;
+                    g = shade ? 98 : 87;
+                    bl = shade ? 121 : 107;
+                } else if (region == 2) {
+                    r = shade ? 69 : 57;
+                    g = shade ? 98 : 82;
+                    bl = shade ? 82 : 72;
+                } else {
+                    r = shade ? 39 : 29;
+                    g = shade ? 119 : 100;
+                    bl = shade ? 59 : 47;
+                }
+
+                draw_triangle3(&a, &c, &b, r, g, bl);
+                draw_triangle3(
+                    &b, &c, &d,
+                    r * 4 / 5,
+                    g * 4 / 5,
+                    bl * 4 / 5
+                );
+            }
+              """.rstrip()
+          )
+
+          # Custom low-poly objects.
+          graphics = r'''
+          static void vt_pyramid(
+              int wx, int wy, int wz,
+              int radius, int height,
+              int r, int g, int b
+          ) {
+              SVECTOR a = {
+                  wx - radius - px,
+                  wy,
+                  wz - radius - pz, 0
+              };
+              SVECTOR c = {
+                  wx + radius - px,
+                  wy,
+                  wz - radius - pz, 0
+              };
+              SVECTOR d = {
+                  wx - radius - px,
+                  wy,
+                  wz + radius - pz, 0
+              };
+              SVECTOR e = {
+                  wx + radius - px,
+                  wy,
+                  wz + radius - pz, 0
+              };
+              SVECTOR tip = {
+                  wx - px,
+                  wy - height,
+                  wz - pz, 0
+              };
+
+              draw_triangle3(&a, &tip, &c, r, g, b);
+              draw_triangle3(
+                  &c, &tip, &e,
+                  r * 3 / 4, g * 3 / 4, b * 3 / 4
+              );
+              draw_triangle3(
+                  &e, &tip, &d,
+                  r * 4 / 5, g * 4 / 5, b * 4 / 5
+              );
+              draw_triangle3(
+                  &d, &tip, &a,
+                  r * 2 / 3, g * 2 / 3, b * 2 / 3
+              );
+          }
+
+          static void vt_tree(int x, int z) {
+              draw_box(x, 24, z, 11, 108, 72, 39);
+              vt_pyramid(
+                  x, 17, z, 25, 34,
+                  30, 136, 65
+              );
+              vt_pyramid(
+                  x, -3, z, 20, 33,
+                  49, 163, 73
+              );
+          }
+
+          static void vt_crystal(int x, int z) {
+              draw_box(x, 25, z, 8, 40, 93, 115);
+              vt_pyramid(
+                  x, 14, z, 16, 37,
+                  71, 211, 231
+              );
+          }
+
+          static void vt_gate(int z) {
+              draw_box(
+                  -45, 15, z, 19,
+                  175, 115, 49
+              );
+              draw_box(
+                  45, 15, z, 19,
+                  175, 115, 49
+              );
+
+              draw_box(
+                  0, 21, z + 5, 25,
+                  34, 89, 220
+              );
+
+              vt_pyramid(
+                  0, -8, z, 68, 25,
+                  244, 173, 65
+              );
+          }
+
+          static void vt_sparkit(int x, int z) {
+              draw_box(
+                  x, 20, z, 14,
+                  238, 181, 38
+              );
+
+              draw_box(
+                  x, 2, z - 4, 12,
+                  255, 211, 65
+              );
+
+              vt_pyramid(
+                  x - 10, -6, z - 3,
+                  7, 23,
+                  255, 203, 42
+              );
+
+              vt_pyramid(
+                  x + 10, -6, z - 3,
+                  7, 23,
+                  255, 203, 42
+              );
+
+              draw_box(
+                  x - 6, -1, z - 14,
+                  3, 22, 31, 52
+              );
+
+              draw_box(
+                  x + 6, -1, z - 14,
+                  3, 22, 31, 52
+              );
+
+              draw_box(
+                  x + 19, 18, z + 5,
+                  7, 244, 148, 25
+              );
+          }
+
+          static void vt_mosslet(
+              int x, int z, int kind
+          ) {
+              int r = kind == 2 ? 193 : 74;
+              int g = kind == 2 ? 74 : 162;
+              int b = kind == 2 ? 67 : 93;
+
+              draw_box(x, 23, z, 16, r, g, b);
+              draw_box(
+                  x, 4, z - 4, 13,
+                  r, g, b
+              );
+
+              vt_pyramid(
+                  x - 9, -4, z,
+                  8, 20,
+                  r, g, b
+              );
+
+              vt_pyramid(
+                  x + 9, -4, z,
+                  8, 20,
+                  r, g, b
+              );
+
+              draw_box(
+                  x - 6, 1, z - 15,
+                  3, 22, 35, 46
+              );
+
+              draw_box(
+                  x + 6, 1, z - 15,
+                  3, 22, 35, 46
+              );
+          }
+          '''
+
+          marker = "static void draw_hud(void) {"
+
+          if code.count(marker) != 1:
+              raise RuntimeError("HUD marker missing")
+
+          code = code.replace(
+              marker, graphics + "\n" + marker, 1
+          )
+
+          # Replace the original scenery.
+          start = code.find(
+              "        /* Distinct landmarks for three connected areas. */"
+          )
+
+          end = code.find(
+              "        /* Player, Sparkit and wild creature",
+              start
+          )
+
+          if start < 0 or end < 0:
+              raise RuntimeError("Scenery section missing")
+
+          scenery = r'''
+              /* New V12 low-poly fantasy world. */
+              vt_tree(-155, 180);
+              vt_tree(145, 195);
+              vt_tree(-190, 315);
+              vt_tree(185, 345);
+
+              vt_tree(-245, 255);
+              vt_tree(245, 280);
+
+              vt_gate(335);
+
+              draw_box(
+                  -108, 25, 278, 27,
+                  125, 86, 57
+              );
+              vt_pyramid(
+                  -108, 3, 278,
+                  35, 25,
+                  170, 80, 49
+              );
+
+              draw_box(
+                  119, 25, 285, 27,
+                  120, 79, 53
+              );
+              vt_pyramid(
+                  119, 3, 285,
+                  35, 25,
+                  176, 79, 48
+              );
+
+              if (region == 1) {
+                  vt_crystal(-90, 235);
+                  vt_crystal(95, 245);
+                  vt_crystal(-152, 365);
+                  vt_crystal(151, 375);
+              }
+
+              if (region == 2) {
+                  draw_box(
+                      -125, 19, 310, 36,
+                      174, 65, 46
+                  );
+                  draw_box(
+                      125, 19, 310, 36,
+                      174, 65, 46
+                  );
+
+                  vt_pyramid(
+                      0, -23, 370,
+                      45, 45,
+                      244, 181, 61
+                  );
+              }
+
+          '''
+
+          code = code[:start] + scenery + code[end:]
+
+          # Replace box placeholders with creatures.
+          start = code.find(
+              "        /* Player, Sparkit and wild creature"
+          )
+          end = code.find(
+              "        draw_hud();",
+              start
+          )
+
+          if start < 0 or end < 0:
+              raise RuntimeError("Creature scene missing")
+
+          creatures = r'''
+              /* Player marker and detailed V12 creatures. */
+              draw_box(
+                  px, 17, pz + 73, 12,
+                  56, 101, 212
+              );
+
+              draw_box(
+                  px, -1, pz + 73, 9,
+                  221, 179, 131
+              );
+
+              vt_sparkit(
+                  px + 26, pz + 105
+              );
+
+              if (evolved) {
+                  vt_pyramid(
+                      px + 26, -25, pz + 105,
+                      15, 18,
+                      255, 122, 31
+                  );
+              }
+
+              if (game_mode == 1) {
+                  vt_mosslet(
+                      px - 38,
+                      pz + 135,
+                      encounter_kind
+                  );
+              }
+
+          '''
+
+          code = code[:start] + creatures + code[end:]
+
+          # Keep the working V11-style double HUD.
+          hud = r'''
           static void vt_draw_panel(int y, int height) {
               TILE *tile;
               unsigned int aligned;
@@ -273,37 +588,37 @@ jobs:
           static void draw_hud(void) {
               const char *area;
 
-              area = region == 0 ? "SUNMEADOW" :
+              area = region == 0 ?
+                  "SUNMEADOW" :
                   (region == 1 ?
                    "CRYSTAL PASS" : "STORM ARENA");
 
-              FntPrint(0,
-                  "VOLT TRAIL V11 - %s\n",
+              FntPrint(
+                  0, "VOLT TRAIL V12 - %s\n\n",
                   area
               );
 
-              FntPrint(0,
-                  "SPARKIT L%d HP %d/24%s\n",
+              FntPrint(
+                  0, "SPARKIT L%d HP %d/24%s\n\n",
                   companion_level,
                   companion_hp,
                   evolved ? " VOLTIGON" : ""
               );
 
-              FntPrint(0,
-                  "BADGE %d/1 TEAM %d STEPS %d\n",
+              FntPrint(
+                  0, "BADGE %d/1 TEAM %d STEPS %d\n",
                   badges,
                   1 + caught_mosslet,
                   step_count
               );
 
               if (game_mode == 0) {
-                  FntPrint(1,
-                      "D-PAD MOVE  X BATTLE\n"
+                  FntPrint(
+                      1, "D-PAD MOVE X BATTLE\n\n"
                   );
-                  FntPrint(1,
-                      "START RESET\n"
+                  FntPrint(
+                      1, "START RESET\n"
                   );
-
               } else if (game_mode == 1) {
                   const char *enemy;
 
@@ -312,59 +627,62 @@ jobs:
                       (encounter_kind == 1 ?
                        "TRAINER" : "MOSSLET");
 
-                  FntPrint(1,
-                      "%s L%d HP %d/%d\n",
-                      enemy,
-                      enemy_level,
-                      wild_hp,
-                      enemy_max_hp
+                  FntPrint(
+                      1, "%s L%d HP %d/%d\n\n",
+                      enemy, enemy_level,
+                      wild_hp, enemy_max_hp
                   );
 
                   if (action_flash > 0) {
-                      FntPrint(1,
-                          "%s\n",
+                      FntPrint(
+                          1, "%s\n",
                           last_action == 1 ?
                           "SUPER EFFECTIVE!" :
                           (last_action == 2 ?
                            "CAPTURED!" : "ACTION!")
                       );
                   } else {
-                      FntPrint(1,
-                          "X ATTACK O CATCH (%d)\n",
+                      FntPrint(
+                          1, "X ATTACK O CATCH (%d)\n",
                           capture_attempts
                       );
                   }
-
               } else if (game_mode == 2) {
-                  FntPrint(1,
-                      "VICTORY! X CONTINUE\n"
+                  FntPrint(
+                      1, "VICTORY! X CONTINUE\n\n"
                   );
-                  FntPrint(1,
-                      "YOUR TEAM GETS STRONGER\n"
+                  FntPrint(
+                      1, "TEAM GETS STRONGER\n"
                   );
-
               } else if (game_mode == 3) {
-                  FntPrint(1,
-                      "SPARKIT NEEDS REST\n"
+                  FntPrint(
+                      1, "SPARKIT NEEDS REST\n\n"
                   );
-                  FntPrint(1,
-                      "PRESS X TO RECOVER\n"
+                  FntPrint(
+                      1, "X RECOVER\n"
                   );
               }
 
-              /*
-               * V11 FIX:
-               * Flush BOTH font streams.
-               * V10 used FntFlush(-1), which only drew
-               * the last stream (the lower menu).
-               */
               FntFlush(0);
               FntFlush(1);
           }
           '''
 
-          intro_code = r'''
-          /* Higher-resolution 8-bit indexed PS1 intro. */
+          start = code.find(
+              "static void draw_hud(void) {"
+          )
+          end = code.find(
+              "int main(void) {",
+              start
+          )
+
+          if start < 0 or end < 0:
+              raise RuntimeError("HUD replacement failed")
+
+          code = code[:start] + hud + "\n" + code[end:]
+
+          # Preserve V11 intro rendering.
+          intro = r'''
           static void vt_play_intro(void) {
               DISPENV intro_disp;
               DRAWENV intro_draw;
@@ -375,13 +693,11 @@ jobs:
               POLY_FT4 quad;
               u_long intro_ot[2];
 
-              int frame;
-              int wait;
+              int frame, wait;
 
               SetDefDispEnv(
                   &intro_disp, 0, 240, 320, 240
               );
-
               SetDefDrawEnv(
                   &intro_draw, 0, 240, 320, 240
               );
@@ -396,18 +712,13 @@ jobs:
 
               setXY4(
                   &quad,
-                  0, 0,
-                  319, 0,
-                  0, 239,
-                  319, 239
+                  0, 0, 319, 0,
+                  0, 239, 319, 239
               );
-
               setUV4(
                   &quad,
-                  0, 0,
-                  223, 0,
-                  0, 167,
-                  223, 167
+                  0, 0, 223, 0,
+                  0, 167, 223, 167
               );
 
               setTPage(&quad, 1, 0, 320, 0);
@@ -452,23 +763,9 @@ jobs:
           }
           '''
 
-          start = code.find(
-              "static void draw_hud(void) {"
-          )
-
-          end = code.find(
+          replace_once(
               "int main(void) {",
-              start
-          )
-
-          if start < 0 or end < 0:
-              raise RuntimeError("Original HUD not found")
-
-          code = (
-              code[:start] +
-              ui_code + "\n" +
-              intro_code + "\n" +
-              code[end:]
+              intro + "\nint main(void) {"
           )
 
           replace_once(
@@ -483,14 +780,26 @@ jobs:
               "    vt_play_intro();"
           )
 
-          old_end = (
+          replace_once(
+              "VECTOR camera_pos = {0, -10, CAMERA_Z, 0};",
+              "VECTOR camera_pos = {0, -10, CAMERA_Z};"
+          )
+
+          replace_once(
+              "draw[0].isbg = 1; draw[0].r0 = 10; draw[0].g0 = 15; draw[0].b0 = 35;",
+              "draw[0].isbg = 1; draw[0].r0 = 8; draw[0].g0 = 24; draw[0].b0 = 48;"
+          )
+
+          replace_once(
+              "draw[1].isbg = 1; draw[1].r0 = 10; draw[1].g0 = 15; draw[1].b0 = 35;",
+              "draw[1].isbg = 1; draw[1].r0 = 8; draw[1].g0 = 24; draw[1].b0 = 48;"
+          )
+
+          replace_once(
               "        draw_hud();\n"
               "        PutDispEnv(&disp[db]);\n"
               "        PutDrawEnv(&draw[db]);\n"
-              "        DrawOTag(ot[db] + (OT_LEN - 1));"
-          )
-
-          new_end = (
+              "        DrawOTag(ot[db] + (OT_LEN - 1));",
               "        vt_draw_panels();\n"
               "        PutDispEnv(&disp[db]);\n"
               "        PutDrawEnv(&draw[db]);\n"
@@ -499,17 +808,11 @@ jobs:
               "        draw_hud();"
           )
 
-          replace_once(old_end, new_end)
-
-          replace_once(
-              "VECTOR camera_pos = {0, -10, CAMERA_Z, 0};",
-              "VECTOR camera_pos = {0, -10, CAMERA_Z};"
-          )
-
           src.write_text(code, encoding="utf-8")
 
-          print("V11 intro preserved")
-          print("V11 both HUD font streams enabled")
+          print("Volt Trail V12 source prepared")
+          print("3D trees, creatures, paths and gate added")
+          print("HD intro and double HUD preserved")
           PY
 
       - name: Download PSn00bSDK
@@ -559,7 +862,6 @@ jobs:
             if [ -n "$FOUND" ]; then
               break
             fi
-
           done < <(
             jq -r '
               .assets[]
@@ -585,7 +887,7 @@ jobs:
           )
 
           if [ -z "$FOUND" ]; then
-            echo "::error::PSn00bSDK not found"
+            echo "::error::PSn00bSDK missing"
             exit 1
           fi
 
@@ -596,7 +898,7 @@ jobs:
             -print -quit | xargs -r dirname)"
 
           if [ -z "$SDK_BIN" ]; then
-            echo "::error::PS1 compiler not found"
+            echo "::error::PS1 compiler missing"
             exit 1
           fi
 
@@ -614,7 +916,7 @@ jobs:
               >> "$GITHUB_PATH"
           fi
 
-      - name: Build Volt Trail V11
+      - name: Build Volt Trail V12
         shell: bash
         run: |
           set -euxo pipefail
@@ -652,10 +954,10 @@ jobs:
 
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V11
+      - name: Upload Volt Trail V12
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V11-HUD-Fix
+          name: VoltTrail-PS1-V12-3D-World
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
