@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V19 Dragon Battles
+name: Build Volt Trail PS1 V19 Dragon Battles Fixed
 
 on:
   workflow_dispatch:
@@ -57,18 +57,40 @@ jobs:
           python3 "$RUNNER_TEMP/run_previous_step.py" \
             "Load original V18 build"
 
-      - name: Restore V18 dragons intro and menu
+      # Each action step reads GITHUB_ENV from the preceding step.
+      # PROJECT_DIR is created by Prepare game project and must be
+      # available to the following restore steps.
+      - name: Prepare V18 game project
         shell: bash
         run: |
           set -euo pipefail
-          for name in \
-            "Prepare game project" \
-            "Restore V17 intro and gameplay" \
-            "Restore V18 dragons and graphics" \
+          python3 "$RUNNER_TEMP/run_previous_step.py" \
+            "Prepare game project"
+
+      - name: Restore V17 intro and gameplay
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${PROJECT_DIR:-}" || {
+            echo "::error::PROJECT_DIR was not exported"
+            exit 1
+          }
+          python3 "$RUNNER_TEMP/run_previous_step.py" \
+            "Restore V17 intro and gameplay"
+
+      - name: Restore V18 dragons and graphics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/run_previous_step.py" \
+            "Restore V18 dragons and graphics"
+
+      - name: Apply working V18 compiler fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/run_previous_step.py" \
             "Repair V18 battle menu compiler error"
-          do
-            python3 "$RUNNER_TEMP/run_previous_step.py" "$name"
-          done
 
       - name: Add V19 dragon species and battle effects
         shell: bash
@@ -341,7 +363,7 @@ jobs:
       - name: Upload Volt Trail V19
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V19-Dragon-Battles
+          name: VoltTrail-PS1-V19-Dragon-Battles-Fixed
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
