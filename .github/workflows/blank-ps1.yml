@@ -1,5 +1,5 @@
 
-name: Build Volt Trail PS1 V10 HD Intro
+name: Build Volt Trail PS1 V11 HUD Fix
 
 on:
   workflow_dispatch:
@@ -42,7 +42,7 @@ jobs:
             exit 1
           fi
 
-          DEST="$RUNNER_TEMP/volttrail-v10"
+          DEST="$RUNNER_TEMP/volttrail-v11"
           rm -rf "$DEST"
           mkdir -p "$DEST"
           unzip -q "$ZIP" -d "$DEST"
@@ -65,7 +65,7 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Convert HD intro to PS1 format
+      - name: Convert improved intro to PS1 format
         shell: bash
         run: |
           set -euo pipefail
@@ -80,12 +80,11 @@ jobs:
           project = Path(os.environ["PROJECT_DIR"])
 
           video = root / "DKVierich_Produktion_PS1_Intro_original.mp4"
-          raw_file = Path(os.environ["RUNNER_TEMP"]) / "intro_v10.rgb"
+          raw_file = Path(os.environ["RUNNER_TEMP"]) / "intro_v11.rgb"
           header = project / "src/volttrail_intro_data.h"
 
           WIDTH = 224
           HEIGHT = 168
-          FPS = 6
           MAX_FRAMES = 30
           FRAME_PIXELS = WIDTH * HEIGHT
           RGB_BYTES = FRAME_PIXELS * 3
@@ -115,6 +114,7 @@ jobs:
               raise RuntimeError("Invalid intro video frames")
 
           count = min(len(raw) // RGB_BYTES, MAX_FRAMES)
+
           if count == 0:
               raise RuntimeError("Intro contains no frames")
 
@@ -168,7 +168,6 @@ jobs:
                       psx_palette.append(psx)
 
                   palettes.append(psx_palette)
-
                   f.write("{\n")
 
                   for i in range(0, len(pixels), 24):
@@ -208,15 +207,13 @@ jobs:
               f.write("};\n")
               f.write("#endif\n")
 
-          memory = count * (FRAME_PIXELS + 512)
-          print("V10 intro frames:", count)
+          print("V11 intro frames:", count)
           print("Resolution:", WIDTH, "x", HEIGHT)
           print("Colors per frame: 256")
-          print("Intro data bytes:", memory)
           print("Header created:", header)
           PY
 
-      - name: Apply V10 intro and clean HUD
+      - name: Apply V11 intro and HUD fix
         shell: bash
         run: |
           set -euo pipefail
@@ -233,7 +230,7 @@ jobs:
 
               if code.count(old) != 1:
                   raise RuntimeError(
-                      "V10 patch marker not found: " + old
+                      "V11 patch marker not found: " + old
                   )
 
               code = code.replace(old, new, 1)
@@ -245,7 +242,7 @@ jobs:
           )
 
           ui_code = r'''
-          /* Two dark HUD panels, drawn in front of 3D geometry. */
+          /* Dark HUD panels, drawn in front of 3D geometry. */
           static void vt_draw_panel(int y, int height) {
               TILE *tile;
               unsigned int aligned;
@@ -281,7 +278,7 @@ jobs:
                    "CRYSTAL PASS" : "STORM ARENA");
 
               FntPrint(0,
-                  "VOLT TRAIL V10 - %s\n",
+                  "VOLT TRAIL V11 - %s\n",
                   area
               );
 
@@ -355,12 +352,19 @@ jobs:
                   );
               }
 
-              FntFlush(-1);
+              /*
+               * V11 FIX:
+               * Flush BOTH font streams.
+               * V10 used FntFlush(-1), which only drew
+               * the last stream (the lower menu).
+               */
+              FntFlush(0);
+              FntFlush(1);
           }
           '''
 
           intro_code = r'''
-          /* Play higher-resolution 8-bit indexed PS1 intro. */
+          /* Higher-resolution 8-bit indexed PS1 intro. */
           static void vt_play_intro(void) {
               DISPENV intro_disp;
               DRAWENV intro_draw;
@@ -503,7 +507,9 @@ jobs:
           )
 
           src.write_text(code, encoding="utf-8")
-          print("V10 improved intro and HUD applied")
+
+          print("V11 intro preserved")
+          print("V11 both HUD font streams enabled")
           PY
 
       - name: Download PSn00bSDK
@@ -608,7 +614,7 @@ jobs:
               >> "$GITHUB_PATH"
           fi
 
-      - name: Build Volt Trail V10
+      - name: Build Volt Trail V11
         shell: bash
         run: |
           set -euxo pipefail
@@ -646,10 +652,10 @@ jobs:
 
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V10
+      - name: Upload Volt Trail V11
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V10-HD-Intro
+          name: VoltTrail-PS1-V11-HUD-Fix
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
