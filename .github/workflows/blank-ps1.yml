@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V24.3 Kampf Grafik Fix
+name: Build Volt Trail PS1 V25 Grafik Rendering
 
 on:
   workflow_dispatch:
@@ -2495,91 +2495,257 @@ jobs:
           print("Dragon team, fights, codex and saves retained")
           PY
 
-      - name: Install PSn00bSDK 0.24 directly
+      - name: V25 Improve rendering and environmental detail
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
 
-          # Fixed release avoids the GitHub API rate limit (HTTP 403).
-          SDK_URL="https://github.com/Lameguy64/PSn00bSDK/releases/download/v0.24/PSn00bSDK-0.24-Linux.zip"
-          SDK_ARCHIVE="$RUNNER_TEMP/PSn00bSDK-0.24-Linux.zip"
-          SDK_DIR="$RUNNER_TEMP/psn00bsdk"
+          path = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+          code = path.read_text(encoding='utf-8')
 
-          echo "Downloading the same PSn00bSDK release used by V20..."
-          curl --fail --location --silent --show-error \
-            --retry 5 --retry-all-errors --retry-delay 3 \
-            --connect-timeout 20 \
-            "$SDK_URL" -o "$SDK_ARCHIVE"
+          def replace_one(old, new):
+              global code
+              count = code.count(old)
+              if count != 1:
+                  raise RuntimeError(f'V25 expected one code marker, found {count}: {old[:96]!r}')
+              code = code.replace(old, new, 1)
 
-          test -s "$SDK_ARCHIVE" || {
-            echo "::error::PSn00bSDK archive was not downloaded"
-            exit 1
+
+          def swap_function(name, replacement):
+              global code
+              # Unlike a naive brace parser, this uses the *next actual C function*
+              # declaration as boundary; comments with apostrophes are harmless.
+              pat = re.compile(r'(?m)^static void\s+' + re.escape(name) + r'\s*\([^;]*\)\s*\{')
+              matches = list(pat.finditer(code))
+              if len(matches) != 1:
+                  raise RuntimeError(f'V25 missing unique function {name}: {len(matches)}')
+              start = matches[0].start()
+              opening = code.index('{', matches[0].start(), matches[0].end())
+              depth = 0
+              mode = 'code'
+              i = opening
+              while i < len(code):
+                  ch = code[i]
+                  nxt = code[i + 1] if i + 1 < len(code) else ''
+                  if mode == 'line':
+                      if ch == '\n': mode = 'code'
+                  elif mode == 'block':
+                      if ch == '*' and nxt == '/':
+                          i += 1
+                          mode = 'code'
+                  elif mode in ('str', 'chr'):
+                      if ch == '\\':
+                          i += 1
+                      elif (mode == 'str' and ch == '"') or (mode == 'chr' and ch == "'"):
+                          mode = 'code'
+                  elif ch == '/' and nxt == '/':
+                      mode = 'line'
+                      i += 1
+                  elif ch == '/' and nxt == '*':
+                      mode = 'block'
+                      i += 1
+                  elif ch == '"':
+                      mode = 'str'
+                  elif ch == "'":
+                      mode = 'chr'
+                  elif ch == '{':
+                      depth += 1
+                  elif ch == '}':
+                      depth -= 1
+                      if depth == 0:
+                          code = code[:start] + replacement.strip() + code[i + 1:]
+                          return
+                  i += 1
+              raise RuntimeError('V25 did not find closing brace: ' + name)
+
+          replace_one('VOLT TRAIL V24.3 - %s', 'VOLT TRAIL V25 - %s')
+          replace_one('VOLT TRAIL V24.3 - MENUE', 'VOLT TRAIL V25 - MENUE')
+
+          renderer = r'''
+          /* V25: Frustum rejection, painter's ordering and gentle atmospheric fog.
+           * Uses the game's established PS1 GTE and 256-bucket ordering table.
+           * Never changes combat, menus, player coordinates or memory-card data. */
+          static void draw_triangle3(SVECTOR *v0, SVECTOR *v1, SVECTOR *v2,
+                                     int r, int g, int b) {
+              long depth, xy0, xy1, xy2;
+              int bucket;
+              int x0, y0, x1, y1, x2, y2;
+              int fade;
+              long cross;
+              unsigned int aligned;
+              POLY_F3 *poly;
+
+              if (v0->vz + CAMERA_Z < NEAR_Z ||
+                  v1->vz + CAMERA_Z < NEAR_Z ||
+                  v2->vz + CAMERA_Z < NEAR_Z) return;
+
+              gte_ldv3(v0, v1, v2);
+              gte_rtpt();
+              gte_avsz3();
+              gte_stotz(&depth);
+              bucket = (int)(depth >> 2);
+              if (bucket <= 0 || bucket >= OT_LEN) return;
+
+              /* Project before allocating any primitive: clipped objects cost no RAM. */
+              gte_stsxy0(&xy0);
+              gte_stsxy1(&xy1);
+              gte_stsxy2(&xy2);
+              x0 = (short)(xy0 & 65535L); y0 = (short)((xy0 >> 16) & 65535L);
+              x1 = (short)(xy1 & 65535L); y1 = (short)((xy1 >> 16) & 65535L);
+              x2 = (short)(xy2 & 65535L); y2 = (short)((xy2 >> 16) & 65535L);
+
+              if ((x0 < -16 && x1 < -16 && x2 < -16) ||
+                  (x0 > SCREEN_W + 16 && x1 > SCREEN_W + 16 && x2 > SCREEN_W + 16) ||
+                  (y0 < -16 && y1 < -16 && y2 < -16) ||
+                  (y0 > SCREEN_H + 16 && y1 > SCREEN_H + 16 && y2 > SCREEN_H + 16))
+                  return;
+
+              cross = (long)(x1 - x0) * (y2 - y0) - (long)(y1 - y0) * (x2 - x0);
+              if (cross > -3 && cross < 3) return;
+
+              /* Gentle distance haze blends far faces toward the blue sky. */
+              fade = bucket > 116 ? (bucket - 116) / 2 : 0;
+              if (fade > 65) fade = 65;
+              r = (r * (256 - fade) + 40 * fade) >> 8;
+              g = (g * (256 - fade) + 76 * fade) >> 8;
+              b = (b * (256 - fade) + 124 * fade) >> 8;
+              if (r > 255) r = 255;
+              if (g > 255) g = 255;
+              if (b > 255) b = 255;
+              if (r < 0) r = 0;
+              if (g < 0) g = 0;
+              if (b < 0) b = 0;
+
+              aligned = (prim_used + 3u) & ~3u;
+              if (aligned + sizeof(POLY_F3) > sizeof(prim_arena[db])) return;
+              poly = (POLY_F3 *)(prim_arena[db] + aligned);
+              prim_used = aligned + sizeof(POLY_F3);
+
+              setPolyF3(poly);
+              setRGB0(poly, r, g, b);
+              setXY3(poly, x0, y0, x1, y1, x2, y2);
+              addPrim(ot[db] + bucket, poly);
+          }
+          '''
+          swap_function('draw_triangle3', renderer)
+
+          ground = r'''
+          /* V25: stable world-coordinate color variation, streamed around the player. */
+          static void vt_v241_ground(void) {
+              int x, z;
+              int step = 110;
+              int base_x = px / step * step - 660;
+              int base_z = pz / step * step - 110;
+              int r = 48, g = 128, b = 65;
+              int variant;
+
+              if (px < 0 && px % step) base_x -= step;
+              if (pz < 0 && pz % step) base_z -= step;
+              if (region == 1) { r = 64; g = 114; b = 97; }
+              if (region == 2) { r = 83; g = 106; b = 77; }
+
+              for (z = base_z; z < base_z + 1100; z += step) {
+                  for (x = base_x; x < base_x + 1320; x += step) {
+                      SVECTOR v0 = {x - px, 35, z - pz, 0};
+                      SVECTOR v1 = {x + step - px, 35, z - pz, 0};
+                      SVECTOR v2 = {x - px, 35, z + step - pz, 0};
+                      SVECTOR v3 = {x + step - px, 35, z + step - pz, 0};
+                      unsigned int seed = (unsigned int)(x * 73 + z * 149 + region * 371);
+                      seed ^= seed >> 9;
+                      seed *= 1664525u;
+                      seed ^= seed >> 15;
+                      variant = (int)(seed & 15u) - 7;
+                      draw_triangle3(&v0, &v2, &v1,
+                                     r + variant, g + variant, b + variant / 2);
+                      draw_triangle3(&v1, &v2, &v3,
+                                     r - 5 + variant, g - 12 + variant, b - 6 + variant / 2);
+                  }
+              }
+          }
+          '''
+          swap_function('vt_v241_ground', ground)
+
+          details = r'''
+          /* V25: New original landmarks, color accents and walkable-looking scenery.
+           * Each detail is distance-culled so RAM/GTE load stays PS1-friendly. */
+          static void vt_v25_rock(int x, int z, int size, int tint) {
+              int r = tint ? 113 : 132;
+              int g = tint ? 151 : 137;
+              int b = tint ? 171 : 147;
+              if (!vt_v241_visible(x, z, 870)) return;
+              vt_v24_peak(x, z, size, size + 18, r, g, b);
+              vt_v24_peak(x + size / 2, z + size / 3, size / 2,
+                          size + 4, r + 17, g + 8, b + 10);
           }
 
-          rm -rf "$SDK_DIR"
-          mkdir -p "$SDK_DIR"
-          unzip -q "$SDK_ARCHIVE" -d "$SDK_DIR"
+          static void vt_v25_shrub(int x, int z, int seed) {
+              if (!vt_v241_visible(x, z, 720)) return;
+              vt_pyramid(x, 13, z, 11, 23,
+                         (seed & 1) ? 42 : 65,
+                         124 + ((seed >> 1) & 3) * 12, 55);
+              if ((seed & 3) == 0) {
+                  vt_pyramid(x + 9, 23, z - 8, 5, 11, 230, 193, 65);
+              }
+          }
 
-          SDK_CMAKE="$(find "$SDK_DIR" \
-            -type f -path '*/lib/libpsn00b/cmake/sdk.cmake' \
-            -print -quit)"
+          static void vt_v25_waterline(int z) {
+              int i;
+              if (!vt_v241_visible(0, z, 1000)) return;
+              /* River beside the elevated wooden road bridge in the Sonnental. */
+              vt_v241_flat(-770, z - 75, -130, z + 76, 33, 41, 131, 194);
+              vt_v241_flat(130, z - 75, 770, z + 76, 33, 38, 126, 192);
+              vt_v241_flat(-152, z - 92, -125, z + 92, 31, 114, 104, 74);
+              vt_v241_flat(125, z - 92, 152, z + 92, 31, 121, 111, 76);
+              for (i = 0; i < 5; i++) {
+                  int zz = z - 57 + i * 25;
+                  vt_v241_flat(-580 + i * 26, zz, -465 + i * 26,
+                               zz + 5, 32, 111, 178, 216);
+                  vt_v241_flat(315 + i * 18, zz, 420 + i * 18,
+                               zz + 5, 32, 105, 169, 209);
+              }
+          }
 
-          if [ -z "$SDK_CMAKE" ]; then
-            echo "::error::PSn00bSDK CMake toolchain missing"
-            exit 1
-          fi
+          static void vt_v25_landscape_detail(void) {
+              int i, z;
+              /* Alternate pines and shrubs along both sides of the old main road. */
+              for (i = -2; i < 18; i++) {
+                  z = i * 155 + 75;
+                  vt_v25_shrub(-185 - (i * 41 & 75), z + (i & 1) * 26, i + 30);
+                  vt_v25_shrub(185 + (i * 47 & 91), z - (i & 1) * 17, i + 31);
+              }
 
-          SDK_ROOT="${SDK_CMAKE%/lib/libpsn00b/cmake/sdk.cmake}"
-          SDK_COMPILER="$(find "$SDK_ROOT" \
-            -type f -name mipsel-none-elf-gcc -print -quit)"
-          SDK_ISO="$(find "$SDK_ROOT" \
-            -type f -name mkpsxiso -print -quit)"
-
-          if [ -z "$SDK_COMPILER" ] || [ -z "$SDK_ISO" ]; then
-            echo "::error::PS1 compiler or CD image builder missing"
-            exit 1
-          fi
-
-          chmod +x "$SDK_COMPILER" "$SDK_ISO"
-          printf 'PSN00BSDK_CMAKE=%s\n' "$SDK_CMAKE" >> "$GITHUB_ENV"
-          printf '%s\n' "$(dirname "$SDK_COMPILER")" >> "$GITHUB_PATH"
-          printf '%s\n' "$(dirname "$SDK_ISO")" >> "$GITHUB_PATH"
-
-          echo "PSn00bSDK 0.24 installed."
-          echo "CMake toolchain: $SDK_CMAKE"
-          echo "PS1 compiler: $SDK_COMPILER"
-
-      - name: Build Volt Trail V24.3
-        shell: bash
-        run: |
-          set -euxo pipefail
-          cmake \
-            -S "$PROJECT_DIR" \
-            -B "$GITHUB_WORKSPACE/build" \
-            -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE" \
-            -DCMAKE_BUILD_TYPE=Release
-          cmake --build "$GITHUB_WORKSPACE/build" --verbose
-
-      - name: Collect PS1 files
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/artifacts"
-          for file in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
-            SOURCE="$GITHUB_WORKSPACE/build/$file"
-            if [ ! -s "$SOURCE" ]; then
-              echo "::error::Missing PS1 file: $file"
-              exit 1
-            fi
-            cp "$SOURCE" "$GITHUB_WORKSPACE/artifacts/"
-          done
-          ls -lh "$GITHUB_WORKSPACE/artifacts"
-
-      - name: Upload Volt Trail V24.3
-        uses: actions/upload-artifact@v4
-        with:
-          name: VoltTrail-PS1-V24-3-Kampf-Grafik-Fix
-          path: artifacts/*
-          if-no-files-found: error
-          retention-days: 14
+              if (region == 0) {
+                  vt_v25_waterline(715);
+                  vt_v25_rock(-190, 690, 24, 0);
+                  vt_v25_rock(191, 735, 27, 0);
+                  vt_v25_rock(-600, 1030, 72, 1);
+                  vt_v25_rock(570, 1110, 68, 1);
+                  vt_v25_rock(-420, 290, 42, 0);
+                  vt_v25_rock(470, 430, 47, 0);
+                  /* Flowered meadow and stone gate around the far village lookout. */
+                  vt_v25_shrub(-110, 470, 12);
+                  vt_v25_shrub(235, 460, 24);
+              } else if (region == 1) {
+                  for (i = 0; i < 6; i++) {
+                      z = 210 + i * 245;
+                      vt_v25_rock(-390, z, 65 + (i & 1) * 18, 1);
+                      vt_v25_rock(410, z + 66, 69 + (i & 1) * 20, 1);
+                  }
+                  vt_v25_rock(-105, 870, 35, 1);
+                  vt_v25_rock(152, 1050, 39, 1);
+              } else {
+                  for (i = 0; i < 5; i++) {
+                      z = 240 + i * 210;
+                      vt_v25_rock(-520, z, 74, 0);
+                      vt_v25_rock(515, z + 60, 71, 0);
+                  }
+                  vt_v25_rock(-215, 655, 29, 0);
+                  vt_v25_rock(216, 660, 31, 0);
+              }
+          }
+          '''
+          replace_one('static void draw_hud(void) {'
