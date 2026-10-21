@@ -1,5 +1,5 @@
 
-name: Build Volt Trail PS1 V16 German Quests
+name: Build Volt Trail PS1 V17 Main Menu
 
 on:
   workflow_dispatch:
@@ -24,16 +24,16 @@ jobs:
             cmake ninja-build unzip curl jq tar \
             ffmpeg python3-pil python3-yaml
 
-      - name: Prepare stable V15 sources
+      - name: Prepare stable V16 project
         shell: bash
         run: |
           set -euo pipefail
 
-          V15_COMMIT="59eebc807fc3adbce97f7099c790b9c930f9a1c6"
+          V16_COMMIT="e8f3217c597c2694176c8d34657597f6df7ddd0b"
 
           curl --retry 3 -fsSL \
-            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$V15_COMMIT/.github/workflows/blank-ps1.yml" \
-            -o "$RUNNER_TEMP/v15-fixed.yml"
+            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$V16_COMMIT/.github/workflows/blank-ps1.yml" \
+            -o "$RUNNER_TEMP/v16.yml"
 
           python3 - <<'PY'
           import os
@@ -41,35 +41,31 @@ jobs:
           from pathlib import Path
           import yaml
 
-          path = Path(os.environ["RUNNER_TEMP"]) / "v15-fixed.yml"
+          path = Path(os.environ["RUNNER_TEMP"]) / "v16.yml"
           steps = yaml.safe_load(
-              path.read_text(encoding="utf-8")
+              path.read_text()
           )["jobs"]["build"]["steps"]
 
-          for wanted in [
-              "Load V15 source instructions",
-              "Prepare V14 project"
-          ]:
-              matches = [
-                  step for step in steps
-                  if step.get("name") == wanted
-              ]
+          matches = [
+              s for s in steps
+              if s.get("name") ==
+              "Prepare stable V15 sources"
+          ]
 
-              if len(matches) != 1:
-                  raise RuntimeError(
-                      "Required V15 step missing: " + wanted
-                  )
+          if len(matches) != 1:
+              raise RuntimeError("V16 setup missing")
 
-              print("Running:", wanted, flush=True)
-
-              subprocess.run(
-                  ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
-                  env=os.environ.copy(),
-                  check=True
-              )
+          subprocess.run(
+              [
+                  "bash", "-euo", "pipefail",
+                  "-c", matches[0]["run"]
+              ],
+              env=os.environ.copy(),
+              check=True
+          )
           PY
 
-      - name: Restore V15 game and intro
+      - name: Restore V16 gameplay and intro
         shell: bash
         run: |
           set -euo pipefail
@@ -80,40 +76,42 @@ jobs:
           from pathlib import Path
           import yaml
 
-          path = Path(os.environ["RUNNER_TEMP"]) / "v15-fixed.yml"
-          steps = yaml.safe_load(path.read_text())["jobs"]["build"]["steps"]
+          path = Path(os.environ["RUNNER_TEMP"]) / "v16.yml"
+          steps = yaml.safe_load(
+              path.read_text()
+          )["jobs"]["build"]["steps"]
 
-          for wanted in [
-              "Restore V14 game and intro",
-              "Add corrected V15 NPC world"
+          for name in [
+              "Restore V15 game and intro",
+              "Apply V16 German dialogue and quests"
           ]:
               matches = [
-                  step for step in steps
-                  if step.get("name") == wanted
+                  s for s in steps
+                  if s.get("name") == name
               ]
 
               if len(matches) != 1:
-                  raise RuntimeError("V15 step missing: " + wanted)
-
-              print("Restoring:", wanted, flush=True)
+                  raise RuntimeError("V16 step missing: " + name)
 
               subprocess.run(
-                  ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
+                  [
+                      "bash", "-euo", "pipefail",
+                      "-c", matches[0]["run"]
+                  ],
                   env=os.environ.copy(),
                   check=True
               )
 
-          print("Stable V15 source restored")
+          print("V16 gameplay restored")
           PY
 
-      - name: Apply V16 German dialogue and quests
+      - name: Add V17 menu controls and Memory Card
         shell: bash
         run: |
           set -euo pipefail
 
           python3 - <<'PY'
           import os
-          import re
           import textwrap
           from pathlib import Path
 
@@ -125,189 +123,485 @@ jobs:
               count = code.count(old)
               if count != 1:
                   raise RuntimeError(
-                      "V16 source marker mismatch: "
-                      + old[:70] + " matches=" + str(count)
+                      "V17 marker missing or duplicated: "
+                      + old[:70]
+                      + " count=" + str(count)
                   )
               code = code.replace(old, new, 1)
 
-          # Update the visible game version.
+          # Keep the original working game.
           replace_once(
-              "VOLT TRAIL V15 - %s",
-              "VOLT TRAIL V16 - %s"
+              "VOLT TRAIL V16 - %s",
+              "VOLT TRAIL V17 - %s"
           )
 
-          # Add quest and dialogue state.
           replace_once(
-              "static int vt_npc_dialog = -1;",
-              """
-          static int vt_npc_dialog = -1;
-          static int vt_npc_page = 0;
-          static int vt_walk_quest = 0;
-          static int vt_walk_quest_start = 0;
-          static int vt_moss_quest = 0;
-              """.strip()
+              '#include "volttrail_intro_data.h"',
+              '#include "volttrail_intro_data.h"\n'
+              '#include <stdint.h>\n'
+              '#include <string.h>\n'
+              '#include <sys/fcntl.h>'
           )
 
-          # Add two tasks and German dialogue pages.
-          quest_code = r'''
-          static void vt_begin_dialog(int npc) {
-              vt_npc_dialog = npc;
-              vt_npc_page = 0;
+          # Square becomes the fighting button.
+          replace_once(
+              "if ((pressed & PAD_CROSS) && step_count > 5)",
+              "if ((pressed & PAD_SQUARE) && step_count > 5)"
+          )
 
-              /* Quest 1: walk 40 steps. */
-              if (npc == 0) {
-                  if (vt_walk_quest == 0) {
-                      vt_walk_quest = 1;
-                      vt_walk_quest_start = step_count;
-                  } else if (
-                      vt_walk_quest == 1 &&
-                      step_count - vt_walk_quest_start >= 40
-                  ) {
-                      vt_walk_quest = 2;
-                      companion_level++;
-                      companion_hp = 24;
+          replace_once(
+              "if ((pressed & PAD_CROSS) && game_mode==1)",
+              "if ((pressed & PAD_SQUARE) && game_mode==1)"
+          )
 
-                      if (companion_level >= 8) {
-                          evolved = 1;
-                      }
-                  }
+          # Add a real, small item inventory.
+          # Capturing consumes one Fang-Kapsel.
+          replace_once(
+              "if ((pressed & PAD_CIRCLE) && game_mode==1) {",
+              "if ((pressed & PAD_CIRCLE) && "
+              "game_mode==1 && vt_capture_items > 0) {\n"
+              "                vt_capture_items--;"
+          )
+
+          game_system = r'''
+          /*
+           * V17 MENU, INVENTORY AND MEMORY CARD
+           * One save slot in Memory Card port 1.
+           */
+
+          #define VT_SAVE_FILE "bu00:BESLES-00000VTRAIL"
+          #define VT_SAVE_BYTES 8192
+          #define VT_SAVE_MAGIC 0x56543137u
+
+          static int vt_capture_items = 12;
+          static int vt_potions = 2;
+
+          static int vt_menu_open = 0;
+          static int vt_menu_page = 0;
+          static int vt_menu_choice = 0;
+          static const char *vt_menu_message = "";
+
+          static uint8_t vt_save_block[VT_SAVE_BYTES]
+              __attribute__((aligned(4)));
+
+          static uint32_t vt_save_checksum(
+              const uint32_t *words
+          ) {
+              uint32_t hash = 2166136261u;
+              int i;
+
+              for (i = 0; i < 18; i++) {
+                  hash ^= words[i];
+                  hash *= 16777619u;
               }
 
-              /* Quest 2: catch a Mosslet. */
-              if (npc == 1) {
-                  if (vt_moss_quest == 0) {
-                      vt_moss_quest = 1;
-                  } else if (
-                      vt_moss_quest == 1 &&
-                      caught_mosslet > 0
-                  ) {
-                      vt_moss_quest = 2;
-                      companion_hp = 24;
-                  }
-              }
+              return hash;
           }
 
-          static const char *vt_dialog_text(
-              int npc, int page
-          ) {
-              if (npc == 0) {
-                  if (vt_walk_quest == 2) {
-                      if (page == 0)
-                          return "FUEHRER: GUT GEMACHT!";
-                      if (page == 1)
-                          return "SPARKIT ERHAELT EIN LEVEL!";
-                      return "AUFGABE ABGESCHLOSSEN.";
-                  }
+          static void vt_prepare_save(void) {
+              uint32_t *words;
+              uint16_t *palette;
+              int i;
 
-                  if (page == 0)
-                      return "FUEHRER: LAUFE 40 SCHRITTE.";
-                  if (page == 1)
-                      return "KOMM DANN ZU MIR ZURUECK.";
-                  return "BELOHNUNG: SPARKIT +1 LEVEL.";
+              memset(
+                  vt_save_block, 0,
+                  sizeof(vt_save_block)
+              );
+
+              /* PlayStation Memory Card file header. */
+              vt_save_block[0] = 'S';
+              vt_save_block[1] = 'C';
+              vt_save_block[2] = 0x11;
+              vt_save_block[3] = 0;
+
+              memcpy(
+                  vt_save_block + 4,
+                  "VOLT TRAIL V17", 14
+              );
+
+              /* Simple static Memory Card icon. */
+              palette = (uint16_t *)
+                  (vt_save_block + 96);
+
+              palette[1] = 0xfc00;
+              palette[2] = 0x83ff;
+
+              for (i = 0; i < 128; i++) {
+                  vt_save_block[128 + i] =
+                      (i & 1) ? 0x22 : 0x11;
               }
 
-              if (npc == 1) {
-                  if (vt_moss_quest == 2) {
-                      if (page == 0)
-                          return "BEWOHNER: TOLL GEMACHT!";
-                      if (page == 1)
-                          return "DEIN TEAM WURDE GEHEILT!";
-                      return "DANKE FUER DEINE HILFE!";
-                  }
+              /* Game data, outside the icon header. */
+              words = (uint32_t *)
+                  (vt_save_block + 512);
 
-                  if (page == 0)
-                      return "BEWOHNER: FANGE EIN MOSSLET!";
-                  if (page == 1)
-                      return "BRING ES ZU MIR ZURUECK.";
-                  return "BELOHNUNG: VOLLE LEBENSPUNKTE.";
+              words[0] = VT_SAVE_MAGIC;
+              words[1] = 17;
+              words[2] = (uint32_t)px;
+              words[3] = (uint32_t)pz;
+              words[4] = (uint32_t)companion_level;
+              words[5] = (uint32_t)companion_hp;
+              words[6] = (uint32_t)step_count;
+              words[7] = (uint32_t)caught_mosslet;
+              words[8] = (uint32_t)badges;
+              words[9] = (uint32_t)trainer_wins;
+              words[10] = (uint32_t)evolved;
+              words[11] = (uint32_t)region;
+              words[12] = (uint32_t)vt_walk_quest;
+              words[13] = (uint32_t)vt_walk_quest_start;
+              words[14] = (uint32_t)vt_moss_quest;
+              words[15] = (uint32_t)encounter;
+              words[16] = (uint32_t)vt_capture_items;
+              words[17] = (uint32_t)vt_potions;
+              words[18] = vt_save_checksum(words);
+          }
+
+          static int vt_save_game(void) {
+              int fd;
+              int written;
+
+              vt_prepare_save();
+
+              fd = open(
+                  VT_SAVE_FILE, FWRITE
+              );
+
+              if (fd < 0) {
+                  fd = open(
+                      VT_SAVE_FILE,
+                      FWRITE | FCREATE | FNBLOCKS(1)
+                  );
               }
 
-              if (npc == 2) {
-                  if (page == 0)
-                      return "FORSCHER: HALLO, ENTDECKER!";
-                  if (page == 1)
-                      return "HIER GIBT ES KRISTALLE.";
-                  return "SEI VORSICHTIG IM GEBIRGE!";
+              if (fd < 0) {
+                  return 0;
               }
 
-              if (npc == 3) {
-                  if (badges > 0) {
-                      if (page == 0)
-                          return "WAECHTER: GLUECKWUNSCH!";
-                      if (page == 1)
-                          return "DU HAST DEN ORDEN!";
-                      return "DIE ARENA KENNT DEINEN MUT.";
-                  }
+              written = write(
+                  fd, vt_save_block, VT_SAVE_BYTES
+              );
 
-                  if (page == 0)
-                      return "WAECHTER: WILLKOMMEN!";
-                  if (page == 1)
-                      return "DIE ARENA WARTET AUF DICH.";
-                  return "BESIEGE DEN ARENA-ANFUEHRER!";
+              close(fd);
+
+              return written == VT_SAVE_BYTES;
+          }
+
+          /*
+           *  1: successfully loaded
+           *  0: file unavailable/read failed
+           * -1: invalid saved data
+           */
+          static int vt_load_game(void) {
+              int fd;
+              int bytes;
+              uint32_t *w;
+
+              fd = open(VT_SAVE_FILE, FREAD);
+
+              if (fd < 0) {
+                  return 0;
               }
 
-              return "HALLO, REISENDER!";
+              bytes = read(
+                  fd, vt_save_block, VT_SAVE_BYTES
+              );
+
+              close(fd);
+
+              if (bytes != VT_SAVE_BYTES) {
+                  return 0;
+              }
+
+              w = (uint32_t *)(vt_save_block + 512);
+
+              if (
+                  vt_save_block[0] != 'S' ||
+                  vt_save_block[1] != 'C' ||
+                  w[0] != VT_SAVE_MAGIC ||
+                  w[1] != 17 ||
+                  w[18] != vt_save_checksum(w)
+              ) {
+                  return -1;
+              }
+
+              /* Validate values before using them. */
+              if (
+                  (int32_t)w[2] < -500 ||
+                  (int32_t)w[2] > 500 ||
+                  (int32_t)w[3] < -500 ||
+                  (int32_t)w[3] > 500 ||
+                  w[4] < 1 || w[4] > 99 ||
+                  w[5] > 24 ||
+                  w[6] > 10000000u ||
+                  w[7] > 1 ||
+                  w[8] > 1 ||
+                  w[9] > 10000u ||
+                  w[10] > 1 ||
+                  w[11] > 2 ||
+                  w[12] > 2 ||
+                  w[13] > w[6] ||
+                  w[14] > 2 ||
+                  w[15] > 10000000u ||
+                  w[16] > 99 ||
+                  w[17] > 99
+              ) {
+                  return -1;
+              }
+
+              px = (int32_t)w[2];
+              pz = (int32_t)w[3];
+              companion_level = (int)w[4];
+              companion_hp = (int)w[5];
+              step_count = (int)w[6];
+              caught_mosslet = (int)w[7];
+              badges = (int)w[8];
+              trainer_wins = (int)w[9];
+              evolved = (int)w[10];
+              region = (int)w[11];
+
+              vt_walk_quest = (int)w[12];
+              vt_walk_quest_start = (int)w[13];
+              vt_moss_quest = (int)w[14];
+              encounter = (int)w[15];
+
+              vt_capture_items = (int)w[16];
+              vt_potions = (int)w[17];
+
+              /* Continue in exploration mode. */
+              game_mode = 0;
+              vt_npc_dialog = -1;
+              vt_npc_page = 0;
+              vt_npc_near = -1;
+
+              encounter_kind = 0;
+              wild_hp = 16;
+              enemy_level = 3;
+              enemy_max_hp = 16;
+              enemy_turn = 0;
+              capture_attempts = 3;
+              action_flash = 0;
+
+              return 1;
+          }
+
+          static void vt_use_potion(void) {
+              if (vt_potions <= 0) {
+                  vt_menu_message =
+                      "KEIN HEILTRANK VORHANDEN";
+                  return;
+              }
+
+              if (companion_hp >= 24) {
+                  vt_menu_message =
+                      "SPARKIT IST BEREITS FIT";
+                  return;
+              }
+
+              vt_potions--;
+
+              companion_hp += 10;
+
+              if (companion_hp > 24) {
+                  companion_hp = 24;
+              }
+
+              vt_menu_message = "SPARKIT GEHEILT!";
+          }
+
+          static void vt_draw_menu_panel(void) {
+              TILE *panel;
+              unsigned int aligned;
+
+              if (!vt_menu_open) {
+                  return;
+              }
+
+              aligned = (prim_used + 3u) & ~3u;
+
+              if (
+                  aligned + sizeof(TILE) >
+                  sizeof(prim_arena[db])
+              ) {
+                  return;
+              }
+
+              panel = (TILE *)
+                  (prim_arena[db] + aligned);
+
+              prim_used = aligned + sizeof(TILE);
+
+              setTile(panel);
+              setXY0(panel, 8, 67);
+              setWH(panel, 304, 168);
+              setRGB0(panel, 18, 29, 62);
+
+              addPrim(ot[db], panel);
           }
           '''
 
           replace_once(
-              "static void vt_npc_model(",
-              quest_code + "\nstatic void vt_npc_model("
+              "static void draw_hud(void) {",
+              game_system +
+              "\nstatic void draw_hud(void) {"
           )
 
-          # Replace the previous one-page dialogue controls.
+          # Show the main menu and its submenus.
+          menu_hud = r'''
+              if (vt_menu_open) {
+                  FntPrint(
+                      0, "VOLT TRAIL V17 - MENUE\n\n"
+                  );
+                  FntPrint(
+                      0, "SPARKIT L%d HP %d/24\n\n",
+                      companion_level, companion_hp
+                  );
+                  FntPrint(
+                      0, "ORDEN %d/1 TEAM %d\n",
+                      badges, 1 + caught_mosslet
+                  );
+
+                  if (vt_menu_page == 0) {
+                      FntPrint(
+                          2, "HAUPTMENUE\n\n"
+                      );
+                      FntPrint(
+                          2, "%c MONSTER\n",
+                          vt_menu_choice == 0 ? '>' : ' '
+                      );
+                      FntPrint(
+                          2, "%c ITEMS\n",
+                          vt_menu_choice == 1 ? '>' : ' '
+                      );
+                      FntPrint(
+                          2, "%c SPEICHERN\n",
+                          vt_menu_choice == 2 ? '>' : ' '
+                      );
+                      FntPrint(
+                          2, "%c LADEN\n",
+                          vt_menu_choice == 3 ? '>' : ' '
+                      );
+                      FntPrint(
+                          2, "\nX WAHL / DREIECK ZURUECK\n"
+                      );
+
+                  } else if (vt_menu_page == 1) {
+                      FntPrint(
+                          2, "MEINE MONSTER\n\n"
+                      );
+                      FntPrint(
+                          2, "%s L%d HP %d/24\n",
+                          evolved ? "VOLTIGON" : "SPARKIT",
+                          companion_level,
+                          companion_hp
+                      );
+                      FntPrint(
+                          2, "MOSSLET: %s\n",
+                          caught_mosslet ?
+                          "GEFANGEN" : "NOCH NICHT GEFANGEN"
+                      );
+                      FntPrint(
+                          2, "TEAM: %d MONSTER\n",
+                          1 + caught_mosslet
+                      );
+                      FntPrint(
+                          2, "\nDREIECK ZURUECK\n"
+                      );
+
+                  } else if (vt_menu_page == 2) {
+                      FntPrint(
+                          2, "MEINE ITEMS\n\n"
+                      );
+                      FntPrint(
+                          2, "FANGKAPSELN: %d\n",
+                          vt_capture_items
+                      );
+                      FntPrint(
+                          2, "HEILTRANK: %d\n",
+                          vt_potions
+                      );
+                      FntPrint(
+                          2, "X: HEILTRANK NUTZEN\n"
+                      );
+                      FntPrint(
+                          2, "%s\n",
+                          vt_menu_message
+                      );
+                      FntPrint(
+                          2, "DREIECK ZURUECK\n"
+                      );
+
+                  } else {
+                      FntPrint(
+                          2, "SPEICHERSTATUS\n\n"
+                      );
+                      FntPrint(
+                          2, "%s\n\n",
+                          vt_menu_message
+                      );
+                      FntPrint(
+                          2, "DREIECK ZURUECK\n"
+                      );
+                  }
+
+                  FntFlush(0);
+                  FntFlush(2);
+                  return;
+              }
+          '''
+
+          replace_once(
+              "static void draw_hud(void) {",
+              "static void draw_hud(void) {\n" +
+              menu_hud
+          )
+
+          # Change NPC controls so X opens a dialogue,
+          # X advances and Triangle closes it.
           begin_key = "vt_npc_near = vt_find_npc();"
           end_key = "if (action_flash > 0) action_flash--;"
 
           if code.count(begin_key) != 1:
-              raise RuntimeError("NPC controls not found")
+              raise RuntimeError("NPC input marker missing")
 
-          position = code.index(begin_key)
-          start = code.rfind("\n", 0, position) + 1
+          pos = code.index(begin_key)
+          begin = code.rfind("\n", 0, pos) + 1
 
-          stop = code.find(end_key, position)
-          if stop < 0:
-              raise RuntimeError("Controller boundary missing")
+          stop_pos = code.find(end_key, pos)
 
-          stop = code.rfind("\n", 0, stop) + 1
+          if stop_pos < 0:
+              raise RuntimeError("Game input boundary missing")
 
-          controls = r'''
+          end = code.rfind("\n", 0, stop_pos) + 1
+
+          npc_controls = r'''
           vt_npc_near = vt_find_npc();
 
-          /* Close conversations during battles. */
           if (game_mode != 0) {
               vt_npc_dialog = -1;
               vt_npc_page = 0;
           }
 
-          /* Reset quest progress when starting over. */
-          if (pressed & PAD_START) {
-              vt_npc_dialog = -1;
-              vt_npc_page = 0;
-              vt_walk_quest = 0;
-              vt_moss_quest = 0;
-              vt_walk_quest_start = 0;
-          }
-
-          /* Triangle opens or closes conversations. */
+          /* X interacts with nearby characters. */
           if (
               game_mode == 0 &&
-              (pressed & PAD_TRIANGLE)
+              vt_npc_dialog < 0 &&
+              vt_npc_near >= 0 &&
+              (pressed & PAD_CROSS)
           ) {
-              if (vt_npc_dialog >= 0) {
-                  vt_npc_dialog = -1;
-                  vt_npc_page = 0;
-              } else if (vt_npc_near >= 0) {
-                  vt_begin_dialog(vt_npc_near);
-              }
+              vt_begin_dialog(vt_npc_near);
+              pressed &= ~PAD_CROSS;
           }
 
-          /* X advances to the next dialogue page. */
           if (
               game_mode == 0 &&
               vt_npc_dialog >= 0
           ) {
-              if (pressed & PAD_CROSS) {
+              /* Triangle cancels the conversation. */
+              if (pressed & PAD_TRIANGLE) {
+                  vt_npc_dialog = -1;
+                  vt_npc_page = 0;
+                  pressed &= ~PAD_TRIANGLE;
+              } else if (pressed & PAD_CROSS) {
                   vt_npc_page++;
 
                   if (vt_npc_page >= 3) {
@@ -315,13 +609,9 @@ jobs:
                       vt_npc_page = 0;
                   }
 
-                  /* Never start a battle with the
-                     same press used for dialogue. */
                   pressed &= ~PAD_CROSS;
               }
 
-              /* Keep the player in place while
-                 an NPC dialogue is open. */
               if (vt_npc_dialog >= 0) {
                   pad &= ~(
                       PAD_LEFT | PAD_RIGHT |
@@ -331,132 +621,206 @@ jobs:
           }
           '''
 
-          controls = textwrap.indent(
-              textwrap.dedent(controls).strip("\n"),
+          npc_controls = textwrap.indent(
+              textwrap.dedent(npc_controls).strip(),
               "        "
           ) + "\n\n"
 
-          code = code[:start] + controls + code[stop:]
-
-          # Locate the exploration HUD by C syntax
-          # instead of fragile exact indentation.
-          hud_marker = "static void draw_hud(void) {"
-          hud = code.find(hud_marker)
-
-          if hud < 0:
-              raise RuntimeError("HUD function missing")
-
-          first = re.search(
-              r"(?m)^[ \t]*if[ \t]*\("
-              r"[ \t]*game_mode[ \t]*==[ \t]*0"
-              r"[ \t]*\)[ \t]*\{",
-              code[hud:]
+          code = (
+              code[:begin] +
+              npc_controls +
+              code[end:]
           )
 
-          if first is None:
-              raise RuntimeError("Exploration HUD missing")
+          # Process menu input BEFORE game input.
+          menu_controls = r'''
+          {
+              int menu_consumed = 0;
 
-          first_pos = hud + first.start()
+              if (pressed & PAD_START) {
+                  menu_consumed = 1;
 
-          second = re.search(
-              r"(?m)^[ \t]*\}[ \t]*else"
-              r"[ \t]+if[ \t]*\("
-              r"[ \t]*game_mode[ \t]*==[ \t]*1"
-              r"[ \t]*\)[ \t]*\{",
-              code[first_pos:]
-          )
-
-          if second is None:
-              raise RuntimeError("Battle HUD boundary missing")
-
-          second_pos = first_pos + second.start()
-
-          german_hud = r'''
-              if (game_mode == 0) {
-                  if (vt_npc_dialog >= 0) {
-                      FntPrint(
-                          1, "%s\n\n",
-                          vt_dialog_text(
-                              vt_npc_dialog, vt_npc_page
-                          )
-                      );
-
-                      FntPrint(
-                          1, "X WEITER / DREIECK ENDE\n"
-                      );
-
-                  } else if (vt_npc_near >= 0) {
-                      FntPrint(
-                          1, "DREIECK SPRECHEN\n\n"
-                      );
-
-                      FntPrint(
-                          1, "X KAMPF / D-PAD GEHEN\n"
-                      );
-
+                  if (vt_menu_open) {
+                      vt_menu_open = 0;
+                      vt_menu_page = 0;
                   } else {
-                      FntPrint(
-                          1, "D-PAD GEHEN X KAMPF\n\n"
-                      );
-
-                      FntPrint(
-                          1, "DREIECK REDEN START RESET\n"
-                      );
+                      vt_menu_open = 1;
+                      vt_menu_page = 0;
+                      vt_menu_choice = 0;
+                      vt_menu_message = "";
                   }
+              }
+
+              if (vt_menu_open) {
+                  menu_consumed = 1;
+
+                  if (pressed & PAD_TRIANGLE) {
+                      if (vt_menu_page != 0) {
+                          vt_menu_page = 0;
+                          vt_menu_message = "";
+                      } else {
+                          vt_menu_open = 0;
+                      }
+                  } else if (vt_menu_page == 0) {
+                      if (pressed & PAD_UP) {
+                          vt_menu_choice--;
+                          if (vt_menu_choice < 0) {
+                              vt_menu_choice = 3;
+                          }
+                      }
+
+                      if (pressed & PAD_DOWN) {
+                          vt_menu_choice++;
+                          if (vt_menu_choice > 3) {
+                              vt_menu_choice = 0;
+                          }
+                      }
+
+                      if (pressed & PAD_CROSS) {
+                          if (vt_menu_choice == 0) {
+                              vt_menu_page = 1;
+
+                          } else if (
+                              vt_menu_choice == 1
+                          ) {
+                              vt_menu_page = 2;
+                              vt_menu_message = "";
+
+                          } else if (
+                              vt_menu_choice == 2
+                          ) {
+                              vt_menu_page = 3;
+
+                              if (
+                                  game_mode != 0 ||
+                                  vt_npc_dialog >= 0
+                              ) {
+                                  vt_menu_message =
+                                      "NUR IM FELD SPEICHERN";
+                              } else if (vt_save_game()) {
+                                  vt_menu_message =
+                                      "SPIELSTAND GESPEICHERT";
+                              } else {
+                                  vt_menu_message =
+                                      "SPEICHERN FEHLGESCHLAGEN";
+                              }
+
+                          } else {
+                              int result = vt_load_game();
+                              vt_menu_page = 3;
+
+                              if (result == 1) {
+                                  vt_menu_message =
+                                      "SPIELSTAND GELADEN";
+                              } else if (result == -1) {
+                                  vt_menu_message =
+                                      "DATEI UNGUELTIG";
+                              } else {
+                                  vt_menu_message =
+                                      "KEIN SPIELSTAND";
+                              }
+                          }
+                      }
+
+                  } else if (
+                      vt_menu_page == 2 &&
+                      (pressed & PAD_CROSS)
+                  ) {
+                      vt_use_potion();
+                  }
+              }
+
+              /* Never send menu keys into
+                 movement or the battle system. */
+              if (menu_consumed) {
+                  pressed = 0;
+                  pad = 0;
+              }
+          }
           '''
 
-          code = (
-              code[:first_pos]
-              + german_hud
-              + code[second_pos:]
+          menu_controls = textwrap.indent(
+              textwrap.dedent(menu_controls).strip(),
+              "        "
+          ) + "\n\n"
+
+          replace_once(
+              "        previous_pad = pad;",
+              "        previous_pad = pad;\n\n" +
+              menu_controls.rstrip()
           )
 
-          # Translate additional visible HUD labels.
+          # Third text stream for the large menu.
+          replace_once(
+              "    FntOpen(8, 194, 304, 42, 0, 128);",
+              "    FntOpen(8, 194, 304, 42, 0, 128);\n"
+              "    FntOpen(18, 75, 284, 155, 0, 512);"
+          )
+
+          # Initialize Memory Card slot 1.
+          replace_once(
+              "    StartPAD();",
+              "    StartPAD();\n"
+              "    InitCARD(0);\n"
+              "    StartCARD();\n"
+              "    _bu_init();"
+          )
+
+          # Draw the menu panel with the 3D scene.
+          replace_once(
+              "        vt_draw_panels();",
+              "        vt_draw_panels();\n"
+              "        vt_draw_menu_panel();"
+          )
+
+          # German interface reflecting new controls.
           translations = {
-              "BADGE %d/1 TEAM %d STEPS %d":
-                  "ORDEN %d/1 TEAM %d SCHR %d",
-              "X ATTACK O CATCH (%d)":
-                  "X ANGRIFF O FANGEN (%d)",
-              "VICTORY! X CONTINUE":
-                  "SIEG! X WEITER",
-              "TEAM GETS STRONGER":
-                  "TEAM WIRD STAERKER",
-              "SPARKIT NEEDS REST":
-                  "SPARKIT BRAUCHT RUHE",
-              "X RECOVER":
-                  "X HEILEN"
+              "D-PAD GEHEN X KAMPF":
+                  "VIERECK KAMPF X AKTION",
+              "X KAMPF / D-PAD GEHEN":
+                  "VIERECK KAMPF D-PAD GEHEN",
+              "DREIECK SPRECHEN":
+                  "X SPRECHEN",
+              "DREIECK REDEN START RESET":
+                  "START MENUE D-PAD GEHEN",
+              "X ANGRIFF O FANGEN (%d)":
+                  "VIERECK HIEB O FANGEN (%d)"
           }
 
           for old, new in translations.items():
               code = code.replace(old, new)
 
-          # Validate the preserved PS1 systems.
           required = [
-              "VOLT TRAIL V16",
-              "vt_play_intro();",
-              "vt_player(px, pz + 73);",
-              "vt_sparkit(",
-              "vt_mosslet(",
-              "vt_begin_dialog(",
-              "vt_dialog_text(",
+              "VOLT TRAIL V17",
+              "vt_menu_open",
+              "vt_menu_choice",
+              "vt_draw_menu_panel();",
+              "vt_save_game(void)",
+              "vt_load_game(void)",
+              "PAD_SQUARE",
+              "PAD_CIRCLE",
               "PAD_TRIANGLE",
-              "FntFlush(0);",
-              "FntFlush(1);"
+              "PAD_START",
+              "InitCARD(0);",
+              "FntFlush(2);",
+              "vt_play_intro();"
           ]
 
           for marker in required:
               if marker not in code:
                   raise RuntimeError(
-                      "Missing V16 feature: " + marker
+                      "V17 feature missing: " + marker
                   )
 
           path.write_text(code, encoding="utf-8")
 
-          print("Volt Trail V16 source ready")
-          print("German multi-page dialogues added")
-          print("Walking quest and reward added")
-          print("Mosslet capture quest and reward added")
-          print("V15 intro, 3D world and combat preserved")
+          print("Volt Trail V17 source prepared")
+          print("X = interact, Square = attack")
+          print("Circle = capture, Triangle = back")
+          print("START = four-option main menu")
+          print("Monster and item views added")
+          print("Memory Card save and load added")
+          print("Original V16 intro and quests kept")
           PY
 
       - name: Install PSn00bSDK
@@ -470,25 +834,30 @@ jobs:
           from pathlib import Path
           import yaml
 
-          path = Path(os.environ["RUNNER_TEMP"]) / "v15-fixed.yml"
-          steps = yaml.safe_load(path.read_text())["jobs"]["build"]["steps"]
+          path = Path(os.environ["RUNNER_TEMP"]) / "v16.yml"
+          steps = yaml.safe_load(
+              path.read_text()
+          )["jobs"]["build"]["steps"]
 
           matches = [
-              step for step in steps
-              if step.get("name") == "Install PSn00bSDK"
+              s for s in steps
+              if s.get("name") == "Install PSn00bSDK"
           ]
 
           if len(matches) != 1:
-              raise RuntimeError("PSn00bSDK setup missing")
+              raise RuntimeError("V16 SDK step missing")
 
           subprocess.run(
-              ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
+              [
+                  "bash", "-euo", "pipefail",
+                  "-c", matches[0]["run"]
+              ],
               env=os.environ.copy(),
               check=True
           )
           PY
 
-      - name: Build Volt Trail V16
+      - name: Build Volt Trail V17
         shell: bash
         run: |
           set -euxo pipefail
@@ -500,12 +869,15 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE" \
             -DCMAKE_BUILD_TYPE=Release
 
-          cmake --build "$GITHUB_WORKSPACE/build" --verbose
+          cmake --build \
+            "$GITHUB_WORKSPACE/build" \
+            --verbose
 
-      - name: Collect PS1 files
+      - name: Collect game files
         shell: bash
         run: |
           set -euo pipefail
+
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
 
           for file in \
@@ -515,7 +887,7 @@ jobs:
             SOURCE="$GITHUB_WORKSPACE/build/$file"
 
             if [ ! -s "$SOURCE" ]; then
-              echo "::error::Missing file: $file"
+              echo "::error::Missing game file: $file"
               exit 1
             fi
 
@@ -524,10 +896,10 @@ jobs:
 
           ls -lh "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Volt Trail V16
+      - name: Upload V17 game
         uses: actions/upload-artifact@v4
         with:
-          name: VoltTrail-PS1-V16-German-Quests
+          name: VoltTrail-PS1-V17-Main-Menu
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
