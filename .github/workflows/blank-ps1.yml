@@ -1,4 +1,4 @@
-name: Build Volt Trail PS1 V21 Dragon Team Codex
+name: Build Volt Trail PS1 V21 Dragon Team SDK Fix
 
 on:
   workflow_dispatch:
@@ -1277,12 +1277,59 @@ jobs:
           print('V21: extra captured dragons remain in codex and can replace bench')
           PY
 
-      - name: Install PSn00bSDK
+      - name: Install PSn00bSDK 0.24 directly
         shell: bash
         run: |
           set -euo pipefail
-          python3 "$RUNNER_TEMP/run_previous_step.py" \
-            "Install PSn00bSDK"
+
+          # Fixed release avoids the GitHub API rate limit (HTTP 403).
+          SDK_URL="https://github.com/Lameguy64/PSn00bSDK/releases/download/v0.24/PSn00bSDK-0.24-Linux.zip"
+          SDK_ARCHIVE="$RUNNER_TEMP/PSn00bSDK-0.24-Linux.zip"
+          SDK_DIR="$RUNNER_TEMP/psn00bsdk"
+
+          echo "Downloading the same PSn00bSDK release used by V20..."
+          curl --fail --location --silent --show-error \
+            --retry 5 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 20 \
+            "$SDK_URL" -o "$SDK_ARCHIVE"
+
+          test -s "$SDK_ARCHIVE" || {
+            echo "::error::PSn00bSDK archive was not downloaded"
+            exit 1
+          }
+
+          rm -rf "$SDK_DIR"
+          mkdir -p "$SDK_DIR"
+          unzip -q "$SDK_ARCHIVE" -d "$SDK_DIR"
+
+          SDK_CMAKE="$(find "$SDK_DIR" \
+            -type f -path '*/lib/libpsn00b/cmake/sdk.cmake' \
+            -print -quit)"
+
+          if [ -z "$SDK_CMAKE" ]; then
+            echo "::error::PSn00bSDK CMake toolchain missing"
+            exit 1
+          fi
+
+          SDK_ROOT="${SDK_CMAKE%/lib/libpsn00b/cmake/sdk.cmake}"
+          SDK_COMPILER="$(find "$SDK_ROOT" \
+            -type f -name mipsel-none-elf-gcc -print -quit)"
+          SDK_ISO="$(find "$SDK_ROOT" \
+            -type f -name mkpsxiso -print -quit)"
+
+          if [ -z "$SDK_COMPILER" ] || [ -z "$SDK_ISO" ]; then
+            echo "::error::PS1 compiler or CD image builder missing"
+            exit 1
+          fi
+
+          chmod +x "$SDK_COMPILER" "$SDK_ISO"
+          printf 'PSN00BSDK_CMAKE=%s\n' "$SDK_CMAKE" >> "$GITHUB_ENV"
+          printf '%s\n' "$(dirname "$SDK_COMPILER")" >> "$GITHUB_PATH"
+          printf '%s\n' "$(dirname "$SDK_ISO")" >> "$GITHUB_PATH"
+
+          echo "PSn00bSDK 0.24 installed."
+          echo "CMake toolchain: $SDK_CMAKE"
+          echo "PS1 compiler: $SDK_COMPILER"
 
       - name: Build Volt Trail V21
         shell: bash
