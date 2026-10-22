@@ -1,8 +1,8 @@
 # Eigenstaendiger GitHub Actions Workflow. Noch kein PS1-Spiel/ROM!
-# Als .github/workflows/lydra-v29-1.yml hochladen und Actions starten.
+# Als .github/workflows/lydra-v29-3.yml hochladen und Actions starten.
 # V27, V28.2, V29 und vorhandene Memory Cards bleiben unveraendert.
 
-name: Lydra World Of Dragon V29.2 – Vollbild, Kompass und Optionen
+name: Lydra World Of Dragon V29.3 – Kamera- und Bewegungssteuerung
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Lydra V29.1 mit Optionen (Build fuer PlayStation 1)
+    name: Lydra V29.3 Kamera und Bewegung (PlayStation 1)
     runs-on: ubuntu-latest
     steps:
       - name: Projekt laden
@@ -1813,13 +1813,214 @@ jobs:
           PY
           python3 "$RUNNER_TEMP/lydra_v292_patch.py"
 
+      - name: V29.3 Kameraschwenk und Laufrichtung reparieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/lydra_v293_steuerung_patch.py" <<'PY'
+          #!/usr/bin/env python3
+          """V29.3: Camera-relative forward/backward, turn-only L/R, direction-facing hero.
+          
+          Applied after all previous V29.2 build steps and before PSn00bSDK build.
+          """
+          import math
+          import os
+          import re
+          from pathlib import Path
+          
+          source = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+          s = source.read_text(encoding='utf-8')
+          
+          
+          def function_span(name):
+              pat = r'\bstatic\s+void\s+' + re.escape(name) + r'\s*\([^;]*?\)\s*\{'
+              matches = list(re.finditer(pat, s, re.S))
+              if len(matches) != 1:
+                  raise RuntimeError('V29.3: function ' + name + ' was found ' + str(len(matches)) + ' times')
+              m = matches[0]
+              i, depth, state = m.end(), 1, 'code'
+              while i < len(s) and depth:
+                  ch = s[i]
+                  nex = s[i + 1] if i + 1 < len(s) else ''
+                  if state == 'code':
+                      if ch == '/' and nex == '/': state = 'line'; i += 1
+                      elif ch == '/' and nex == '*': state = 'block'; i += 1
+                      elif ch == '"': state = 'string'
+                      elif ch == "'": state = 'char'
+                      elif ch == '{': depth += 1
+                      elif ch == '}': depth -= 1
+                  elif state == 'line':
+                      if ch == '\n': state = 'code'
+                  elif state == 'block':
+                      if ch == '*' and nex == '/': state = 'code'; i += 1
+                  else:
+                      if ch == '\\': i += 1
+                      elif (state == 'string' and ch == '"') or (state == 'char' and ch == "'"):
+                          state = 'code'
+                  i += 1
+              if depth: raise RuntimeError('V29.3: Unclosed C function ' + name)
+              return m.start(), m.end(), i - 1, i
+          
+          
+          # 64-sample fixed-point sine table, avoids float/fpu and new SDK dependencies.
+          vals = [round(1024 * math.sin((i * 2 * math.pi) / 64)) for i in range(64)]
+          values = ',\n    '.join(', '.join(str(v) for v in vals[i:i+8]) for i in range(0,64,8))
+          
+          helpers = r'''
+          /* V29.3: camera-relative movement, classic tank-style turning.
+             0..4095 angular units, lookup only: cheap on original PlayStation.
+             Buttons are the *logical* buttons after the existing OPTIONS remapper. */
+          static const short vt_v293_sin_table[64] = {
+              __SINE_VALUES__
+          };
+          static int vt_v293_sin(int angle) {
+              return vt_v293_sin_table[((angle + 32) & 4095) >> 6];
+          }
+          static int vt_v293_cos(int angle) {
+              return vt_v293_sin(angle + 1024);
+          }
+          static int vt_v293_avatar_yaw = 2048;
+          static int vt_v293_model_x = 0;
+          static int vt_v293_model_z = 0;
+          static void vt_v293_rotate_mesh_point(int x,int z,int *out_x,int *out_z) {
+              int dx=x-vt_v293_model_x;
+              int dz=z-vt_v293_model_z;
+              int sn=vt_v293_sin(vt_v293_avatar_yaw);
+              int cs=vt_v293_cos(vt_v293_avatar_yaw);
+              *out_x=vt_v293_model_x + (dx*cs + dz*sn)/1024;
+              *out_z=vt_v293_model_z + (-dx*sn + dz*cs)/1024;
+          }
+          static void vt_v293_player_box(int x,int y,int z,int size,int r,int g,int b) {
+              int a,c;
+              vt_v293_rotate_mesh_point(x,z,&a,&c);
+              draw_box(a,y,c,size,r,g,b);
+          }
+          static void vt_v293_player_pyramid(int x,int y,int z,int size,int height,int r,int g,int b) {
+              int a,c;
+              vt_v293_rotate_mesh_point(x,z,&a,&c);
+              vt_pyramid(a,y,c,size,height,r,g,b);
+          }
+          static void vt_v293_move(unsigned int pad) {
+              int direction=0;
+              int dx,dz;
+              /* RIGHT looks right: rotate the scenery left; LEFT looks left.
+                 Rotation matrix uses world-to-view yaw, so right is negative yaw. */
+              if ((pad & PAD_RIGHT) && !(pad & PAD_LEFT))
+                  vt_v292_cam_yaw=(vt_v292_cam_yaw+4096-64)&4095;
+              else if ((pad & PAD_LEFT) && !(pad & PAD_RIGHT))
+                  vt_v292_cam_yaw=(vt_v292_cam_yaw+64)&4095;
+              vt_v292_yaw_target=vt_v292_cam_yaw;
+          
+              if ((pad & PAD_UP) && !(pad & PAD_DOWN)) direction=1;
+              else if ((pad & PAD_DOWN) && !(pad & PAD_UP)) direction=-1;
+              if (!direction) return;
+          
+              /* Camera forward in world coordinates: (-sin(yaw), 0, cos(yaw)).
+                 D-Pad DOWN goes backwards; horizontal buttons never translate. */
+              dx=direction*(-vt_v293_sin(vt_v292_cam_yaw)*4)/1024;
+              dz=direction*(vt_v293_cos(vt_v292_cam_yaw)*4)/1024;
+              px += dx;
+              pz += dz;
+              if(px < -WORLD_LIMIT) px=-WORLD_LIMIT;
+              if(px > WORLD_LIMIT) px=WORLD_LIMIT;
+              if(pz < -WORLD_LIMIT) pz=-WORLD_LIMIT;
+              if(pz > WORLD_LIMIT) pz=WORLD_LIMIT;
+              if(dx || dz) step_count++;
+          
+              /* V27's face decorations sit on local -Z. Rotate that face towards
+                 the movement vector; when reversing, the figure looks backwards. */
+              vt_v293_avatar_yaw = ((direction>0 ? 2048 : 0) - vt_v292_cam_yaw + 4096)&4095;
+              if (dx>0 && dx>= (dz<0?-dz:dz)) facing=2;
+              else if (dx<0 && -dx>= (dz<0?-dz:dz)) facing=1;
+              else facing=(dz>=0)?3:0;
+          }
+          '''.replace('__SINE_VALUES__', values)
+          
+          # The legacy world-relative move must be replaced: simply adding turn input
+          # would still cause the reversed movement visible in the screenshots.
+          lines = s.splitlines(keepends=True)
+          start_positions = [i for i,line in enumerate(lines) if re.match(r'^\s*if\s*\(\s*pad\s*&\s*PAD_LEFT\s*\)\s*\{\s*px\s*-=', line)]
+          if len(start_positions) != 1:
+              raise RuntimeError('V29.3: could not locate original left/right/up/down movement; found '+str(len(start_positions)))
+          start = start_positions[0]
+          expected = (
+              ("PAD_LEFT", "px"), ("PAD_RIGHT", "px"),
+              ("PAD_UP", "pz"), ("PAD_DOWN", "pz"),
+          )
+          for i,(button, axis) in enumerate(expected):
+              line = lines[start+i]
+              if not (f'pad & {button}' in line and re.search(r'\b'+axis+r'\s*[+-]=',line)
+                      and 'step_count++' in line and 'facing=' in line):
+                  raise RuntimeError('V29.3: unexpected movement body '+repr(line))
+          lines[start:start+4] = ['            vt_v293_move((unsigned int)pad);\n']
+          s = ''.join(lines)
+          
+          # Prevent V29.2 camera-follow code from undoing the D-Pad turn in the
+          # same frame. Movement and camera now share one explicit heading.
+          a,opening,closing,end = function_span('vt_v292_update_camera')
+          s = s[:a] + '''static void vt_v292_update_camera(void) {
+              /* V29.3: manual turn-only D-Pad yaw, no automatic direction switch. */
+              vt_v292_yaw_target = vt_v292_cam_yaw;
+          }''' + s[end:]
+          
+          # The player has stylized axis-aligned meshes. Turn its facial accents,
+          # hair, clothing and body details around the model center without changing
+          # the world geometry, NPCs, or the companion dragon.
+          a,opening,closing,end = function_span('vt_player')
+          body = s[opening:closing]
+          old_boxes = len(re.findall(r'\bdraw_box\s*\(',body))
+          old_pyramids = len(re.findall(r'\bvt_pyramid\s*\(',body))
+          if old_boxes < 2:
+              raise RuntimeError('V29.3: vt_player mesh calls changed: '+str(old_boxes))
+          body = re.sub(r'\bdraw_box\s*\(', 'vt_v293_player_box(', body)
+          body = re.sub(r'\bvt_pyramid\s*\(', 'vt_v293_player_pyramid(', body)
+          body = '\n    vt_v293_model_x=x; vt_v293_model_z=z;\n' + body
+          s = s[:opening] + body + s[closing:]
+          
+          # The V29.2 HUD helper originally declares yaw below vt_player. Move the two
+          # global yaw definitions above vt_player so the movement helpers compile in C99.
+          yaw_decls='static int vt_v292_cam_yaw=0;\nstatic int vt_v292_yaw_target=0;\n'
+          if s.count(yaw_decls)!=1:
+              raise RuntimeError('V29.3: camera variables not found at expected anchor')
+          s=s.replace(yaw_decls,'',1)
+          # Put helpers before vt_player: vt_pyramid and draw_box are already defined.
+          a,opening,closing,end = function_span('vt_player')
+          s = s[:a] + yaw_decls + helpers + '\n' + s[a:]
+          
+          # Rename movement instructions in OPTIONS; keep saved key assignments untouched.
+          s=s.replace('"GEHEN HOCH", "GEHEN RUNTER", "GEHEN LINKS", "GEHEN RECHTS",',
+                      '"VORWAERTS", "RUECKWAERTS", "KAMERA LINKS", "KAMERA RECHTS",')
+          
+          checks = [
+           'vt_v293_move((unsigned int)pad);',
+           'vt_v292_yaw_target = vt_v292_cam_yaw;',
+           'vt_v293_player_box(',
+           'vt_v293_player_pyramid(',
+           'vt_v293_avatar_yaw',
+           'vt_v281_resolve_movement();',
+           'vt_v292_draw_exploration_hud();',
+           'vt_v282_draw_house_npcs(x,z);',
+           'vt_opt_draw_page();',
+           'vt_save_game(void)', 'vt_load_game(void)', 'vt_v21_party[3]',
+          ]
+          for marker in checks:
+              if marker not in s: raise RuntimeError('V29.3 retained feature missing: '+marker)
+          if s.count('vt_v293_move((unsigned int)pad);') != 1:
+              raise RuntimeError('V29.3: duplicate movement hook')
+          source.write_text(s, encoding='utf-8')
+          print('V29.3: Up/Down forward and backward relative to camera; Left/Right turn only')
+          print('V29.3: Player body decorations rotate with movement; original worlds and save files untouched')
+          print('V29.3: Rotated',old_boxes,'boxes and',old_pyramids,'pyramids in player mesh')
+          PY
+          python3 "$RUNNER_TEMP/lydra_v293_steuerung_patch.py"
+
       - name: PS1 SDK installieren – V27 Basis
         shell: bash
         run: |
           set -euo pipefail
           python3 "$RUNNER_TEMP/run_v27_step.py" "Install PSn00bSDK"
 
-      - name: Lydra V29.2 fuer PS1 kompilieren
+      - name: Lydra V29.3 fuer PS1 kompilieren
         shell: bash
         run: |
           set -euo pipefail
@@ -1838,12 +2039,12 @@ jobs:
           for f in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
             test -s "artifacts/$f" || { echo "Fehlende PS1-Datei: $f"; exit 1; }
           done
-          echo "V29 Dateien vorhanden. Emulator-Pruefung ist anschliessend erforderlich."
+          echo "V29.3 Dateien vorhanden. RetroArch Test steht noch aus."
 
-      - name: Lydra V29.2 herunterladen
+      - name: Lydra V29.3 herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: Lydra-World-Of-Dragon-PS1-V29-2
+          name: Lydra-World-Of-Dragon-PS1-V29-3
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
