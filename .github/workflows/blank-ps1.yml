@@ -2,7 +2,7 @@
 # Als .github/workflows/lydra-v29-1.yml hochladen und Actions starten.
 # V27, V28.2, V29 und vorhandene Memory Cards bleiben unveraendert.
 
-name: Lydra World Of Dragon V29.1 – Grafik und Optionen
+name: Lydra World Of Dragon V29.2 – Vollbild, Kompass und Optionen
 
 on:
   workflow_dispatch:
@@ -1584,13 +1584,242 @@ jobs:
           PY
           python3 "$RUNNER_TEMP/lydra_v291_options.py"
 
+      - name: V29.2 Vollbild Ortsnamen Kompass Kontext Aktion Kamera
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/lydra_v292_patch.py" <<'PY'
+          #!/usr/bin/env python3
+          '''V29.2: unobtrusive exploration HUD, location names, compass and follow yaw.'''
+          import os, re
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+          s=p.read_text(encoding='utf-8')
+
+          def once(old,new):
+              global s
+              hits=s.count(old)
+              if hits!=1:
+                  raise RuntimeError('V29.2 expected one C anchor (%s), found %d'%(repr(old[:100]),hits))
+              s=s.replace(old,new,1)
+
+          # Keep all older battle, codex, team and save routines untouched.
+          helpers=r'''
+          /* V29.2 – 320x240 fullscreen exploration HUD with locations + compass.
+             Original Memory Card layout is unchanged. */
+          static int vt_v292_cam_yaw=0;
+          static int vt_v292_yaw_target=0;
+          static int vt_v292_last_x=0,vt_v292_last_z=0;
+          static int vt_v292_tracking=0;
+          static int vt_v292_item_flags=0;
+          static int vt_v292_notification=0;
+          static const char *vt_v292_notice="";
+
+          typedef struct {
+              int region,x,z,type;
+          } vt_v292_pickup_t;
+          /* type 0=HEILTRANK, type 1=FANGKAPSEL (uses existing inventory). */
+          static const vt_v292_pickup_t vt_v292_pickups[] = {
+              {0,-365,650,0}, {0,285,980,1},
+              {1,-208,735,0}, {2,312,680,1}
+          };
+          #define VT_V292_PICKUP_COUNT 4
+          static int vt_v292_abs(int n) { return n<0?-n:n; }
+          static int vt_v292_find_pickup(void) {
+              int i;
+              for(i=0;i<VT_V292_PICKUP_COUNT;i++) {
+                  const vt_v292_pickup_t *v=&vt_v292_pickups[i];
+                  if((vt_v292_item_flags & (1<<i))==0 && v->region==region &&
+                     vt_v292_abs(px-v->x)<50 && vt_v292_abs(pz-v->z)<50)
+                      return i;
+              }
+              return -1;
+          }
+          static int vt_v292_find_resident(void) {
+              unsigned int i;
+              if(!vt_v282_npcs_initialized)return -1;
+              for(i=0;i<VT_V282_NPC_COUNT;i++) {
+                  const vt_v282_npc_t *n=&vt_v282_npcs[i];
+                  if(n->region_id==region && vt_v292_abs(n->x-px)<47 &&
+                     vt_v292_abs(n->z-pz)<47)return (int)i;
+              }
+              return -1;
+          }
+          static void vt_v292_talk_resident(int i) {
+              if(i<0 || i>=(int)VT_V282_NPC_COUNT)return;
+              vt_v292_notice="BEWOHNER: WILLKOMMEN!";
+              vt_v292_notification=95;
+          }
+          static void vt_v292_take_pickup(int i) {
+              if(i<0 || i>=VT_V292_PICKUP_COUNT || (vt_v292_item_flags & (1<<i)))return;
+              vt_v292_item_flags |= (1<<i);
+              if(vt_v292_pickups[i].type==0) {
+                  vt_potions++;
+                  vt_v292_notice="HEILTRANK GEFUNDEN";
+              } else {
+                  vt_capture_items++;
+                  vt_v292_notice="FANGKAPSEL GEFUNDEN";
+              }
+              vt_v292_notification=105;
+          }
+          /* Only names of locations that already exist in the current world.
+             Future caves / islands get their own region or area rules here. */
+          static const char *vt_v292_location(void) {
+              if(region==0) {
+                  if(pz>660 && pz<780 && vt_v292_abs(px)<185)return "SONNENBRUECKE";
+                  if(pz>990)return "RUINENWEG";
+                  if(vt_v292_abs(px)>490)return "SONNENTAL-WALD";
+                  if(pz>=170 && pz<630 && vt_v292_abs(px)<480)return "SUNMEADOW";
+                  return "SONNENTAL-PFAD";
+              }
+              if(region==1) {
+                  if(pz>700 && pz<880 && vt_v292_abs(px+190)<140)return "KRISTALLRUINEN";
+                  if(pz>900)return "KRISTALLPFAD";
+                  return "CRYSTAL PASS";
+              }
+              if(region==2) {
+                  if(pz>760 && pz<980 && vt_v292_abs(px)<285)return "ARENA-TOR";
+                  if(pz>1050)return "STURMHOEHEN";
+                  return "STORM ARENA";
+              }
+              return "UNBEKANNTES GEBIET";
+          }
+          static void vt_v292_update_camera(void) {
+              int dx,dz,diff;
+              if(!vt_v292_tracking) {
+                  vt_v292_last_x=px;vt_v292_last_z=pz;vt_v292_tracking=1;
+              }
+              dx=px-vt_v292_last_x;dz=pz-vt_v292_last_z;
+              vt_v292_last_x=px;vt_v292_last_z=pz;
+              if(!vt_menu_open && game_mode==0 &&
+                 (dx || dz) && vt_v292_abs(dx)<65 && vt_v292_abs(dz)<65) {
+                  if(vt_v292_abs(dx)>vt_v292_abs(dz))
+                      vt_v292_yaw_target=dx>0?1024:3072;
+                  else vt_v292_yaw_target=dz>0?0:2048;
+              }
+              diff=((vt_v292_yaw_target-vt_v292_cam_yaw+6144)&4095)-2048;
+              if(diff>90)diff=90;
+              else if(diff< -90)diff=-90;
+              vt_v292_cam_yaw=(vt_v292_cam_yaw+diff+4096)&4095;
+          }
+          static void vt_v292_draw_compass(void) {
+              /* Clockwise heading: north, east (Ost), south, west. */
+              static const char *letters[4]={"N","O","S","W"};
+              int heading=((vt_v292_cam_yaw+512)&4095)/1024;
+              FntPrint(3,"  %s\n%s + %s\n  %s\n",
+                  letters[heading],letters[(heading+3)&3],
+                  letters[(heading+1)&3],letters[(heading+2)&3]);
+          }
+          static void vt_v292_draw_exploration_hud(void) {
+              /* Text stream 0 top-left, stream 3 top-right, stream 1 bottom. */
+              FntPrint(0,"%s\n",vt_v292_location());
+              vt_v292_draw_compass();
+              if(vt_npc_dialog>=0) {
+                  FntPrint(1,"%s\nX WEITER / DREIECK ZURUECK\n",
+                      vt_opt_reveal_dialog(vt_dialog_text(vt_npc_dialog,vt_npc_page),
+                                           vt_npc_dialog,vt_npc_page));
+              } else if(vt_find_npc()>=0 || vt_v292_find_resident()>=0 || vt_v292_find_pickup()>=0) {
+                  FntPrint(1,"X AKTION\n");
+              } else if(vt_v292_notification>0) {
+                  FntPrint(1,"%s\n",vt_v292_notice);
+              }
+              if(vt_v292_notification>0)vt_v292_notification--;
+              FntFlush(0);FntFlush(1);FntFlush(3);
+          }
+          '''
+          once('static void draw_hud(void) {', helpers+'\nstatic void draw_hud(void) {\n'
+               '    if(!vt_menu_open && game_mode==0) {\n'
+               '        vt_v292_draw_exploration_hud();\n'
+               '        return;\n    }')
+
+          # Keep original main menu pages (codex, team, items, save/load, options),
+          # but remove the header+HP lines printed outside the black menu window.
+          hud_start=s.index('static void draw_hud(void) {')
+          menu_start=s.find('if (vt_menu_open) {',hud_start)
+          main_page=s.find('if (vt_menu_page == 0) {',menu_start)
+          if menu_start<0 or main_page<0 or main_page-menu_start>2200:
+              raise RuntimeError('Menu header layout unexpected')
+          s=s[:menu_start]+'''if (vt_menu_open) {
+                  /* Menu text belongs inside the black panel, not the exploration HUD. */
+                  '''+s[main_page:]
+
+          # Options page previously printed a second title into the outside top HUD.
+          once('FntPrint(0,"LYDRA WORLD OF DRAGON - OPTIONEN\\n\\n");',
+               '/* Header is in the OPTIONEN panel below. */')
+
+          # D-Pad movement is world-relative in this engine. Turn the world camera
+          # gradually to follow actual movement (instead of rotating the HUD only).
+          # The model matrix is already set up by the V28 camera patch.
+          needle='RotMatrix(&camera_rot, &m);'
+          if s.count(needle)!=1:
+              raise RuntimeError('Camera rotation anchor changed')
+          once(needle, 'vt_v292_update_camera();\n'
+                       '        camera_rot.vy = vt_v292_cam_yaw;\n'
+                       '        RotMatrix(&camera_rot, &m);')
+
+          # Add a compact separate text stream for the compass; indices 0..2 exist.
+          font='FntOpen(18, 75, 284, 155, 0, 512);'
+          once(font,font+'\n    FntOpen(247, 6, 69, 65, 0, 128); /* compass */')
+
+          # The V29.1 options version suppressed the whole 3D scene while the menu was open.
+          # Render the scene even while paused; draw the opaque menu panel *before* world
+          # primitives (PS1 OT insertion is LIFO), putting it over the scenery.
+          once('        if(!vt_menu_open) {\n        draw_ground();',
+               '        vt_draw_menu_panel();\n        draw_ground();')
+          once('        }\n        if(!vt_menu_open) vt_draw_panels();',
+               '        if(!vt_menu_open && game_mode!=0) vt_draw_panels();')
+          # Remove late panel draw so the panel isn't overpainted by the scenery.
+          # One occurrence in main, one added above: use exactly a two-occurrence check.
+          anchor='        vt_draw_menu_panel();'
+          if s.count(anchor)!=2:
+              raise RuntimeError('Unexpected panel draw calls %d'%s.count(anchor))
+          pos=s.rfind(anchor)
+          s=s[:pos]+s[pos+len(anchor):]
+          # The black window covers just the menu text, leaving the world visible outside.
+          once('setXY0(panel, 0, 0);','setXY0(panel, 11, 65);')
+          once('setWH(panel, 320, 240);','setWH(panel, 298, 169);')
+
+          # Contextual hidden items: only grant a pickup if X is pressed in range and
+          # there isn't a dialogue NPC. Existing potion/capsule inventories are reused.
+          anchor='pressed=vt_opt_gamepad(physical_pressed);'
+          once(anchor,anchor+r'''
+                                if(game_mode==0 && vt_npc_dialog<0 &&
+                                   (pressed & PAD_CROSS) && vt_find_npc()<0) {
+                                    int resident=vt_v292_find_resident();
+                                    int item=vt_v292_find_pickup();
+                                    if(resident>=0) {
+                                        vt_v292_talk_resident(resident);
+                                        pressed &= ~PAD_CROSS;
+                                    } else if(item>=0) {
+                                        vt_v292_take_pickup(item);
+                                        pressed &= ~PAD_CROSS;
+                                    }
+                                }''')
+
+          checks=['vt_v292_draw_exploration_hud();', 'camera_rot.vy = vt_v292_cam_yaw;',
+                  'vt_v292_find_pickup()', 'vt_v291_world_polish();',
+                  'vt_v282_draw_house_npcs(x,z);','vt_opt_draw_page();',
+                  'vt_save_game(void)','vt_load_game(void)', 'vt_v21_party[3]']
+          for marker in checks:
+              if marker not in s:raise RuntimeError('Missing retained feature: '+marker)
+          if s.count('vt_draw_menu_panel();')!=1:
+              raise RuntimeError('Menu panel must be drawn exactly once')
+          if s.count('FntOpen(247, 6, 69, 65, 0, 128);')!=1:
+              raise RuntimeError('Compass stream missing')
+          p.write_text(s,encoding='utf-8')
+          print('V29.2: field is full 320x240; context action only when available.')
+          print('V29.2: place labels, separate compass, smooth follow yaw, black window menu.')
+          print('V29.2: prior dragon team, 19 houses, 27 NPCs, codex and save format retained.')
+          PY
+          python3 "$RUNNER_TEMP/lydra_v292_patch.py"
+
       - name: PS1 SDK installieren – V27 Basis
         shell: bash
         run: |
           set -euo pipefail
           python3 "$RUNNER_TEMP/run_v27_step.py" "Install PSn00bSDK"
 
-      - name: Lydra V29.1 mit Optionen fuer PS1 kompilieren
+      - name: Lydra V29.2 fuer PS1 kompilieren
         shell: bash
         run: |
           set -euo pipefail
@@ -1611,10 +1840,10 @@ jobs:
           done
           echo "V29 Dateien vorhanden. Emulator-Pruefung ist anschliessend erforderlich."
 
-      - name: Lydra V29.1 mit Optionen herunterladen
+      - name: Lydra V29.2 herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: Lydra-World-Of-Dragon-PS1-V29-1-Optionen
+          name: Lydra-World-Of-Dragon-PS1-V29-2
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
