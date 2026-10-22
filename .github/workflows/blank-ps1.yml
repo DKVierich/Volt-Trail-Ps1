@@ -1,4 +1,5 @@
-name: Build Volt Trail PS1 V25 Grafik Rendering
+
+name: Build Lydra World Of Dragon PS1 V25
 
 on:
   workflow_dispatch:
@@ -14,2738 +15,425 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Install build tools
+      - name: Install tools
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y \
-            cmake ninja-build unzip curl jq tar \
+            cmake ninja-build unzip curl \
             ffmpeg python3-pil python3-yaml
 
-      - name: Load working V18 instructions
+      - name: Load working V24.3 source
         shell: bash
         run: |
           set -euo pipefail
 
-          V18_COMMIT="343091814e0c9771e5c885b75377b9af439f746e"
+          V243_COMMIT="7886e325c196b8d43576e12f6916831de73be704"
 
-          curl --retry 3 -fsSL \
-            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$V18_COMMIT/.github/workflows/blank-ps1.yml" \
-            -o "$RUNNER_TEMP/v18-fixed.yml"
+          curl --fail --location --retry 4 \
+            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$V243_COMMIT/.github/workflows/blank-ps1.yml" \
+            -o "$RUNNER_TEMP/working-v243.yml"
 
-          cat > "$RUNNER_TEMP/run_previous_step.py" <<'PY'
+          cat > "$RUNNER_TEMP/run_v243.py" <<'PY'
           import os
-          import subprocess
           import sys
+          import subprocess
           from pathlib import Path
           import yaml
 
-          source = Path(os.environ["RUNNER_TEMP"]) / "v18-fixed.yml"
-          steps = yaml.safe_load(source.read_text())["jobs"]["build"]["steps"]
-          name = sys.argv[1]
-          matches = [step for step in steps if step.get("name") == name]
+          source = (
+              Path(os.environ["RUNNER_TEMP"])
+              / "working-v243.yml"
+          )
+
+          data = yaml.safe_load(
+              source.read_text(encoding="utf-8")
+          )
+
+          steps = data["jobs"]["build"]["steps"]
+
+          wanted = sys.argv[1]
+
+          matches = [
+              step for step in steps
+              if step.get("name") == wanted
+          ]
+
           if len(matches) != 1:
-              raise RuntimeError("V18 step missing: " + name)
-          print("Running:", name, flush=True)
+              raise RuntimeError(
+                  "Build step missing: " + wanted
+              )
+
+          print("Running:", wanted, flush=True)
+
           subprocess.run(
-              ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
-              env=os.environ.copy(), check=True
+              [
+                  "bash",
+                  "-euo",
+                  "pipefail",
+                  "-c",
+                  matches[0]["run"]
+              ],
+              env=os.environ.copy(),
+              check=True
           )
           PY
 
-          python3 "$RUNNER_TEMP/run_previous_step.py" \
-            "Load original V18 build"
+          python3 "$RUNNER_TEMP/run_v243.py" \
+            "Load working V18 instructions"
 
-      # Each action step reads GITHUB_ENV from the preceding step.
-      # PROJECT_DIR is created by Prepare game project and must be
-      # available to the following restore steps.
-      - name: Prepare V18 game project
+      - name: Prepare existing game project
         shell: bash
         run: |
           set -euo pipefail
-          python3 "$RUNNER_TEMP/run_previous_step.py" \
-            "Prepare game project"
 
-      - name: Restore V17 intro and gameplay
+          python3 "$RUNNER_TEMP/run_v243.py" \
+            "Prepare V18 game project"
+
+      - name: Rebuild working V24.3 game
         shell: bash
         run: |
           set -euo pipefail
+
           test -n "${PROJECT_DIR:-}" || {
-            echo "::error::PROJECT_DIR was not exported"
+            echo "::error::PROJECT_DIR missing"
             exit 1
           }
-          python3 "$RUNNER_TEMP/run_previous_step.py" \
-            "Restore V17 intro and gameplay"
 
-      - name: Restore V18 dragons and graphics
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/run_previous_step.py" \
-            "Restore V18 dragons and graphics"
-
-      - name: Apply working V18 compiler fix
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/run_previous_step.py" \
-            "Repair V18 battle menu compiler error"
-
-      - name: Add V19 dragon species and battle effects
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
+          cat > "$RUNNER_TEMP/restore_game.py" <<'PY'
           import os
-          import re
+          import subprocess
           from pathlib import Path
-
-          path = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
-          code = path.read_text(encoding="utf-8")
-
-          def replace_once(old, new):
-              global code
-              count = code.count(old)
-              if count != 1:
-                  raise RuntimeError(
-                      "V19 expected one occurrence of " + repr(old[:70])
-                      + "; found " + str(count)
-                  )
-              code = code.replace(old, new, 1)
-
-          replace_once("VOLT TRAIL V18 - %s", "VOLT TRAIL V19 - %s")
-          replace_once("VOLT TRAIL V18 - MENUE", "VOLT TRAIL V19 - MENUE")
-
-          dragon_code = r'''
-          /* V19: 0 Mosslet, 1 Flamyr, 2 Aquar, 3 Glacir. */
-          static int vt_v19_kind = 0;
-          static unsigned int vt_v19_mask = 0;
-
-          static const char *vt_v19_name(int kind) {
-              switch (kind) {
-                  case 1: return "FLAMYR";
-                  case 2: return "AQUAR";
-                  case 3: return "GLACIR";
-                  default: return "MOSSLET";
-              }
-          }
-
-          static int vt_v19_caught_count(void) {
-              unsigned int mask = vt_v19_mask;
-              int i;
-              int count = 0;
-              if (caught_mosslet) mask |= 1u;
-              for (i = 0; i < 4; i++) {
-                  if (mask & (1u << i)) count++;
-              }
-              return count;
-          }
-
-          static void vt_v19_hit_effect(int x, int z) {
-              int wave;
-              if (game_mode != 1 || action_flash <= 0) return;
-              wave = (30 - action_flash) & 15;
-
-              /* Electrical flashes around the enemy dragon. */
-              vt_pyramid(
-                  x - 25, -10 - wave, z - 23,
-                  6, 22, 250, 228, 54
-              );
-              vt_pyramid(
-                  x + 23, -19 + wave, z - 27,
-                  6, 18, 94, 219, 251
-              );
-              vt_pyramid(
-                  x, -31, z - 31,
-                  5 + wave / 4, 13, 255, 247, 138
-              );
-          }
-
-          static void vt_v19_wild_dragon(int x, int z, int kind) {
-              int r = 62;
-              int g = 172;
-              int b = 92;
-              int flap = (vt_v18_tick / 7) & 1;
-
-              if (kind == 1) {
-                  r = 225; g = 87; b = 46;
-              } else if (kind == 2) {
-                  r = 61; g = 139; b = 221;
-              } else if (kind == 3) {
-                  r = 135; g = 216; b = 232;
-              }
-
-              /* Body, neck, dragon head and long muzzle. */
-              draw_box(x, 23, z, 15, r, g, b);
-              draw_box(x, 5, z - 8, 10, r, g, b);
-              draw_box(x, -7, z - 16, 12, r, g, b);
-              draw_box(x, -5, z - 29, 6, r, g, b);
-              vt_dragon_eyes(x, -10, z - 31, 7);
-
-              /* Horns and two animated wings. */
-              vt_pyramid(x - 9, -16, z - 12,
-                         6, 22, r, g, b);
-              vt_pyramid(x + 9, -16, z - 12,
-                         6, 22, r, g, b);
-              vt_dragon_wing(x, z, -1, 39,
-                             flap ? 9 : -1, r, g, b);
-              vt_dragon_wing(x, z, 1, 39,
-                             flap ? -1 : 9, r, g, b);
-
-              /* Long tail, feet and pointed spikes. */
-              draw_box(x + 12, 23, z + 23, 9, r, g, b);
-              draw_box(x + 17, 18, z + 36, 6, r, g, b);
-              vt_pyramid(x + 19, 17, z + 42,
-                         8, 19, r, g, b);
-              draw_box(x - 10, 39, z, 6, r, g, b);
-              draw_box(x + 10, 39, z, 6, r, g, b);
-
-              vt_v19_hit_effect(x, z);
-          }
-          '''
-
-          # Keep all original dragon and menu functions in place.
-          replace_once(
-              "static void vt_sparkit(int x, int z) {",
-              dragon_code + "\nstatic void vt_sparkit(int x, int z) {"
-          )
-
-          # Pick different species for wild encounters, without
-          # modifying how trainer and arena fights work.
-          replace_once(
-              "                encounter++;",
-              "                encounter++;\n"
-              "                vt_v19_kind = (encounter + region) & 3;"
-          )
-
-          # Wild encounters use the species-specific 3D model.
-          call_pattern = (
-              r"vt_mosslet\s*\(\s*px\s*-\s*38\s*,\s*"
-              r"pz\s*\+\s*135\s*,\s*encounter_kind\s*\);"
-          )
-          replacement = (
-              "if (encounter_kind == 0) {\n"
-              "                      vt_v19_wild_dragon(\n"
-              "                          px - 38, pz + 135, vt_v19_kind\n"
-              "                      );\n"
-              "                  } else {\n"
-              "                      vt_mosslet(\n"
-              "                          px - 38, pz + 135, encounter_kind\n"
-              "                      );\n"
-              "                  }"
-          )
-          code, count = re.subn(call_pattern, replacement, code)
-          if count != 1:
-              raise RuntimeError("Wild dragon drawing call missing")
-
-          # Keep special enemy labels for trainers and leaders.
-          replace_once(
-              '"TRAINER" : "MOSSLET");',
-              '"TRAINER" : vt_v19_name(vt_v19_kind));'
-          )
-
-          # Record successful captures without overwriting the
-          # older Mosslet quest and Memory Card format.
-          replace_once(
-              "if (encounter_kind==0) caught_mosslet=1;",
-              "if (encounter_kind==0) {\n"
-              "                        vt_v19_mask |= 1u << vt_v19_kind;\n"
-              "                        if (vt_v19_kind == 0) caught_mosslet=1;\n"
-              "                    }"
-          )
-
-          # Display the true total number of captured species.
-          if code.count("1 + caught_mosslet") < 2:
-              raise RuntimeError("Team-counter anchors missing")
-          code = code.replace(
-              "1 + caught_mosslet", "1 + vt_v19_caught_count()"
-          )
-
-          # Monster menu: show all collected dragon species.
-          team_pattern = r'(?m)^(\s*)FntPrint\(\s*2,\s*"TEAM: %d MONSTER\\n"'
-          match = re.search(team_pattern, code)
-          if not match:
-              raise RuntimeError("Monster submenu missing")
-          indent = match.group(1)
-          new_lines = (
-              'FntPrint(\n'
-              '    2, "FLAMYR:%s AQUAR:%s\\n",\n'
-              '    (vt_v19_mask & 2u) ? "JA" : "NEIN",\n'
-              '    (vt_v19_mask & 4u) ? "JA" : "NEIN"\n'
-              ');\n'
-              'FntPrint(\n'
-              '    2, "GLACIR:%s\\n",\n'
-              '    (vt_v19_mask & 8u) ? "JA" : "NEIN"\n'
-              ');\n'
-          )
-          new_lines = "\n".join(
-              indent + line if line else line
-              for line in new_lines.rstrip("\n").split("\n")
-          ) + "\n"
-          code = code[:match.start()] + new_lines + code[match.start():]
-
-          # Store an extension in the unused part of the original
-          # PS1 save block. The original checksum and its first 19
-          # words remain unchanged, so V17/V18 saves still load.
-          replace_once(
-              "words[18] = vt_save_checksum(words);",
-              "words[18] = vt_save_checksum(words);\n"
-              "              words[19] = 0x56313944u;\n"
-              "              words[20] = vt_v19_mask | (caught_mosslet ? 1u : 0u);\n"
-              "              words[21] = words[19] ^ words[20] ^ 0xa592c3d6u;"
-          )
-
-          replace_once(
-              "caught_mosslet = (int)w[7];",
-              "caught_mosslet = (int)w[7];\n"
-              "              if (w[19] == 0x56313944u &&\n"
-              "                  w[21] == (w[19] ^ w[20] ^ 0xa592c3d6u) &&\n"
-              "                  (w[20] & ~15u) == 0) {\n"
-              "                  vt_v19_mask = w[20];\n"
-              "              } else {\n"
-              "                  vt_v19_mask = caught_mosslet ? 1u : 0u;\n"
-              "              }"
-          )
-
-          required = [
-              "VOLT TRAIL V19", "vt_v19_wild_dragon(",
-              "vt_v19_hit_effect(", "vt_v19_caught_count(",
-              "vt_save_game(void)", "vt_load_game(void)",
-              "InitCARD(1);", "vt_menu_open",
-              "vt_play_intro();", "PAD_SQUARE", "PAD_CIRCLE"
-          ]
-          for marker in required:
-              if marker not in code:
-                  raise RuntimeError("Missing V19 feature: " + marker)
-
-          path.write_text(code, encoding="utf-8")
-          print("V19 ready: Flamyr, Aquar and Glacir added")
-          print("Battle lightning effects added")
-          print("Old saves remain compatible")
-          print("V18 controller, intro, quests and menu preserved")
-          PY
-
-      - name: Add V20 Dragon Codex and elemental battles
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os,re
-          from pathlib import Path
-          path=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-          code=path.read_text(encoding='utf-8')
-
-          def replace_once(old,new):
-           global code
-           n=code.count(old)
-           if n!=1: raise RuntimeError(f'V20 marker mismatch {old[:85]!r}: {n}')
-           code=code.replace(old,new,1)
-
-          replace_once('VOLT TRAIL V19 - %s','VOLT TRAIL V20 - %s')
-          replace_once('VOLT TRAIL V19 - MENUE','VOLT TRAIL V20 - MENUE')
-
-          # World state for the codex: four wild species, plus starter/evolution
-          replace_once('static unsigned int vt_v19_mask = 0;', '''static unsigned int vt_v19_mask = 0;
-
-          /* Discoveries and the chosen battle dragon. */
-          static unsigned int vt_v20_seen_mask = 0;
-          static int vt_v20_active_dragon = 0;
-          static int vt_v20_menu_dragon = 0;
-          static int vt_v20_attack_timer = 0;
-          static int vt_v20_attack_kind = 0;
-          '''.rstrip())
-
-          helpers=r'''
-          /* Dragon slots: 0 starter, 1 Mosslet, 2 Flamyr, 3 Aquar, 4 Glacir. */
-          static const char *vt_v20_dragon_name(int slot) {
-              switch (slot) {
-                  case 0: return evolved ? "VOLTIGON" : "SPARKIT";
-                  case 1: return "MOSSLET";
-                  case 2: return "FLAMYR";
-                  case 3: return "AQUAR";
-                  case 4: return "GLACIR";
-                  default: return "UNBEKANNT";
-              }
-          }
-
-          static int vt_v20_owned(int slot) {
-              if (slot == 0) return 1;
-              if (slot < 1 || slot > 4) return 0;
-              if (slot == 1 && caught_mosslet) return 1;
-              return (vt_v19_mask & (1u << (slot - 1))) != 0;
-          }
-
-          static const char *vt_v20_entry(int species) {
-              unsigned int bit;
-              if (species == 0) return "GEFANGEN"; /* Starter Sparkit */
-              if (species == 1) return evolved ? "GEFANGEN" : "???";
-              if (species < 2 || species > 5) return "???";
-              bit = 1u << (species - 2);
-              if (vt_v19_mask & bit) return "GEFANGEN";
-              if (species == 2 && caught_mosslet) return "GEFANGEN";
-              if (vt_v20_seen_mask & bit) return "GESEHEN";
-              return "???";
-          }
-
-          static const char *vt_v20_entry_name(int species) {
-              if (species == 0) return "SPARKIT";
-              if (species == 1) return evolved ? "VOLTIGON" : "???";
-              if (!(vt_v20_seen_mask & (1u << (species - 2))) &&
-                  !vt_v20_owned(species - 1)) return "???";
-              switch (species) {
-                  case 2: return "MOSSLET";
-                  case 3: return "FLAMYR";
-                  case 4: return "AQUAR";
-                  case 5: return "GLACIR";
-              }
-              return "???";
-          }
-
-          static void vt_v20_next_dragon(void) {
-              int try_slot;
-              int slot;
-              for (try_slot = 1; try_slot <= 5; try_slot++) {
-                  slot = (vt_v20_active_dragon + try_slot) % 5;
-                  if (vt_v20_owned(slot)) {
-                      vt_v20_active_dragon = slot;
-                      return;
-                  }
-              }
-          }
-
-          /* Each selected dragon has its own elemental attack. */
-          static int vt_v20_attack_damage(void) {
-              int damage = evolved ? 13 :
-                  (companion_level >= enemy_level ? 10 : 7);
-              int slot = vt_v20_active_dragon;
-              if (slot == 1) damage = 8 + companion_level / 2;  /* Leaf */
-              if (slot == 2) damage = 10 + companion_level / 2; /* Fire */
-              if (slot == 3) damage = 9 + companion_level / 2;  /* Water */
-              if (slot == 4) damage = 9 + companion_level / 2;  /* Ice */
-
-              /* Simple first elemental advantages against wild dragons. */
-              if (encounter_kind == 0) {
-                  if ((slot == 0 && vt_v19_kind == 2) ||
-                      (slot == 1 && vt_v19_kind == 2) ||
-                      (slot == 2 && vt_v19_kind == 3) ||
-                      (slot == 3 && vt_v19_kind == 1) ||
-                      (slot == 4 && vt_v19_kind == 2)) damage += 4;
-              }
-              return damage;
-          }
-
-          static void vt_v20_element_effect(int x, int z) {
-              int t = vt_v20_attack_timer;
-              int r = 255, g = 221, b = 58;
-              int i;
-              if (!t || game_mode != 1 || vt_menu_open) return;
-              if (vt_v20_attack_kind == 1) {r=68; g=202; b=98;}
-              if (vt_v20_attack_kind == 2) {r=247; g=88; b=35;}
-              if (vt_v20_attack_kind == 3) {r=50; g=158; b=247;}
-              if (vt_v20_attack_kind == 4) {r=162; g=235; b=252;}
-              for (i = 0; i < 4; i++) {
-                  int side = (i & 1) ? 1 : -1;
-                  int rise = ((20 - t + i * 3) & 15);
-                  vt_pyramid(x + side * (9 + i * 9),
-                             -13 - rise, z - 15 - i * 4,
-                             5 + (i & 1) * 2, 12 + rise,
-                             r, g, b);
-              }
-          }
-          '''
-          # Existing V19 render code is defined before draw_hud. Add V20 code
-          # after V17 menu state and all 3D helper function declarations.
-          replace_once('static void draw_hud(void) {',helpers+'\nstatic void draw_hud(void) {')
-
-          # Register observations at the moment a battle begins. This includes
-          # NPC trainers/arena, whose current models are Mosslet variants.
-          kind_marker='vt_v19_kind = (encounter + region) & 3;'
-          if code.count(kind_marker)!=1: raise RuntimeError('Encounter marker missing')
-          start=code.index(kind_marker)
-          end=code.find('game_mode=1;',start,start+1800)
-          if end<0: raise RuntimeError('Battle-entry point missing')
-          code=code[:end]+('game_mode=1;\n'
-           '                if (encounter_kind == 0) {\n'
-           '                    vt_v20_seen_mask |= 1u << vt_v19_kind;\n'
-           '                } else {\n'
-           '                    /* NPC battle: the displayed opponent is a Mosslet. */\n'
-           '                    vt_v20_seen_mask |= 1u;\n'
-           '                }')+code[end+len('game_mode=1;'):]
-
-          # Make the companion visibly change when the user chooses a captured dragon.
-          pattern=r'vt_sparkit\s*\(\s*px\s*\+\s*26\s*,\s*pz\s*\+\s*105\s*\);'
-          replacement='''if (vt_v20_active_dragon == 0) {
-                            vt_sparkit(px + 26, pz + 105);
-                        } else {
-                            vt_v19_wild_dragon(px + 26, pz + 105,
-                                               vt_v20_active_dragon - 1);
-                        }'''
-          code,n=re.subn(pattern,replacement,code)
-          if n!=1: raise RuntimeError(f'Companion draw marker missing: {n}')
-          # Keep Voltigon's extra horn only while Voltigon is the selected dragon.
-          loc=code.index('vt_v20_active_dragon - 1);')
-          p=code.find('if (evolved) {',loc,loc+700)
-          if p!=-1:code=code[:p]+'if (evolved && vt_v20_active_dragon == 0) {'+code[p+len('if (evolved) {'):]
-
-          # Distinct element damage and animation, without altering battle buttons.
-          pattern=r'int damage\s*=\s*evolved\s*\?\s*13\s*:\s*\(companion_level\s*>=\s*enemy_level\s*\?\s*10\s*:\s*7\);'
-          main_begin = code.index('int main(void) {')
-          combat_code = code[main_begin:]
-          combat_code,n=re.subn(pattern,('int damage = vt_v20_attack_damage();\n'
-           '                vt_v20_attack_timer = 24;\n'
-           '                vt_v20_attack_kind = vt_v20_active_dragon;'),combat_code)
-          if n!=1:raise RuntimeError(f'Elemental battle attack location missing: {n}')
-          code=code[:main_begin]+combat_code
-          replace_once('        vt_v18_tick++;',
-                       '        vt_v18_tick++;\n'
-                       '        if (vt_v20_attack_timer > 0) vt_v20_attack_timer--;')
-          # Show effect after the landscape draws.
-          replace_once('        vt_v18_battle_bars();',
-                       '        vt_v20_element_effect(px - 38, pz + 135);\n'
-                       '        vt_v18_battle_bars();')
-
-          # Always allow quick dragon-switch in battle without replacing X/O/Square.
-          key='        previous_pad = pad;'
-          replace_once(key,key+'''\n
-                  if (game_mode == 1 && !vt_menu_open &&
-                      (pressed & PAD_L1)) {
-                      vt_v20_next_dragon();
-                      pressed &= ~PAD_L1;
-                  }
-          ''')
-
-          # Save codex seen states and the active dragon in an independent extension
-          # to existing V17/V18/V19 block. First 22 words stay unchanged for compatibility.
-          replace_once('words[21] = words[19] ^ words[20] ^ 0xa592c3d6u;',
-          '''words[21] = words[19] ^ words[20] ^ 0xa592c3d6u;
-                        words[22] = 0x5632304bu;
-                        words[23] = (vt_v20_seen_mask | vt_v19_mask |
-                                      (caught_mosslet ? 1u : 0u)) & 15u;
-                        words[24] = (uint32_t)vt_v20_active_dragon;
-                        words[25] = words[22] ^ words[23] ^ words[24] ^ 0xdec0de20u;''')
-          # Restore V19 block first; insert the V20 addendum immediately after V19
-          # validation branch to avoid overriding old saves.
-          old='vt_v19_mask = caught_mosslet ? 1u : 0u;'
-          pos=code.index(old)
-          brace=code.find('}',pos,pos+180)
-          if brace<0:raise RuntimeError('V19 load extension end missing')
-          load_extra='''
-                        if (w[22] == 0x5632304bu &&
-                            w[25] == (w[22] ^ w[23] ^ w[24] ^ 0xdec0de20u) &&
-                            (w[23] & ~15u) == 0 && w[24] <= 4) {
-                            vt_v20_seen_mask = w[23];
-                            vt_v20_active_dragon = (int)w[24];
-                        } else {
-                            /* Older saves: known captures are discovered. */
-                            vt_v20_seen_mask = vt_v19_mask |
-                                (caught_mosslet ? 1u : 0u);
-                            vt_v20_active_dragon = 0;
-                        }
-                        vt_v20_seen_mask |= vt_v19_mask |
-                            (caught_mosslet ? 1u : 0u);
-                        if (!vt_v20_owned(vt_v20_active_dragon))
-                            vt_v20_active_dragon = 0;
-          '''
-          code=code[:brace+1]+load_extra+code[brace+1:]
-
-          # Revise only the rendered menu in draw_hud.
-          hud_start=code.index('static void draw_hud(void) {')
-          menu_start=code.index('if (vt_menu_open) {',hud_start)
-          menu_end=code.index('FntFlush(0);',menu_start)
-          menu=code[menu_start:menu_end]
-          if 'DRACHEN-MENUE' not in menu:raise RuntimeError('V19 main menu missing')
-          if '"%c MONSTER\\n\\n"' not in menu:raise RuntimeError('Monster menu label mismatch')
-
-          # Shift the four existing menu rows down one slot.
-          shifts=[]
-          def shift_choice(m):
-           shifts.append(m.group(1))
-           return 'vt_menu_choice == '+str(int(m.group(1))+1)
-          menu=re.sub(r'vt_menu_choice\s*==\s*([0-3])',shift_choice,menu)
-          if sorted(shifts)!=['0','1','2','3']:
-           raise RuntimeError('Unexpected main menu selections: '+repr(shifts))
-          line=menu.index('"%c MONSTER\\n\\n"')
-          beg=menu.rfind('FntPrint(',0,line)
-          if beg<0:raise RuntimeError('Monster row call not found')
-          codex_row='''FntPrint(
-                                    2, "%c DRACHEN KODEX\\n\\n",
-                                    vt_menu_choice == 0 ? '>' : ' '
-                                );
-                                '''
-          menu=menu[:beg]+codex_row+menu[beg:]
-
-          # A separate codex page, always the first item.
-          if_marker='} else if (vt_menu_page == 1) {'
-          if menu.count(if_marker)!=1:raise RuntimeError('Monster-page start marker changed')
-          codex_page='''} else if (vt_menu_page == 4) {
-                                FntPrint(2, "DRACHEN KODEX\\n\\n");
-                                FntPrint(2, "SPARKIT: GEFANGEN\\n");
-                                FntPrint(2, "%s: %s\\n",
-                                    vt_v20_entry_name(1), vt_v20_entry(1));
-                                FntPrint(2, "%s: %s\\n",
-                                    vt_v20_entry_name(2), vt_v20_entry(2));
-                                FntPrint(2, "%s: %s\\n",
-                                    vt_v20_entry_name(3), vt_v20_entry(3));
-                                FntPrint(2, "%s: %s\\n",
-                                    vt_v20_entry_name(4), vt_v20_entry(4));
-                                FntPrint(2, "%s: %s\\n\\n",
-                                    vt_v20_entry_name(5), vt_v20_entry(5));
-                                FntPrint(2, "GESEHEN / GEFANGEN / ???\\n");
-                                FntPrint(2, "DREIECK ZURUECK\\n");
-
-                            '''+if_marker
-          menu=menu.replace(if_marker,codex_page,1)
-
-          # Replace the cramped old monster submenu with a selectable team list.
-          start=menu.find(if_marker)
-          end=menu.find('} else if (vt_menu_page == 2) {',start)
-          if start<0 or end<0:raise RuntimeError('Monster submenu boundaries changed')
-          team_page='''} else if (vt_menu_page == 1) {
-                                int i;
-                                FntPrint(2, "MEINE DRACHEN - X WAHL\\n\\n");
-                                for (i = 0; i < 5; i++) {
-                                    FntPrint(2, "%c%c %s %s\\n",
-                                        vt_v20_menu_dragon == i ? '>' : ' ',
-                                        vt_v20_active_dragon == i ? '*' : ' ',
-                                        vt_v20_dragon_name(i),
-                                        vt_v20_owned(i) ? "JA" : "--");
-                                }
-                                FntPrint(2, "* AKTIV / DREIECK ZURUECK\\n");
-
-                            '''
-          menu=menu[:start]+team_page+menu[end:]
-          code=code[:menu_start]+menu+code[menu_end:]
-
-          # Main menu logic (within the main loop), update choice wrap and add codex.
-          main=code.index('int main(void) {')
-          ctl_start=code.index('if (vt_menu_open) {',main)
-          ctl_end=code.index('/* Never send menu keys',ctl_start)
-          ctl=code[ctl_start:ctl_end]
-          if ctl.count('vt_menu_choice = 3;')!=1 or ctl.count('vt_menu_choice > 3')!=1:
-           raise RuntimeError('Main-menu up/down anchor mismatched')
-          ctl=ctl.replace('vt_menu_choice = 3;','vt_menu_choice = 4;',1)
-          ctl=ctl.replace('vt_menu_choice > 3','vt_menu_choice > 4',1)
-          choices=[]
-          def shift_controls(m):
-           choices.append(m.group(1))
-           return 'vt_menu_choice == '+str(int(m.group(1))+1)
-          ctl=re.sub(r'vt_menu_choice\s*==\s*([0-3])',shift_controls,ctl)
-          if sorted(choices)!=['0','1','2']:
-           raise RuntimeError('Controller choice markers changed: '+str(choices))
-          # Fourth load action is in an else branch, no explicit ==3 comparison.
-          old='if (vt_menu_choice == 1) {'
-          if ctl.count(old)!=1:raise RuntimeError('Main-menu selection first branch missing')
-          ctl=ctl.replace(old,'''if (vt_menu_choice == 0) {
-                                        vt_menu_page = 4;
-                                    } else if (vt_menu_choice == 1) {''',1)
-          # On entering the team page, select current member.
-          old='vt_menu_page = 1;'
-          if ctl.count(old)!=1: raise RuntimeError('Monster menu selection changed')
-          ctl=ctl.replace(old,old+'\n                              vt_v20_menu_dragon = vt_v20_active_dragon;',1)
-          # Add team selection using up/down and X, keep potions unchanged.
-          pattern=r'\}\s*else if\s*\(\s*vt_menu_page\s*==\s*2\s*&&\s*\(pressed\s*&\s*PAD_CROSS\)\s*\)\s*\{'
-          add='''} else if (vt_menu_page == 1) {
-                                if (pressed & PAD_UP)
-                                    vt_v20_menu_dragon =
-                                        (vt_v20_menu_dragon + 4) % 5;
-                                if (pressed & PAD_DOWN)
-                                    vt_v20_menu_dragon =
-                                        (vt_v20_menu_dragon + 1) % 5;
-                                if (pressed & PAD_CROSS) {
-                                    if (vt_v20_owned(vt_v20_menu_dragon)) {
-                                        vt_v20_active_dragon = vt_v20_menu_dragon;
-                                        vt_menu_message = "DRACHE GEWECHSELT";
-                                    } else {
-                                        vt_menu_message = "NOCH NICHT GEFANGEN";
-                                    }
-                                }
-                            } else if (vt_menu_page == 2 && (pressed & PAD_CROSS)) {'''
-          ctl,n=re.subn(pattern,add,ctl)
-          if n!=1:raise RuntimeError('Monster-page controls insertion failed: '+str(n))
-          code=code[:ctl_start]+ctl+code[ctl_end:]
-
-          # Show the currently selected dragon rather than always labeling it Sparkit.
-          pattern=r'FntPrint\(\s*0,\s*"SPARKIT L%d HP %d/24%s\\n\\n",\s*companion_level,\s*companion_hp,\s*evolved\s*\?\s*" VOLTIGON"\s*:\s*""\s*\);'
-          repl='FntPrint(0, "%s L%d HP %d/24\\n\\n",\n                       vt_v20_dragon_name(vt_v20_active_dragon),\n                       companion_level, companion_hp);'
-          code,n=re.subn(pattern,lambda m:repl,code)
-          if n!=1:print('WARNING: top HUD name not changed',n)
-
-          # In battle, L1 switches between all previously caught dragon species;
-          # the selected dragon defines which elemental attack Square performs.
-          required=['VOLT TRAIL V20','DRACHEN KODEX','vt_v20_entry(',
-                    'vt_v20_active_dragon','vt_v20_seen_mask',
-                    'vt_v20_attack_damage();','vt_v20_element_effect(',
-                    'vt_save_game(void)','vt_load_game(void)',
-                    'InitCARD(1);','PAD_SQUARE','PAD_CIRCLE',
-                    'vt_play_intro();']
-          for marker in required:
-           if marker not in code:raise RuntimeError('V20 missing feature '+marker)
-          path.write_text(code,encoding='utf-8')
-          print('V20 patched: first START item DRACHEN KODEX, seen/captured status')
-          print('NPC and wild dragon encounters tracked; persistence added')
-          print('Monster team selection and L1 battle switching added')
-          print('Elemental damage/effects: lightning, leaf, fire, water, ice')
-          PY
-
-      - name: Fix V20 C function declaration
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
+          import yaml
 
           source = (
-              Path(os.environ["PROJECT_DIR"])
-              / "src" / "main.c"
-          )
-          code = source.read_text(encoding="utf-8")
-
-          # C requires a declaration before the first call.
-          # Accept either whitespace style of the restored source.
-          import re
-          prototype = "static int vt_v20_owned(int slot);"
-          function = re.search(
-              r"(?m)^\s*static\s+int\s+vt_load_game\s*"
-              r"\(\s*void\s*\)\s*\{",
-              code
-          )
-          definition = re.search(
-              r"(?m)^\s*static\s+int\s+vt_v20_owned\s*"
-              r"\(\s*int\s+slot\s*\)\s*\{",
-              code
-          )
-          if function is None or definition is None:
-              raise RuntimeError("V20 save/load source markers missing")
-          if function.start() >= definition.start():
-              raise RuntimeError("Unexpected C function order")
-          if prototype in code:
-              raise RuntimeError("C prototype already inserted")
-          code = (
-              code[:function.start()]
-              + prototype + "\n\n"
-              + code[function.start():]
+              Path(os.environ["RUNNER_TEMP"])
+              / "working-v243.yml"
           )
 
-          for marker in (
-              "VOLT TRAIL V20",
-              "DRACHEN KODEX",
-              "vt_v20_seen_mask",
-              "vt_v20_active_dragon",
-              "vt_v20_attack_damage();",
-              "vt_save_game(void)",
-              "InitCARD(1);",
-          ):
-              if marker not in code:
-                  raise RuntimeError("Missing gameplay feature: " + marker)
+          steps = yaml.safe_load(
+              source.read_text(encoding="utf-8")
+          )["jobs"]["build"]["steps"]
 
-          source.write_text(code, encoding="utf-8")
-          print("Fixed C declaration of vt_v20_owned")
-          print("Dragon Codex, game saves and battle controls kept")
-          PY
-
-      - name: Add V21 three-dragon team and detailed Codex
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os, re
-          from pathlib import Path
-
-          path = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
-          code = path.read_text(encoding='utf-8')
-
-          def once(old, new):
-              global code
-              n = code.count(old)
-              if n != 1:
-                  raise RuntimeError(f'V21 expected exactly one {old[:90]!r}, found {n}')
-              code = code.replace(old, new, 1)
-
-          def function_body_span(src, fname):
-              match = re.search(r'\bstatic\s+(?:void|int)\s+'+re.escape(fname)+r'\s*\([^;]*?\)\s*\{',src)
-              if not match:
-                  raise RuntimeError('Function missing: '+fname)
-              start = match.start()
-              op = src.index('{', match.start(), match.end())
-              depth = 0
-              in_quote = False
-              in_char = False
-              in_line_comment = False
-              in_block_comment = False
-              escaped = False
-              i = op
-              while i < len(src):
-                  ch=src[i]; nextch=src[i+1] if i+1<len(src) else ''
-                  if in_line_comment:
-                      if ch == '\n':in_line_comment=False
-                  elif in_block_comment:
-                      if ch=='*' and nextch=='/': in_block_comment=False;i+=1
-                  elif in_quote or in_char:
-                      if escaped:escaped=False
-                      elif ch=='\\':escaped=True
-                      elif in_quote and ch=='"':in_quote=False
-                      elif in_char and ch=="'":in_char=False
-                  elif ch=='/' and nextch=='/':in_line_comment=True;i+=1
-                  elif ch=='/' and nextch=='*':in_block_comment=True;i+=1
-                  elif ch=='"':in_quote=True
-                  elif ch=="'":in_char=True
-                  elif ch=='{':depth+=1
-                  elif ch=='}':
-                      depth-=1
-                      if depth==0:return start,op,i+1
-                  i+=1
-              raise RuntimeError('Unclosed function '+fname)
-
-          # Visible version and menu label.
-          once('VOLT TRAIL V20 - %s','VOLT TRAIL V21 - %s')
-          once('VOLT TRAIL V20 - MENUE','VOLT TRAIL V21 - MENUE')
-          once('"%c MONSTER\\n\\n"','"%c DRACHEN\\n\\n"')
-
-          # State MUST appear before the save/load functions.
-          state = r'''
-          /* V21 team: at most 3 carried dragons, others remain in the codex. */
-          #define VT_V21_SAVE_MAGIC 0x56323150u
-          static int vt_v21_ready = 0;
-          static int vt_v21_count = 1;
-          static int vt_v21_party[3] = {0, -1, -1};
-          static int vt_v21_hp[5] = {24, 24, 24, 24, 24};
-          static int vt_v21_active = 0;
-          static int vt_v21_team_cursor = 0;
-          static int vt_v21_codex_cursor = 0;
-          static int vt_v21_force_switch = 0;
-          static int vt_v21_force_cursor = 0;
-          '''
-          once('static int vt_v20_attack_kind = 0;', 'static int vt_v20_attack_kind = 0;\n' + state.rstrip())
-
-          # Functions are inserted AFTER the existing V20 dragon-ownership logic.
-          helpers = r'''
-          static int vt_v21_party_position(int species) {
-              int i;
-              for (i = 0; i < vt_v21_count; i++)
-                  if (vt_v21_party[i] == species) return i;
-              return -1;
-          }
-
-          static void vt_v21_autofill(void) {
-              int species;
-              for (species = 1; species < 5 && vt_v21_count < 3; species++) {
-                  if (vt_v20_owned(species) && vt_v21_party_position(species) < 0) {
-                      vt_v21_party[vt_v21_count++] = species;
-                  }
-              }
-          }
-
-          static void vt_v21_setup(void) {
-              int species;
-              int old_active = vt_v20_active_dragon;
-              int old_hp = companion_hp;
-              if (vt_v21_ready) return;
-              vt_v21_count = 1;
-              vt_v21_party[0] = 0;
-              vt_v21_party[1] = -1;
-              vt_v21_party[2] = -1;
-              for (species = 0; species < 5; species++) vt_v21_hp[species] = 24;
-              if (old_active < 0 || old_active > 4 || !vt_v20_owned(old_active))
-                  old_active = 0;
-              vt_v21_autofill();
-              if (vt_v21_party_position(old_active) < 0) {
-                  /* An old V20 save may have a dragon beyond the first three. */
-                  vt_v21_party[vt_v21_count - 1] = old_active;
-              }
-              vt_v21_active = vt_v21_party_position(old_active);
-              if (vt_v21_active < 0) vt_v21_active = 0;
-              if (old_hp < 0) old_hp = 0;
-              if (old_hp > 24) old_hp = 24;
-              vt_v21_hp[old_active] = old_hp;
-              vt_v20_active_dragon = vt_v21_party[vt_v21_active];
-              companion_hp = vt_v21_hp[vt_v20_active_dragon];
-              vt_v21_team_cursor = vt_v21_active;
-              vt_v21_force_switch = 0;
-              vt_v21_ready = 1;
-          }
-
-          static int vt_v21_can_switch_to(int position) {
-              int species;
-              if (position < 0 || position >= vt_v21_count) return 0;
-              species = vt_v21_party[position];
-              if (species < 0 || species > 4) return 0;
-              return vt_v21_hp[species] > 0;
-          }
-
-          static int vt_v21_switch_to(int position) {
-              int old_species;
-              int new_species;
-              if (!vt_v21_can_switch_to(position)) return 0;
-              old_species = vt_v21_party[vt_v21_active];
-              if (old_species >= 0 && old_species < 5) {
-                  if (companion_hp < 0) companion_hp = 0;
-                  if (companion_hp > 24) companion_hp = 24;
-                  vt_v21_hp[old_species] = companion_hp;
-              }
-              vt_v21_active = position;
-              new_species = vt_v21_party[position];
-              vt_v20_active_dragon = new_species;
-              companion_hp = vt_v21_hp[new_species];
-              vt_v21_team_cursor = position;
-              return 1;
-          }
-
-          static void vt_v21_next_dragon(void) {
-              int i;
-              int pos;
-              for (i = 1; i < vt_v21_count; i++) {
-                  pos = (vt_v21_active + i) % vt_v21_count;
-                  if (vt_v21_can_switch_to(pos)) {
-                      vt_v21_switch_to(pos);
-                      return;
-                  }
-              }
-          }
-
-          static int vt_v21_alive_reserve(void) {
-              int i;
-              for (i = 0; i < vt_v21_count; i++) {
-                  if (i != vt_v21_active && vt_v21_can_switch_to(i)) return i;
-              }
-              return -1;
-          }
-
-          static void vt_v21_post_frame(void) {
-              int species;
-              int pos;
-              vt_v21_setup();
-              vt_v21_autofill();
-              species = vt_v21_party[vt_v21_active];
-              if (species >= 0 && species < 5) {
-                  if (companion_hp < 0) companion_hp = 0;
-                  if (companion_hp > 24) companion_hp = 24;
-                  vt_v21_hp[species] = companion_hp;
-              }
-              /* The original game sets mode=3 when the active dragon is knocked out. */
-              if (game_mode == 3 && !vt_v21_force_switch) {
-                  pos = vt_v21_alive_reserve();
-                  if (pos >= 0) {
-                      vt_v21_force_switch = 1;
-                      vt_v21_force_cursor = pos;
-                      game_mode = 1;
-                      vt_menu_open = 0;
-                      vt_menu_page = 0;
-                  }
-              }
-          }
-
-          static const char *vt_v21_element(int species) {
-              switch (species) {
-                  case 0: case 1: return "BLITZ";
-                  case 2: return "PFLANZE";
-                  case 3: return "FEUER";
-                  case 4: return "WASSER";
-                  case 5: return "EIS";
-                  default: return "UNBEKANNT";
-              }
-          }
-
-          static const char *vt_v21_description(int species) {
-              switch (species) {
-                  case 0: return "KLEINER ELEKTRODRACHE";
-                  case 1: return "STARKER STURMDRACHE";
-                  case 2: return "HUETER DES WALDES";
-                  case 3: return "DRACHE DES FEUERS";
-                  case 4: return "DRACHE DES WASSERS";
-                  case 5: return "DRACHE DES EISES";
-                  default: return "NOCH UNENTDECKT";
-              }
-          }
-
-          static int vt_v21_codex_species_owned(int codex_species) {
-              if (codex_species == 0) return 1;
-              if (codex_species == 1) return evolved != 0;
-              return vt_v20_owned(codex_species - 1);
-          }
-
-          static void vt_v21_codex_add_to_team(void) {
-              int selected = vt_v21_codex_cursor;
-              int species = selected < 2 ? 0 : selected - 1;
-              int position;
-              if (!vt_v21_codex_species_owned(selected)) {
-                  vt_menu_message = "NOCH NICHT GEFANGEN";
-                  return;
-              }
-              position = vt_v21_party_position(species);
-              if (position >= 0) {
-                  vt_menu_message = "BEREITS IM TEAM";
-                  return;
-              }
-              if (vt_v21_count < 3) {
-                  vt_v21_party[vt_v21_count++] = species;
-                  vt_menu_message = "DRACHE IM TEAM";
-              } else {
-                  /* Replace a reserve dragon, never the active one. */
-                  position = vt_v21_active == 2 ? 1 : 2;
-                  vt_v21_party[position] = species;
-                  vt_menu_message = "RESERVE AUSGETAUSCHT";
-              }
-              vt_v21_hp[species] = 24;
-          }
-          '''
-          once('static const char *vt_v20_entry(int species) {', helpers + '\nstatic const char *vt_v20_entry(int species) {')
-
-          # Restore slots and individual HP without changing the existing save checksum.
-          # Save extension starts at word 26, beyond the V20 extension ending at 25.
-          save_entry = 'words[25] = words[22] ^ words[23] ^ words[24] ^ 0xdec0de20u;'
-          save_extended = r'''
-                        words[26] = VT_V21_SAVE_MAGIC;
-                        words[27] = (uint32_t)vt_v21_count;
-                        words[28] = (uint32_t)(vt_v21_party[0] & 255) |
-                                    ((uint32_t)(vt_v21_party[1] & 255) << 8) |
-                                    ((uint32_t)(vt_v21_party[2] & 255) << 16);
-                        /* HP for all five caught species, even those in reserve. */
-                        if (vt_v21_ready && vt_v21_active >= 0 &&
-                            vt_v21_active < vt_v21_count) {
-                            int species = vt_v21_party[vt_v21_active];
-                            vt_v21_hp[species] = companion_hp;
-                        }
-                        words[29] = (uint32_t)(vt_v21_hp[0] & 255) |
-                                    ((uint32_t)(vt_v21_hp[1] & 255) << 8) |
-                                    ((uint32_t)(vt_v21_hp[2] & 255) << 16) |
-                                    ((uint32_t)(vt_v21_hp[3] & 255) << 24);
-                        words[30] = (uint32_t)vt_v21_hp[4];
-                        words[31] = (uint32_t)vt_v21_active;
-                        words[32] = words[26] ^ words[27] ^ words[28] ^
-                                    words[29] ^ words[30] ^ words[31] ^ 0x8d53c4b1u;
-          '''
-          once(save_entry, save_entry + '\n' + save_extended.rstrip())
-
-          # Insert restore into the existing real vt_load_game function right before return 1.
-          a,b,end=function_body_span(code,'vt_load_game')
-          load_fragment=code[b:end]
-          if load_fragment.count('return 1;')!=1:raise RuntimeError('Unexpected V20 load return')
-          restore=r'''
-                        /* Backward compatible: V17-V20 saves have no V21 team block. */
-                        vt_v21_ready = 0;
-                        if (w[26] == VT_V21_SAVE_MAGIC &&
-                            w[32] == (w[26] ^ w[27] ^ w[28] ^
-                                      w[29] ^ w[30] ^ w[31] ^ 0x8d53c4b1u) &&
-                            w[27] >= 1 && w[27] <= 3 && w[31] < w[27]) {
-                            int i;
-                            int count = (int)w[27];
-                            int valid = 1;
-                            int ids[3];
-                            int health[5];
-                            ids[0] = (int)(w[28] & 255u);
-                            ids[1] = (int)((w[28] >> 8) & 255u);
-                            ids[2] = (int)((w[28] >> 16) & 255u);
-                            for (i = 0; i < 4; i++)
-                                health[i] = (int)((w[29] >> (i * 8)) & 255u);
-                            health[4] = (int)w[30];
-                            for (i = 0; i < 5; i++)
-                                if (health[i] > 24) valid = 0;
-                            for (i = 0; i < count; i++) {
-                                int k;
-                                int species = ids[i];
-                                if (species < 0 || species > 4) valid = 0;
-                                for (k = 0; k < i; k++)
-                                    if (ids[k] == species) valid = 0;
-                                if (species > 0 &&
-                                    !(vt_v19_mask & (1u << (species - 1))) &&
-                                    !(species == 1 && caught_mosslet)) valid = 0;
-                            }
-                            if (valid) {
-                                vt_v21_count = count;
-                                for (i = 0; i < 3; i++)
-                                    vt_v21_party[i] = i < count ? ids[i] : -1;
-                                for (i = 0; i < 5; i++) vt_v21_hp[i] = health[i];
-                                vt_v21_active = (int)w[31];
-                                vt_v20_active_dragon = vt_v21_party[vt_v21_active];
-                                companion_hp = vt_v21_hp[vt_v20_active_dragon];
-                                vt_v21_team_cursor = vt_v21_active;
-                                vt_v21_ready = 1;
-                            }
-                        }
-                        vt_v21_force_switch = 0;
-          '''
-          load_fragment=load_fragment.replace('return 1;', restore+'\n              return 1;',1)
-          code=code[:b]+load_fragment+code[end:]
-
-          # Modify in-world active dragon switching to respect the carried team and HP.
-          main=code.index('int main(void) {')
-          before,after=code[:main],code[main:]
-          if after.count('vt_v20_next_dragon();')!=1:raise RuntimeError('V20 L1 battle switch call missing')
-          after=after.replace('vt_v20_next_dragon();','vt_v21_next_dragon();',1)
-          code=before+after
-
-          # New main-menu team page: only 1-3 carried dragons, with individual HP.
-          a,b,end=function_body_span(code,'draw_hud')
-          hud=code[b:end]
-          start = hud.find('} else if (vt_menu_page == 1) {')
-          stop = hud.find('} else if (vt_menu_page == 2) {',start)
-          if start<0 or stop<0:raise RuntimeError('Team HUD page not found')
-          team_hud=r'''} else if (vt_menu_page == 1) {
-                                int i;
-                                FntPrint(2, "DEINE DRACHEN %d/3\n\n", vt_v21_count);
-                                for (i = 0; i < vt_v21_count; i++) {
-                                    int species = vt_v21_party[i];
-                                    FntPrint(2, "%c%c %s %d/24 HP\n\n",
-                                        vt_v21_team_cursor == i ? '>' : ' ',
-                                        vt_v21_active == i ? '*' : ' ',
-                                        vt_v20_dragon_name(species),
-                                        vt_v21_hp[species]);
-                                }
-                                FntPrint(2, "X WAHL / DREIECK ZURUECK\n");
-
-                            '''
-          hud=hud[:start]+team_hud+hud[stop:]
-
-          # Codex with pagination (3 rows at a time) plus an X detail page.
-          start = hud.find('} else if (vt_menu_page == 4) {')
-          stop = hud.find('} else if (vt_menu_page == 1) {',start)
-          if start<0 or stop<0:raise RuntimeError('Codex HUD page not found')
-          codex_hud=r'''} else if (vt_menu_page == 4) {
-                                int i;
-                                int first = (vt_v21_codex_cursor / 3) * 3;
-                                FntPrint(2, "DRACHEN KODEX  %d/6\n\n",
-                                    vt_v21_codex_cursor + 1);
-                                for (i = first; i < first + 3 && i < 6; i++) {
-                                    FntPrint(2, "%c %-8s %s\n\n",
-                                        vt_v21_codex_cursor == i ? '>' : ' ',
-                                        vt_v20_entry_name(i), vt_v20_entry(i));
-                                }
-                                FntPrint(2, "X DETAILS / DREIECK ZURUECK\n");
-
-                            } else if (vt_menu_page == 5) {
-                                int species = vt_v21_codex_cursor;
-                                FntPrint(2, "DRACHEN INFO\n\n");
-                                FntPrint(2, "%s\n\n", vt_v20_entry_name(species));
-                                FntPrint(2, "ELEMENT: %s\n\n", vt_v21_element(species));
-                                FntPrint(2, "STATUS: %s\n\n", vt_v20_entry(species));
-                                if (!strcmp(vt_v20_entry(species), "???"))
-                                    FntPrint(2, "NOCH NICHT ENTDECKT\n\n");
-                                else
-                                    FntPrint(2, "%s\n\n", vt_v21_description(species));
-                                if (vt_v21_codex_species_owned(species))
-                                    FntPrint(2, "VIERECK INS TEAM\n");
-                                FntPrint(2, "%s\n", vt_menu_message);
-                                FntPrint(2, "DREIECK ZURUECK\n");
-
-                            '''
-          hud=hud[:start]+codex_hud+hud[stop:]
-
-          # Knockout screen appears independently of the START menu.
-          needle='if (vt_menu_open) {'
-          if hud.count(needle)!=1: raise RuntimeError('Menu HUD condition changed')
-          forced_hud=r'''if (vt_v21_force_switch) {
-                        int i;
-                        FntPrint(0, "DEIN DRACHE IST BESIEGT!\n\n");
-                        FntPrint(0, "WAEHLE DEN NAECHSTEN DRACHEN\n");
-                        FntPrint(2, "DRACHEN WECHSELN\n\n");
-                        for (i = 0; i < vt_v21_count; i++) {
-                            int species = vt_v21_party[i];
-                            if (vt_v21_hp[species] > 0)
-                                FntPrint(2, "%c %s HP %d/24\n\n",
-                                    vt_v21_force_cursor == i ? '>' : ' ',
-                                    vt_v20_dragon_name(species), vt_v21_hp[species]);
-                        }
-                        FntPrint(2, "D-PAD WAHL / X EINWECHSELN\n");
-                        FntFlush(0);
-                        FntFlush(2);
-                        return;
-                    }
-                    '''
-          hud=hud.replace(needle,forced_hud+needle,1)
-          code=code[:b]+hud+code[end:]
-
-          # Draw the same dark panel for the forced-switch screen.
-          a,b,end=function_body_span(code,'vt_draw_menu_panel')
-          panel=code[b:end]
-          if panel.count('if (!vt_menu_open)')!=1:
-              raise RuntimeError('Menu background visibility marker changed')
-          panel=panel.replace('if (!vt_menu_open)', 'if (!vt_menu_open && !vt_v21_force_switch)',1)
-          code=code[:b]+panel+code[end:]
-
-          # Modify the existing START menu controls, preserving save/load and items.
-          main=code.index('int main(void) {')
-          ctl_start=code.find('if (vt_menu_open) {',main)
-          ctl_end=code.find('/* Never send menu keys',ctl_start)
-          if ctl_start<0 or ctl_end<0:raise RuntimeError('Main menu controller block not found')
-          ctl=code[ctl_start:ctl_end]
-          old='if (vt_menu_page != 0) {'
-          if ctl.count(old)!=1:raise RuntimeError('Back-navigation condition changed')
-          ctl=ctl.replace(old,'if (vt_menu_page == 5) {\n                          vt_menu_page = 4;\n                      } else if (vt_menu_page != 0) {',1)
-          old='vt_v20_menu_dragon = vt_v20_active_dragon;'
-          if ctl.count(old)!=1:raise RuntimeError('Team cursor init marker changed')
-          ctl=ctl.replace(old,'vt_v21_team_cursor = vt_v21_active;',1)
-          # Replace sub-menu team handling without disturbing item page (2).
-          start=ctl.find('} else if (vt_menu_page == 1) {')
-          stop=ctl.find('} else if (vt_menu_page == 2 &&',start)
-          if start<0 or stop<0:raise RuntimeError('Team input boundaries not found')
-          team_control=r'''} else if (vt_menu_page == 4) {
-                                if (pressed & PAD_UP)
-                                    vt_v21_codex_cursor = (vt_v21_codex_cursor + 5) % 6;
-                                if (pressed & PAD_DOWN)
-                                    vt_v21_codex_cursor = (vt_v21_codex_cursor + 1) % 6;
-                                if (pressed & PAD_CROSS) {
-                                    vt_menu_page = 5;
-                                    vt_menu_message = "";
-                                }
-                            } else if (vt_menu_page == 5) {
-                                if (pressed & PAD_SQUARE)
-                                    vt_v21_codex_add_to_team();
-                            } else if (vt_menu_page == 1) {
-                                if ((pressed & PAD_UP) && vt_v21_count > 0)
-                                    vt_v21_team_cursor =
-                                        (vt_v21_team_cursor + vt_v21_count - 1) % vt_v21_count;
-                                if ((pressed & PAD_DOWN) && vt_v21_count > 0)
-                                    vt_v21_team_cursor =
-                                        (vt_v21_team_cursor + 1) % vt_v21_count;
-                                if (pressed & PAD_CROSS) {
-                                    if (vt_v21_switch_to(vt_v21_team_cursor))
-                                        vt_menu_message = "DRACHE EINGEWECHSELT";
-                                    else
-                                        vt_menu_message = "DRACHE BESIEGT";
-                                }
-                            '''
-          ctl=ctl[:start]+team_control+ctl[stop:]
-          code=code[:ctl_start]+ctl+code[ctl_end:]
-
-          # Initialize team and process forced switching BEFORE the older game input.
-          # This also prevents X used to switch from attacking on the same frame.
-          key='        previous_pad = pad;'
-          control=r'''
-                  vt_v21_setup();
-                  if (vt_v21_force_switch) {
-                      int direction;
-                      if (pressed & (PAD_UP | PAD_DOWN)) {
-                          direction = (pressed & PAD_DOWN) ? 1 : -1;
-                          {
-                              int n;
-                              for (n = 1; n <= vt_v21_count; n++) {
-                                  int pos = (vt_v21_force_cursor +
-                                             vt_v21_count + direction * n) % vt_v21_count;
-                                  if (vt_v21_can_switch_to(pos)) {
-                                      vt_v21_force_cursor = pos;
-                                      break;
-                                  }
-                              }
-                          }
-                      }
-                      if ((pressed & PAD_CROSS) &&
-                          vt_v21_switch_to(vt_v21_force_cursor)) {
-                          vt_v21_force_switch = 0;
-                      }
-                      pressed = 0;
-                      pad = 0;
-                  }
-                  /* Original X recovery restores all team dragons after a full defeat. */
-                  if (game_mode == 3 && (pressed & PAD_CROSS)) {
-                      int i;
-                      for (i = 0; i < vt_v21_count; i++)
-                          vt_v21_hp[vt_v21_party[i]] = 24;
-                      companion_hp = 24;
-                  }
-          '''
-          once(key,key+'\n'+control.rstrip())
-
-          # Update team and check for a fainted dragon before rendering the scene.
-          post_anchor='        /* Camera follows the player;'
-          if code.count(post_anchor)!=1:
-              raise RuntimeError('Camera/rendering post-loop anchor changed')
-          once(post_anchor, '        vt_v21_post_frame();\n\n'+post_anchor)
-
-          # Show carried team size in existing status display (not all captured species).
-          code = code.replace('1 + vt_v19_caught_count()', 'vt_v21_count')
-
-          # Validate source contents.
           required = [
-              'VOLT TRAIL V21', 'DRACHEN KODEX', '"%c DRACHEN\\n\\n"',
-              'vt_v21_count', 'vt_v21_party[3]', 'vt_v21_force_switch',
-              'vt_v21_codex_cursor', 'vt_v21_codex_add_to_team',
-              'vt_v21_post_frame();', 'vt_v21_next_dragon();',
-              'VT_V21_SAVE_MAGIC', 'vt_save_game(void)', 'vt_load_game(void)',
-              'InitCARD(1);', 'PAD_SQUARE', 'PAD_CIRCLE', 'PAD_TRIANGLE',
-              'vt_play_intro();', 'FntFlush(2);'
+              "Restore V17 intro and gameplay",
+              "Restore V18 dragons and graphics",
+              "Apply working V18 compiler fix",
+              "Add V19 dragon species and battle effects",
+              "Add V20 Dragon Codex and elemental battles",
+              "Fix V20 C function declaration",
+              "Add V21 three-dragon team and detailed Codex",
+              "Apply V22 persistent fainting and battle switching",
+              "Apply V23 selected living dragon in overworld",
+              "Expand V24 world and improve retro adventure graphics",
+              "Apply V24.1 camera background villages and roads fixed",
+              "V24.2 Tilt camera and show true ground perspective",
+              "V24.3 Improve player framing and battle HP display"
           ]
-          for marker in required:
-              if marker not in code:
-                  raise RuntimeError('V21 feature missing: '+marker)
-          path.write_text(code,encoding='utf-8')
-          print('V21: START menu DRACHEN only lists carried party (max 3)')
-          print('V21: KO forces selection of a living reserve dragon')
-          print('V21: per-species HP and party persisted in compatible save extension')
-          print('V21: codex scroll, X details, elements, descriptions and captured status')
-          print('V21: extra captured dragons remain in codex and can replace bench')
-          PY
 
-      - name: Apply V22 persistent fainting and battle switching
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os
-          import re
-          from pathlib import Path
+          for name in required:
+              matches = [
+                  step for step in steps
+                  if step.get("name") == name
+              ]
 
-          path = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
-          code = path.read_text(encoding='utf-8')
-
-
-          def replace_once(old, new):
-              global code
-              n = code.count(old)
-              if n != 1:
-                  raise RuntimeError(f'V22 marker expected once, found {n}: {old[:85]!r}')
-              code = code.replace(old, new, 1)
-
-
-          def function_span(source, name, return_type=None):
-              # Braces inside comments and strings are ignored.
-              rt = r'(?:void|int)' if return_type is None else re.escape(return_type)
-              reg = r'\b(?:static\s+)?' + rt + r'\s+' + re.escape(name) + r'\s*\([^;]*?\)\s*\{'
-              matches = list(re.finditer(reg, source))
               if len(matches) != 1:
-                  raise RuntimeError(f'Cannot locate {name} definition (found {len(matches)})')
-              start = matches[0].start()
-              op = source.index('{', matches[0].start(), matches[0].end())
-              level = 0
-              i = op
-              quoted = False
-              char_quoted = False
-              line_comment = False
-              block_comment = False
-              escaped = False
-              while i < len(source):
-                  c = source[i]
-                  following = source[i+1] if i+1 < len(source) else ''
-                  if line_comment:
-                      if c == '\n': line_comment = False
-                  elif block_comment:
-                      if c == '*' and following == '/': block_comment = False; i += 1
-                  elif quoted or char_quoted:
-                      if escaped: escaped = False
-                      elif c == '\\': escaped = True
-                      elif quoted and c == '"': quoted = False
-                      elif char_quoted and c == "'": char_quoted = False
-                  elif c == '/' and following == '/': line_comment = True; i += 1
-                  elif c == '/' and following == '*': block_comment = True; i += 1
-                  elif c == '"': quoted = True
-                  elif c == "'": char_quoted = True
-                  elif c == '{': level += 1
-                  elif c == '}':
-                      level -= 1
-                      if level == 0: return start, op, i+1
-                  i += 1
-              raise RuntimeError('Unclosed C block: ' + name)
-
-
-          def replace_function_section(name, old, new):
-              global code
-              a, op, end = function_span(code, name)
-              part = code[a:end]
-              n = part.count(old)
-              if n != 1:
-                  raise RuntimeError(f'{name} subsection expected once, found {n}: {old[:85]!r}')
-              part = part.replace(old, new, 1)
-              code = code[:a] + part + code[end:]
-
-
-          # A new save-format number is unnecessary: the V21 party block already
-          # saves per-species HP, including zero. Keep compatibility with V21.
-          replace_once('VOLT TRAIL V21 - %s', 'VOLT TRAIL V22 - %s')
-          replace_once('VOLT TRAIL V21 - MENUE', 'VOLT TRAIL V22 - MENUE')
-
-          # Fix the exploit where removing a fainted dragon from the three-member
-          # party and adding it again through the Codex gives it 24 HP for free.
-          replace_function_section(
-              'vt_v21_codex_add_to_team',
-              '    vt_v21_hp[species] = 24;',
-              '    /* HP is retained, including zero for a knocked-out dragon. */'
-          )
-
-          # Add actual knockout and manual revival helpers after the V21 ownership,
-          # save-state, and party-management declarations. Each species keeps its
-          # individual HP independently of its position in the party.
-          helpers = r'''
-          /* V22: A defeated dragon remains at zero HP until explicitly healed. */
-          static void vt_v22_knockout(void) {
-              int species;
-              int reserve;
-
-              vt_v21_setup();
-              species = vt_v21_party[vt_v21_active];
-              companion_hp = 0;
-              if (species >= 0 && species < 5)
-                  vt_v21_hp[species] = 0;
-
-              reserve = vt_v21_alive_reserve();
-              if (reserve >= 0) {
-                  /* Preserve wild_hp and encounter_kind: the battle is NOT reset. */
-                  vt_v21_force_switch = 1;
-                  vt_v21_force_cursor = reserve;
-                  game_mode = 1;
-                  vt_menu_open = 0;
-                  vt_menu_page = 0;
-              } else {
-                  /* No living teammate: show defeat screen, without healing. */
-                  vt_v21_force_switch = 0;
-                  game_mode = 3;
-              }
-          }
-
-          /* V22: Square in the DRACHEN menu uses one potion on the chosen dragon.
-           * This works even at 0 HP and is the only free-roaming way to revive
-           * a defeated party member. Never change unrelated team members' HP. */
-          static void vt_v22_heal_selected(int position) {
-              int species;
-              int health;
-
-              vt_v21_setup();
-              if (position < 0 || position >= vt_v21_count) {
-                  vt_menu_message = "KEIN DRACHE GEWAEHLT";
-                  return;
-              }
-              species = vt_v21_party[position];
-              if (species < 0 || species > 4) return;
-
-              if (vt_potions <= 0) {
-                  vt_menu_message = "KEINE HEILTRAENKE MEHR";
-                  return;
-              }
-
-              health = vt_v21_hp[species];
-              if (position == vt_v21_active) health = companion_hp;
-              if (health >= 24) {
-                  vt_menu_message = "DRACHE BEREITS GESUND";
-                  return;
-              }
-
-              vt_potions--;
-              health += 10;
-              if (health > 24) health = 24;
-              vt_v21_hp[species] = health;
-              if (position == vt_v21_active) companion_hp = health;
-              vt_menu_message = health > 0 ?
-                  "DRACHE GEHEILT / WIEDER FIT" : "DRACHE GEHEILT";
-          }
-          '''
-          replace_once('static void vt_v21_post_frame(void) {', helpers + '\nstatic void vt_v21_post_frame(void) {')
-
-          # Remove the V21 shortcut that silently healed every dragon for free
-          # on the defeat screen, BEFORE the original combat code handled X.
-          old_recovery = re.compile(
-              r'/\*\s*Original X recovery restores all team dragons after a full defeat\.\s*\*/'
-              r'\s*if\s*\(\s*game_mode\s*==\s*3\s*&&\s*\(\s*pressed\s*&\s*PAD_CROSS\s*\)\s*\)\s*\{'
-              r'\s*int\s+i\s*;\s*for\s*\(\s*i\s*=\s*0\s*;\s*i\s*<\s*vt_v21_count\s*;\s*i\+\+\s*\)'
-              r'\s*vt_v21_hp\[vt_v21_party\[i\]\]\s*=\s*24\s*;'
-              r'\s*companion_hp\s*=\s*24\s*;\s*\}', re.M
-          )
-          code, n = old_recovery.subn('/* V22: Never revive the whole party after defeat. */', code)
-          if n != 1:
-              raise RuntimeError(f'V21 automatic party recovery block not found: {n}')
-
-          # The original game-over X handler also heals the active dragon and
-          # exits battle. Replace it by a non-healing return to the world.
-          a, op, end = function_span(code, 'main', 'int')
-          main = code[a:end]
-          pattern = re.compile(
-              r'\}\s*else\s+if\s*\(\s*game_mode\s*==\s*3\s*&&\s*\(\s*pressed\s*&\s*PAD_CROSS\s*\)\s*\)\s*\{'
-              r'\s*companion_hp\s*=\s*24\s*;\s*game_mode\s*=\s*0\s*;\s*px\s*=\s*0\s*;\s*pz\s*=\s*0\s*;'
-              r'\s*\}', re.M
-          )
-          main, n = pattern.subn(
-              '''} else if (game_mode == 3 && (pressed & PAD_CROSS)) {
-                      /* The party is still fainted. Return to heal via START. */
-                      game_mode = 0;
-                      vt_v21_force_switch = 0;
-                      vt_menu_open = 0;
-                      vt_menu_page = 0;
-                  }''', main
-          )
-          if n != 1:
-              raise RuntimeError(f'Original game-over heal branch not found: {n}')
-
-          # Do NOT heal the active dragon after each victory automatically.
-          # Keeping actual battle damage makes individual HP meaningful.
-          win_pattern = re.compile(
-              r'(\}\s*else\s+if\s*\(\s*game_mode\s*==\s*2\s*&&\s*\(\s*pressed\s*&\s*PAD_CROSS\s*\)\s*\)\s*\{)'
-              r'(?P<body>.*?)'
-              r'(?=\}\s*else\s+if\s*\(\s*game_mode\s*==\s*3\s*&&)', re.S
-          )
-          win_match = win_pattern.search(main)
-          if not win_match:
-              raise RuntimeError('Victory handler not found')
-          win_body = win_match.group('body')
-          win_body, count = re.subn(r'\bcompanion_hp\s*=\s*24\s*;',
-                                    '/* V22: Keep battle HP until a potion heals it. */', win_body)
-          if count != 1:
-              raise RuntimeError(f'Expected one auto-heal in victory, got {count}')
-          main = main[:win_match.start('body')] + win_body + main[win_match.end('body'):]
-
-          # Enforce knockout as soon as a combat action drops health to zero,
-          # before the old mode-3 defeat path can close or reset the battle.
-          post_anchor = '        vt_v21_post_frame();'
-          if main.count(post_anchor) != 1:
-              raise RuntimeError('V21 end-of-frame party updater not found')
-          main = main.replace(post_anchor, '''        if (game_mode == 3 && companion_hp <= 0) {
-                      vt_v22_knockout();
-                  }
-                  vt_v21_post_frame();''', 1)
-
-          # The game cannot start a new battle with an unconscious active dragon.
-          # Switch to the first living reserve if there is one; otherwise prevent
-          # the battle until the player manually heals a party member.
-          before_battle = r'''        if (game_mode == 0 && (pressed & PAD_SQUARE) &&
-                      companion_hp <= 0 && !vt_menu_open) {
-                      int alive = vt_v21_alive_reserve();
-                      if (alive >= 0) {
-                          vt_v21_switch_to(alive);
-                      } else {
-                          pressed &= ~PAD_SQUARE;
-                          vt_menu_message = "ALLE DRACHEN KO - HEILEN";
-                      }
-                  }
-          '''
-          anchor = '        if (action_flash > 0) action_flash--;'
-          if main.count(anchor) != 1:
-              raise RuntimeError('Original battle controls marker missing')
-          main = main.replace(anchor, before_battle + anchor, 1)
-
-          # Never allow an unhealed knocked-out dragon to take a turn while the
-          # force-switch selection is on screen; the V21 input code already clears
-          # pressed and pad during forced switching.
-          code = code[:a] + main + code[end:]
-
-          # Manual potion in the three-dragon team page. X continues to switch;
-          # Square heals the currently highlighted dragon (including fainted ones).
-          a, op, end = function_span(code, 'main', 'int')
-          main = code[a:end]
-          start = main.find('} else if (vt_menu_page == 1) {')
-          stop = main.find('} else if (vt_menu_page == 2 &&', start)
-          if start < 0 or stop < 0:
-              raise RuntimeError('V21 team submenu controls missing')
-          team_controls = main[start:stop]
-          if team_controls.count('vt_v21_switch_to(vt_v21_team_cursor)') != 1:
-              raise RuntimeError('V21 team selection logic unexpectedly changed')
-          # Append Square handling at the bottom of the DRACHEN submenu.
-          team_controls += '''    if (pressed & PAD_SQUARE) {
-                  vt_v22_heal_selected(vt_v21_team_cursor);
-              }
-              '''
-          main = main[:start] + team_controls + main[stop:]
-          code = code[:a] + main + code[end:]
-
-          # Update team help to show Square = heal, X = switch, Triangle = back.
-          replace_function_section(
-              'draw_hud',
-              'FntPrint(2, "X WAHL / DREIECK ZURUECK\\n");',
-              'FntPrint(2, "X WECHSEL / VIERECK HEILEN\\n");\n'
-              '                      FntPrint(2, "%s\\n", vt_menu_message);\n'
-              '                      FntPrint(2, "DREIECK ZURUECK\\n");'
-          )
-
-          # Replace only the defeat-state HUD content. Keep all other HUD pages.
-          a, op, end = function_span(code, 'draw_hud')
-          hud = code[a:end]
-          mode = re.search(r'\}\s*else\s+if\s*\(\s*game_mode\s*==\s*3\s*\)\s*\{', hud)
-          if mode:
-              start = mode.end()
-              i = start
-              nesting = 1
-              while i < len(hud) and nesting:
-                  if hud[i] == '{': nesting += 1
-                  elif hud[i] == '}': nesting -= 1
-                  i += 1
-              if nesting != 0:
-                  raise RuntimeError('Cannot close game-over HUD branch')
-              hud = (hud[:start] + '''
-                        FntPrint(1, "ALLE DRACHEN BESIEGT!\\n");
-                        FntPrint(1, "X ZURUECK - DRACHEN HEILEN\\n");
-                    ''' + hud[i-1:])
-              code = code[:a] + hud + code[end:]
-          else:
-              print('NOTE: Existing victory/defeat HUD differs; game-over notice unchanged.')
-
-          # Leave existing memory card storage intact: V21 stores HP for each of
-          # the five species (including 0) inside its validated save extension.
-          required = [
-              'VOLT TRAIL V22', 'vt_v21_hp[5]', 'vt_v21_party[3]',
-              'vt_v22_knockout();', 'vt_v22_heal_selected(vt_v21_team_cursor)',
-              'vt_v21_force_switch = 1;', 'vt_v21_can_switch_to(',
-              'VT_V21_SAVE_MAGIC', 'vt_save_game(void)', 'vt_load_game(void)',
-              'InitCARD(1);', 'PAD_SQUARE', 'PAD_CROSS', 'PAD_CIRCLE',
-              'vt_play_intro();'
-          ]
-          for term in required:
-              if term not in code:
-                  raise RuntimeError('V22 required feature missing: ' + term)
-
-          path.write_text(code, encoding='utf-8')
-          print('V22: Defeated dragons persist at 0 HP until an item revives them')
-          print('V22: Forced replacement keeps enemy HP and battle state intact')
-          print('V22: Full party defeat ends battle; X returns to exploration without a heal')
-          print('V22: Square in DRACHEN menu heals selected dragon using a potion')
-          print('V22: Winning does not automatically refill HP')
-          print('V22: Save format unchanged; 0 HP persisted and compatible with V21')
-          PY
-
-      - name: Apply V23 selected living dragon in overworld
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          path = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
-          code = path.read_text(encoding='utf-8')
-
-          def once(old, new):
-              global code
-              n=code.count(old)
-              if n!=1:
-                  raise RuntimeError(f'V23 marker expected once, found {n}: {old[:110]!r}')
-              code=code.replace(old,new,1)
-
-          def span(source,name):
-              pattern=r'\bstatic\s+(?:void|int)\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
-              matches=list(re.finditer(pattern,source))
-              if len(matches)!=1:
-                  raise RuntimeError(f'V23 function {name} expected once, found {len(matches)}')
-              a=matches[0].start()
-              op=source.index('{',a,matches[0].end())
-              depth=0
-              quoted=False
-              char_quoted=False
-              escaped=False
-              line_comment=False
-              block_comment=False
-              j=op
-              while j<len(source):
-                  c=source[j]
-                  nextc=source[j+1] if j+1<len(source) else ''
-                  if line_comment:
-                      if c=='\n': line_comment=False
-                  elif block_comment:
-                      if c=='*' and nextc=='/':block_comment=False;j+=1
-                  elif quoted or char_quoted:
-                      if escaped:escaped=False
-                      elif c=='\\':escaped=True
-                      elif quoted and c=='"':quoted=False
-                      elif char_quoted and c=="'":char_quoted=False
-                  elif c=='/' and nextc=='/':line_comment=True;j+=1
-                  elif c=='/' and nextc=='*':block_comment=True;j+=1
-                  elif c=='"':quoted=True
-                  elif c=="'":char_quoted=True
-                  elif c=='{':depth+=1
-                  elif c=='}':
-                      depth-=1
-                      if depth==0:return a,j+1
-                  j+=1
-              raise RuntimeError('Unclosed C function '+name)
-
-          once('VOLT TRAIL V22 - %s','VOLT TRAIL V23 - %s')
-          once('VOLT TRAIL V22 - MENUE','VOLT TRAIL V23 - MENUE')
-
-          # Reordering the actual carried party is important. The first team slot and the
-          # visible field companion must agree with the player's selected living dragon.
-          switch_code = r'''static int vt_v21_switch_to(int position) {
-              int old_species;
-              int new_species;
-              int i;
-
-              vt_v21_setup();
-              if (!vt_v21_can_switch_to(position)) return 0;
-
-              old_species = vt_v21_party[vt_v21_active];
-              if (old_species >= 0 && old_species < 5) {
-                  if (companion_hp < 0) companion_hp = 0;
-                  if (companion_hp > 24) companion_hp = 24;
-                  vt_v21_hp[old_species] = companion_hp;
-              }
-
-              new_species = vt_v21_party[position];
-
-              /* Bring the chosen dragon to slot 1; retain all other team members. */
-              for (i = position; i > 0; i--)
-                  vt_v21_party[i] = vt_v21_party[i - 1];
-              vt_v21_party[0] = new_species;
-
-              vt_v21_active = 0;
-              vt_v20_active_dragon = new_species;
-              companion_hp = vt_v21_hp[new_species];
-              vt_v21_team_cursor = 0;
-              return 1;
-          }'''
-          a,b=span(code,'vt_v21_switch_to')
-          assert 'vt_v21_active = position;' in code[a:b]
-          code=code[:a]+switch_code+code[b:]
-
-          helpers=r'''
-          /* V23: Keep the selected, living dragon at the front of the team.
-           * If the active dragon has 0 HP outside battle, use a living teammate.
-           * Never heal a KO dragon or force a dead dragon to follow the player. */
-          static void vt_v23_check_field_leader(void) {
-              int species;
-              int position;
-
-              if (game_mode != 0 || vt_v21_force_switch) return;
-              vt_v21_setup();
-              if (vt_v21_count <= 0 || vt_v21_active < 0 ||
-                  vt_v21_active >= vt_v21_count) return;
-
-              species = vt_v21_party[vt_v21_active];
-              if (species < 0 || species > 4) return;
-
-              if (companion_hp > 0) return;
-
-              vt_v21_hp[species] = 0;
-              companion_hp = 0;
-
-              /* Prefer an available living dragon, including a healed teammate. */
-              for (position = 0; position < vt_v21_count; position++) {
-                  if (position != vt_v21_active && vt_v21_can_switch_to(position)) {
-                      vt_v21_switch_to(position);
-                      return;
-                  }
-              }
-              /* Everyone is at 0 HP: the player walks without a dragon until healed. */
-          }
-
-          /* Return -1 when no living companion should be drawn in the overworld. */
-          static int vt_v23_field_dragon(void) {
-              if (!vt_v21_ready || vt_v21_count < 1 ||
-                  vt_v21_active < 0 || vt_v21_active >= vt_v21_count ||
-                  companion_hp <= 0) return -1;
-              return vt_v21_party[vt_v21_active];
-          }
-          '''
-          once('static void vt_v22_knockout(void) {',helpers+'\nstatic void vt_v22_knockout(void) {')
-
-          # This is the frame boundary just before the 3-D scene is rendered in V22.
-          once('        vt_v21_post_frame();',
-               '        vt_v21_post_frame();\n'
-               '        vt_v23_check_field_leader();')
-
-          # Use the actual chosen team member for overworld and battle companion geometry.
-          # A 0 HP follower is intentionally omitted (never appear next to the trainer).
-          render_pattern = re.compile(
-              r'if\s*\(\s*vt_v20_active_dragon\s*==\s*0\s*\)\s*\{'
-              r'\s*vt_sparkit\s*\(\s*px\s*\+\s*26\s*,\s*pz\s*\+\s*105\s*\)\s*;'
-              r'\s*\}\s*else\s*\{'
-              r'\s*vt_v19_wild_dragon\s*\(\s*px\s*\+\s*26\s*,\s*pz\s*\+\s*105\s*,'
-              r'\s*vt_v20_active_dragon\s*-\s*1\s*\)\s*;'
-              r'\s*\}', re.M)
-          replace_render=r'''{
-                      int field_dragon = vt_v23_field_dragon();
-                      if (field_dragon == 0) {
-                          vt_sparkit(px + 26, pz + 105);
-                      } else if (field_dragon > 0) {
-                          vt_v19_wild_dragon(px + 26, pz + 105,
-                                             field_dragon - 1);
-                      }
-                  }'''
-          code,n=render_pattern.subn(lambda m:replace_render,code)
-          if n!=1:raise RuntimeError(f'V23 active follower drawing location not found uniquely: {n}')
-
-          # The additional Voltigon evolution spike belongs only to the displayed dragon.
-          # Otherwise KO Voltigon would still appear as a floating piece in the field.
-          spike_pat=re.compile(r'if\s*\(\s*evolved\s*&&\s*vt_v20_active_dragon\s*==\s*0\s*\)')
-          code,n=spike_pat.subn('if (evolved && vt_v23_field_dragon() == 0)',code)
-          if n > 1:raise RuntimeError(f'V23 ambiguous evolution render anchors: {n}')
-
-          required=['VOLT TRAIL V23','vt_v23_check_field_leader();',
-                    'vt_v23_field_dragon();','vt_v21_party[0] = new_species;',
-                    'vt_v22_knockout();','vt_v22_heal_selected(vt_v21_team_cursor)',
-                    'vt_save_game(void)','vt_load_game(void)','InitCARD(1);',
-                    'PAD_CROSS','PAD_SQUARE','PAD_TRIANGLE','vt_play_intro();']
-          for needle in required:
-              if needle not in code:raise RuntimeError('V23 expected feature missing: '+needle)
-          path.write_text(code,encoding='utf-8')
-          print('V23: Selected living dragon moves to front of party')
-          print('V23: Overworld and battle render the selected active dragon')
-          print('V23: KO dragon at 0 HP is never drawn as the follower')
-          print('V23: If another party dragon is healthy, switch to it in the field')
-          print('V23: When all dragons are KO the player has no companion until healed')
-          print('V23: Intro, controls, fights, party HP and save files preserved')
-          PY
-
-      - name: Expand V24 world and improve retro adventure graphics
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          path = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
-          code = path.read_text(encoding='utf-8')
-
-          def replace_once(old, new):
-              global code
-              n = code.count(old)
-              if n != 1:
-                  raise RuntimeError(f'V24 anchor expected once, found {n}: {old[:100]!r}')
-              code = code.replace(old, new, 1)
-
-          replace_once('VOLT TRAIL V23 - %s', 'VOLT TRAIL V24 - %s')
-          replace_once('VOLT TRAIL V23 - MENUE', 'VOLT TRAIL V24 - MENUE')
-
-          code, n = re.subn(r'#define\s+WORLD_LIMIT\s+\d+', '#define WORLD_LIMIT 1600', code, count=1)
-          if n != 1:
-              raise RuntimeError('WORLD_LIMIT definition missing')
-
-          helpers = r'''
-          /* V24: A much larger retro-adventure overworld inspired by the sense of
-           * scale of late-N64/PS1 fantasy games. The art remains original low-poly.
-           */
-          static void vt_v24_ground_patch(int x0, int z0, int step, int nx, int nz,
-                                          int r1, int g1, int b1,
-                                          int r2, int g2, int b2) {
-              int zi, xi;
-              for (zi = 0; zi < nz; zi++) {
-                  for (xi = 0; xi < nx; xi++) {
-                      int wx = x0 + xi * step;
-                      int wz = z0 + zi * step;
-                      SVECTOR a = {wx - px, 35, wz - pz, 0};
-                      SVECTOR b = {wx + step - px, 35, wz - pz, 0};
-                      SVECTOR c = {wx - px, 35, wz + step - pz, 0};
-                      SVECTOR d = {wx + step - px, 35, wz + step - pz, 0};
-                      if (((xi + zi) & 1) == 0) {
-                          draw_triangle3(&a, &c, &b, r1, g1, b1);
-                          draw_triangle3(&b, &c, &d, r2, g2, b2);
-                      } else {
-                          draw_triangle3(&a, &c, &b, r2, g2, b2);
-                          draw_triangle3(&b, &c, &d, r1, g1, b1);
-                      }
-                  }
-              }
-          }
-
-          static void vt_v24_peak(int x, int z, int width, int height,
-                                  int r, int g, int b) {
-              SVECTOR a = {x - width - px, 38, z - pz, 0};
-              SVECTOR b0 = {x + width - px, 38, z - pz, 0};
-              SVECTOR c = {x - px, 38 - height, z - 42 - pz, 0};
-              SVECTOR d = {x - px, 38, z + 34 - pz, 0};
-              draw_triangle3(&a, &c, &b0, r, g, b);
-              draw_triangle3(&a, &d, &c, r * 3 / 4, g * 3 / 4, b * 3 / 4);
-              draw_triangle3(&c, &d, &b0, r / 2, g / 2, b / 2);
-          }
-
-          static void vt_v24_tree(int x, int z, int scale, int variant) {
-              int rr = 35, gg = 140, bb = 70;
-              draw_box(x, 14, z, 9 + scale / 6, 96, 62, 38);
-              if (variant == 1) { rr = 28; gg = 164; bb = 84; }
-              if (variant == 2) { rr = 44; gg = 154; bb = 98; }
-              vt_pyramid(x, -18, z, 14 + scale / 4, 34 + scale, rr, gg, bb);
-              vt_pyramid(x, -36, z + 6, 10 + scale / 5, 26 + scale / 2,
-                         rr + 8, gg + 10, bb + 8);
-          }
-
-          static void vt_v24_house(int x, int z, int body_r, int body_g, int body_b,
-                                   int roof_r, int roof_g, int roof_b) {
-              draw_box(x, 18, z, 30, body_r, body_g, body_b);
-              draw_box(x, 6, z - 3, 8, 45, 85, 210);
-              vt_pyramid(x, -10, z, 34, 26, roof_r, roof_g, roof_b);
-          }
-
-          static void vt_v24_ruin_arch(int x, int z, int r, int g, int b) {
-              draw_box(x - 18, 6, z, 10, r, g, b);
-              draw_box(x + 18, 6, z, 10, r, g, b);
-              draw_box(x, -18, z, 12, r, g, b);
-          }
-
-          static void vt_v24_path_band(int z, int width, int r, int g, int b) {
-              int x0 = -width;
-              int x1 = width;
-              SVECTOR a = {x0 - px, 34, z - pz, 0};
-              SVECTOR b0 = {x1 - px, 34, z - pz, 0};
-              SVECTOR c = {x0 - px, 34, z + 70 - pz, 0};
-              SVECTOR d = {x1 - px, 34, z + 70 - pz, 0};
-              draw_triangle3(&a, &c, &b0, r, g, b);
-              draw_triangle3(&b0, &c, &d, r * 4 / 5, g * 4 / 5, b * 4 / 5);
-          }
-
-          static void vt_v24_draw_overworld(void) {
-              int z;
-              int i;
-
-              /* Broad field with more depth than the original prototype. */
-              vt_v24_ground_patch(-720, 40, 90, 16, 12, 34, 108, 58, 26, 92, 48);
-              vt_v24_ground_patch(-480, 1120, 120, 8, 4, 38, 98, 64, 30, 88, 54);
-
-              /* Main road through the region. */
-              for (z = 60; z <= 760; z += 70) {
-                  int width = 84 + (z / 24);
-                  vt_v24_path_band(z, width, 118, 91, 60);
-              }
-
-              /* Distant mountains and horizon landmarks. */
-              for (i = -3; i <= 3; i++) {
-                  vt_v24_peak(i * 210, 760 + (i & 1) * 70,
-                              110 + (i & 1) * 30,
-                              140 + (i + 3) * 8,
-                              42, 110, 108);
-              }
-              vt_v24_peak(-620, 920, 180, 210, 34, 86, 102);
-              vt_v24_peak(620, 950, 210, 240, 46, 98, 118);
-
-              if (region == 0) {
-                  /* Sunmeadow: wide village valley. */
-                  vt_v24_house(-210, 300, 138, 102, 64, 191, 84, 58);
-                  vt_v24_house(0, 325, 162, 124, 74, 228, 182, 82);
-                  vt_v24_house(205, 295, 136, 101, 70, 184, 86, 62);
-                  vt_v24_house(-95, 430, 150, 112, 72, 194, 88, 60);
-                  vt_v24_house(118, 440, 142, 108, 69, 204, 96, 65);
-                  draw_box(0, 2, 520, 18, 64, 126, 235);
-                  vt_v24_ruin_arch(0, 610, 156, 149, 132);
-                  for (i = -6; i <= 6; i++) {
-                      vt_v24_tree(-500 + i * 85, 250 + ((i & 1) ? 40 : -20), 10 + (i & 3) * 2, i % 3);
-                      vt_v24_tree(-540 + i * 90, 520 + ((i & 1) ? -10 : 36), 13 + ((i + 1) & 3) * 2, (i + 1) % 3);
-                  }
-              } else if (region == 1) {
-                  /* Crystal Pass: canyon-like travel route. */
-                  for (i = -4; i <= 4; i++) {
-                      vt_v24_peak(-520, 240 + i * 120, 92, 122 + (i & 1) * 24, 68, 92, 118);
-                      vt_v24_peak(520, 240 + i * 120, 92, 126 + ((i + 1) & 1) * 20, 74, 100, 126);
-                  }
-                  for (i = -3; i <= 3; i++) {
-                      draw_box(-180 + i * 120, 12, 320 + i * 80, 18, 98, 188, 228);
-                      vt_pyramid(-180 + i * 120, -18, 320 + i * 80, 10, 32, 124, 228, 255);
-                      draw_box(210 - i * 110, 18, 380 + i * 70, 15, 112, 194, 235);
-                      vt_pyramid(210 - i * 110, -16, 380 + i * 70, 9, 28, 138, 238, 255);
-                  }
-                  vt_v24_ruin_arch(0, 690, 150, 156, 170);
-              } else {
-                  /* Storm Arena: huge approach and arena gate. */
-                  draw_box(-180, 16, 540, 54, 110, 66, 42);
-                  draw_box(180, 16, 540, 54, 110, 66, 42);
-                  draw_box(0, -8, 560, 40, 222, 167, 68);
-                  draw_box(-128, 40, 540, 20, 235, 176, 78);
-                  draw_box(128, 40, 540, 20, 235, 176, 78);
-                  for (i = -3; i <= 3; i++) {
-                      draw_box(i * 95, 16, 280 + i * 55, 14, 108, 110, 126);
-                      vt_pyramid(i * 95, -14, 280 + i * 55, 8, 20, 190, 200, 245);
-                  }
-                  vt_v24_peak(-360, 860, 120, 180, 50, 82, 92);
-                  vt_v24_peak(360, 830, 120, 190, 48, 80, 100);
-              }
-          }
-          '''
-
-          replace_once('static void draw_hud(void) {', helpers + '\nstatic void draw_hud(void) {')
-
-          code, _ = re.subn(r'if \(pz > 420 && region < 2\)', 'if (pz > 1120 && region < 2)', code)
-          code, _ = re.subn(r'if \(pz < -420 && region > 0\)', 'if (pz < -1120 && region > 0)', code)
-          code, _ = re.subn(r'if \(region==0 && step_count>20\) region=1;', 'if (region==0 && step_count>120) region=1;', code)
-          code, _ = re.subn(r'if \(region==1 && step_count>45\) region=2;', 'if (region==1 && step_count>260) region=2;', code)
-
-          replace_once('        draw_hud();', '        vt_v24_draw_overworld();\n        draw_hud();')
-
-          required = [
-              'VOLT TRAIL V24', 'vt_v24_draw_overworld();',
-              'vt_v24_ground_patch(', 'vt_v24_house(', 'vt_v24_peak(',
-              'PAD_TRIANGLE', 'vt_play_intro();', 'vt_v23_field_dragon();'
-          ]
-          for marker in required:
-              if marker not in code:
-                  raise RuntimeError('Missing V24 feature: ' + marker)
-
-          path.write_text(code, encoding='utf-8')
-          print('V24 ready: larger adventure-scale overworld added')
-          print('V24 ready: wide fields, village, pass and arena approach added')
-          print('V24 ready: V23 dragons, party, codex, menu and intro preserved')
-          PY
-
-      - name: Apply V24.1 camera background villages and roads fixed
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          source = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
-          code = source.read_text(encoding='utf-8')
-
-          def once(old, new):
-              global code
-              n=code.count(old)
-              if n != 1:
-                  raise RuntimeError('V24.1 marker unexpected: %r count=%d' % (old[:80], n))
-              code=code.replace(old,new,1)
-
-          def function_range(s, name):
-              pat = r'\bstatic\s+void\s+' + re.escape(name) + r'\s*\([^;]*?\)\s*\{'
-              ms = list(re.finditer(pat,s))
-              if len(ms) != 1: raise RuntimeError('Function '+name+' count='+str(len(ms)))
-              a=ms[0].start(); op=s.index('{',a); depth=0
-              quote=None; escape=False; block=False; line=False
-              i=op
-              while i<len(s):
-                  c=s[i]; nextc=s[i+1] if i+1<len(s) else ''
-                  if line:
-                      if c=='\n':line=False
-                  elif block:
-                      if c=='*' and nextc=='/':block=False;i+=1
-                  elif quote:
-                      if escape: escape=False
-                      elif c=='\\':escape=True
-                      elif c==quote:quote=None
-                  elif c=='/' and nextc=='/':line=True;i+=1
-                  elif c=='/' and nextc=='*':block=True;i+=1
-                  elif c in '"\'':quote=c
-                  elif c=='{':depth+=1
-                  elif c=='}':
-                      depth-=1
-                      if depth==0:return a,i+1
-                  i+=1
-              raise RuntimeError('Unclosed function '+name)
-
-          once('VOLT TRAIL V24 - %s','VOLT TRAIL V24.1 - %s')
-          once('VOLT TRAIL V24 - MENUE','VOLT TRAIL V24.1 - MENUE')
-          once('#define WORLD_LIMIT 1600','#define WORLD_LIMIT 2100')
-          once('#define CAMERA_Z 190','#define CAMERA_Z 255')
-          # The V23/V24 source may format the camera initializer differently.
-          # CAMERA_Z was already increased above. Modify the camera height
-          # only if a compatible declaration is actually present.
-          camera_re = re.compile(
-              r'(\b(?:VECTOR|SVECTOR)\s+camera_pos\s*=\s*\{\s*0\s*,\s*)'
-              r'[-+]?\d+(\s*,\s*CAMERA_Z\b)'
-          )
-          code, camera_count = camera_re.subn(
-              lambda match: match.group(1) + '-28' + match.group(2),
-              code
-          )
-          if camera_count > 1:
-              raise RuntimeError('Ambiguous camera declarations')
-          if camera_count == 0:
-              print('Camera height unchanged; wider CAMERA_Z=255 is applied.')
-          else:
-              print('Camera height adjusted for the wider view.')
-          # The V23 source may set RGB colors on one line, several lines,
-          # or use different starting values. Change only existing DRAWENV fields.
-          # Never make a cosmetic sky-color change block the entire build.
-          for i in (0, 1):
-              count = 0
-              for channel, value in (('r0', 24), ('g0', 53), ('b0', 102)):
-                  pattern = re.compile(
-                      r'(\bdraw\s*\[\s*' + str(i) + r'\s*\]\s*\.\s*'
-                      + channel + r'\s*=\s*)\d+(\s*;)'
-                  )
-                  code, replaced = pattern.subn(
-                      lambda m, v=value: m.group(1) + str(v) + m.group(2),
-                      code, count=1
-                  )
-                  count += replaced
-              if count not in (0, 3):
-                  print('NOTICE: Only', count, 'color channels found for DRAWENV', i)
-              elif count == 0:
-                  print('NOTICE: DRAWENV', i, 'uses another background setup; keeping it.')
-              else:
-                  print('DRAWENV', i, 'background color updated.')
-
-          new_helpers = r'''
-          /* V24.1 scene details: draw only places near the player to preserve PS1 RAM/GPU time. */
-          static int vt_v241_visible(int x, int z, int distance) {
-              int dx=x-px;
-              int dz=z-pz;
-              return dx>-distance && dx<distance && dz>-220 && dz<1120;
-          }
-
-          static void vt_v241_flat(int x1,int z1,int x2,int z2,int y,int r,int g,int b) {
-              SVECTOR a={x1-px,y,z1-pz,0};
-              SVECTOR c={x1-px,y,z2-pz,0};
-              SVECTOR d={x2-px,y,z2-pz,0};
-              SVECTOR e={x2-px,y,z1-pz,0};
-              draw_triangle3(&a,&c,&e,r,g,b);
-              draw_triangle3(&e,&c,&d,r*4/5,g*4/5,b*4/5);
-          }
-
-          static void vt_v241_path(int x1,int z1,int x2,int z2,int width) {
-              /* A continuous, walkable looking road strip between map landmarks. */
-              if (!vt_v241_visible((x1+x2)/2,(z1+z2)/2,950)) return;
-              if (x1==x2) {
-                  vt_v241_flat(x1-width,z1,x1+width,z2,33,164,123,80);
-              } else {
-                  vt_v241_flat(x1,z1-width,x2,z1+width,33,163,121,76);
-              }
-          }
-
-          static void vt_v241_building(int x,int z,int size,int roof,int style) {
-              if (!vt_v241_visible(x,z,800))return;
-              draw_box(x,4,z,size,178,142,94);
-              draw_box(x,-15,z-3,size/2,201,173,115);
-              vt_pyramid(x,-size+4,z,size+10,size/2+8,
-                         roof==0?168:218,roof==0?76:152,roof==0?55:79);
-              /* Dark wooden door, windows, simple chimney. */
-              draw_box(x,13,z-size-1,8,45,77,151);
-              draw_box(x-size/2,-1,z-size+4,6,238,201,94);
-              draw_box(x+size/2,-1,z-size+4,6,238,201,94);
-              if (style) draw_box(x+size/2, -size, z+size/2,9,122,119,107);
-          }
-
-          static void vt_v241_npc(int x,int z,int tint) {
-              /* Decorative villagers; the existing dialogue-capable NPCs remain intact. */
-              if (!vt_v241_visible(x,z,760))return;
-              draw_box(x,18,z,10,tint?156:45,tint?72:117,tint?78:198);
-              draw_box(x,-1,z-2,8,218,170,115);
-              draw_box(x-10,19,z,4,210,162,111);
-              draw_box(x+10,19,z,4,210,162,111);
-          }
-
-          static void vt_v241_sign(int x,int z) {
-              if (!vt_v241_visible(x,z,700))return;
-              draw_box(x,15,z,5,123,86,55);
-              draw_box(x,-10,z,13,192,151,81);
-          }
-
-          static void vt_v241_fence(int x,int z) {
-              if (!vt_v241_visible(x,z,730))return;
-              draw_box(x,24,z,5,115,74,43);
-              draw_box(x+30,24,z,5,115,74,43);
-              draw_box(x+15,13,z,6,166,104,59);
-          }
-
-          static void vt_v241_tree_at(int x,int z,int seed) {
-              if (!vt_v241_visible(x,z,900))return;
-              vt_v24_tree(x,z,17+(seed%4)*3,seed%3);
-          }
-
-          static void vt_v241_ruins(int x,int z) {
-              if (!vt_v241_visible(x,z,950))return;
-              vt_v24_ruin_arch(x,z,160,161,171);
-              draw_box(x-45,25,z+25,14,134,140,156);
-              draw_box(x+42,25,z+20,11,135,141,153);
-          }
-
-          static void vt_v241_bridge(int z) {
-              int i;
-              if (!vt_v241_visible(0,z,850))return;
-              /* Blue river and a broad raised wooden crossing on the main road. */
-              vt_v241_flat(-760,z-85,760,z+85,34,37,108,176);
-              vt_v241_flat(-115,z-95,115,z+95,28,154,112,73);
-              for (i=-2;i<=2;i++) {
-                  draw_box(-122,9,z+i*43,5,130,83,52);
-                  draw_box(122,9,z+i*43,5,130,83,52);
-              }
-          }
-
-          static void vt_v241_ground(void) {
-              int gx=(px/110)*110-660;
-              int gz=(pz/110)*110-110;
-              /* Stream terrain around player rather than drawing the entire map at once. */
-              if (region==1) vt_v24_ground_patch(gx,gz,110,12,11,64,109,94,48,92,83);
-              else if (region==2) vt_v24_ground_patch(gx,gz,110,12,11,79,105,73,65,91,65);
-              else vt_v24_ground_patch(gx,gz,110,12,11,57,132,72,39,112,59);
-          }
-          '''
-          # Recreate the V24 world function with additional locations and paths, retaining
-          # its original function name (the V24 workflow already calls that name in main).
-          new_world = r'''static void vt_v24_draw_overworld(void) {
-              int i, z;
-              vt_v241_ground();
-
-              /* The same north/south road runs through Sunmeadow, Crystal Pass and Arena. */
-              for (z=-480;z<2250;z+=100) vt_v241_path(0,z,0,z+100,85);
-              /* Side roads connect the village, lookout and ruins rather than isolated islands. */
-              vt_v241_path(-550,370,550,370,56);
-              vt_v241_path(-450,850,450,850,45);
-              vt_v241_path(-400,1100,400,1100,46);
-
-              /* Forest edges frame a long navigable clearing without filling every polygon. */
-              for (i=-3;i<19;i++) {
-                  int seed=i+8;
-                  z=i*145;
-                  vt_v241_tree_at(-290-(seed*53%115),z+((seed&1)*35),seed);
-                  vt_v241_tree_at(290+(seed*61%145),z+((seed&1)*35),seed+1);
-                  if ((seed&3)==0) {
-                      vt_v241_tree_at(-515,z+30,seed+2);
-                      vt_v241_tree_at(510,z+70,seed+3);
-                  }
-              }
-
-              /* Original polygon mountains, drawn as recognizable distant destinations. */
-              for (i=-2;i<=2;i++) {
-                  int zz=1270+((i+2)&1)*75;
-                  int xx=i*350;
-                  if (vt_v241_visible(xx,zz,1600))
-                      vt_v24_peak(xx,zz,190,220+(i+2)*17,62,99,139);
-              }
-
-              if(region==0) {
-                  /* SUNMEADOW: larger village, crossroad, bridge, lookout and ruins. */
-                  vt_v241_building(-205,265,43,0,1);
-                  vt_v241_building(15,330,52,1,1);
-                  vt_v241_building(208,280,42,0,0);
-                  vt_v241_building(-380,395,49,1,0);
-                  vt_v241_building(365,397,46,0,1);
-                  vt_v241_building(-100,500,37,0,0);
-                  vt_v241_building(165,495,38,1,0);
-                  vt_v241_sign(-110,170);
-                  vt_v241_sign(140,465);
-                  vt_v241_fence(-130,230);
-                  vt_v241_fence(140,230);
-                  vt_v241_fence(-130,540);
-                  vt_v241_fence(140,540);
-                  vt_v241_npc(-115,328,0);
-                  vt_v241_npc(120,368,1);
-                  vt_v241_npc(-300,465,1);
-                  vt_v241_npc(255,490,0);
-                  vt_v241_bridge(715);
-                  vt_v241_ruins(350,880);
-                  vt_v241_ruins(-295,1110);
-              } else if(region==1) {
-                  /* CRYSTAL PASS: tall rock silhouettes and crystal outcrops. */
-                  for (i=-4;i<=8;i++) {
-                      z=i*160+120;
-                      if(vt_v241_visible(-480,z,1050))vt_v24_peak(-480,z,125,165,88,112,152);
-                      if(vt_v241_visible(480,z,1050))vt_v24_peak(480,z,125,175,75,108,153);
-                      if(vt_v241_visible(-250,z,800)) {
-                          draw_box(-250,12,z,17,87,181,206);
-                          vt_pyramid(-250,-20,z,17,52,133,219,244);
-                      }
-                      if(vt_v241_visible(250,z,800)) {
-                          draw_box(250,12,z,17,109,195,216);
-                          vt_pyramid(250,-20,z,17,50,147,220,248);
-                      }
-                  }
-                  vt_v241_ruins(-190,780);
-                  vt_v241_sign(122,250);
-                  vt_v241_npc(-115,335,0);
-                  vt_v241_npc(115,585,1);
-              } else {
-                  /* STORM ARENA: wide gate, approach road, stone watchtowers. */
-                  vt_v241_building(-390,365,53,0,1);
-                  vt_v241_building(370,375,53,0,1);
-                  if(vt_v241_visible(0,875,990)) {
-                      draw_box(-165,12,875,60,141,89,60);
-                      draw_box(165,12,875,60,141,89,60);
-                      draw_box(0,-35,875,66,216,161,74);
-                      vt_pyramid(-165,-70,875,65,80,210,115,67);
-                      vt_pyramid(165,-70,875,65,80,210,115,67);
-                  }
-                  vt_v241_ruins(-330,740);
-                  vt_v241_ruins(335,715);
-                  vt_v241_sign(115,265);
-                  vt_v241_npc(-115,420,0);
-                  vt_v241_npc(125,550,1);
-              }
-          }'''
-
-          # Put helper definitions immediately before the old world function.
-          old_def='static void vt_v24_draw_overworld(void) {'
-          once(old_def,new_helpers+'\n'+old_def)
-          a,b=function_range(code,'vt_v24_draw_overworld')
-          code=code[:a]+new_world+code[b:]
-
-          # Avoid large scene geometry being placed over the player by moving the
-          # overworld call ahead of character meshes (directly after ground).
-          once('        vt_v24_draw_overworld();\n        draw_hud();', '        draw_hud();')
-          once('        draw_ground();', '        draw_ground();\n        vt_v24_draw_overworld();')
-
-          # The original V17 memory-card reader rejected coordinates outside +/-500.
-          # A larger world must also accept the larger coordinates when loading saves.
-          # Keep the 17-word checksum and all existing save fields unchanged.
-          for axis in (2,3):
-              for operator, old_limit in (('<','-500'),('>','500')):
-                  old='(int32_t)w[%d] %s %s' % (axis,operator,old_limit)
-                  new='(int32_t)w[%d] %s %s' % (axis,operator,('-WORLD_LIMIT' if operator=='<' else 'WORLD_LIMIT'))
-                  once(old,new)
-
-          # The old world used 1120 as region transition for walkable roads; preserve it.
-          required=[
-              'VOLT TRAIL V24.1', 'vt_v241_ground();', 'vt_v241_bridge(715);',
-              'vt_v241_building(', 'vt_v241_npc(', 'vt_v241_path(',
-              'vt_v241_visible(', 'vt_v24_draw_overworld();',
-              '#define CAMERA_Z 255', 'vt_v23_field_dragon();',
-              'vt_v21_party[3]', 'vt_save_game(void)', 'vt_load_game(void)',
-              'InitCARD(1);', 'vt_play_intro();',
-          ]
-          for term in required:
-              if term not in code: raise RuntimeError('Missing V24.1 feature: '+term)
-          source.write_text(code,encoding='utf-8')
-          print('V24.1 large low-poly world ready')
-          print('V24.1 wider camera, large buildings, villagers, signs, bridges and paths')
-          print('Original V23/V24 gameplay, dragon team, codex, intro and saves untouched')
-          PY
-
-      - name: V24.2 Tilt camera and show true ground perspective
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-
-          source = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
-          code = source.read_text(encoding='utf-8')
-
-          def once(old, new):
-              global code
-              count = code.count(old)
-              if count != 1:
-                  raise RuntimeError('V24.2 camera anchor not found uniquely: '
-                                     + repr(old) + ' count=' + str(count))
-              code = code.replace(old, new, 1)
-
-          # Keep all existing characters, NPCs, missions, combat, menu and save format.
-          once('VOLT TRAIL V24.1 - %s', 'VOLT TRAIL V24.2 - %s')
-          once('VOLT TRAIL V24.1 - MENUE', 'VOLT TRAIL V24.2 - MENUE')
-
-          # The previous camera was almost horizontal, making all terrain appear
-          # as a thin strip near the horizon. Pitch downward approximately 15 deg
-          # (PS1 uses 4096 angular units per full revolution), then move the
-          # camera upwards so near grass and the paths fill the lower screen.
-          # Set these immediately before the real rendering matrix is generated;
-          # this is more robust than matching the initial camera declarations.
-          once('RotMatrix(&camera_rot, &m);',
-               'camera_rot.vx = 170;  /* approx. 15 degrees towards ground */\n'
-               '        camera_pos.vy = 110; /* camera above the landscape */\n'
-               '        RotMatrix(&camera_rot, &m);')
-
-          # Slightly larger geometry projection compensates for the long-distance
-          # camera, leaving a spacious view without shrinking the player too much.
-          # Earlier releases may set a different projection distance (e.g. 180,
-          # 205 or 220). Update the existing projection call regardless of its value.
-          import re
-          projection = re.compile(r'\bgte_SetGeomScreen\s*\(\s*\d+\s*\)\s*;')
-          code, projection_count = projection.subn('gte_SetGeomScreen(205);', code, count=1)
-          if projection_count == 0:
-              # Some source revisions use another projection initializer:
-              # do not abort an otherwise working build for a cosmetic tweak.
-              print('V24.2: Projection initializer differs, keeping original.')
-          else:
-              print('V24.2: Projection distance adjusted to 205.')
-
-          # The V24.1 draw order (ground, props, characters, HUD) is preserved.
-          # The existing nearby terrain streaming already draws ground all around
-          # the player; it becomes visible once the camera is pitched downward.
-          needed = [
-              'VOLT TRAIL V24.2', 'camera_rot.vx = 170;',
-              'camera_pos.vy = 110;',
-              'vt_v24_draw_overworld();', 'vt_v241_ground();',
-              'vt_v241_bridge(715);', 'vt_v21_party[3]',
-              'vt_v23_field_dragon();', 'vt_save_game(void)',
-              'vt_load_game(void)', 'InitCARD(1);', 'vt_play_intro();'
-          ]
-          for marker in needed:
-              if marker not in code:
-                  raise RuntimeError('V24.2 expected feature missing: ' + marker)
-
-          source.write_text(code, encoding='utf-8')
-          print('V24.2: camera pitched down, elevated and projection improved')
-          print('V24.2: nearby terrain and long roads can fill more screen height')
-          print('V24.2: V24.1 villages, forests, bridge and mountain props kept')
-          print('V24.2: dragon team, battles, codex, intro and saves unchanged')
-          PY
-
-      - name: V24.3 Improve player framing and battle HP display
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          source = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
-          code = source.read_text(encoding="utf-8")
-
-          def one(old, new):
-              global code
-              count = code.count(old)
-              if count != 1:
                   raise RuntimeError(
-                      f"V24.3 marker found {count} times: {old[:65]!r}"
+                      "Required step missing: " + name
                   )
-              code = code.replace(old, new, 1)
 
-          one("VOLT TRAIL V24.2 - %s", "VOLT TRAIL V24.3 - %s")
-          one("VOLT TRAIL V24.2 - MENUE", "VOLT TRAIL V24.3 - MENUE")
+              print("Applying:", name, flush=True)
 
-          # The V24.2 high camera and steep angle push the player under the HUD.
-          # Keep a noticeable ground view while framing player + follower safely.
-          camera_updates = [
-              (r"\bcamera_rot\.vx\s*=\s*170\s*;", "camera_rot.vx = 104;"),
-              (r"\bcamera_pos\.vy\s*=\s*110\s*;", "camera_pos.vy = 62;"),
-              (r"\bgte_SetGeomScreen\s*\(\s*205\s*\)\s*;", "gte_SetGeomScreen(185);")
-          ]
-          for pattern, replacement in camera_updates:
-              code, count = re.subn(pattern, replacement, code, count=1)
-              if count != 1:
-                  raise RuntimeError("Camera marker missing: " + pattern)
-
-          # The old V18 battle health bar had a 296x29 dark rectangle across
-          # the lower half of the battlefield. The rectangles also appeared
-          # in the wrong order: PS1 addPrim() prepends to its OT bucket,
-          # therefore it is necessary to ADD foreground rectangles first.
-          #
-          # Replacing this one function keeps all HP, combat and game states intact.
-          def function_range(source_code, name):
-              # C braces inside comments or quoted strings do not close a function.
-              # The previous parser failed on apostrophes in comments like
-              # "Sparkit's HP bar" and reported false 'Unbalanced braces'.
-              pattern = re.compile(
-                  r"\bstatic\s+void\s+" + re.escape(name)
-                  + r"\s*\(\s*void\s*\)\s*\{"
+              subprocess.run(
+                  [
+                      "bash",
+                      "-euo",
+                      "pipefail",
+                      "-c",
+                      matches[0]["run"]
+                  ],
+                  env=os.environ.copy(),
+                  check=True
               )
-              matches = list(pattern.finditer(source_code))
-              if len(matches) != 1:
-                  raise RuntimeError(
-                      "C function declaration not unique: " + name
-                      + " (" + str(len(matches)) + ")"
-                  )
 
-              start = matches[0].start()
-              opening = source_code.rfind("{", start, matches[0].end())
-              depth = 0
-              i = opening
-              mode = "code"
-              while i < len(source_code):
-                  ch = source_code[i]
-                  next_ch = source_code[i + 1] if i + 1 < len(source_code) else ""
-                  if mode == "line_comment":
-                      if ch == "\n":
-                          mode = "code"
-                  elif mode == "block_comment":
-                      if ch == "*" and next_ch == "/":
-                          mode = "code"
-                          i += 1
-                  elif mode in ("string", "character"):
-                      if ch == "\\":
-                          i += 1
-                      elif (mode == "string" and ch == '"') or (
-                          mode == "character" and ch == "'"
-                      ):
-                          mode = "code"
-                  elif ch == "/" and next_ch == "/":
-                      mode = "line_comment"
-                      i += 1
-                  elif ch == "/" and next_ch == "*":
-                      mode = "block_comment"
-                      i += 1
-                  elif ch == '"':
-                      mode = "string"
-                  elif ch == "'":
-                      mode = "character"
-                  elif ch == "{":
-                      depth += 1
-                  elif ch == "}":
-                      depth -= 1
-                      if depth == 0:
-                          return start, i + 1
-                  i += 1
-              raise RuntimeError("Unbalanced braces in " + name)
-
-          clean_battle_bars = r"""
-          /* V24.3: Compact HP bars above the battlefield; no black overlay. */
-          static void vt_v18_battle_bars(void) {
-              int hero_hp;
-              int foe_hp;
-              int foe_max;
-
-              if (game_mode != 1 || vt_menu_open) return;
-
-              hero_hp = companion_hp;
-              if (hero_hp < 0) hero_hp = 0;
-              if (hero_hp > 24) hero_hp = 24;
-
-              foe_max = enemy_max_hp;
-              if (foe_max < 1) foe_max = 1;
-              foe_hp = wild_hp;
-              if (foe_hp < 0) foe_hp = 0;
-              if (foe_hp > foe_max) foe_hp = foe_max;
-
-              /* PS1 OT is LIFO: draw solid colored bars LAST by adding them FIRST. */
-              if (hero_hp > 0)
-                  vt_v18_tile(21, 85, 114 * hero_hp / 24, 6,
-                              hero_hp > 7 ? 70 : 230,
-                              hero_hp > 7 ? 216 : 95, 85);
-              if (foe_hp > 0)
-                  vt_v18_tile(185, 85, 114 * foe_hp / foe_max, 6,
-                              235, 149, 76);
-
-              /* Narrow backing tracks render first. No giant obscuring panel. */
-              vt_v18_tile(19, 83, 118, 10, 31, 42, 56);
-              vt_v18_tile(183, 83, 118, 10, 31, 42, 56);
-          }
-          """
-
-          start, end = function_range(code, "vt_v18_battle_bars")
-          code = code[:start] + clean_battle_bars + code[end:]
-
-          for required in (
-              "VOLT TRAIL V24.3", "camera_rot.vx = 104;",
-              "camera_pos.vy = 62;", "gte_SetGeomScreen(185);",
-              "vt_v24_draw_overworld();", "vt_v23_field_dragon();",
-              "vt_v18_battle_bars();", "vt_v21_party[3]",
-              "vt_v22_knockout();", "vt_save_game(void)",
-              "vt_load_game(void)", "vt_play_intro();"
-          ):
-              if required not in code:
-                  raise RuntimeError("Required game feature missing: " + required)
-
-          source.write_text(code, encoding="utf-8")
-          print("V24.3 complete: player and companion framed higher")
-          print("Battle bars compact and color fills correctly layered")
-          print("Dragon team, fights, codex and saves retained")
+          print("Working V24.3 restored.")
           PY
 
-      - name: V25 Improve rendering and environmental detail
+          python3 "$RUNNER_TEMP/restore_game.py"
+
+      - name: Add Lydra name and V25 graphics
         shell: bash
         run: |
           set -euo pipefail
+
           python3 - <<'PY'
           import os
-          import re
           from pathlib import Path
 
-          path = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
-          code = path.read_text(encoding='utf-8')
+          path = (
+              Path(os.environ["PROJECT_DIR"])
+              / "src"
+              / "main.c"
+          )
 
-          def replace_one(old, new):
-              global code
-              count = code.count(old)
-              if count != 1:
-                  raise RuntimeError(f'V25 expected one code marker, found {count}: {old[:96]!r}')
-              code = code.replace(old, new, 1)
+          code = path.read_text(encoding="utf-8")
 
+          old_title = "VOLT TRAIL V24.3"
+          new_title = "LYDRA WORLD OF DRAGON"
 
-          def swap_function(name, replacement):
-              global code
-              # Unlike a naive brace parser, this uses the *next actual C function*
-              # declaration as boundary; comments with apostrophes are harmless.
-              pat = re.compile(r'(?m)^static void\s+' + re.escape(name) + r'\s*\([^;]*\)\s*\{')
-              matches = list(pat.finditer(code))
-              if len(matches) != 1:
-                  raise RuntimeError(f'V25 missing unique function {name}: {len(matches)}')
-              start = matches[0].start()
-              opening = code.index('{', matches[0].start(), matches[0].end())
-              depth = 0
-              mode = 'code'
-              i = opening
-              while i < len(code):
-                  ch = code[i]
-                  nxt = code[i + 1] if i + 1 < len(code) else ''
-                  if mode == 'line':
-                      if ch == '\n': mode = 'code'
-                  elif mode == 'block':
-                      if ch == '*' and nxt == '/':
-                          i += 1
-                          mode = 'code'
-                  elif mode in ('str', 'chr'):
-                      if ch == '\\':
-                          i += 1
-                      elif (mode == 'str' and ch == '"') or (mode == 'chr' and ch == "'"):
-                          mode = 'code'
-                  elif ch == '/' and nxt == '/':
-                      mode = 'line'
-                      i += 1
-                  elif ch == '/' and nxt == '*':
-                      mode = 'block'
-                      i += 1
-                  elif ch == '"':
-                      mode = 'str'
-                  elif ch == "'":
-                      mode = 'chr'
-                  elif ch == '{':
-                      depth += 1
-                  elif ch == '}':
-                      depth -= 1
-                      if depth == 0:
-                          code = code[:start] + replacement.strip() + code[i + 1:]
-                          return
-                  i += 1
-              raise RuntimeError('V25 did not find closing brace: ' + name)
+          if old_title not in code:
+              raise RuntimeError(
+                  "V24.3 title not found"
+              )
 
-          replace_one('VOLT TRAIL V24.3 - %s', 'VOLT TRAIL V25 - %s')
-          replace_one('VOLT TRAIL V24.3 - MENUE', 'VOLT TRAIL V25 - MENUE')
+          code = code.replace(
+              old_title,
+              new_title
+          )
 
-          renderer = r'''
-          /* V25: Frustum rejection, painter's ordering and gentle atmospheric fog.
-           * Uses the game's established PS1 GTE and 256-bucket ordering table.
-           * Never changes combat, menus, player coordinates or memory-card data. */
-          static void draw_triangle3(SVECTOR *v0, SVECTOR *v1, SVECTOR *v2,
-                                     int r, int g, int b) {
-              long depth, xy0, xy1, xy2;
-              int bucket;
-              int x0, y0, x1, y1, x2, y2;
-              int fade;
-              long cross;
-              unsigned int aligned;
-              POLY_F3 *poly;
+          # PS1 GPU dithering.
+          anchor = "    SetDispMask(1);"
 
-              if (v0->vz + CAMERA_Z < NEAR_Z ||
-                  v1->vz + CAMERA_Z < NEAR_Z ||
-                  v2->vz + CAMERA_Z < NEAR_Z) return;
+          if code.count(anchor) != 1:
+              raise RuntimeError(
+                  "GPU setup marker missing"
+              )
 
-              gte_ldv3(v0, v1, v2);
-              gte_rtpt();
-              gte_avsz3();
-              gte_stotz(&depth);
-              bucket = (int)(depth >> 2);
-              if (bucket <= 0 || bucket >= OT_LEN) return;
+          code = code.replace(
+              anchor,
+              "    draw[0].dtd = 1;\n"
+              "    draw[1].dtd = 1;\n"
+              + anchor,
+              1
+          )
 
-              /* Project before allocating any primitive: clipped objects cost no RAM. */
-              gte_stsxy0(&xy0);
-              gte_stsxy1(&xy1);
-              gte_stsxy2(&xy2);
-              x0 = (short)(xy0 & 65535L); y0 = (short)((xy0 >> 16) & 65535L);
-              x1 = (short)(xy1 & 65535L); y1 = (short)((xy1 >> 16) & 65535L);
-              x2 = (short)(xy2 & 65535L); y2 = (short)((xy2 >> 16) & 65535L);
+          # Extra original low-poly nature details.
+          graphics = r'''
+          /*
+           * LYDRA V25 - WORLD GRAPHICS
+           *
+           * Small PS1-friendly scenery.
+           * Only nearby, visible details are drawn.
+           */
 
-              if ((x0 < -16 && x1 < -16 && x2 < -16) ||
-                  (x0 > SCREEN_W + 16 && x1 > SCREEN_W + 16 && x2 > SCREEN_W + 16) ||
-                  (y0 < -16 && y1 < -16 && y2 < -16) ||
-                  (y0 > SCREEN_H + 16 && y1 > SCREEN_H + 16 && y2 > SCREEN_H + 16))
-                  return;
+          static void lydra_v25_world_details(void) {
+              int cell_x;
+              int cell_z;
+              int cx;
+              int cz;
 
-              cross = (long)(x1 - x0) * (y2 - y0) - (long)(y1 - y0) * (x2 - x0);
-              if (cross > -3 && cross < 3) return;
+              cell_x = px / 180;
+              cell_z = pz / 180;
 
-              /* Gentle distance haze blends far faces toward the blue sky. */
-              fade = bucket > 116 ? (bucket - 116) / 2 : 0;
-              if (fade > 65) fade = 65;
-              r = (r * (256 - fade) + 40 * fade) >> 8;
-              g = (g * (256 - fade) + 76 * fade) >> 8;
-              b = (b * (256 - fade) + 124 * fade) >> 8;
-              if (r > 255) r = 255;
-              if (g > 255) g = 255;
-              if (b > 255) b = 255;
-              if (r < 0) r = 0;
-              if (g < 0) g = 0;
-              if (b < 0) b = 0;
+              for (
+                  cz = cell_z;
+                  cz <= cell_z + 5;
+                  cz++
+              ) {
+                  for (
+                      cx = cell_x - 3;
+                      cx <= cell_x + 3;
+                      cx++
+                  ) {
+                      int seed;
+                      int wx;
+                      int wz;
+                      int dx;
+                      int dz;
+                      int shade;
 
-              aligned = (prim_used + 3u) & ~3u;
-              if (aligned + sizeof(POLY_F3) > sizeof(prim_arena[db])) return;
-              poly = (POLY_F3 *)(prim_arena[db] + aligned);
-              prim_used = aligned + sizeof(POLY_F3);
+                      seed = (
+                          cx * 19 +
+                          cz * 29 +
+                          region * 7
+                      ) & 15;
 
-              setPolyF3(poly);
-              setRGB0(poly, r, g, b);
-              setXY3(poly, x0, y0, x1, y1, x2, y2);
-              addPrim(ot[db] + bucket, poly);
-          }
-          '''
-          swap_function('draw_triangle3', renderer)
+                      if (
+                          seed != 0 &&
+                          seed != 3 &&
+                          seed != 7
+                      ) {
+                          continue;
+                      }
 
-          ground = r'''
-          /* V25: stable world-coordinate color variation, streamed around the player. */
-          static void vt_v241_ground(void) {
-              int x, z;
-              int step = 110;
-              int base_x = px / step * step - 660;
-              int base_z = pz / step * step - 110;
-              int r = 48, g = 128, b = 65;
-              int variant;
+                      wx = cx * 180 + seed * 5;
+                      wz = cz * 180 + seed * 3;
 
-              if (px < 0 && px % step) base_x -= step;
-              if (pz < 0 && pz % step) base_z -= step;
-              if (region == 1) { r = 64; g = 114; b = 97; }
-              if (region == 2) { r = 83; g = 106; b = 77; }
+                      dx = wx - px;
+                      dz = wz - pz;
 
-              for (z = base_z; z < base_z + 1100; z += step) {
-                  for (x = base_x; x < base_x + 1320; x += step) {
-                      SVECTOR v0 = {x - px, 35, z - pz, 0};
-                      SVECTOR v1 = {x + step - px, 35, z - pz, 0};
-                      SVECTOR v2 = {x - px, 35, z + step - pz, 0};
-                      SVECTOR v3 = {x + step - px, 35, z + step - pz, 0};
-                      unsigned int seed = (unsigned int)(x * 73 + z * 149 + region * 371);
-                      seed ^= seed >> 9;
-                      seed *= 1664525u;
-                      seed ^= seed >> 15;
-                      variant = (int)(seed & 15u) - 7;
-                      draw_triangle3(&v0, &v2, &v1,
-                                     r + variant, g + variant, b + variant / 2);
-                      draw_triangle3(&v1, &v2, &v3,
-                                     r - 5 + variant, g - 12 + variant, b - 6 + variant / 2);
+                      /* Avoid hidden polygons. */
+                      if (
+                          dz < 100 ||
+                          dz > 740 ||
+                          dx < -480 ||
+                          dx > 480
+                      ) {
+                          continue;
+                      }
+
+                      /* Keep the central road clear. */
+                      if (
+                          wx > -115 &&
+                          wx < 115
+                      ) {
+                          continue;
+                      }
+
+                      /*
+                       * Atmospheric coloring:
+                       * objects farther away are
+                       * slightly cooler in color.
+                       */
+                      shade = dz > 450;
+
+                      if (seed == 0) {
+                          /* Low-poly boulder. */
+                          draw_box(
+                              wx, 26, wz,
+                              8 + (cz & 3),
+                              shade ? 103 : 118,
+                              shade ? 120 : 111,
+                              shade ? 139 : 104
+                          );
+                      } else if (seed == 3) {
+                          /* Green shrub. */
+                          vt_pyramid(
+                              wx, 23, wz,
+                              13, 22,
+                              shade ? 64 : 37,
+                              shade ? 139 : 169,
+                              shade ? 111 : 73
+                          );
+                      } else {
+                          /* Small decorative rock. */
+                          draw_box(
+                              wx, 30, wz,
+                              5,
+                              shade ? 119 : 137,
+                              shade ? 135 : 122,
+                              shade ? 150 : 101
+                          );
+                      }
                   }
               }
           }
           '''
-          swap_function('vt_v241_ground', ground)
 
-          details = r'''
-          /* V25: New original landmarks, color accents and walkable-looking scenery.
-           * Each detail is distance-culled so RAM/GTE load stays PS1-friendly. */
-          static void vt_v25_rock(int x, int z, int size, int tint) {
-              int r = tint ? 113 : 132;
-              int g = tint ? 151 : 137;
-              int b = tint ? 171 : 147;
-              if (!vt_v241_visible(x, z, 870)) return;
-              vt_v24_peak(x, z, size, size + 18, r, g, b);
-              vt_v24_peak(x + size / 2, z + size / 3, size / 2,
-                          size + 4, r + 17, g + 8, b + 10);
-          }
+          marker = "static void draw_hud(void) {"
 
-          static void vt_v25_shrub(int x, int z, int seed) {
-              if (!vt_v241_visible(x, z, 720)) return;
-              vt_pyramid(x, 13, z, 11, 23,
-                         (seed & 1) ? 42 : 65,
-                         124 + ((seed >> 1) & 3) * 12, 55);
-              if ((seed & 3) == 0) {
-                  vt_pyramid(x + 9, 23, z - 8, 5, 11, 230, 193, 65);
-              }
-          }
+          if code.count(marker) != 1:
+              raise RuntimeError(
+                  "HUD insertion marker missing"
+              )
 
-          static void vt_v25_waterline(int z) {
-              int i;
-              if (!vt_v241_visible(0, z, 1000)) return;
-              /* River beside the elevated wooden road bridge in the Sonnental. */
-              vt_v241_flat(-770, z - 75, -130, z + 76, 33, 41, 131, 194);
-              vt_v241_flat(130, z - 75, 770, z + 76, 33, 38, 126, 192);
-              vt_v241_flat(-152, z - 92, -125, z + 92, 31, 114, 104, 74);
-              vt_v241_flat(125, z - 92, 152, z + 92, 31, 121, 111, 76);
-              for (i = 0; i < 5; i++) {
-                  int zz = z - 57 + i * 25;
-                  vt_v241_flat(-580 + i * 26, zz, -465 + i * 26,
-                               zz + 5, 32, 111, 178, 216);
-                  vt_v241_flat(315 + i * 18, zz, 420 + i * 18,
-                               zz + 5, 32, 105, 169, 209);
-              }
-          }
+          code = code.replace(
+              marker,
+              graphics + "\n" + marker,
+              1
+          )
 
-          static void vt_v25_landscape_detail(void) {
-              int i, z;
-              /* Alternate pines and shrubs along both sides of the old main road. */
-              for (i = -2; i < 18; i++) {
-                  z = i * 155 + 75;
-                  vt_v25_shrub(-185 - (i * 41 & 75), z + (i & 1) * 26, i + 30);
-                  vt_v25_shrub(185 + (i * 47 & 91), z - (i & 1) * 17, i + 31);
-              }
+          draw_marker = (
+              "        vt_v24_draw_overworld();"
+          )
 
-              if (region == 0) {
-                  vt_v25_waterline(715);
-                  vt_v25_rock(-190, 690, 24, 0);
-                  vt_v25_rock(191, 735, 27, 0);
-                  vt_v25_rock(-600, 1030, 72, 1);
-                  vt_v25_rock(570, 1110, 68, 1);
-                  vt_v25_rock(-420, 290, 42, 0);
-                  vt_v25_rock(470, 430, 47, 0);
-                  /* Flowered meadow and stone gate around the far village lookout. */
-                  vt_v25_shrub(-110, 470, 12);
-                  vt_v25_shrub(235, 460, 24);
-              } else if (region == 1) {
-                  for (i = 0; i < 6; i++) {
-                      z = 210 + i * 245;
-                      vt_v25_rock(-390, z, 65 + (i & 1) * 18, 1);
-                      vt_v25_rock(410, z + 66, 69 + (i & 1) * 20, 1);
-                  }
-                  vt_v25_rock(-105, 870, 35, 1);
-                  vt_v25_rock(152, 1050, 39, 1);
-              } else {
-                  for (i = 0; i < 5; i++) {
-                      z = 240 + i * 210;
-                      vt_v25_rock(-520, z, 74, 0);
-                      vt_v25_rock(515, z + 60, 71, 0);
-                  }
-                  vt_v25_rock(-215, 655, 29, 0);
-                  vt_v25_rock(216, 660, 31, 0);
-              }
-          }
-          '''
-          replace_one('static void draw_hud(void) {'
+          if code.count(draw_marker) != 1:
+              raise RuntimeError(
+                  "World rendering marker missing"
+              )
+
+          code = code.replace(
+              draw_marker,
+              draw_marker
+              + "\n"
+              + "        lydra_v25_world_details();",
+              1
+          )
+
+          required = [
+              "LYDRA WORLD OF DRAGON",
+              "lydra_v25_world_details();",
+              "vt_v24_draw_overworld();",
+              "vt_v23_field_dragon();",
+              "vt_v18_battle_bars();",
+              "vt_save_game(void)",
+              "vt_load_game(void)",
+              "vt_play_intro();"
+          ]
+
+          for item in required:
+              if item not in code:
+                  raise RuntimeError(
+                      "Game feature missing: " + item
+                  )
+
+          path.write_text(
+              code,
+              encoding="utf-8"
+          )
+
+          print("LYDRA WORLD OF DRAGON")
+          print("V25 graphics installed")
+          print("Existing gameplay preserved")
+          PY
+
+      - name: Install PSn00bSDK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 "$RUNNER_TEMP/run_v243.py" \
+            "Install PSn00bSDK 0.24 directly"
+
+      - name: Build Lydra World Of Dragon
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          cmake \
+            -S "$PROJECT_DIR" \
+            -B "$GITHUB_WORKSPACE/build" \
+            -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE" \
+            -DCMAKE_BUILD_TYPE=Release
+
+          cmake --build \
+            "$GITHUB_WORKSPACE/build" \
+            --verbose
+
+      - name: Collect PS1 game files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p \
+            "$GITHUB_WORKSPACE/artifacts"
+
+          for file in \
+            VTRAIL.bin \
+            VTRAIL.cue \
+            VTRAIL.exe \
+            VTRAIL.elf
+          do
+            source="$GITHUB_WORKSPACE/build/$file"
+
+            if [ ! -s "$source" ]; then
+              echo "::error::Missing $file"
+              exit 1
+            fi
+
+            cp "$source" \
+              "$GITHUB_WORKSPACE/artifacts/"
+          done
+
+          ls -lh \
+            "$GITHUB_WORKSPACE/artifacts"
+
+      - name: Upload Lydra World Of Dragon
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lydra-World-Of-Dragon-PS1-V25
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 14
