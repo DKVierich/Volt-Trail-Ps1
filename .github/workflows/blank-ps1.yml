@@ -1,5 +1,5 @@
 
-name: Build Lydra World Of Dragon V25 Grafik Fix
+name: Build Lydra World Of Dragon V26
 
 on:
   workflow_dispatch:
@@ -24,323 +24,228 @@ jobs:
             cmake ninja-build unzip curl \
             ffmpeg python3-pil python3-yaml
 
-      - name: Load working V24.3 instructions
+      - name: Load stable V25
         shell: bash
         run: |
           set -euo pipefail
 
-          BASE_COMMIT="7886e325c196b8d43576e12f6916831de73be704"
+          BASE="7176f799eb454be40960c415a64c336b2b24fed7"
 
-          curl --fail --location --retry 4 \
-            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$BASE_COMMIT/.github/workflows/blank-ps1.yml" \
-            -o "$RUNNER_TEMP/lydra-base.yml"
+          curl -fLsS --retry 4 \
+            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$BASE/.github/workflows/blank-ps1.yml" \
+            -o "$RUNNER_TEMP/v25.yml"
 
-          cat > "$RUNNER_TEMP/run_base.py" <<'PY'
+          cat > "$RUNNER_TEMP/v25_step.py" <<'PY'
           import os
           import sys
           import subprocess
           from pathlib import Path
           import yaml
 
-          path = (
-              Path(os.environ["RUNNER_TEMP"])
-              / "lydra-base.yml"
-          )
-
-          data = yaml.safe_load(
-              path.read_text(encoding="utf-8")
-          )
-
+          path = Path(os.environ["RUNNER_TEMP"]) / "v25.yml"
+          data = yaml.safe_load(path.read_text(encoding="utf-8"))
           steps = data["jobs"]["build"]["steps"]
+
           wanted = sys.argv[1]
+          found = [s for s in steps if s.get("name") == wanted]
 
-          matches = [
-              step for step in steps
-              if step.get("name") == wanted
-          ]
+          if len(found) != 1:
+              raise RuntimeError("V25 step missing: " + wanted)
 
-          if len(matches) != 1:
-              raise RuntimeError(
-                  "Missing base step: " + wanted
-              )
-
-          print("Executing:", wanted, flush=True)
+          print("Running:", wanted, flush=True)
 
           subprocess.run(
-              [
-                  "bash",
-                  "-euo",
-                  "pipefail",
-                  "-c",
-                  matches[0]["run"]
-              ],
+              ["bash", "-euo", "pipefail", "-c", found[0]["run"]],
               env=os.environ.copy(),
               check=True
           )
           PY
 
-          python3 "$RUNNER_TEMP/run_base.py" \
-            "Load working V18 instructions"
+          python3 "$RUNNER_TEMP/v25_step.py" \
+            "Load working V24.3 instructions"
 
-      - name: Prepare existing game project
+      - name: Prepare game
         shell: bash
         run: |
           set -euo pipefail
+          python3 "$RUNNER_TEMP/v25_step.py" \
+            "Prepare existing game project"
 
-          python3 "$RUNNER_TEMP/run_base.py" \
-            "Prepare V18 game project"
-
-      - name: Restore working V24.3 game
+      - name: Restore original gameplay
         shell: bash
         run: |
           set -euo pipefail
+          python3 "$RUNNER_TEMP/v25_step.py" \
+            "Restore working V24.3 game"
 
-          test -n "${PROJECT_DIR:-}" || {
-            echo "::error::PROJECT_DIR missing"
-            exit 1
-          }
+      - name: Restore Lydra V25
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/v25_step.py" \
+            "Apply Lydra name and V25 graphics"
+
+      - name: Improve V26 dragon and world models
+        shell: bash
+        run: |
+          set -euo pipefail
 
           python3 - <<'PY'
           import os
-          import subprocess
+          import re
           from pathlib import Path
-          import yaml
 
-          source = (
-              Path(os.environ["RUNNER_TEMP"])
-              / "lydra-base.yml"
-          )
+          path = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
+          code = path.read_text(encoding="utf-8")
 
-          data = yaml.safe_load(
-              source.read_text(encoding="utf-8")
-          )
+          def enhance(name, addition):
+              global code
 
-          steps = data["jobs"]["build"]["steps"]
+              pattern = (
+                  r"\bstatic\s+void\s+"
+                  + re.escape(name)
+                  + r"\s*\([^;]*?\)\s*\{"
+              )
 
-          required = [
-              "Restore V17 intro and gameplay",
-              "Restore V18 dragons and graphics",
-              "Apply working V18 compiler fix",
-              "Add V19 dragon species and battle effects",
-              "Add V20 Dragon Codex and elemental battles",
-              "Fix V20 C function declaration",
-              "Add V21 three-dragon team and detailed Codex",
-              "Apply V22 persistent fainting and battle switching",
-              "Apply V23 selected living dragon in overworld",
-              "Expand V24 world and improve retro adventure graphics",
-              "Apply V24.1 camera background villages and roads fixed",
-              "V24.2 Tilt camera and show true ground perspective",
-              "V24.3 Improve player framing and battle HP display"
-          ]
-
-          for wanted in required:
-              matches = [
-                  step for step in steps
-                  if step.get("name") == wanted
-              ]
+              matches = list(re.finditer(pattern, code, re.S))
 
               if len(matches) != 1:
                   raise RuntimeError(
-                      "Required step missing: " + wanted
+                      "V26 model missing: " + name
                   )
 
-              print("Restoring:", wanted, flush=True)
+              start = matches[0].end()
+              depth = 1
+              position = start
 
-              subprocess.run(
-                  [
-                      "bash",
-                      "-euo",
-                      "pipefail",
-                      "-c",
-                      matches[0]["run"]
-                  ],
-                  env=os.environ.copy(),
-                  check=True
-              )
+              while depth > 0 and position < len(code):
+                  if code[position] == "{":
+                      depth += 1
+                  elif code[position] == "}":
+                      depth -= 1
+                  position += 1
 
-          print("Working V24.3 restored")
-          PY
-
-      - name: Apply Lydra name and V25 graphics
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-
-          path = (
-              Path(os.environ["PROJECT_DIR"])
-              / "src"
-              / "main.c"
-          )
-
-          code = path.read_text(
-              encoding="utf-8"
-          )
-
-          def replace_once(old, new):
-              global code
-
-              count = code.count(old)
-
-              if count != 1:
+              if depth != 0:
                   raise RuntimeError(
-                      "Source marker missing: "
-                      + old[:65]
+                      "Invalid model structure: " + name
                   )
 
-              code = code.replace(
-                  old,
-                  new,
-                  1
+              insert_at = position - 1
+
+              code = (
+                  code[:insert_at]
+                  + "\n"
+                  + addition
+                  + "\n"
+                  + code[insert_at:]
               )
 
-          # Rename the game.
-          if "VOLT TRAIL V24.3" not in code:
-              raise RuntimeError(
-                  "Original game title missing"
-              )
+          # More detailed companion dragon.
+          enhance("vt_sparkit", r'''
+              /* V26: additional horns and claws. */
+              vt_pyramid(
+                  x - 13, -24, z - 13,
+                  5, 17, 250, 188, 68
+              );
+              vt_pyramid(
+                  x + 13, -24, z - 13,
+                  5, 17, 250, 188, 68
+              );
+              draw_box(
+                  x - 12, 38, z - 13,
+                  4, 232, 214, 181
+              );
+              draw_box(
+                  x + 12, 38, z - 13,
+                  4, 232, 214, 181
+              );
+              vt_pyramid(
+                  x + 20, 8, z + 30,
+                  6, 12, 235, 150, 60
+              );
+          ''')
 
-          code = code.replace(
-              "VOLT TRAIL V24.3",
-              "LYDRA WORLD OF DRAGON"
-          )
+          # Improve all four wild dragon variations.
+          enhance("vt_v19_wild_dragon", r'''
+              /* V26: stronger wings and back plates. */
+              vt_dragon_wing(
+                  x, z, -1, 44,
+                  flap ? 12 : -4,
+                  r * 3 / 4,
+                  g * 3 / 4,
+                  b * 3 / 4
+              );
+              vt_dragon_wing(
+                  x, z, 1, 44,
+                  flap ? -4 : 12,
+                  r * 3 / 4,
+                  g * 3 / 4,
+                  b * 3 / 4
+              );
+              vt_pyramid(
+                  x, -3, z + 4,
+                  5, 13, r, g, b
+              );
+              vt_pyramid(
+                  x, 3, z + 16,
+                  5, 11, r, g, b
+              );
+              draw_box(
+                  x - 12, 40, z - 9,
+                  4, 221, 207, 170
+              );
+              draw_box(
+                  x + 12, 40, z - 9,
+                  4, 221, 207, 170
+              );
+          ''')
 
-          # Additional PS1-friendly low-poly nature.
-          # No fragile GPU initialization patch.
-          nature_code = r'''
-          /*
-           * LYDRA WORLD OF DRAGON - V25
-           * Additional scenery.
-           */
+          # Add depth to existing trees.
+          enhance("vt_v24_tree", r'''
+              /* V26: layered foliage and branches. */
+              vt_pyramid(
+                  x - 11, -16, z + 8,
+                  11 + scale / 5,
+                  20 + scale / 2,
+                  rr + 8,
+                  gg + 6,
+                  bb + 4
+              );
+              vt_pyramid(
+                  x + 11, -24, z - 7,
+                  10 + scale / 5,
+                  18 + scale / 2,
+                  rr,
+                  gg + 12,
+                  bb
+              );
+              draw_box(
+                  x + 4, 21, z + 3,
+                  4, 112, 75, 47
+              );
+          ''')
 
-          static void lydra_v25_nature(void) {
-              int base_x = px / 180;
-              int base_z = pz / 180;
-
-              int cx;
-              int cz;
-
-              if (game_mode != 0) {
-                  return;
-              }
-
-              for (
-                  cz = base_z;
-                  cz <= base_z + 5;
-                  cz++
-              ) {
-                  for (
-                      cx = base_x - 3;
-                      cx <= base_x + 3;
-                      cx++
-                  ) {
-                      int seed;
-                      int wx;
-                      int wz;
-                      int dx;
-                      int dz;
-                      int distant;
-
-                      seed = (
-                          cx * 19
-                          + cz * 29
-                          + region * 7
-                      ) & 15;
-
-                      if (
-                          seed != 0
-                          && seed != 3
-                          && seed != 7
-                      ) {
-                          continue;
-                      }
-
-                      wx = cx * 180 + seed * 5;
-                      wz = cz * 180 + seed * 3;
-
-                      dx = wx - px;
-                      dz = wz - pz;
-
-                      /*
-                       * Simple visibility check:
-                       * skip scenery outside
-                       * the active surroundings.
-                       */
-                      if (
-                          dz < 100
-                          || dz > 740
-                          || dx < -480
-                          || dx > 480
-                      ) {
-                          continue;
-                      }
-
-                      /* Keep the main road clear. */
-                      if (
-                          wx > -115
-                          && wx < 115
-                      ) {
-                          continue;
-                      }
-
-                      distant = dz > 450;
-
-                      if (seed == 0) {
-                          /* Small boulder. */
-                          draw_box(
-                              wx,
-                              26,
-                              wz,
-                              8 + (cz & 3),
-                              distant ? 103 : 118,
-                              distant ? 120 : 111,
-                              distant ? 139 : 104
-                          );
-                      } else if (seed == 3) {
-                          /* Bush. */
-                          vt_pyramid(
-                              wx,
-                              23,
-                              wz,
-                              13,
-                              22,
-                              distant ? 64 : 37,
-                              distant ? 139 : 169,
-                              distant ? 111 : 73
-                          );
-                      } else {
-                          /* Small stone. */
-                          draw_box(
-                              wx,
-                              30,
-                              wz,
-                              5,
-                              distant ? 119 : 137,
-                              distant ? 135 : 122,
-                              distant ? 150 : 101
-                          );
-                      }
-                  }
-              }
-          }
-          '''
-
-          replace_once(
-              "static void draw_hud(void) {",
-              nature_code
-              + "\n"
-              + "static void draw_hud(void) {"
-          )
-
-          replace_once(
-              "        vt_v24_draw_overworld();",
-              "        vt_v24_draw_overworld();"
-              + "\n"
-              + "        lydra_v25_nature();"
-          )
+          # Add windows and an entrance to houses.
+          enhance("vt_v24_house", r'''
+              /* V26: entrance and window details. */
+              draw_box(
+                  x - 19, 9, z - 24,
+                  5, 68, 143, 197
+              );
+              draw_box(
+                  x + 19, 9, z - 24,
+                  5, 68, 143, 197
+              );
+              draw_box(
+                  x, 31, z - 25,
+                  8, 105, 72, 49
+              );
+              vt_pyramid(
+                  x + 17, -24, z + 7,
+                  6, 14,
+                  roof_r, roof_g, roof_b
+              );
+          ''')
 
           required = [
               "LYDRA WORLD OF DRAGON",
@@ -350,82 +255,50 @@ jobs:
               "vt_v18_battle_bars();",
               "vt_save_game(void)",
               "vt_load_game(void)",
-              "vt_play_intro();"
+              "vt_play_intro();",
+              "V26: additional horns",
+              "V26: layered foliage"
           ]
 
           for marker in required:
               if marker not in code:
                   raise RuntimeError(
-                      "Required feature missing: "
-                      + marker
+                      "Missing game component: " + marker
                   )
 
-          path.write_text(
-              code,
-              encoding="utf-8"
-          )
+          path.write_text(code, encoding="utf-8")
 
-          print("LYDRA WORLD OF DRAGON")
-          print("V25 graphics applied")
-          print("Existing V24.3 gameplay retained")
+          print("LYDRA WORLD OF DRAGON V26")
+          print("Dragon models enhanced")
+          print("Trees and houses enhanced")
+          print("Original gameplay preserved")
           PY
 
       - name: Install PSn00bSDK
         shell: bash
         run: |
           set -euo pipefail
+          python3 "$RUNNER_TEMP/v25_step.py" \
+            "Install PSn00bSDK"
 
-          python3 "$RUNNER_TEMP/run_base.py" \
-            "Install PSn00bSDK 0.24 directly"
-
-      - name: Build Lydra World Of Dragon
+      - name: Build Lydra V26
         shell: bash
         run: |
-          set -euxo pipefail
-
-          cmake \
-            -S "$PROJECT_DIR" \
-            -B "$GITHUB_WORKSPACE/build" \
-            -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE="$PSN00BSDK_CMAKE" \
-            -DCMAKE_BUILD_TYPE=Release
-
-          cmake --build \
-            "$GITHUB_WORKSPACE/build" \
-            --verbose
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/v25_step.py" \
+            "Build Lydra World Of Dragon"
 
       - name: Collect PS1 game files
         shell: bash
         run: |
           set -euo pipefail
+          python3 "$RUNNER_TEMP/v25_step.py" \
+            "Collect PS1 game files"
 
-          mkdir -p \
-            "$GITHUB_WORKSPACE/artifacts"
-
-          for file in \
-            VTRAIL.bin \
-            VTRAIL.cue \
-            VTRAIL.exe \
-            VTRAIL.elf
-          do
-            source="$GITHUB_WORKSPACE/build/$file"
-
-            if [ ! -s "$source" ]; then
-              echo "::error::Missing file: $file"
-              exit 1
-            fi
-
-            cp "$source" \
-              "$GITHUB_WORKSPACE/artifacts/"
-          done
-
-          ls -lh \
-            "$GITHUB_WORKSPACE/artifacts"
-
-      - name: Upload Lydra V25
+      - name: Upload Lydra V26
         uses: actions/upload-artifact@v4
         with:
-          name: Lydra-World-Of-Dragon-PS1-V25
+          name: Lydra-World-Of-Dragon-PS1-V26
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
