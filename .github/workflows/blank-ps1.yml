@@ -1,4 +1,4 @@
-name: Build Lydra World Of Dragon V28.1 Camera & Collision Fix
+name: Build Lydra World Of Dragon V28.2 Houses & Living NPCs
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   build:
-    name: Lydra V28.1 PS1 (V27 safe base)
+    name: Lydra V28.2 PS1 (V27 safe base)
     runs-on: ubuntu-latest
     steps:
       - name: Projekt laden
@@ -472,13 +472,294 @@ jobs:
                     PY
                     python3 "$RUNNER_TEMP/apply_lydra_v281.py"
 
+      - name: V28.2 Begehbare Haeuser Innenraeume und wandernde NPCs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/apply_lydra_v282.py" <<'PY'
+          #!/usr/bin/env python3
+          # Lydra V28.2: houses with walkable interiors and spawn-bound moving NPCs.
+          # Apply AFTER the unmodified V28.1 patch and BEFORE PS1 SDK/build.
+          import os, re
+          from pathlib import Path
+          
+          source = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+          code = source.read_text(encoding='utf-8')
+          
+          def once(old, new):
+              global code
+              count=code.count(old)
+              if count != 1:
+                  raise RuntimeError('V28.2 expected exactly one anchor; got %d: %s' %(count,old[:100]))
+              code=code.replace(old,new,1)
+          
+          def replace_function(name, new):
+              global code
+              pattern=r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
+              hits=list(re.finditer(pattern, code,re.S))
+              if len(hits)!=1:
+                  raise RuntimeError('Missing/ambiguous function '+name)
+              m=hits[0]; i=m.end(); depth=1
+              state='code'
+              while i<len(code):
+                  c=code[i]; n=code[i+1] if i+1<len(code) else ''
+                  if state=='line':
+                      if c=='\n': state='code'
+                  elif state=='block':
+                      if c=='*' and n=='/': i+=1; state='code'
+                  elif state in ('string','char'):
+                      if c=='\\': i+=1
+                      elif (state=='string' and c=='"') or (state=='char' and c=="'"):
+                          state='code'
+                  elif c=='/' and n=='/': state='line';i+=1
+                  elif c=='/' and n=='*': state='block';i+=1
+                  elif c=='"':state='string'
+                  elif c=="'":state='char'
+                  elif c=='{': depth+=1
+                  elif c=='}':
+                      depth-=1
+                      if not depth:
+                          code=code[:m.start()]+new+code[i+1:]
+                          return
+                  i+=1
+              raise RuntimeError('Unterminated source function '+name)
+          
+          # The V28.1 fix correctly stops players at houses, but treats entire building
+          # footprints as solid. Replace ONLY that house-blocking predicate with perimeter
+          # walls and a traversable front door. Preserve collision against all trees/ruins.
+          wall_helpers=r'''
+          /* V28.2: expanded rectangular house, thick walls, and a genuine door on -Z. */
+          static int vt_v282_size(int original) { return original * 5 / 4; }
+          static int vt_v282_house_wall(int x, int z, const vt_v281_blocker_t *h) {
+              int size=vt_v282_size(h->half);
+              int dx=vt_v281_abs(x-h->x);
+              int dz=vt_v281_abs(z-h->z);
+              int inner=size-8-VT_V281_PLAYER_RADIUS;
+              if (dx>=size+VT_V281_PLAYER_RADIUS || dz>=size+VT_V281_PLAYER_RADIUS)
+                  return 0;
+              if (dx<inner && dz<inner) return 0;
+              /* Door gap: 64 world units across, allowing for the player's hit radius. */
+              if (z<=h->z && dx<32-VT_V281_PLAYER_RADIUS) return 0;
+              return 1;
+          }
+          static int vt_v282_inside(int x,int z) {
+              unsigned int i;
+              for (i=0;i<sizeof(vt_v281_houses)/sizeof(vt_v281_houses[0]);i++) {
+                  const vt_v281_blocker_t *h=&vt_v281_houses[i];
+                  int inner=vt_v282_size(h->half)-7;
+                  if (h->map_region==region && h->x==x && h->z==z &&
+                      vt_v281_abs(px-x)<inner && vt_v281_abs(pz-z)<inner)
+                      return 1;
+              }
+              return 0;
+          }
+          '''
+          once('static int vt_v281_is_blocked(int x, int z) {',
+               wall_helpers+'\nstatic int vt_v281_is_blocked(int x, int z) {')
+          once('vt_v281_in_box(x, z, h->x, h->z, h->half)) return 1;',
+               'vt_v282_house_wall(x, z, h)) return 1;')
+          
+          npc_helpers=r'''
+          /* NPCs are transient, do not change the old save-data structure or checksum. */
+          typedef struct {
+              int region_id, spawn_x, spawn_z, x, z;
+              int radius, direction, steps_left, home_index, tint;
+          } vt_v282_npc_t;
+          /* home_index=-1 means outside. Nonnegative: index in V28.1 building table. */
+          static vt_v282_npc_t vt_v282_npcs[] = {
+              {0,-115,328,0,0,36,0,0,-1,0}, {0,120,368,0,0,34,0,0,-1,1},
+              {0,-300,465,0,0,34,0,0,-1,1}, {0,255,490,0,0,38,0,0,-1,0},
+              {1,-115,335,0,0,40,0,0,-1,0}, {1,115,585,0,0,40,0,0,-1,1},
+              {2,-115,420,0,0,37,0,0,-1,0}, {2,125,550,0,0,37,0,0,-1,1},
+              {0,-205,265,0,0,22,0,0,0,1}, {0,15,330,0,0,24,0,0,1,0},
+              {0,208,280,0,0,22,0,0,2,1}, {0,-380,395,0,0,24,0,0,3,0},
+              {0,365,397,0,0,22,0,0,4,1}, {0,-100,500,0,0,20,0,0,5,0},
+              {0,165,495,0,0,21,0,0,6,1},
+              {2,-390,365,0,0,25,0,0,7,0}, {2,370,375,0,0,25,0,0,8,1}
+          };
+          static int vt_v282_npcs_initialized=0;
+          static unsigned int vt_v282_random_state=0x1bf58a2du;
+          #define VT_V282_NPC_COUNT (sizeof(vt_v282_npcs)/sizeof(vt_v282_npcs[0]))
+          
+          static void vt_v282_update_npcs(void) {
+              unsigned int i;
+              if (!vt_v282_npcs_initialized) {
+                  for (i=0;i<VT_V282_NPC_COUNT;i++) {
+                      vt_v282_npcs[i].x=vt_v282_npcs[i].spawn_x;
+                      vt_v282_npcs[i].z=vt_v282_npcs[i].spawn_z;
+                      vt_v282_npcs[i].steps_left=5+(int)(i%8);
+                  }
+                  vt_v282_npcs_initialized=1;
+              }
+              if ((vt_v18_tick & 3)!=0) return; /* 1 movement step per 4 frames. */
+              for (i=0;i<VT_V282_NPC_COUNT;i++) {
+                  vt_v282_npc_t *n=&vt_v282_npcs[i];
+                  int next_x, next_z;
+                  if (n->region_id!=region) continue;
+                  if (--n->steps_left<=0) {
+                      vt_v282_random_state=vt_v282_random_state*1664525u+1013904223u;
+                      n->direction=(int)((vt_v282_random_state>>16)%5u);
+                      n->steps_left=6+(int)((vt_v282_random_state>>22)%13u);
+                  }
+                  next_x=n->x; next_z=n->z;
+                  if (n->direction==1) next_x+=3;
+                  else if (n->direction==2) next_x-=3;
+                  else if (n->direction==3) next_z+=3;
+                  else if (n->direction==4) next_z-=3;
+                  /* A square bound is intentionally predictable and very cheap on PS1. */
+                  if (vt_v281_abs(next_x-n->spawn_x)>n->radius ||
+                      vt_v281_abs(next_z-n->spawn_z)>n->radius ||
+                      (n->home_index<0 && vt_v281_is_blocked(next_x,next_z))) {
+                      /* Walk back toward the original spawn instead of wandering away. */
+                      if (n->x>n->spawn_x) next_x=n->x-3;
+                      else if (n->x<n->spawn_x) next_x=n->x+3;
+                      else next_x=n->x;
+                      if (n->z>n->spawn_z) next_z=n->z-3;
+                      else if (n->z<n->spawn_z) next_z=n->z+3;
+                      else next_z=n->z;
+                      n->steps_left=3;
+                  }
+                  n->x=next_x;
+                  n->z=next_z;
+              }
+          }
+          
+          static void vt_v282_draw_npc(int x,int z,int tint) {
+              int leg=((vt_v18_tick>>3)&1)?3:-3;
+              if (vt_v281_abs(x-px)>760 || z-pz< -240 || z-pz>1080) return;
+              draw_box(x,18,z,10,tint?156:45,tint?72:117,tint?78:198);
+              draw_box(x,-1,z-2,8,218,170,115);
+              draw_box(x-11,18+leg,z,4,203,157,106);
+              draw_box(x+11,18-leg,z,4,203,157,106);
+              draw_box(x-5,32+leg,z,4,65,58,89);
+              draw_box(x+5,32-leg,z,4,65,58,89);
+          }
+          static void vt_v282_draw_outdoor_npcs(void) {
+              unsigned int i;
+              for (i=0;i<VT_V282_NPC_COUNT;i++) {
+                  const vt_v282_npc_t *n=&vt_v282_npcs[i];
+                  if (n->region_id==region && n->home_index<0)
+                      vt_v282_draw_npc(n->x,n->z,n->tint);
+              }
+          }
+          static void vt_v282_draw_house_npcs(int x,int z) {
+              unsigned int i,j;
+              for (j=0;j<sizeof(vt_v281_houses)/sizeof(vt_v281_houses[0]);j++) {
+                  const vt_v281_blocker_t *h=&vt_v281_houses[j];
+                  if (h->map_region!=region || h->x!=x || h->z!=z) continue;
+                  for (i=0;i<VT_V282_NPC_COUNT;i++) {
+                      const vt_v282_npc_t *n=&vt_v282_npcs[i];
+                      if (n->region_id==region && n->home_index==(int)j)
+                          vt_v282_draw_npc(n->x,n->z,n->tint);
+                  }
+                  return;
+              }
+          }
+          /* Double-sided wall triangles: the walls remain visible from inside rooms. */
+          static void vt_v282_wall(int x1,int z1,int x2,int z2,
+                                   int r,int g,int b) {
+              SVECTOR a={x1-px,30,z1-pz,0};
+              SVECTOR c={x1-px,-57,z1-pz,0};
+              SVECTOR d={x2-px,-57,z2-pz,0};
+              SVECTOR e={x2-px,30,z2-pz,0};
+              draw_triangle3(&a,&c,&e,r,g,b);
+              draw_triangle3(&c,&d,&e,r,g,b);
+              draw_triangle3(&e,&c,&a,r*4/5,g*4/5,b*4/5);
+              draw_triangle3(&e,&d,&c,r*4/5,g*4/5,b*4/5);
+          }
+          '''
+          once('static void vt_v28_living_landscape(void) {',
+               npc_helpers+'\nstatic void vt_v28_living_landscape(void) {')
+          
+          # Replace the existing cube-house with enlarged HOLLOW wall geometry. A doorway
+          # on the near (-Z) side matches the opening in actual movement collision. The roof
+          # is skipped ONLY when the player is in this building (or temporarily blocked by
+          # this building during camera follow); the house interior remains drawn.
+          new_building=r'''static void vt_v241_building(int x,int z,int size,int roof,int style) {
+              int s=vt_v282_size(size);
+              int inside=vt_v282_inside(x,z);
+              int hide_roof;
+              int wr=style?157:177;
+              int wg=style?132:147;
+              int wb=style?96:107;
+              if (!vt_v241_visible(x,z,800)) return;
+              hide_roof=inside;
+              /* V28.1 camera concealment: never erase the house body, only its roof. */
+              if (!inside && vt_v28_house_blocks_view(x,z,s)) hide_roof=1;
+              /* The floor lies just over terrain and can be walked across. */
+              vt_v241_flat(x-s+3,z-s+3,x+s-3,z+s-3,31,147,114,83);
+              /* Four external walls, except a generous front door in two segments. */
+              vt_v282_wall(x-s,z-s,x-32,z-s,wr,wg,wb);
+              vt_v282_wall(x+32,z-s,x+s,z-s,wr,wg,wb);
+              vt_v282_wall(x-s,z+s,x+s,z+s,wr,wg,wb);
+              vt_v282_wall(x-s,z-s,x-s,z+s,wr-12,wg-12,wb-9);
+              vt_v282_wall(x+s,z-s,x+s,z+s,wr-12,wg-12,wb-9);
+              /* Door posts and lintel, leaving the centre OPEN for gameplay. */
+              draw_box(x-34,-6,z-s,6,106,69,43);
+              draw_box(x+34,-6,z-s,6,106,69,43);
+              draw_box(x,-46,z-s,6,119,80,53);
+              /* Interior furniture. These objects are decorations, not solid blockers. */
+              draw_box(x-s/2,24,z+s/3,13,110,72,42);
+              draw_box(x-s/2,-2,z+s/3,5,179,143,91);
+              draw_box(x+s/2,22,z+s/3,12,108,88,63);
+              draw_box(x+s/2,-2,z+s/3,8,204,167,109);
+              /* Windows, subtle eave and distinctive roof colors. */
+              draw_box(x-s/2,-8,z-s+2,7,230,191,97);
+              draw_box(x+s/2,-8,z-s+2,7,230,191,97);
+              if (!hide_roof) {
+                  vt_pyramid(x,-71,z,s+13,37,
+                             roof==0?172:213,roof==0?78:148,roof==0?59:84);
+                  vt_pyramid(x,-76,z,s-15,18,
+                             roof==0?199:235,roof==0?104:174,roof==0?69:96);
+                  if (style) draw_box(x+s/2,-86,z+s/3,9,129,114,106);
+              } else if (inside) {
+                  /* Roof off only here; resident is visible and moves inside the room. */
+                  vt_v282_draw_house_npcs(x,z);
+              }
+          }'''
+          replace_function('vt_v241_building',new_building)
+          
+          # Remove eight DECORATIVE static NPC draws from original V24.1 overworld.
+          # They are replaced by the transient NPC system above (plus nine residents).
+          old_spawn_calls=[(-115,328,0),(120,368,1),(-300,465,1),(255,490,0),
+                           (-115,335,0),(115,585,1),(-115,420,0),(125,550,1)]
+          for x,z,t in old_spawn_calls:
+              once('vt_v241_npc(%d,%d,%d);'%(x,z,t),
+                   '/* V28.2 moving resident (%d, %d), drawn dynamically. */'%(x,z))
+          
+          # Keep camera lower than V28.1's overly steep top-down view. No effect on saves.
+          once('int wanted = vt_v281_camera_obstructed() ? 64 : 0;',
+               'int wanted = vt_v281_camera_obstructed() ? 35 : 0;')
+          once('camera_pos.vy = 62 + vt_v28_camera_blend;',
+               'camera_pos.vy = 62 + vt_v28_camera_blend / 2;')
+          
+          # Update once per game frame and render after the static world geometry.
+          once('        vt_v24_draw_overworld();',
+               '        vt_v282_update_npcs();\n'
+               '        vt_v24_draw_overworld();\n'
+               '        vt_v282_draw_outdoor_npcs();')
+          
+          assertions=['vt_v282_house_wall(', 'vt_v282_inside(', 'vt_v282_draw_house_npcs(',
+                      'vt_v282_update_npcs();', 'vt_v282_draw_outdoor_npcs();',
+                      'vt_v281_resolve_movement();','vt_save_game(void)','vt_load_game(void)',
+                      'vt_v23_field_dragon();','vt_v18_battle_bars();','vt_v21_party[3]']
+          for marker in assertions:
+              if marker not in code: raise RuntimeError('V28.2 safety check failed: '+marker)
+          if code.count('static void vt_v241_building(')!=1: raise RuntimeError('Unexpected second house definition')
+          source.write_text(code,encoding='utf-8')
+          print('LYDRA V28.2: enlarged hollow houses, per-house removable roofs, walkable doorway')
+          print('17 NPCs: 8 outdoor wanderers and 9 indoor residents, radius-clamped per spawn')
+          print('Original V28.1 combat, save/load and memory-card format unchanged')
+          PY
+          python3 "$RUNNER_TEMP/apply_lydra_v282.py"
+
       - name: PS1 SDK installieren – V27 Basis
         shell: bash
         run: |
           set -euo pipefail
           python3 "$RUNNER_TEMP/run_v27_step.py" "Install PSn00bSDK"
 
-      - name: Lydra V28 fuer PS1 kompilieren
+      - name: Lydra V28.2 fuer PS1 kompilieren
         shell: bash
         run: |
           set -euo pipefail
@@ -502,7 +783,7 @@ jobs:
       - name: Lydra World Of Dragon V28 herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: Lydra-World-Of-Dragon-PS1-V28-1
+          name: Lydra-World-Of-Dragon-PS1-V28-2
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
