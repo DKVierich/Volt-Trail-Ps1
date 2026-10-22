@@ -1,8 +1,8 @@
-# Eigenstaendiger GitHub Actions Workflow. Noch kein PS1-Spiel/ROM!
-# Als .github/workflows/lydra-v29-3.yml hochladen und Actions starten.
-# V27, V28.2, V29 und vorhandene Memory Cards bleiben unveraendert.
+# Eigenstaendiger V30.0 GitHub-Actions-Workflow (nicht selbst eine PS1-BIN/CUE).
+# Als .github/workflows/lydra-v30-0.yml hochladen; V29.3 als Backup lassen.
+# V27, V29.3 und vorhandene Memory Cards bleiben unveraendert.
 
-name: Lydra World Of Dragon V29.3 – Kamera- und Bewegungssteuerung
+name: Lydra World Of Dragon V30.0 – 360 Grad Welt und Horizont
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Lydra V29.3 Kamera und Bewegung (PlayStation 1)
+    name: Lydra V30.0 Landschaft und Horizont (PlayStation 1)
     runs-on: ubuntu-latest
     steps:
       - name: Projekt laden
@@ -2014,13 +2014,223 @@ jobs:
           PY
           python3 "$RUNNER_TEMP/lydra_v293_steuerung_patch.py"
 
+      - name: V30.0 – 360 Grad Boden, Ferngebirge und LOD
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${PROJECT_DIR:-}" && test -f "$PROJECT_DIR/src/main.c"
+          cat > "$RUNNER_TEMP/lydra_v300_world_patch.py" <<'PY'
+          #!/usr/bin/env python3
+          """Lydra V30.0: camera-safe 360-degree terrain, distance LOD and skyline.
+          Apply to the fully reconstructed V29.3 C source, before the PSn00bSDK build.
+          Does not modify save data, collision, NPC state, combat or input mappings.
+          """
+          import os
+          import re
+          from pathlib import Path
+          
+          src=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+          code=src.read_text(encoding='utf-8')
+          
+          def function_span(name):
+              pat=r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
+              matches=list(re.finditer(pat,code,re.S))
+              if len(matches)!=1: raise RuntimeError('V30.0: expected one function '+name+': '+str(len(matches)))
+              m=matches[0];pos=m.end();depth=1;state='normal'
+              while pos<len(code) and depth:
+                  ch=code[pos];nxt=code[pos+1] if pos+1<len(code) else ''
+                  if state=='normal':
+                      if ch=='/' and nxt=='/':state='line';pos+=1
+                      elif ch=='/' and nxt=='*':state='block';pos+=1
+                      elif ch=='"':state='string'
+                      elif ch=="'":state='character'
+                      elif ch=='{':depth+=1
+                      elif ch=='}':depth-=1
+                  elif state=='line':
+                      if ch=='\n':state='normal'
+                  elif state=='block':
+                      if ch=='*' and nxt=='/':state='normal';pos+=1
+                  elif state in ('string','character'):
+                      if ch=='\\':pos+=1
+                      elif (ch=='"' if state=='string' else ch=="'"):state='normal'
+                  pos+=1
+              if depth:raise RuntimeError('V30.0: unbalanced braces '+name)
+              return m.start(),m.end(),pos-1,pos
+          
+          if 'static void vt_v300_extend_ground(void)' in code:
+              raise RuntimeError('V30.0: patch was already applied')
+          for dependency in ('vt_v293_sin(', 'vt_v293_cos(', 'vt_v292_cam_yaw',
+                             'vt_v281_resolve_movement();', 'vt_v282_draw_house_npcs(',
+                             'vt_v292_draw_exploration_hud();', 'vt_opt_draw_page();',
+                             'vt_save_game(void)', 'vt_load_game(void)'):
+              if dependency not in code:raise RuntimeError('V30.0 missing V29.3 dependency: '+dependency)
+          
+          addon=r'''
+          /* LYDRA V30.0: 360-degree terrain around the moving player.
+             No new physics: collision and Memory Card formats are unchanged.
+             Nearby terrain stays flat (Y=35) to keep the hero above ground. */
+          #define VT_V300_NEAR_STEP 130
+          #define VT_V300_NEAR_CELLS 14
+          #define VT_V300_FAR_STEP 250
+          #define VT_V300_FAR_CELLS 16
+          #define VT_V300_FAR_CELL_BUDGET 138
+          
+          static int vt_v300_abs(int n) { return n<0?-n:n; }
+          static int vt_v300_forward(int dx, int dz) {
+              return (-dx*vt_v293_sin(vt_v292_cam_yaw)
+                       +dz*vt_v293_cos(vt_v292_cam_yaw))/1024;
+          }
+          static int vt_v300_lateral(int dx, int dz) {
+              return (dx*vt_v293_cos(vt_v292_cam_yaw)
+                      +dz*vt_v293_sin(vt_v292_cam_yaw))/1024;
+          }
+          static int vt_v300_in_view(int dx, int dz, int slack) {
+              int ahead=vt_v300_forward(dx,dz);
+              if(ahead < -slack || ahead>3450)return 0;
+              return vt_v300_abs(vt_v300_lateral(dx,dz))
+                     < (ahead>0 ? ahead : 0) + slack;
+          }
+          static int vt_v300_hash(int x,int z) {
+              unsigned int a=(unsigned int)(x/250);
+              unsigned int b=(unsigned int)(z/250);
+              unsigned int h=a*374761393u+b*668265263u+(unsigned int)region*1274126177u;
+              h^=h>>13; h*=1274126177u; h^=h>>16;
+              return (int)(h&255u);
+          }
+          static void vt_v300_extend_ground(void) {
+              int gx,gz,ix,iz,rendered=0;
+              int r1,g1,b1,r2,g2,b2;
+              /* Two LOD rings: near mesh is centered in X and Z, unlike the old
+                 positive-Z-only patch. Medium distance uses larger triangles. */
+              if(region==1) {
+                  r1=84;g1=134;b1=128;r2=62;g2=108;b2=112;
+              } else if(region==2) {
+                  r1=116;g1=143;b1=87;r2=78;g2=111;b2=77;
+              } else {
+                  r1=85;g1=162;b1=90;r2=54;g2=132;b2=75;
+              }
+              gx=(px/VT_V300_NEAR_STEP)*VT_V300_NEAR_STEP-7*VT_V300_NEAR_STEP;
+              gz=(pz/VT_V300_NEAR_STEP)*VT_V300_NEAR_STEP-7*VT_V300_NEAR_STEP;
+              vt_v24_ground_patch(gx,gz,VT_V300_NEAR_STEP,
+                 VT_V300_NEAR_CELLS,VT_V300_NEAR_CELLS,
+                 r1,g1,b1,r2,g2,b2);
+          
+              gx=(px/VT_V300_FAR_STEP)*VT_V300_FAR_STEP-8*VT_V300_FAR_STEP;
+              gz=(pz/VT_V300_FAR_STEP)*VT_V300_FAR_STEP-8*VT_V300_FAR_STEP;
+              for(iz=0;iz<VT_V300_FAR_CELLS;iz++) {
+                  for(ix=0;ix<VT_V300_FAR_CELLS;ix++) {
+                      int wx=gx+ix*VT_V300_FAR_STEP;
+                      int wz=gz+iz*VT_V300_FAR_STEP;
+                      int dx=wx+VT_V300_FAR_STEP/2-px;
+                      int dz=wz+VT_V300_FAR_STEP/2-pz;
+                      int n=vt_v300_hash(wx,wz)&3;
+                      /* Hide large low-detail triangles under the detailed center;
+                         leave generous overlap behind it to prevent visible holes. */
+                      if(vt_v300_abs(dx)<670 && vt_v300_abs(dz)<670)continue;
+                      if(!vt_v300_in_view(dx,dz,410))continue;
+                      if(rendered>=VT_V300_FAR_CELL_BUDGET)return;
+                      vt_v241_flat(wx,wz,wx+VT_V300_FAR_STEP,wz+VT_V300_FAR_STEP,
+                                   36,r1-(n*3),g1-(n*3),b1-(n*2));
+                      rendered++;
+                  }
+              }
+          }
+          
+          /* A virtual skyline: stable compass-relative mountain silhouettes.
+             It follows the camera position rather than building thousands of faraway
+             3-D objects. Landscape detail is kept out of physics and saves. */
+          static void vt_v300_horizon(void) {
+              int i;
+              for(i=0;i<16;i++) {
+                  int angle=i*256;
+                  int mx=px+(vt_v293_sin(angle)*2450)/1024;
+                  int mz=pz+(vt_v293_cos(angle)*2450)/1024;
+                  int ahead=vt_v300_forward(mx-px,mz-pz);
+                  int wide=275+(i%3)*65;
+                  int high=310+((i*7+region*3)%5)*63;
+                  int r=96,g=135,b=169;
+                  if(ahead<370 || !vt_v300_in_view(mx-px,mz-pz,540))continue;
+                  if(region==1){r=91;g=151;b=192;high+=85;}
+                  if(region==2){r=108;g=127;b=156;high+=30;}
+                  vt_v24_peak(mx,mz,wide,high,r,g,b);
+                  /* Lower foothills give mountain bases a transition to ground. */
+                  if((i&1)==0) {
+                      int hx=px+(vt_v293_sin(angle)*1530)/1024;
+                      int hz=pz+(vt_v293_cos(angle)*1530)/1024;
+                      vt_v24_peak(hx,hz,220,120+(i%3)*26,
+                         region==1?80:73,region==1?131:121,region==1?139:91);
+                  }
+              }
+          }
+          
+          /* Distant forest/detail patch, aligned to the world grid for stable visuals.
+             Cheap pseudo-random placement ensures plants do not move when player walks. */
+          static void vt_v300_mid_detail(void) {
+              int ix,iz,amount=0;
+              int x0=(px/300)*300-1500;
+              int z0=(pz/300)*300-1500;
+              for(iz=0;iz<11;iz++)for(ix=0;ix<11;ix++) {
+                  int x=x0+ix*300;
+                  int z=z0+iz*300;
+                  int dx=x-px,dz=z-pz;
+                  int h=vt_v300_hash(x,z);
+                  if(vt_v300_abs(dx)<510 && vt_v300_abs(dz)<510)continue;
+                  if(vt_v300_abs(dx)>1450 || vt_v300_abs(dz)>1450)continue;
+                  if(!vt_v300_in_view(dx,dz,200))continue;
+                  if((h&7)>2 || amount>=16)continue;
+                  /* No scenery in the middle of the original north-south road. */
+                  if(vt_v300_abs(x)<135)continue;
+                  if(region==1) {
+                      draw_box(x,16,z,11,72,150,181);
+                      vt_pyramid(x,-14,z,13,31,125,207,232);
+                  } else if(region==2) {
+                      vt_v24_tree(x,z,10+(h&3)*2,2);
+                  } else {
+                      vt_v24_tree(x,z,12+(h&3)*2,h%3);
+                  }
+                  amount++;
+              }
+          }
+          '''
+          
+          # Insert helpers into world helper section (after existing triangle/peak/tree helpers,
+          # before vt_v241_ground). Their forward references are already available in V29.3.
+          a,opening,closing,end=function_span('vt_v241_ground')
+          code=code[:a]+addon+'\n'+code[a:]
+          a,opening,closing,end=function_span('vt_v241_ground')
+          # Replace the old asymmetric patch body, retain function name and caller intact.
+          code=code[:opening]+'\n    vt_v300_extend_ground();\n'+code[closing:]
+          
+          # Draw mid/far decoration in the existing world function, with all original
+          # architecture, doors, NPCs, battles and PS1 UI still controlled by older code.
+          a,opening,closing,end=function_span('vt_v24_draw_overworld')
+          body=code[opening:closing]
+          needle='vt_v241_ground();'
+          if body.count(needle)!=1: raise RuntimeError('V30.0: overworld ground anchor changed')
+          body=body.replace(needle,needle+'\n    vt_v300_horizon();\n    vt_v300_mid_detail();',1)
+          code=code[:opening]+body+code[closing:]
+          
+          if code.count('vt_v300_extend_ground();')!=1 or code.count('vt_v300_horizon();')!=1:
+              raise RuntimeError('V30.0: duplicate/absent drawing hook')
+          for marker in ('vt_v293_move((unsigned int)pad);', 'vt_v281_resolve_movement();',
+                         'vt_v282_draw_house_npcs(', 'vt_v292_draw_exploration_hud();',
+                         'vt_v21_party[3]'):
+              if marker not in code:raise RuntimeError('V30.0: lost existing feature '+marker)
+          src.write_text(code,encoding='utf-8')
+          print('V30.0: near 360-degree terrain (14x14), frustum-culled distant ring (<=138 tiles).')
+          print('V30.0: 16 skyline segments, region-specific colors, up to 16 distant forest props.')
+          print('V30.0: unchanged physics/controls/menus/Memory Card. PS1 runtime test outstanding.')
+          PY
+          python3 "$RUNNER_TEMP/lydra_v300_world_patch.py"
+          echo "V30.0 Welt-Patch erstellt; unveraenderter PS1 Build folgt."
+
       - name: PS1 SDK installieren – V27 Basis
         shell: bash
         run: |
           set -euo pipefail
           python3 "$RUNNER_TEMP/run_v27_step.py" "Install PSn00bSDK"
 
-      - name: Lydra V29.3 fuer PS1 kompilieren
+      - name: Lydra V30.0 fuer PS1 kompilieren
         shell: bash
         run: |
           set -euo pipefail
@@ -2039,12 +2249,12 @@ jobs:
           for f in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
             test -s "artifacts/$f" || { echo "Fehlende PS1-Datei: $f"; exit 1; }
           done
-          echo "V29.3 Dateien vorhanden. RetroArch Test steht noch aus."
+          echo "V30.0 Dateien vorhanden. RetroArch- und Hardwaretest stehen noch aus."
 
-      - name: Lydra V29.3 herunterladen
+      - name: Lydra V30.0 herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: Lydra-World-Of-Dragon-PS1-V29-3
+          name: Lydra-World-Of-Dragon-PS1-V30-0
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
