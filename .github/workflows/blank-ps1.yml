@@ -1,8 +1,8 @@
-# Eigenstaendiger V30.0 GitHub-Actions-Workflow (nicht selbst eine PS1-BIN/CUE).
-# Als .github/workflows/lydra-v30-0.yml hochladen; V29.3 als Backup lassen.
+# Eigenstaendiger V30.1 GitHub-Actions-Workflow (nicht selbst eine PS1-BIN/CUE).
+# Als .github/workflows/lydra-v30-1-korrigiert.yml hochladen; V29.3 als Backup lassen.
 # V27, V29.3 und vorhandene Memory Cards bleiben unveraendert.
 
-name: Lydra World Of Dragon V30.1 – Sichtbarkeit Himmel und Zeit
+name: Lydra World Of Dragon V30.1 Korrigiert – Sichtbarkeit und Himmel
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Lydra V30.1 Sichtbarkeit Himmel und Zeit (PlayStation 1)
+    name: Lydra V30.1 Korrigiert (PlayStation 1)
     runs-on: ubuntu-latest
     steps:
       - name: Projekt laden
@@ -2224,100 +2224,118 @@ jobs:
           python3 "$RUNNER_TEMP/lydra_v300_world_patch.py"
           echo "V30.0 Welt-Patch erstellt; unveraenderter PS1 Build folgt."
 
-
-      - name: V30.1 Sichtbarkeit Spieler Himmel Sonne Tag Nacht und Menuefenster
+      - name: V30.1 Korrigiert – Sichtbarkeit Sonne und Tag Nacht
         shell: bash
         run: |
           set -euo pipefail
-          cat > "$RUNNER_TEMP/lydra_v301_visibility_patch.py" <<'PY'
+          test -n "${PROJECT_DIR:-}" && test -f "$PROJECT_DIR/src/main.c"
+          cat > "$RUNNER_TEMP/lydra_v301_fixed.py" <<'PY'
           #!/usr/bin/env python3
-          """V30.1: visibility fixes, fuller sky, compact menu panel and simple day/night display."""
-          import os, re
+          """Corrected V30.1 feature patch, applied AFTER the V30.0 patch."""
+          import os
           from pathlib import Path
-          p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-          s=p.read_text(encoding='utf-8')
-          def once(old,new):
+
+          path=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+          s=path.read_text(encoding='utf-8')
+
+          def one(old,new):
               global s
-              hits=s.count(old)
-              if hits!=1:
-                  raise RuntimeError('V30.1 anchor not found uniquely: %r count=%d'%(old[:80],hits))
+              count=s.count(old)
+              if count != 1:
+                  raise RuntimeError('V30.1: anchor mismatch '+repr(old[:100])+': '+str(count))
               s=s.replace(old,new,1)
-          replacements=[
+
+          # The first V30.1 draft accidentally turned C string \n into real YAML line breaks.
+          # Keep the actual C source under normal Python triple quotes, and insert only
+          # fully formed C statements. No backslash-bearing regex replacement is used.
+          for old,new in (
               ('#define VT_V300_NEAR_CELLS 14','#define VT_V300_NEAR_CELLS 18'),
               ('#define VT_V300_FAR_CELLS 16','#define VT_V300_FAR_CELLS 20'),
-              ('#define VT_V300_FAR_CELL_BUDGET 138','#define VT_V300_FAR_CELL_BUDGET 220'),
-              ('if(ahead < -slack || ahead>3450)return 0;','if(ahead < -(slack*4) || ahead>4300)return 0;'),
-          ]
-          for old,new in replacements:
-              once(old,new)
-          once('draw_box(a,y,c,size,r,g,b);','draw_box(a,y-12,c,size,r,g,b);')
-          once('vt_pyramid(a,y,c,size,height,r,g,b);','vt_pyramid(a,y-12,c,size,height,r,g,b);')
+              ('#define VT_V300_FAR_CELL_BUDGET 138','#define VT_V300_FAR_CELL_BUDGET 170'),
+              ('-7*VT_V300_NEAR_STEP','-(VT_V300_NEAR_CELLS/2)*VT_V300_NEAR_STEP'),
+              ('-8*VT_V300_FAR_STEP','-(VT_V300_FAR_CELLS/2)*VT_V300_FAR_STEP'),
+          ):
+              # Far-step origin appears twice, near-step origin appears twice.
+              n=s.count(old)
+              if n not in (1,2):
+                  raise RuntimeError('V30.1: terrain anchor count '+repr(old)+': '+str(n))
+              s=s.replace(old,new)
+
+          # Introduce the clock ahead of both the world and HUD functions.
+          one('static void vt_v293_player_box(int x,int y,int z,int size,int r,int g,int b) {',
+              'static unsigned int vt_v301_clock=0;\nstatic void vt_v293_player_box(int x,int y,int z,int size,int r,int g,int b) {')
+          # Lift the avatar geometry without altering house floors or physics positions.
+          one('draw_box(a,y,c,size,r,g,b);','draw_box(a,y-14,c,size,r,g,b);')
+          one('vt_pyramid(a,y,c,size,height,r,g,b);','vt_pyramid(a,y-14,c,size,height,r,g,b);')
+          # Modest higher chase camera: avoid pitching so far down that it hides the hero.
           if 'camera_pos.vy = 62 + vt_v28_camera_blend / 3;' in s:
-              once('camera_pos.vy = 62 + vt_v28_camera_blend / 3;','camera_pos.vy = 76 + vt_v28_camera_blend / 3;')
-          if 'camera_pos.vz = CAMERA_Z - vt_v28_camera_blend;' in s:
-              once('camera_pos.vz = CAMERA_Z - vt_v28_camera_blend;','camera_pos.vz = CAMERA_Z - vt_v28_camera_blend - 36;')
-          once('setXY0(panel, 11, 65);','setXY0(panel, 24, 70);')
-          once('setWH(panel, 298, 169);','setWH(panel, 214, 112);')
-          once('FntOpen(247, 6, 69, 65, 0, 128); /* compass */',
-               'FntOpen(247, 6, 69, 65, 0, 128); /* compass */\n    FntOpen(204, 6, 40, 56, 0, 128); /* day-night */')
-          pat=r'''static void vt_v292_draw_compass\(void\) \{.*?
-          \}
-          static void vt_v292_draw_exploration_hud\(void\) \{'''
-          repl=r'''static void vt_v292_draw_compass(void) {
-              static const char *letters[4]={"N","O","S","W"};
-              int heading=((vt_v292_cam_yaw+512)&4095)/1024;
-              FntPrint(3,"  %s
-%s + %s
-  %s
-",
-                  letters[heading],letters[(heading+3)&3],
-                  letters[(heading+1)&3],letters[(heading+2)&3]);
+              one('camera_pos.vy = 62 + vt_v28_camera_blend / 3;',
+                  'camera_pos.vy = 72 + vt_v28_camera_blend / 3;')
+
+          # Small main-menu window. Subpages need extra height for descriptive text.
+          one('setXY0(panel, 11, 65);','setXY0(panel, 11, 65); /* compact main menu */')
+          one('setWH(panel, 298, 169);',
+              'setWH(panel, vt_menu_page == 0 ? 278 : 298, vt_menu_page == 0 ? 116 : 169);')
+
+          # Frame-based clock: 80 seconds daytime / 40 seconds night at 60fps;
+          # game clock only advances while exploring, not while the menu is open.
+          # On PAL/50fps the real-world period is correspondingly longer.
+          helpers=r'''
+          /* V30.1 clock, not connected to the existing memory card data. */
+          static void vt_v301_day_night_hud(void) {
+              unsigned int t,remain;
+              int tag,nacht;
+              if(!vt_menu_open && game_mode==0)vt_v301_clock++;
+              t=vt_v301_clock%7200u;
+              tag=0; nacht=0;
+              if(t<4800u) {
+                  remain=4800u-t;
+                  tag=(int)(remain*100u/4800u);
+              } else {
+                  remain=7200u-t;
+                  nacht=(int)(remain*100u/2400u);
+              }
+              FntPrint(4,"TAG %3d%%\nNAC %3d%%\n",tag,nacht);
           }
-          static void vt_v301_draw_daynight(void) {
-              int cycle=(step_count*3)%240;
-              int day=(cycle<120)?(100-(cycle*100)/120):((cycle-120)*100/120);
-              int night=100-day;
-              if(day<0)day=0; if(day>100)day=100;
-              if(night<0)night=0; if(night>100)night=100;
-              FntPrint(4,"TAG
-%3d%%
-NACHT
-%3d%%
-",day,night);
+          '''
+          one('static void vt_v292_draw_exploration_hud(void) {',
+              helpers+'\nstatic void vt_v292_draw_exploration_hud(void) {')
+          one('vt_v292_draw_compass();','vt_v292_draw_compass();\n    vt_v301_day_night_hud();')
+          one('FntFlush(0);FntFlush(1);FntFlush(3);',
+              'FntFlush(0);FntFlush(1);FntFlush(3);FntFlush(4);')
+          one('FntOpen(247, 6, 69, 65, 0, 128); /* compass */',
+              'FntOpen(247, 6, 69, 65, 0, 128); /* compass */\n'
+              '    FntOpen(177, 6, 68, 42, 0, 128); /* day-night meter */')
+
+          # Stylized low-polygon sun high above the player, towards the horizon.
+          # Defined before the overworld routine, where it is drawn, to satisfy C99.
+          sun_code=r'''
+          /* V30.1: a simple stylized yellow sun and soft highlight. */
+          static void vt_v301_sun(void) {
+              int angle=(vt_v292_cam_yaw + 400)&4095;
+              int x=px+(vt_v293_sin(angle)*1400)/1024;
+              int z=pz+(vt_v293_cos(angle)*1400)/1024;
+              if((vt_v301_clock%7200u)>=4800u)return;
+              vt_pyramid(x,-580,z,110,62,240,195,91);
+              draw_box(x,-592,z,78,255,225,112);
+              vt_pyramid(x,-605,z,48,52,255,244,172);
           }
-          static void vt_v301_draw_sun(void) {
-              int fx, fz, side_x, side_z;
-              fx = px + (-vt_v293_sin(vt_v292_cam_yaw)*2100 + vt_v293_cos(vt_v292_cam_yaw)*760)/1024;
-              fz = pz + ( vt_v293_cos(vt_v292_cam_yaw)*2100 + vt_v293_sin(vt_v292_cam_yaw)*760)/1024;
-              side_x = fx + (vt_v293_cos(vt_v292_cam_yaw)*110)/1024;
-              side_z = fz + (vt_v293_sin(vt_v292_cam_yaw)*110)/1024;
-              draw_box(fx,-250,fz,26,252,226,105);
-              vt_pyramid(fx,-250,fz,36,18,255,236,136);
-              draw_box(side_x,-246,side_z,10,255,241,170);
-          }
-          static void vt_v292_draw_exploration_hud(void) {'''
-          s,n=re.subn(pat,repl,s,flags=re.S)
-          if n!=1:
-              raise RuntimeError('V30.1 compass/day-night block not replaced')
-          once('vt_v292_draw_compass();','vt_v292_draw_compass();\n              vt_v301_draw_daynight();')
-          once('FntFlush(0);FntFlush(1);FntFlush(3);','FntFlush(0);FntFlush(1);FntFlush(3);FntFlush(4);')
-          once('vt_v241_ground();
-    vt_v300_horizon();
-    vt_v300_mid_detail();',
-               'vt_v241_ground();
-    vt_v300_horizon();
-    vt_v301_draw_sun();
-    vt_v300_mid_detail();')
-          for marker in ('vt_v293_move((unsigned int)pad);','vt_v281_resolve_movement();','vt_v282_draw_house_npcs(','vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)'):
-              if marker not in s:
-                  raise RuntimeError('V30.1 lost feature: '+marker)
-          p.write_text(s,encoding='utf-8')
-          print('V30.1: farther ground ring and wider frustum behind the camera.')
-          print('V30.1: lifted player mesh, higher/farther chase camera, compact menu panel.')
-          print('V30.1: top-right compass + day/night readout, simple stylized sun in the sky.')
+          '''
+          one('static void vt_v300_horizon(void) {',sun_code+'\nstatic void vt_v300_horizon(void) {')
+          one('vt_v300_horizon();','vt_v300_horizon();\n    vt_v301_sun();')
+
+          # Keep gameplay, save-file fields, actions, dialogs, houses and NPCs intact.
+          for feature in ('vt_v293_move((unsigned int)pad);','vt_v281_resolve_movement();',
+                          'vt_v282_draw_house_npcs(', 'vt_opt_draw_page();',
+                          'vt_save_game(void)', 'vt_load_game(void)',
+                          'vt_v301_day_night_hud();','vt_v301_sun();'):
+              if feature not in s:
+                  raise RuntimeError('V30.1 lost expected feature: '+feature)
+          path.write_text(s,encoding='utf-8')
+          print('V30.1 corrected: extended terrain, avatar visibility, compact menu, sun + time meter')
           PY
-          python3 "$RUNNER_TEMP/lydra_v301_visibility_patch.py"
-          echo "V30.1 Sichtbarkeits-Patch erstellt; unveraenderter PS1 Build folgt."
+          python3 "$RUNNER_TEMP/lydra_v301_fixed.py"
+
       - name: PS1 SDK installieren – V27 Basis
         shell: bash
         run: |
@@ -2345,7 +2363,7 @@ NACHT
           done
           echo "V30.0 Dateien vorhanden. RetroArch- und Hardwaretest stehen noch aus."
 
-      - name: Lydra V30.1 herunterladen
+      - name: Lydra V30.1 Korrigiert herunterladen
         uses: actions/upload-artifact@v4
         with:
           name: Lydra-World-Of-Dragon-PS1-V30-1
