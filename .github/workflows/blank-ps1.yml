@@ -1,4 +1,4 @@
-name: Build Lydra World Of Dragon V28.2 Houses & Living NPCs
+name: Build Lydra World Of Dragon V29 Fantasy Grafikstil
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   build:
-    name: Lydra V28.2 PS1 (V27 safe base)
+    name: Lydra V29 PS1 (V27 stable source, V28.2 rooms)
     runs-on: ubuntu-latest
     steps:
       - name: Projekt laden
@@ -753,13 +753,284 @@ jobs:
           PY
           python3 "$RUNNER_TEMP/apply_lydra_v282.py"
 
+      - name: V29 Fantasy Grafikstil aus Referenzbild
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/apply_lydra_v29.py" <<'PY'
+          #!/usr/bin/env python3
+          """Lydra World Of Dragon V29: fantasy art direction, conservative PS1 polygon patch.
+
+          Applies on top of the exact V28.2 build-chain output (not compiled BIN/CUE).
+          No save-struct edits; no external textures/assets; no new heap allocations.
+          """
+          import os
+          import re
+          from pathlib import Path
+
+          source = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+          code = source.read_text(encoding='utf-8')
+
+
+          def once(old, new):
+              global code
+              n = code.count(old)
+              if n != 1:
+                  raise RuntimeError(f'V29 anchor expected exactly once ({n}): {old[:90]!r}')
+              code = code.replace(old, new, 1)
+
+
+          def function_bounds(name):
+              pattern = r'\bstatic\s+void\s+' + re.escape(name) + r'\s*\([^;]*?\)\s*\{'
+              matches = list(re.finditer(pattern, code, re.S))
+              if len(matches) != 1:
+                  raise RuntimeError(f'V29 function {name!r} not unique: {len(matches)}')
+              m = matches[0]
+              i, depth, mode = m.end(), 1, 'code'
+              while i < len(code):
+                  c = code[i]
+                  n = code[i + 1] if i + 1 < len(code) else ''
+                  if mode == 'line':
+                      if c == '\n': mode = 'code'
+                  elif mode == 'block':
+                      if c == '*' and n == '/': i += 1; mode = 'code'
+                  elif mode in ('string', 'char'):
+                      if c == '\\': i += 1
+                      elif (mode == 'string' and c == '"') or (mode == 'char' and c == "'"):
+                          mode = 'code'
+                  elif c == '/' and n == '/': mode = 'line'; i += 1
+                  elif c == '/' and n == '*': mode = 'block'; i += 1
+                  elif c == '"': mode = 'string'
+                  elif c == "'": mode = 'char'
+                  elif c == '{': depth += 1
+                  elif c == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return m.start(), i + 1, i
+                  i += 1
+              raise RuntimeError(f'Unterminated function {name}')
+
+
+          def replace_function(name, new):
+              global code
+              start, end, _ = function_bounds(name)
+              code = code[:start] + new.rstrip() + code[end:]
+
+
+          def append_function(name, extra):
+              global code
+              _, _, right_brace = function_bounds(name)
+              code = code[:right_brace] + '\n' + extra.strip('\n') + '\n' + code[right_brace:]
+
+
+          def scoped_change(name, old, new):
+              global code
+              a, b, _ = function_bounds(name)
+              frag = code[a:b]
+              cnt = frag.count(old)
+              if cnt != 1:
+                  raise RuntimeError(f'V29 {name} expected 1 palette marker, got {cnt}: {old}')
+              code = code[:a] + frag.replace(old, new, 1) + code[b:]
+
+
+          # Art direction of the user-provided reference: warmer paths, sunny green valley,
+          # cobalt river and bluish distant mountain silhouettes. No UV textures required.
+          scoped_change('vt_v241_ground', '57,132,72,39,112,59', '83,157,84,54,130,67')
+          scoped_change('vt_v241_ground', '64,109,94,48,92,83', '73,126,109,53,103,86')
+          scoped_change('vt_v241_ground', '79,105,73,65,91,65', '101,133,82,73,108,62')
+          scoped_change('vt_v241_path', '164,123,80', '184,139,88')
+          scoped_change('vt_v241_path', '163,121,76', '184,138,84')
+          scoped_change('vt_v241_bridge', '34,37,108,176', '34,50,125,194')
+
+          # Old roof/house wall collision and roof-less interiors are inherited from V28.2;
+          # this is a pure visual replacement of the same vt_v241_building function.
+          new_house = r'''static void vt_v241_building(int x,int z,int size,int roof,int style) {
+              int s=vt_v282_size(size);
+              int inside=vt_v282_inside(x,z);
+              int occluded;
+              int hide_roof;
+              int wr=style?204:220;
+              int wg=style?176:190;
+              int wb=style?125:146;
+              int r0=roof==0?175:210;
+              int g0=roof==0?85:155;
+              int b0=roof==0?65:100;
+              if (!vt_v241_visible(x,z,800)) return;
+              occluded=vt_v28_house_blocks_view(x,z,s);
+              hide_roof=inside || occluded;
+              /* Bright stone floor, framed door, interior furniture. */
+              vt_v241_flat(x-s+3,z-s+3,x+s-3,z+s-3,31,176,141,99);
+              vt_v241_flat(x-s+9,z-s+9,x+s-9,z+s-9,30,194,163,120);
+
+              /* Hide only the offending upper silhouette when between camera/player.
+                 Physical wall collision from V28.2 remains active at all times. */
+              if (!occluded) {
+                  vt_v282_wall(x-s,z-s,x-32,z-s,wr,wg,wb);
+                  vt_v282_wall(x+32,z-s,x+s,z-s,wr,wg,wb);
+                  vt_v282_wall(x-s,z+s,x+s,z+s,wr-14,wg-14,wb-11);
+                  vt_v282_wall(x-s,z-s,x-s,z+s,wr-17,wg-17,wb-15);
+                  vt_v282_wall(x+s,z-s,x+s,z+s,wr-17,wg-17,wb-15);
+                  /* Half-timber facade beams well clear of the open 64-unit doorway. */
+                  draw_box(x-s+6,-14,z-s,5,119,73,46);
+                  draw_box(x+s-6,-14,z-s,5,119,73,46);
+                  draw_box(x-34,-6,z-s,6,115,71,41);
+                  draw_box(x+34,-6,z-s,6,115,71,41);
+                  draw_box(x,-48,z-s,5,131,83,51);
+                  /* Blue-glass windows with golden framing. */
+                  draw_box(x-s/2,-8,z-s+2,9,244,196,112);
+                  draw_box(x+s/2,-8,z-s+2,9,244,196,112);
+                  draw_box(x-s/2,-8,z-s+1,5,95,161,190);
+                  draw_box(x+s/2,-8,z-s+1,5,95,161,190);
+                  /* Furniture is visible from above only when this house is entered. */
+                  if (inside) {
+                      draw_box(x-s/2,22,z+s/3,13,133,88,51);
+                      draw_box(x+s/2,22,z+s/3,11,148,118,78);
+                      draw_box(x-s/2,-3,z+s/3,7,208,161,89);
+                  }
+              } else {
+                  /* Knee-high foundation marking an obscuring building, not a tall wall. */
+                  draw_box(x-s+7,34,z-s+7,6,168,137,98);
+                  draw_box(x+s-7,34,z+s-7,6,168,137,98);
+              }
+              if (!hide_roof) {
+                  /* Two-tone terracotta or golden plaster roof; roof logic unchanged. */
+                  vt_pyramid(x,-72,z,s+12,37,r0,g0,b0);
+                  vt_pyramid(x,-80,z,s-15,20,r0+18,g0+23,b0+14);
+                  draw_box(x+s/2,-86,z+s/3,7,140,125,103);
+              }
+              if (inside) vt_v282_draw_house_npcs(x,z);
+          }'''
+          replace_function('vt_v241_building', new_house)
+
+          # Place detail in the scene after the stable V28.2 town call. This respects
+          # the renderer's existing world coordinates and nearby-scene culling.
+          new_scene = r'''
+          /* V29: low-cost scenery, clipped by the same world culling as V24.1. */
+          static void vt_v29_fantasy_landscape(void) {
+              int i,x,z,wave,seed;
+              wave=((vt_v18_tick>>4)&3)-1;
+              /* Three cool-blue mountain tiers behind the warm village. */
+              for (i=-3;i<=3;i++) {
+                  x=i*340+60;
+                  z=1060+((i+3)&1)*85;
+                  if (vt_v241_visible(x,z,1550))
+                      vt_v24_peak(x,z,126,185+((i+3)&3)*18,91,139,191);
+              }
+              if (region==0) {
+                  /* The existing navigable bridge and river remain. Add river glints on
+                     the eastern bank without placing blocking geometry on the main path. */
+                  if (vt_v241_visible(540,820,1150)) {
+                      vt_v241_flat(450,790,740,1080,33,44,132,205);
+                      vt_v241_flat(455,830,475,1015,32,97,183,219);
+                      vt_v241_flat(686,820,711,1050,32,98,182,222);
+                      vt_v241_flat(476,930,672,954,31,74,159,213);
+                  }
+                  /* Stone plinths are decorative and outside the traversable main road. */
+                  if (vt_v241_visible(-350,520,760)) {
+                      draw_box(-415,27,575,17,148,150,148);
+                      draw_box(-442,21,584,11,195,187,165);
+                  }
+              }
+              /* Wildflower clusters near the paths, deterministic so saves remain same. */
+              for (i=0;i<32;i++) {
+                  seed=i*73+region*39;
+                  z=70+((seed*11)%1160);
+                  x=((i&1)?1:-1)*(135+(seed%190));
+                  if (!vt_v241_visible(x,z,620)) continue;
+                  vt_pyramid(x+wave,25,z,4,12,48,130,63);
+                  vt_pyramid(x-8-wave,28,z+5,3,10,60,152,74);
+                  if ((i&3)==0)
+                      vt_pyramid(x+wave,12,z,4,8,253,214,87);
+                  else if ((i&3)==1)
+                      vt_pyramid(x+wave,12,z,4,8,247,240,207);
+                  else if ((i&3)==2)
+                      vt_pyramid(x+wave,12,z,4,8,226,127,148);
+                  else
+                      vt_pyramid(x+wave,12,z,4,8,154,183,247);
+              }
+          }
+          '''
+          once('static void vt_v24_draw_overworld(void) {', new_scene+'\nstatic void vt_v24_draw_overworld(void) {')
+          append_function('vt_v24_draw_overworld', '    vt_v29_fantasy_landscape();')
+
+          # Layered forest crown, PS1 flat shading (no expensive particle/texture use).
+          append_function('vt_v24_tree', r'''
+              /* V29: cooler green foliage and sunlit leaf tip. */
+              vt_pyramid(x + ((vt_v18_tick>>5)&1), -46, z-3,
+                         7+scale/6, 18+scale/4,
+                         rr+27, gg+32, bb+20);
+          ''')
+
+          # Add a subtle brighter path edging, but no extra colliders or scene geometry
+          # that could be mistaken for an inaccessible road.
+          append_function('vt_v241_path', r'''
+              if (vt_v241_visible((x1+x2)/2,(z1+z2)/2,870)) {
+                  if (x1==x2) {
+                      vt_v241_flat(x1-width+7,z1,x1-width+13,z2,32,206,171,115);
+                      vt_v241_flat(x1+width-13,z1,x1+width-7,z2,32,207,169,112);
+                  } else {
+                      vt_v241_flat(x1,z1-width+7,x2,z1-width+13,32,209,174,117);
+                      vt_v241_flat(x1,z1+width-13,x2,z1+width-7,32,207,171,115);
+                  }
+              }
+          ''')
+
+          # More readable, lively NPC silhouettes; keep position/radius/update untouched.
+          replace_function('vt_v282_draw_npc', r'''static void vt_v282_draw_npc(int x,int z,int tint) {
+              int stride=((vt_v18_tick>>3)&1)?3:-3;
+              if (vt_v281_abs(x-px)>760 || z-pz<-240 || z-pz>1080) return;
+              draw_box(x,18,z,11,tint?171:52,tint?80:124,tint?73:211);
+              draw_box(x,-1,z-2,8,226,180,132);
+              draw_box(x,-8,z+2,9,tint?103:100,tint?64:67,tint?49:43);
+              draw_box(x-12,18+stride,z,4,211,158,103);
+              draw_box(x+12,18-stride,z,4,211,158,103);
+              draw_box(x-5,31+stride,z,4,63,65,97);
+              draw_box(x+5,31-stride,z,4,63,65,97);
+              draw_box(x,-23,z+2,4,233,204,132);
+          }''')
+
+          # Camera framing: minimize the steep elevation that pushed avatar below roofs.
+          # The occlusion-aware low foundations above keep the player visually readable.
+          once('camera_rot.vx = 104 + vt_v28_camera_blend;',
+               'camera_rot.vx = 104 + vt_v28_camera_blend / 3;')
+          once('camera_pos.vy = 62 + vt_v28_camera_blend / 2;',
+               'camera_pos.vy = 62 + vt_v28_camera_blend / 3;')
+
+          # A little amber scale glint for Sparkit, but keep its original animation.
+          append_function('vt_sparkit', r'''
+              /* V29: warm glint matching the reference fantasy color palette. */
+              vt_pyramid(x, -17-bounce/4, z+16, 5, 10, 250, 217, 99);
+          ''')
+
+          required = [
+              'vt_v29_fantasy_landscape();',
+              'vt_v282_update_npcs();', 'vt_v282_draw_house_npcs(x,z);',
+              'vt_v282_house_wall(', 'vt_v281_resolve_movement();',
+              'vt_v23_field_dragon();', 'vt_v18_battle_bars();',
+              'vt_save_game(void)', 'vt_load_game(void)',
+              'LYDRA WORLD OF DRAGON', 'vt_v21_party[3]'
+          ]
+          for marker in required:
+              if marker not in code:
+                  raise RuntimeError('V29 preservation check failed: '+marker)
+          if code.count('static void vt_v241_building(') != 1:
+              raise RuntimeError('Duplicated building function')
+          if code.count('vt_v29_fantasy_landscape();') != 1:
+              raise RuntimeError('V29 scenery rendered more than once')
+          source.write_text(code,encoding='utf-8')
+          print('LYDRA V29: sunny green terrain, river glints, blue peaks, wildflowers, paths')
+          print('V28.2 indoor/outdoor NPCs, doorway collisions and per-house roofs preserved')
+          print('Low polygon count, original PS1 save data/capture/combat untouched')
+          PY
+          python3 "$RUNNER_TEMP/apply_lydra_v29.py"
+
       - name: PS1 SDK installieren – V27 Basis
         shell: bash
         run: |
           set -euo pipefail
           python3 "$RUNNER_TEMP/run_v27_step.py" "Install PSn00bSDK"
 
-      - name: Lydra V28.2 fuer PS1 kompilieren
+      - name: Lydra V29 fuer PS1 kompilieren
         shell: bash
         run: |
           set -euo pipefail
@@ -778,12 +1049,12 @@ jobs:
           for f in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
             test -s "artifacts/$f" || { echo "Fehlende PS1-Datei: $f"; exit 1; }
           done
-          echo "V28 Dateien vorhanden. Emulator-Pruefung ist anschliessend erforderlich."
+          echo "V29 Dateien vorhanden. Emulator-Pruefung ist anschliessend erforderlich."
 
-      - name: Lydra World Of Dragon V28 herunterladen
+      - name: Lydra World Of Dragon V29 herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: Lydra-World-Of-Dragon-PS1-V28-2
+          name: Lydra-World-Of-Dragon-PS1-V29
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
