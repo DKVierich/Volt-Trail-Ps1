@@ -1,4 +1,4 @@
-name: Build Lydra World Of Dragon V28
+name: Build Lydra World Of Dragon V28.1 Camera & Collision Fix
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   build:
-    name: Lydra V28 PS1 (V27 safe base)
+    name: Lydra V28.1 PS1 (V27 safe base)
     runs-on: ubuntu-latest
     steps:
       - name: Projekt laden
@@ -281,6 +281,197 @@ jobs:
           PY
           python3 "$RUNNER_TEMP/apply_lydra_v28.py"
 
+      - name: V28.1 Kollision und Kamera-Sicht korrigieren
+        shell: bash
+        run: |
+                    set -euo pipefail
+                    cat > "$RUNNER_TEMP/apply_lydra_v281.py" <<'PY'
+                    #!/usr/bin/env python3
+                    """V28.1 post-patch: solid low-poly world collisions and foreground camera fix.
+                    Applied after V28 patch and before PS1 compilation. Does not modify saves.
+                    """
+                    import os
+                    from pathlib import Path
+                    
+                    source = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+                    code = source.read_text(encoding='utf-8')
+                    
+                    
+                    def once(old, new):
+                        global code
+                        occurrences = code.count(old)
+                        if occurrences != 1:
+                            raise RuntimeError(f'V28.1 anchor unexpected ({occurrences}): {old[:96]!r}')
+                        code = code.replace(old, new, 1)
+                    
+                    # Guard against wrong V27/V28 revision. These buildings come from V24.1 and
+                    # remain in the V27 game. Their coordinates and visual radii are also used as
+                    # gameplay blockers below; fail loudly rather than silently misalign collision.
+                    buildings = [
+                        (0, -205, 265, 43), (0, 15, 330, 52), (0, 208, 280, 42),
+                        (0, -380, 395, 49), (0, 365, 397, 46),
+                        (0, -100, 500, 37), (0, 165, 495, 38),
+                        (2, -390, 365, 53), (2, 370, 375, 53),
+                    ]
+                    for region_id, x, z, half in buildings:
+                        marker = f'vt_v241_building({x},{z},{half},'
+                        if code.count(marker) != 1:
+                            raise RuntimeError('Cannot safely align V28.1 collision with building: ' + marker)
+                    
+                    # C89/C99 compatible code. PS1 integers only, no new geometry allocation.
+                    static_collision = ',\n'.join(
+                        f'    {{{r}, {x}, {z}, {size}}}' for r, x, z, size in buildings
+                    )
+                    helpers = r'''
+                    /* V28.1: ACTUAL movement collision in world coordinates; original 17 save
+                     * words, control bindings, dragon battles and models stay unchanged. */
+                    typedef struct {
+                        int map_region;
+                        int x;
+                        int z;
+                        int half;
+                    } vt_v281_blocker_t;
+                    
+                    static const vt_v281_blocker_t vt_v281_houses[] = {
+                    __BUILDINGS__
+                    };
+                    
+                    #define VT_V281_PLAYER_RADIUS 13
+                    static int vt_v281_initialized = 0;
+                    static int vt_v281_last_px = 0;
+                    static int vt_v281_last_pz = 0;
+                    static int vt_v281_last_region = 0;
+                    
+                    static int vt_v281_abs(int n) { return n < 0 ? -n : n; }
+                    
+                    static int vt_v281_in_box(int x, int z, int bx, int bz, int radius) {
+                        return vt_v281_abs(x - bx) < radius + VT_V281_PLAYER_RADIUS &&
+                               vt_v281_abs(z - bz) < radius + VT_V281_PLAYER_RADIUS;
+                    }
+                    
+                    static int vt_v281_is_blocked(int x, int z) {
+                        unsigned int i;
+                        int k, s, zz, seed;
+                        for (i = 0; i < sizeof(vt_v281_houses) / sizeof(vt_v281_houses[0]); i++) {
+                            const vt_v281_blocker_t *h = &vt_v281_houses[i];
+                            if (region == h->map_region &&
+                                vt_v281_in_box(x, z, h->x, h->z, h->half)) return 1;
+                        }
+                        /* Low-poly trees rendered in every region by V24.1. */
+                        for (k = -3; k < 19; k++) {
+                            seed = k + 8;
+                            zz = k * 145;
+                            if (vt_v281_in_box(x, z,
+                                -290 - (seed * 53 % 115), zz + ((seed & 1) * 35), 9)) return 1;
+                            if (vt_v281_in_box(x, z,
+                                290 + (seed * 61 % 145), zz + ((seed & 1) * 35), 9)) return 1;
+                            if ((seed & 3) == 0) {
+                                if (vt_v281_in_box(x, z, -515, zz + 30, 9)) return 1;
+                                if (vt_v281_in_box(x, z, 510, zz + 70, 9)) return 1;
+                            }
+                        }
+                        if (region == 0) {
+                            /* Two stone archways. Pillars block, opening remains walkable. */
+                            if (vt_v281_in_box(x, z, 350 - 18, 880, 11) ||
+                                vt_v281_in_box(x, z, 350 + 18, 880, 11) ||
+                                vt_v281_in_box(x, z, -295 - 18, 1110, 11) ||
+                                vt_v281_in_box(x, z, -295 + 18, 1110, 11)) return 1;
+                        } else if (region == 1) {
+                            for (k = -4; k <= 8; k++) {
+                                zz = k * 160 + 120;
+                                if (vt_v281_in_box(x, z, -250, zz, 17) ||
+                                    vt_v281_in_box(x, z, 250, zz, 17)) return 1;
+                            }
+                        } else if (region == 2) {
+                            /* Big arena side towers. Leave the main central entrance traversable. */
+                            if (vt_v281_in_box(x, z, -165, 875, 60) ||
+                                vt_v281_in_box(x, z, 165, 875, 60)) return 1;
+                        }
+                        return 0;
+                    }
+                    
+                    static void vt_v281_resolve_movement(void) {
+                        int old_x, old_z;
+                        if (!vt_v281_initialized || region != vt_v281_last_region) {
+                            vt_v281_last_px = px;
+                            vt_v281_last_pz = pz;
+                            vt_v281_last_region = region;
+                            vt_v281_initialized = 1;
+                            return;
+                        }
+                        old_x = vt_v281_last_px;
+                        old_z = vt_v281_last_pz;
+                        /* Loading a memory card, teleporting or changing a scene is not walking. */
+                        if (vt_v281_abs(px - old_x) > 95 || vt_v281_abs(pz - old_z) > 95) {
+                            vt_v281_last_px = px;
+                            vt_v281_last_pz = pz;
+                            return;
+                        }
+                        if (vt_v281_is_blocked(px, pz) &&
+                            !vt_v281_is_blocked(old_x, old_z)) {
+                            /* Axis-wise sliding: brush along walls instead of sticking to them. */
+                            if (!vt_v281_is_blocked(px, old_z)) {
+                                pz = old_z;
+                            } else if (!vt_v281_is_blocked(old_x, pz)) {
+                                px = old_x;
+                            } else {
+                                px = old_x;
+                                pz = old_z;
+                            }
+                        }
+                        /* If an older save starts inside a structure, do not trap the player. */
+                        vt_v281_last_px = px;
+                        vt_v281_last_pz = pz;
+                    }
+                    
+                    static int vt_v281_camera_obstructed(void) {
+                        unsigned int i;
+                        for (i = 0; i < sizeof(vt_v281_houses) / sizeof(vt_v281_houses[0]); i++) {
+                            const vt_v281_blocker_t *h = &vt_v281_houses[i];
+                            int dx = vt_v281_abs(px - h->x);
+                            int dz = h->z - pz;
+                            if (h->map_region == region &&
+                                dx < h->half + 76 &&
+                                dz > -CAMERA_Z - h->half && dz < h->half + 60)
+                                return 1;
+                        }
+                        return 0;
+                    }
+                    '''.replace('__BUILDINGS__',static_collision)
+                    
+                    once('static void vt_v28_living_landscape(void) {',
+                         helpers + '\nstatic void vt_v28_living_landscape(void) {')
+                    
+                    # V28 old visibility check was too narrow and was only an indirect frame flag.
+                    # Foreground houses are reduced to low foundations; other buildings stay intact.
+                    once('if (dx < radius + 58 && dz > -205 && dz < 82) {',
+                         'if (dx < radius + 76 && dz > -CAMERA_Z - radius && dz < radius + 60) {')
+                    
+                    # Evaluate the *current* map before the camera is set up, not last frame's
+                    # impression from polygon drawing. Blend smoothly. Slightly steeper overhead.
+                    once('int wanted = vt_v28_house_in_sight ? 48 : 0;',
+                         'int wanted = vt_v281_camera_obstructed() ? 64 : 0;')
+                    once('camera_pos.vy = 62 + (vt_v28_camera_blend * 5) / 6;',
+                         'camera_pos.vy = 62 + vt_v28_camera_blend;')
+                    
+                    # Resolve movement before drawing ground or the avatar to avoid a one-frame
+                    # mismatch of scenery and coordinates. One stable anchor in the V27 game.
+                    once('        draw_ground();',
+                         '        vt_v281_resolve_movement();\n        draw_ground();')
+                    
+                    for marker in ['vt_v281_resolve_movement();',
+                                   'vt_v281_camera_obstructed() ? 64 : 0;',
+                                   'vt_save_game(void)', 'vt_load_game(void)',
+                                   'vt_v21_party[3]', 'vt_v23_field_dragon();',
+                                   'vt_v18_battle_bars();']:
+                        if marker not in code:
+                            raise RuntimeError('V28.1 preservation check failed: ' + marker)
+                    source.write_text(code, encoding='utf-8')
+                    print('V28.1 patch applied: solid houses, tree trunks, ruins and arena obstacles')
+                    print('Live camera proximity fixed; original V28 graphics, dragons and save format retained')
+                    PY
+                    python3 "$RUNNER_TEMP/apply_lydra_v281.py"
+
       - name: PS1 SDK installieren – V27 Basis
         shell: bash
         run: |
@@ -311,7 +502,7 @@ jobs:
       - name: Lydra World Of Dragon V28 herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: Lydra-World-Of-Dragon-PS1-V28
+          name: Lydra-World-Of-Dragon-PS1-V28-1
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
