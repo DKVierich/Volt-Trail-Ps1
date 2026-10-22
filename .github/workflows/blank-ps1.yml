@@ -1,5 +1,5 @@
 
-name: Build Lydra World Of Dragon PS1 V25
+name: Build Lydra World Of Dragon V25 Grafik Fix
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Install tools
+      - name: Install build tools
         shell: bash
         run: |
           set -euo pipefail
@@ -24,35 +24,34 @@ jobs:
             cmake ninja-build unzip curl \
             ffmpeg python3-pil python3-yaml
 
-      - name: Load working V24.3 source
+      - name: Load working V24.3 instructions
         shell: bash
         run: |
           set -euo pipefail
 
-          V243_COMMIT="7886e325c196b8d43576e12f6916831de73be704"
+          BASE_COMMIT="7886e325c196b8d43576e12f6916831de73be704"
 
           curl --fail --location --retry 4 \
-            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$V243_COMMIT/.github/workflows/blank-ps1.yml" \
-            -o "$RUNNER_TEMP/working-v243.yml"
+            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$BASE_COMMIT/.github/workflows/blank-ps1.yml" \
+            -o "$RUNNER_TEMP/lydra-base.yml"
 
-          cat > "$RUNNER_TEMP/run_v243.py" <<'PY'
+          cat > "$RUNNER_TEMP/run_base.py" <<'PY'
           import os
           import sys
           import subprocess
           from pathlib import Path
           import yaml
 
-          source = (
+          path = (
               Path(os.environ["RUNNER_TEMP"])
-              / "working-v243.yml"
+              / "lydra-base.yml"
           )
 
           data = yaml.safe_load(
-              source.read_text(encoding="utf-8")
+              path.read_text(encoding="utf-8")
           )
 
           steps = data["jobs"]["build"]["steps"]
-
           wanted = sys.argv[1]
 
           matches = [
@@ -62,10 +61,10 @@ jobs:
 
           if len(matches) != 1:
               raise RuntimeError(
-                  "Build step missing: " + wanted
+                  "Missing base step: " + wanted
               )
 
-          print("Running:", wanted, flush=True)
+          print("Executing:", wanted, flush=True)
 
           subprocess.run(
               [
@@ -80,7 +79,7 @@ jobs:
           )
           PY
 
-          python3 "$RUNNER_TEMP/run_v243.py" \
+          python3 "$RUNNER_TEMP/run_base.py" \
             "Load working V18 instructions"
 
       - name: Prepare existing game project
@@ -88,10 +87,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          python3 "$RUNNER_TEMP/run_v243.py" \
+          python3 "$RUNNER_TEMP/run_base.py" \
             "Prepare V18 game project"
 
-      - name: Rebuild working V24.3 game
+      - name: Restore working V24.3 game
         shell: bash
         run: |
           set -euo pipefail
@@ -101,7 +100,7 @@ jobs:
             exit 1
           }
 
-          cat > "$RUNNER_TEMP/restore_game.py" <<'PY'
+          python3 - <<'PY'
           import os
           import subprocess
           from pathlib import Path
@@ -109,12 +108,14 @@ jobs:
 
           source = (
               Path(os.environ["RUNNER_TEMP"])
-              / "working-v243.yml"
+              / "lydra-base.yml"
           )
 
-          steps = yaml.safe_load(
+          data = yaml.safe_load(
               source.read_text(encoding="utf-8")
-          )["jobs"]["build"]["steps"]
+          )
+
+          steps = data["jobs"]["build"]["steps"]
 
           required = [
               "Restore V17 intro and gameplay",
@@ -132,18 +133,18 @@ jobs:
               "V24.3 Improve player framing and battle HP display"
           ]
 
-          for name in required:
+          for wanted in required:
               matches = [
                   step for step in steps
-                  if step.get("name") == name
+                  if step.get("name") == wanted
               ]
 
               if len(matches) != 1:
                   raise RuntimeError(
-                      "Required step missing: " + name
+                      "Required step missing: " + wanted
                   )
 
-              print("Applying:", name, flush=True)
+              print("Restoring:", wanted, flush=True)
 
               subprocess.run(
                   [
@@ -157,12 +158,10 @@ jobs:
                   check=True
               )
 
-          print("Working V24.3 restored.")
+          print("Working V24.3 restored")
           PY
 
-          python3 "$RUNNER_TEMP/restore_game.py"
-
-      - name: Add Lydra name and V25 graphics
+      - name: Apply Lydra name and V25 graphics
         shell: bash
         run: |
           set -euo pipefail
@@ -177,63 +176,65 @@ jobs:
               / "main.c"
           )
 
-          code = path.read_text(encoding="utf-8")
+          code = path.read_text(
+              encoding="utf-8"
+          )
 
-          old_title = "VOLT TRAIL V24.3"
-          new_title = "LYDRA WORLD OF DRAGON"
+          def replace_once(old, new):
+              global code
 
-          if old_title not in code:
+              count = code.count(old)
+
+              if count != 1:
+                  raise RuntimeError(
+                      "Source marker missing: "
+                      + old[:65]
+                  )
+
+              code = code.replace(
+                  old,
+                  new,
+                  1
+              )
+
+          # Rename the game.
+          if "VOLT TRAIL V24.3" not in code:
               raise RuntimeError(
-                  "V24.3 title not found"
+                  "Original game title missing"
               )
 
           code = code.replace(
-              old_title,
-              new_title
+              "VOLT TRAIL V24.3",
+              "LYDRA WORLD OF DRAGON"
           )
 
-          # PS1 GPU dithering.
-          anchor = "    SetDispMask(1);"
-
-          if code.count(anchor) != 1:
-              raise RuntimeError(
-                  "GPU setup marker missing"
-              )
-
-          code = code.replace(
-              anchor,
-              "    draw[0].dtd = 1;\n"
-              "    draw[1].dtd = 1;\n"
-              + anchor,
-              1
-          )
-
-          # Extra original low-poly nature details.
-          graphics = r'''
+          # Additional PS1-friendly low-poly nature.
+          # No fragile GPU initialization patch.
+          nature_code = r'''
           /*
-           * LYDRA V25 - WORLD GRAPHICS
-           *
-           * Small PS1-friendly scenery.
-           * Only nearby, visible details are drawn.
+           * LYDRA WORLD OF DRAGON - V25
+           * Additional scenery.
            */
 
-          static void lydra_v25_world_details(void) {
-              int cell_x;
-              int cell_z;
+          static void lydra_v25_nature(void) {
+              int base_x = px / 180;
+              int base_z = pz / 180;
+
               int cx;
               int cz;
 
-              cell_x = px / 180;
-              cell_z = pz / 180;
+              if (game_mode != 0) {
+                  return;
+              }
 
               for (
-                  cz = cell_z;
-                  cz <= cell_z + 5;
+                  cz = base_z;
+                  cz <= base_z + 5;
                   cz++
               ) {
                   for (
-                      cx = cell_x - 3;
-                      cx <= cell_x + 3;
+                      cx = base_x - 3;
+                      cx <= base_x + 3;
                       cx++
                   ) {
                       int seed;
@@ -241,18 +242,18 @@ jobs:
                       int wz;
                       int dx;
                       int dz;
-                      int shade;
+                      int distant;
 
                       seed = (
-                          cx * 19 +
-                          cz * 29 +
-                          region * 7
+                          cx * 19
+                          + cz * 29
+                          + region * 7
                       ) & 15;
 
                       if (
-                          seed != 0 &&
-                          seed != 3 &&
-                          seed != 7
+                          seed != 0
+                          && seed != 3
+                          && seed != 7
                       ) {
                           continue;
                       }
@@ -263,57 +264,63 @@ jobs:
                       dx = wx - px;
                       dz = wz - pz;
 
-                      /* Avoid hidden polygons. */
-                      if (
-                          dz < 100 ||
-                          dz > 740 ||
-                          dx < -480 ||
-                          dx > 480
-                      ) {
-                          continue;
-                      }
-
-                      /* Keep the central road clear. */
-                      if (
-                          wx > -115 &&
-                          wx < 115
-                      ) {
-                          continue;
-                      }
-
                       /*
-                       * Atmospheric coloring:
-                       * objects farther away are
-                       * slightly cooler in color.
+                       * Simple visibility check:
+                       * skip scenery outside
+                       * the active surroundings.
                        */
-                      shade = dz > 450;
+                      if (
+                          dz < 100
+                          || dz > 740
+                          || dx < -480
+                          || dx > 480
+                      ) {
+                          continue;
+                      }
+
+                      /* Keep the main road clear. */
+                      if (
+                          wx > -115
+                          && wx < 115
+                      ) {
+                          continue;
+                      }
+
+                      distant = dz > 450;
 
                       if (seed == 0) {
-                          /* Low-poly boulder. */
+                          /* Small boulder. */
                           draw_box(
-                              wx, 26, wz,
+                              wx,
+                              26,
+                              wz,
                               8 + (cz & 3),
-                              shade ? 103 : 118,
-                              shade ? 120 : 111,
-                              shade ? 139 : 104
+                              distant ? 103 : 118,
+                              distant ? 120 : 111,
+                              distant ? 139 : 104
                           );
                       } else if (seed == 3) {
-                          /* Green shrub. */
+                          /* Bush. */
                           vt_pyramid(
-                              wx, 23, wz,
-                              13, 22,
-                              shade ? 64 : 37,
-                              shade ? 139 : 169,
-                              shade ? 111 : 73
+                              wx,
+                              23,
+                              wz,
+                              13,
+                              22,
+                              distant ? 64 : 37,
+                              distant ? 139 : 169,
+                              distant ? 111 : 73
                           );
                       } else {
-                          /* Small decorative rock. */
+                          /* Small stone. */
                           draw_box(
-                              wx, 30, wz,
+                              wx,
+                              30,
+                              wz,
                               5,
-                              shade ? 119 : 137,
-                              shade ? 135 : 122,
-                              shade ? 150 : 101
+                              distant ? 119 : 137,
+                              distant ? 135 : 122,
+                              distant ? 150 : 101
                           );
                       }
                   }
@@ -321,39 +328,23 @@ jobs:
           }
           '''
 
-          marker = "static void draw_hud(void) {"
-
-          if code.count(marker) != 1:
-              raise RuntimeError(
-                  "HUD insertion marker missing"
-              )
-
-          code = code.replace(
-              marker,
-              graphics + "\n" + marker,
-              1
-          )
-
-          draw_marker = (
-              "        vt_v24_draw_overworld();"
-          )
-
-          if code.count(draw_marker) != 1:
-              raise RuntimeError(
-                  "World rendering marker missing"
-              )
-
-          code = code.replace(
-              draw_marker,
-              draw_marker
+          replace_once(
+              "static void draw_hud(void) {",
+              nature_code
               + "\n"
-              + "        lydra_v25_world_details();",
-              1
+              + "static void draw_hud(void) {"
+          )
+
+          replace_once(
+              "        vt_v24_draw_overworld();",
+              "        vt_v24_draw_overworld();"
+              + "\n"
+              + "        lydra_v25_nature();"
           )
 
           required = [
               "LYDRA WORLD OF DRAGON",
-              "lydra_v25_world_details();",
+              "lydra_v25_nature();",
               "vt_v24_draw_overworld();",
               "vt_v23_field_dragon();",
               "vt_v18_battle_bars();",
@@ -362,10 +353,11 @@ jobs:
               "vt_play_intro();"
           ]
 
-          for item in required:
-              if item not in code:
+          for marker in required:
+              if marker not in code:
                   raise RuntimeError(
-                      "Game feature missing: " + item
+                      "Required feature missing: "
+                      + marker
                   )
 
           path.write_text(
@@ -374,8 +366,8 @@ jobs:
           )
 
           print("LYDRA WORLD OF DRAGON")
-          print("V25 graphics installed")
-          print("Existing gameplay preserved")
+          print("V25 graphics applied")
+          print("Existing V24.3 gameplay retained")
           PY
 
       - name: Install PSn00bSDK
@@ -383,7 +375,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          python3 "$RUNNER_TEMP/run_v243.py" \
+          python3 "$RUNNER_TEMP/run_base.py" \
             "Install PSn00bSDK 0.24 directly"
 
       - name: Build Lydra World Of Dragon
@@ -419,7 +411,7 @@ jobs:
             source="$GITHUB_WORKSPACE/build/$file"
 
             if [ ! -s "$source" ]; then
-              echo "::error::Missing $file"
+              echo "::error::Missing file: $file"
               exit 1
             fi
 
@@ -430,7 +422,7 @@ jobs:
           ls -lh \
             "$GITHUB_WORKSPACE/artifacts"
 
-      - name: Upload Lydra World Of Dragon
+      - name: Upload Lydra V25
         uses: actions/upload-artifact@v4
         with:
           name: Lydra-World-Of-Dragon-PS1-V25
