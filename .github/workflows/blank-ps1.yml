@@ -1,298 +1,489 @@
-# LYDRA WORLD OF DRAGON V30.2 - KURZER BUILD-FIX
-# Repariert den fehlenden Build/Artifact-Upload bei Run #79.
-# Basis: erfolgreicher V30.1-Commit (2026-10-22), keine 128KB-Paste noetig.
-name: Lydra World Of Dragon V30.2 - Richtiger PS1 Build
-
+# V30.3 Vollstaendiger PS1 Build. Basis V30.1 + V30.2 + Sichtreparatur.
+# V27 und Memory Card bleiben unveraendert.
+name: Lydra World Of Dragon V30.3 - Kamera, Welt und Himmel Fix
 on:
-  workflow_dispatch:
-
+  workflow_dispatch: null
 permissions:
   contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Quellprojekt auschecken
-        uses: actions/checkout@v4
-      - name: Werkzeuge installieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build unzip curl ffmpeg python3-pil python3-yaml
-      - name: Funktionierende V30.1 Build-Schritte laden
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fL --retry 3 \
-            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/755ea4e126a0f5e008a477532f21b588f055379e/.github/workflows/blank-ps1.yml' \
-            -o "$RUNNER_TEMP/v301_stabil.yml"
-          cat > "$RUNNER_TEMP/replay_v301.py" <<'PY'
-          import os,sys,subprocess,yaml
-          from pathlib import Path
-          y=Path(os.environ['RUNNER_TEMP'])/'v301_stabil.yml'
-          steps=yaml.safe_load(y.read_text(encoding='utf-8'))['jobs']['build']['steps']
-          matches=[s for s in steps if s.get('name')==sys.argv[1] and isinstance(s.get('run'),str)]
-          if len(matches)!=1:
-              raise RuntimeError('V30.1 Schritt nicht gefunden: '+sys.argv[1])
-          print('Replay:',sys.argv[1],flush=True)
-          subprocess.run(['bash','-euo','pipefail','-c',matches[0]['run']], check=True, env=os.environ.copy())
-          PY
-          python3 -m py_compile "$RUNNER_TEMP/replay_v301.py"
-      - name: Stabile V27-Quellkette laden
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'Stabile V27-Quellkette laden'
-      - name: V27 Grundlage – V26 laden
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Grundlage – V26 laden'
-      - name: V27 Spiel vorbereiten
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Spiel vorbereiten'
-      - name: V27 Spielmechaniken erhalten
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Spielmechaniken erhalten'
-      - name: V27 Lydra-Grafik laden
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Lydra-Grafik laden'
-      - name: V27 Drachenmodelle erhalten
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Drachenmodelle erhalten'
-      - name: V27 Animationen wiederherstellen
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Animationen wiederherstellen'
-      - name: V28 Kamera Landschaft und Drachen verbessern
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V28 Kamera Landschaft und Drachen verbessern'
-      - name: V28.1 Kollision und Kamera-Sicht korrigieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V28.1 Kollision und Kamera-Sicht korrigieren'
-      - name: V28.2 Begehbare Haeuser Innenraeume und wandernde NPCs
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V28.2 Begehbare Haeuser Innenraeume und wandernde NPCs'
-      - name: V29 Fantasy Grafikstil aus Referenzbild
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V29 Fantasy Grafikstil aus Referenzbild'
-      - name: V29.1 Einheitliche Staedte und PS1-Grafikpolitur
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V29.1 Einheitliche Staedte und PS1-Grafikpolitur'
-      - name: V29.1 Schwarzes Startmenue Optionen Tasten Lautstaerke Texttempo
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V29.1 Schwarzes Startmenue Optionen Tasten Lautstaerke Texttempo'
-      - name: V29.2 Vollbild Ortsnamen Kompass Kontext Aktion Kamera
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V29.2 Vollbild Ortsnamen Kompass Kontext Aktion Kamera'
-      - name: V29.3 Kameraschwenk und Laufrichtung reparieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V29.3 Kameraschwenk und Laufrichtung reparieren'
-      - name: V30.0 – 360 Grad Boden, Ferngebirge und LOD
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V30.0 – 360 Grad Boden, Ferngebirge und LOD'
-      - name: V30.1 Korrigiert – Sichtbarkeit Sonne und Tag Nacht
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'V30.1 Korrigiert – Sichtbarkeit Sonne und Tag Nacht'
-      - name: V30.2 360-Grad-Gelaende-Fix anwenden
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "${PROJECT_DIR:-}" && test -f "$PROJECT_DIR/src/main.c"
-          cat > "$RUNNER_TEMP/lydra_v302_world_fix.py" <<'PY'
-          #!/usr/bin/env python3
-          # V30.2 full 360 degree terrain and full-circle distant skyline.
-          # Based on V30.1; no changes to saves, input, doors or combat.
-          import os
-          import re
-          from pathlib import Path
-          
-          path=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-          s=path.read_text(encoding='utf-8')
-          
-          def span(name):
-              match=list(re.finditer(r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{',s,re.S))
-              if len(match)!=1:
-                  raise RuntimeError('V30.2 missing/duplicate function '+name+': '+str(len(match)))
-              p=match[0].end()
-              depth=1
-              state='normal'
-              while p<len(s) and depth:
-                  c=s[p]
-                  nxt=s[p+1] if p+1<len(s) else ''
-                  if state=='normal':
-                      if c=='/' and nxt=='/':state='line';p+=1
-                      elif c=='/' and nxt=='*':state='block';p+=1
-                      elif c=='"':state='string'
-                      elif c=="'":state='char'
-                      elif c=='{':depth+=1
-                      elif c=='}':depth-=1
-                  elif state=='line':
-                      if c=='\n':state='normal'
-                  elif state=='block':
-                      if c=='*' and nxt=='/':state='normal';p+=1
-                  elif state=='string' or state=='char':
-                      if c=='\\':p+=1
-                      elif (state=='string' and c=='"') or (state=='char' and c=="'"):
-                          state='normal'
-                  p+=1
-              if depth:
-                  raise RuntimeError('V30.2 unclosed function '+name)
-              return match[0].start(),p
-          
-          ground=r'''
-          /* V30.2: A complete 360 degree terrain ring with deterministic coverage.
-             The previous V30.1 patch exhausted its far-cell budget while scanning
-             south-to-north, starving directions at the end of the scan.
-             This version fits a full ring in a bounded polygon budget (no FOV cull).
-             Render near tiles at the same height as the existing world floor. */
-          static void vt_v300_extend_ground(void) {
-              int gx,gz,ix,iz;
-              int r1,g1,b1,r2,g2,b2;
-              const int near_step=140, near_cells=16;
-              const int far_step=380, far_cells=16;
-              if(region==1) {
-                  r1=84;g1=134;b1=128;r2=62;g2=108;b2=112;
-              } else if(region==2) {
-                  r1=116;g1=143;b1=87;r2=78;g2=111;b2=77;
-              } else {
-                  r1=85;g1=162;b1=90;r2=54;g2=132;b2=75;
-              }
-              /* Centered on player, independently of where camera faces. */
-              gx=(px/near_step)*near_step-(near_cells/2)*near_step;
-              gz=(pz/near_step)*near_step-(near_cells/2)*near_step;
-              vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,
-                                  r1,g1,b1,r2,g2,b2);
-          
-              /* Outer 16x16 square spans 6080 world units; overlapping center
-                 suppresses only 4x4 cells which the higher-detail inner terrain covers.
-                 ALL remaining far cells are drawn, not just the first N in row order. */
-              gx=(px/far_step)*far_step-(far_cells/2)*far_step;
-              gz=(pz/far_step)*far_step-(far_cells/2)*far_step;
-              for(iz=0;iz<far_cells;iz++) {
-                  for(ix=0;ix<far_cells;ix++) {
-                      int x=gx+ix*far_step;
-                      int z=gz+iz*far_step;
-                      int dx=x+far_step/2-px;
-                      int dz=z+far_step/2-pz;
-                      int shade=vt_v300_hash(x,z)&3;
-                      if(vt_v300_abs(dx)<720 && vt_v300_abs(dz)<720)
-                          continue;
-                      vt_v241_flat(x,z,x+far_step,z+far_step,36,
-                                    r1-shade*3,g1-shade*3,b1-shade*2);
-                  }
-              }
-          }
-          '''
-          
-          horizon=r'''
-          /* V30.2: Continuous ring of far peaks, so turning 180 degrees doesn't
-             reveal a completely empty backdrop. Peaks are visual only and remain
-             attached to the camera-centered horizon, never to the collision world. */
-          static void vt_v300_horizon(void) {
-              int i;
-              for(i=0;i<24;i++) {
-                  int angle=(i*4096)/24;
-                  int x=px+(vt_v293_sin(angle)*3320)/1024;
-                  int z=pz+(vt_v293_cos(angle)*3320)/1024;
-                  int height=260+((i*7+region*3)%5)*47;
-                  int r=98,g=143,b=176;
-                  if(region==1) {r=96;g=165;b=202;height+=75;}
-                  else if(region==2) {r=111;g=137;b=161;height+=40;}
-                  vt_v24_peak(x,z,740+(i%3)*45,height,r,g,b);
-                  if((i&1)==0) {
-                      int xx=px+(vt_v293_sin(angle)*2470)/1024;
-                      int zz=pz+(vt_v293_cos(angle)*2470)/1024;
-                      vt_v24_peak(xx,zz,440,150+(i%3)*20,
-                          region==1?82:73,region==1?132:125,region==1?151:97);
-                  }
-              }
-          }
-          '''
-          for name,new in [('vt_v300_extend_ground',ground),('vt_v300_horizon',horizon)]:
-              a,b=span(name)
-              s=s[:a]+new.strip()+'\n'+s[b:]
-          
-          required=(
-              'vt_v301_sun();', 'vt_v301_day_night_hud();',
-              'vt_v293_move((unsigned int)pad);', 'vt_v281_resolve_movement();',
-              'vt_v282_draw_house_npcs(', 'vt_opt_draw_page();',
-              'vt_v292_draw_exploration_hud();', 'vt_save_game(void)',
-              'vt_load_game(void)',
-          )
-          for item in required:
-              if item not in s:
-                  raise RuntimeError('V30.2 missing preserved system: '+item)
-          if 'if(rendered>=VT_V300_FAR_CELL_BUDGET)return;' in s:
-              raise RuntimeError('V30.2 still contains one-sided cell budget cutoff')
-          if s.count('static void vt_v300_extend_ground(void)')!=1 or s.count('static void vt_v300_horizon(void)')!=1:
-              raise RuntimeError('V30.2 functions were duplicated')
-          path.write_text(s,encoding='utf-8')
-          print('V30.2: centered 16x16 near mesh, 360-degree coarse 16x16 ring.')
-          print('V30.2: no camera-direction filter / scan-order limit; full distant mountains.')
-          print('V30.2: preserved V30.1 game systems and Memory Card layout.')
-          PY
-          python3 "$RUNNER_TEMP/lydra_v302_world_fix.py"
-      - name: PS1 SDK installieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'PS1 SDK installieren – V27 Basis'
-      - name: Echtes V30.2 PS1-Spiel kompilieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'Lydra V30.1 fuer PS1 kompilieren'
-      - name: Fertige BIN und CUE einsammeln
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/replay_v301.py" 'Fertige PS1-Dateien einsammeln'
-      - name: PS1-Dateien pruefen (Build muss fehlschlagen falls fehlend)
-        shell: bash
-        run: |
-          set -euo pipefail
-          ls -lah artifacts/
-          for file in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
-            test -s "artifacts/$file" || { echo "::error::PS1 Datei fehlt: $file"; exit 1; }
-          done
-          grep -qi 'VTRAIL.bin' artifacts/VTRAIL.cue || { echo '::error::CUE verweist nicht auf VTRAIL.bin'; exit 1; }
-          echo 'Alle PS1-Dateien sind vorhanden.'
-      - name: V30.2 BIN CUE ELF EXE als Artefakt hochladen
-        uses: actions/upload-artifact@v4
-        with:
-          name: Lydra-World-Of-Dragon-PS1-V30-2-FIX
-          path: artifacts/VTRAIL.*
-          if-no-files-found: error
-          retention-days: 14
+    - name: Quellprojekt auschecken
+      uses: actions/checkout@v4
+    - name: Werkzeuge installieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build unzip curl ffmpeg python3-pil python3-yaml
+    - name: Funktionierende V30.1 Build-Schritte laden
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -fL --retry 3 \
+          'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/755ea4e126a0f5e008a477532f21b588f055379e/.github/workflows/blank-ps1.yml' \
+          -o "$RUNNER_TEMP/v301_stabil.yml"
+        cat > "$RUNNER_TEMP/replay_v301.py" <<'PY'
+        import os,sys,subprocess,yaml
+        from pathlib import Path
+        y=Path(os.environ['RUNNER_TEMP'])/'v301_stabil.yml'
+        steps=yaml.safe_load(y.read_text(encoding='utf-8'))['jobs']['build']['steps']
+        matches=[s for s in steps if s.get('name')==sys.argv[1] and isinstance(s.get('run'),str)]
+        if len(matches)!=1:
+            raise RuntimeError('V30.1 Schritt nicht gefunden: '+sys.argv[1])
+        print('Replay:',sys.argv[1],flush=True)
+        subprocess.run(['bash','-euo','pipefail','-c',matches[0]['run']], check=True, env=os.environ.copy())
+        PY
+        python3 -m py_compile "$RUNNER_TEMP/replay_v301.py"
+    - name: Stabile V27-Quellkette laden
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'Stabile V27-Quellkette laden'
+    - name: V27 Grundlage – V26 laden
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Grundlage – V26 laden'
+    - name: V27 Spiel vorbereiten
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Spiel vorbereiten'
+    - name: V27 Spielmechaniken erhalten
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Spielmechaniken erhalten'
+    - name: V27 Lydra-Grafik laden
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Lydra-Grafik laden'
+    - name: V27 Drachenmodelle erhalten
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Drachenmodelle erhalten'
+    - name: V27 Animationen wiederherstellen
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Animationen wiederherstellen'
+    - name: V28 Kamera Landschaft und Drachen verbessern
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V28 Kamera Landschaft und Drachen verbessern'
+    - name: V28.1 Kollision und Kamera-Sicht korrigieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V28.1 Kollision und Kamera-Sicht korrigieren'
+    - name: V28.2 Begehbare Haeuser Innenraeume und wandernde NPCs
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V28.2 Begehbare Haeuser Innenraeume und wandernde NPCs'
+    - name: V29 Fantasy Grafikstil aus Referenzbild
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V29 Fantasy Grafikstil aus Referenzbild'
+    - name: V29.1 Einheitliche Staedte und PS1-Grafikpolitur
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V29.1 Einheitliche Staedte und PS1-Grafikpolitur'
+    - name: V29.1 Schwarzes Startmenue Optionen Tasten Lautstaerke Texttempo
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V29.1 Schwarzes Startmenue Optionen Tasten Lautstaerke Texttempo'
+    - name: V29.2 Vollbild Ortsnamen Kompass Kontext Aktion Kamera
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V29.2 Vollbild Ortsnamen Kompass Kontext Aktion Kamera'
+    - name: V29.3 Kameraschwenk und Laufrichtung reparieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V29.3 Kameraschwenk und Laufrichtung reparieren'
+    - name: V30.0 – 360 Grad Boden, Ferngebirge und LOD
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V30.0 – 360 Grad Boden, Ferngebirge und LOD'
+    - name: V30.1 Korrigiert – Sichtbarkeit Sonne und Tag Nacht
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'V30.1 Korrigiert – Sichtbarkeit Sonne und Tag Nacht'
+    - name: V30.2 360-Grad-Gelaende-Fix anwenden
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -n "${PROJECT_DIR:-}" && test -f "$PROJECT_DIR/src/main.c"
+        cat > "$RUNNER_TEMP/lydra_v302_world_fix.py" <<'PY'
+        #!/usr/bin/env python3
+        # V30.2 full 360 degree terrain and full-circle distant skyline.
+        # Based on V30.1; no changes to saves, input, doors or combat.
+        import os
+        import re
+        from pathlib import Path
+
+        path=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=path.read_text(encoding='utf-8')
+
+        def span(name):
+            match=list(re.finditer(r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{',s,re.S))
+            if len(match)!=1:
+                raise RuntimeError('V30.2 missing/duplicate function '+name+': '+str(len(match)))
+            p=match[0].end()
+            depth=1
+            state='normal'
+            while p<len(s) and depth:
+                c=s[p]
+                nxt=s[p+1] if p+1<len(s) else ''
+                if state=='normal':
+                    if c=='/' and nxt=='/':state='line';p+=1
+                    elif c=='/' and nxt=='*':state='block';p+=1
+                    elif c=='"':state='string'
+                    elif c=="'":state='char'
+                    elif c=='{':depth+=1
+                    elif c=='}':depth-=1
+                elif state=='line':
+                    if c=='\n':state='normal'
+                elif state=='block':
+                    if c=='*' and nxt=='/':state='normal';p+=1
+                elif state=='string' or state=='char':
+                    if c=='\\':p+=1
+                    elif (state=='string' and c=='"') or (state=='char' and c=="'"):
+                        state='normal'
+                p+=1
+            if depth:
+                raise RuntimeError('V30.2 unclosed function '+name)
+            return match[0].start(),p
+
+        ground=r'''
+        /* V30.2: A complete 360 degree terrain ring with deterministic coverage.
+           The previous V30.1 patch exhausted its far-cell budget while scanning
+           south-to-north, starving directions at the end of the scan.
+           This version fits a full ring in a bounded polygon budget (no FOV cull).
+           Render near tiles at the same height as the existing world floor. */
+        static void vt_v300_extend_ground(void) {
+            int gx,gz,ix,iz;
+            int r1,g1,b1,r2,g2,b2;
+            const int near_step=140, near_cells=16;
+            const int far_step=380, far_cells=16;
+            if(region==1) {
+                r1=84;g1=134;b1=128;r2=62;g2=108;b2=112;
+            } else if(region==2) {
+                r1=116;g1=143;b1=87;r2=78;g2=111;b2=77;
+            } else {
+                r1=85;g1=162;b1=90;r2=54;g2=132;b2=75;
+            }
+            /* Centered on player, independently of where camera faces. */
+            gx=(px/near_step)*near_step-(near_cells/2)*near_step;
+            gz=(pz/near_step)*near_step-(near_cells/2)*near_step;
+            vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,
+                                r1,g1,b1,r2,g2,b2);
+
+            /* Outer 16x16 square spans 6080 world units; overlapping center
+               suppresses only 4x4 cells which the higher-detail inner terrain covers.
+               ALL remaining far cells are drawn, not just the first N in row order. */
+            gx=(px/far_step)*far_step-(far_cells/2)*far_step;
+            gz=(pz/far_step)*far_step-(far_cells/2)*far_step;
+            for(iz=0;iz<far_cells;iz++) {
+                for(ix=0;ix<far_cells;ix++) {
+                    int x=gx+ix*far_step;
+                    int z=gz+iz*far_step;
+                    int dx=x+far_step/2-px;
+                    int dz=z+far_step/2-pz;
+                    int shade=vt_v300_hash(x,z)&3;
+                    if(vt_v300_abs(dx)<720 && vt_v300_abs(dz)<720)
+                        continue;
+                    vt_v241_flat(x,z,x+far_step,z+far_step,36,
+                                  r1-shade*3,g1-shade*3,b1-shade*2);
+                }
+            }
+        }
+        '''
+
+        horizon=r'''
+        /* V30.2: Continuous ring of far peaks, so turning 180 degrees doesn't
+           reveal a completely empty backdrop. Peaks are visual only and remain
+           attached to the camera-centered horizon, never to the collision world. */
+        static void vt_v300_horizon(void) {
+            int i;
+            for(i=0;i<24;i++) {
+                int angle=(i*4096)/24;
+                int x=px+(vt_v293_sin(angle)*3320)/1024;
+                int z=pz+(vt_v293_cos(angle)*3320)/1024;
+                int height=260+((i*7+region*3)%5)*47;
+                int r=98,g=143,b=176;
+                if(region==1) {r=96;g=165;b=202;height+=75;}
+                else if(region==2) {r=111;g=137;b=161;height+=40;}
+                vt_v24_peak(x,z,740+(i%3)*45,height,r,g,b);
+                if((i&1)==0) {
+                    int xx=px+(vt_v293_sin(angle)*2470)/1024;
+                    int zz=pz+(vt_v293_cos(angle)*2470)/1024;
+                    vt_v24_peak(xx,zz,440,150+(i%3)*20,
+                        region==1?82:73,region==1?132:125,region==1?151:97);
+                }
+            }
+        }
+        '''
+        for name,new in [('vt_v300_extend_ground',ground),('vt_v300_horizon',horizon)]:
+            a,b=span(name)
+            s=s[:a]+new.strip()+'\n'+s[b:]
+
+        required=(
+            'vt_v301_sun();', 'vt_v301_day_night_hud();',
+            'vt_v293_move((unsigned int)pad);', 'vt_v281_resolve_movement();',
+            'vt_v282_draw_house_npcs(', 'vt_opt_draw_page();',
+            'vt_v292_draw_exploration_hud();', 'vt_save_game(void)',
+            'vt_load_game(void)',
+        )
+        for item in required:
+            if item not in s:
+                raise RuntimeError('V30.2 missing preserved system: '+item)
+        if 'if(rendered>=VT_V300_FAR_CELL_BUDGET)return;' in s:
+            raise RuntimeError('V30.2 still contains one-sided cell budget cutoff')
+        if s.count('static void vt_v300_extend_ground(void)')!=1 or s.count('static void vt_v300_horizon(void)')!=1:
+            raise RuntimeError('V30.2 functions were duplicated')
+        path.write_text(s,encoding='utf-8')
+        print('V30.2: centered 16x16 near mesh, 360-degree coarse 16x16 ring.')
+        print('V30.2: no camera-direction filter / scan-order limit; full distant mountains.')
+        print('V30.2: preserved V30.1 game systems and Memory Card layout.')
+        PY
+        python3 "$RUNNER_TEMP/lydra_v302_world_fix.py"
+    - name: V30.3 Sicht, Boden, Himmel und HUD reparieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > "$RUNNER_TEMP/lydra_v303_patch.py" <<'PY'
+        #!/usr/bin/env python3
+        """V30.3 view-space clipping and OT capacity correction for actual PS1 source.
+        Input must be V30.2 source created from the successful V30.1 chain + V30.2 fix.
+        """
+        import os
+        import re
+        from pathlib import Path
+        p=Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+        s=p.read_text(encoding='utf-8')
+
+        def once(old,new):
+            global s
+            n=s.count(old)
+            if n!=1: raise RuntimeError('V30.3 expected one anchor %r, found %d'%(old[:90],n))
+            s=s.replace(old,new,1)
+
+        def span(name):
+            matches=list(re.finditer(r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{',s,re.S))
+            if len(matches)!=1: raise RuntimeError('V30.3 missing or duplicate function %s: %d'%(name,len(matches)))
+            p0=matches[0].end(); pos=p0; depth=1; state='code'
+            while pos<len(s) and depth:
+                c=s[pos]; nxt=s[pos+1] if pos+1<len(s) else ''
+                if state=='code':
+                    if c=='/' and nxt=='/':state='line';pos+=1
+                    elif c=='/' and nxt=='*':state='block';pos+=1
+                    elif c=='"':state='string'
+                    elif c=="'":state='char'
+                    elif c=='{':depth+=1
+                    elif c=='}':depth-=1
+                elif state=='line':
+                    if c=='\n':state='code'
+                elif state=='block':
+                    if c=='*' and nxt=='/':state='code';pos+=1
+                elif state in ('string','char'):
+                    if c=='\\':pos+=1
+                    elif (state=='string' and c=='"') or (state=='char' and c=="'"):state='code'
+                pos+=1
+            if depth:raise RuntimeError('V30.3 unbalanced function '+name)
+            return matches[0].start(),pos
+
+        def replace_func(name,definition):
+            global s
+            a,b=span(name)
+            s=s[:a]+definition.strip()+'\n'+s[b:]
+
+        # Original engine discards triangles based on UNROTATED Z. When the camera turns
+        # this makes perfectly visible landscape disappear. Correct in camera/view space.
+        once('#define OT_LEN 256','#define OT_LEN 1024')
+        once('static unsigned char prim_arena[2][65536]', 'static unsigned char prim_arena[2][131072]')
+        once('bucket = (int)(depth >> 2);','bucket = (int)(depth >> 3);')
+        anchor='static void draw_triangle3(SVECTOR *v0, SVECTOR *v1, SVECTOR *v2, int r, int g, int b) {'
+        once(anchor, '''/* Camera functions/globals are defined farther down by V29.3. */
+        static int vt_v292_cam_yaw;
+        static int vt_v293_sin(int angle);
+        static int vt_v293_cos(int angle);
+        '''+anchor)
+        # Original old clipping from V7: remove the three unrotated z+CAMERA_Z checks.
+        clip=re.compile(r'/\* Never project a vertex behind the camera or across the near plane\. \*/\s*if\s*\(v0->vz\s*\+\s*CAMERA_Z\s*<\s*NEAR_Z\s*\|\|\s*v1->vz\s*\+\s*CAMERA_Z\s*<\s*NEAR_Z\s*\|\|\s*v2->vz\s*\+\s*CAMERA_Z\s*<\s*NEAR_Z\)\s*return\s*;',re.S)
+        clipping='''/* V30.3: view-space near clipping matching the rotating camera. */
+            {
+                int sn=vt_v293_sin(vt_v292_cam_yaw);
+                int cs=vt_v293_cos(vt_v292_cam_yaw);
+                long z0=((long)v0->vz*cs-(long)v0->vx*sn)/1024 + CAMERA_Z - 70;
+                long z1=((long)v1->vz*cs-(long)v1->vx*sn)/1024 + CAMERA_Z - 70;
+                long z2=((long)v2->vz*cs-(long)v2->vx*sn)/1024 + CAMERA_Z - 70;
+                if(z0<NEAR_Z || z1<NEAR_Z || z2<NEAR_Z)return;
+            }'''
+        s,n=clip.subn(clipping,s,count=1)
+        if n!=1:raise RuntimeError('V30.3: original erroneous unrotated near-plane test not found')
+
+        # Old prototype front-only ground overlaps V30.2 terrain; avoid z-fighting.
+        replace_func('draw_ground', '''static void draw_ground(void) {
+            /* V30.3: Terrain is supplied by vt_v300_extend_ground in the world renderer.
+               The old fixed front-only ground caused overlapping surfaces and polygons. */
+        }''')
+
+        # Near and far terrain are both generated around player regardless of camera angle;
+        # the far tiles sit below the near tiles to avoid overpainting the avatar.
+        replace_func('vt_v300_extend_ground',r'''
+        static void vt_v300_extend_ground(void) {
+            int ix, iz, gx, gz;
+            int r1,g1,b1,r2,g2,b2;
+            const int near_step=140, near_cells=16;
+            const int far_step=420, far_cells=14;
+            if(region==1){r1=84;g1=134;b1=128;r2=62;g2=108;b2=112;}
+            else if(region==2){r1=116;g1=143;b1=87;r2=78;g2=111;b2=77;}
+            else {r1=85;g1=162;b1=90;r2=54;g2=132;b2=75;}
+            /* Coarse 360-degree ring first: stable in fixed world coordinates. */
+            gx=(px/far_step)*far_step-(far_cells/2)*far_step;
+            gz=(pz/far_step)*far_step-(far_cells/2)*far_step;
+            for(iz=0;iz<far_cells;iz++)for(ix=0;ix<far_cells;ix++){
+                int x=gx+ix*far_step, z=gz+iz*far_step;
+                int dx=x+far_step/2-px, dz=z+far_step/2-pz;
+                int shade=vt_v300_hash(x,z)&3;
+                /* Only skip cells fully inside the detailed center. */
+                if(vt_v300_abs(dx)+far_step/2<840 &&
+                   vt_v300_abs(dz)+far_step/2<840)continue;
+                vt_v241_flat(x,z,x+far_step,z+far_step,44,
+                    r1-shade*3,g1-shade*3,b1-shade*2);
+            }
+            /* Fine center extends in every direction, without a directional cutoff. */
+            gx=(px/near_step)*near_step-(near_cells/2)*near_step;
+            gz=(pz/near_step)*near_step-(near_cells/2)*near_step;
+            vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,
+                                r1,g1,b1,r2,g2,b2);
+        }
+        ''')
+
+        # Scenic mountain loop retains a full ring but uses a regular spacing and
+        # bounded number of polygons, with enough arc overlap to avoid giant gaps.
+        replace_func('vt_v300_horizon',r'''
+        static void vt_v300_horizon(void) {
+            int i;
+            for(i=0;i<24;i++) {
+                int angle=(i*4096)/24;
+                int x=px+(vt_v293_sin(angle)*2600)/1024;
+                int z=pz+(vt_v293_cos(angle)*2600)/1024;
+                int high=260+((i*7+region*3)%5)*37;
+                int r=93,g=140,b=179;
+                if(region==1){r=104;g=162;b=201;high+=75;}
+                else if(region==2){r=109;g=140;b=168;high+=40;}
+                vt_v24_peak(x,z,790,high,r,g,b);
+            }
+        }
+        ''')
+
+        # Slightly look down so ground fills more of the screen, with a more centered
+        # follow view. Keep original obstruction blend for houses.
+        if 'camera_rot.vx = 104 + vt_v28_camera_blend / 3;' in s:
+            once('camera_rot.vx = 104 + vt_v28_camera_blend / 3;',
+                 'camera_rot.vx = 160 + vt_v28_camera_blend / 4;')
+        if 'camera_pos.vy = 72 + vt_v28_camera_blend / 3;' in s:
+            once('camera_pos.vy = 72 + vt_v28_camera_blend / 3;',
+                 'camera_pos.vy = 48 + vt_v28_camera_blend / 4;')
+
+        # Cleaner counter next to compass. Preserve actual frame-based timekeeping.
+        once('FntPrint(4,"TAG %3d%%\\nNAC %3d%%\\n",tag,nacht);',
+             'FntPrint(4,"T %3d%%\\nN %3d%%\\n",tag,nacht);')
+
+        # Daytime sky and a screen-space sun are drawn behind the polygons; night gets
+        # a darker sky and moon. This avoids the 3-D sun being culled by the GTE far limit.
+        replace_func('vt_v301_sun',r'''
+        static void vt_v301_sun(void) {
+            unsigned int t=vt_v301_clock%7200u;
+            int daytime=t<4800u;
+            int sx,sy,alt;
+            TILE *disc;
+            unsigned int aligned;
+            if(daytime){
+                alt=(t<2400u)?(int)t:(int)(4800u-t);
+                draw[db].r0=(unsigned char)(64+alt/120);
+                draw[db].g0=(unsigned char)(112+alt/80);
+                draw[db].b0=(unsigned char)(180+alt/110);
+                sx=24+(int)(t*270u/4800u);
+                sy=86-alt/42;
+            } else {
+                alt=(int)(t-4800u);
+                draw[db].r0=12;
+                draw[db].g0=25;
+                draw[db].b0=55;
+                sx=30+alt*245/2400;
+                sy=45;
+            }
+            aligned=(prim_used+3u)&~3u;
+            if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;
+            disc=(TILE*)(prim_arena[db]+aligned);
+            prim_used=aligned+sizeof(TILE);
+            setTile(disc);
+            setXY0(disc,sx-(daytime?12:8),sy-(daytime?12:8));
+            setWH(disc,daytime?24:16,daytime?24:16);
+            if(daytime)setRGB0(disc,255,231,129);
+            else setRGB0(disc,194,217,241);
+            /* High-depth OT entry draws behind scenery, not over the player's face. */
+            addPrim(ot[db]+OT_LEN-2,disc);
+        }
+        ''')
+
+        required=['vt_v293_move((unsigned int)pad);','vt_v281_resolve_movement();',
+                  'vt_v282_draw_house_npcs(', 'vt_opt_draw_page();','vt_save_game(void)',
+                  'vt_load_game(void)','vt_v292_draw_exploration_hud();']
+        for feature in required:
+            if feature not in s:raise RuntimeError('V30.3 missing gameplay feature '+feature)
+        assert s.count('static void vt_v300_extend_ground(void)')==1
+        assert s.count('static void vt_v301_sun(void)')==1
+        p.write_text(s,encoding='utf-8')
+        print('V30.3: camera-aware near clipping, longer depth sorting, balanced 360° terrain.')
+        print('V30.3: removed duplicate front-only ground; tuned camera, sun/moon and time label.')
+        print('Existing save/card structure, controls, capture, NPCs, indoor houses untouched.')
+        PY
+        python3 "$RUNNER_TEMP/lydra_v303_patch.py"
+    - name: PS1 SDK installieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'PS1 SDK installieren – V27 Basis'
+    - name: Echtes V30.3 PS1-Spiel kompilieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'Lydra V30.1 fuer PS1 kompilieren'
+    - name: Fertige BIN und CUE einsammeln
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/replay_v301.py" 'Fertige PS1-Dateien einsammeln'
+    - name: V30.3 PS1-Dateien pruefen
+      shell: bash
+      run: |
+        set -euo pipefail
+        ls -lah artifacts/
+        for file in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
+          test -s "artifacts/$file" || { echo "::error::PS1 Datei fehlt: $file"; exit 1; }
+        done
+        grep -qi 'VTRAIL.bin' artifacts/VTRAIL.cue || { echo '::error::CUE verweist nicht auf VTRAIL.bin'; exit 1; }
+        echo 'Alle PS1-Dateien sind vorhanden.'
+    - name: V30.3 BIN CUE ELF EXE als Artefakt hochladen
+      uses: actions/upload-artifact@v4
+      with:
+        name: Lydra-World-Of-Dragon-PS1-V30-3
+        path: artifacts/VTRAIL.*
+        if-no-files-found: error
+        retention-days: 14
