@@ -1,4 +1,8 @@
-name: Build Lydra World Of Dragon V29 Fantasy Grafikstil
+# Eigenstaendiger GitHub Actions Workflow. Noch kein PS1-Spiel/ROM!
+# Als .github/workflows/lydra-v29-1.yml hochladen und Actions starten.
+# V27, V28.2, V29 und vorhandene Memory Cards bleiben unveraendert.
+
+name: Lydra World Of Dragon V29.1 – Grafik und Optionen
 
 on:
   workflow_dispatch:
@@ -8,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Lydra V29 PS1 (V27 stable source, V28.2 rooms)
+    name: Lydra V29.1 mit Optionen (Build fuer PlayStation 1)
     runs-on: ubuntu-latest
     steps:
       - name: Projekt laden
@@ -1024,13 +1028,569 @@ jobs:
           PY
           python3 "$RUNNER_TEMP/apply_lydra_v29.py"
 
+      - name: V29.1 Einheitliche Staedte und PS1-Grafikpolitur
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/apply_lydra_v291.py" <<'PY'
+          #!/usr/bin/env python3
+          """Lydra World Of Dragon V29.1 - consistent towns and PS1-friendly art polish.
+          
+          Run AFTER the complete V29 source patch, BEFORE installing/building PSn00bSDK.
+          All runtime objects transient; original saves, captures, battles and menus untouched.
+          """
+          import os
+          import re
+          from pathlib import Path
+          
+          source = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+          code = source.read_text(encoding='utf-8')
+          
+          
+          def once(old, new):
+              global code
+              n = code.count(old)
+              if n != 1:
+                  raise RuntimeError('V29.1 incompatible source: expected one anchor, got %d: %r' % (n, old[:100]))
+              code = code.replace(old, new, 1)
+          
+          
+          def function_bounds(name):
+              pattern = r'\bstatic\s+void\s+' + re.escape(name) + r'\s*\([^;]*?\)\s*\{'
+              matches = list(re.finditer(pattern, code, re.S))
+              if len(matches) != 1:
+                  raise RuntimeError('V29.1 function missing/ambiguous: ' + name)
+              m = matches[0]
+              i, depth, mode = m.end(), 1, 'code'
+              while i < len(code):
+                  c = code[i]
+                  n = code[i+1] if i+1 < len(code) else ''
+                  if mode == 'line':
+                      if c == '\n': mode = 'code'
+                  elif mode == 'block':
+                      if c == '*' and n == '/': i += 1; mode = 'code'
+                  elif mode in ('string', 'char'):
+                      if c == '\\': i += 1
+                      elif (mode == 'string' and c == '"') or (mode == 'char' and c == "'"):
+                          mode = 'code'
+                  elif c == '/' and n == '/': mode = 'line'; i += 1
+                  elif c == '/' and n == '*': mode = 'block'; i += 1
+                  elif c == '"': mode = 'string'
+                  elif c == "'": mode = 'char'
+                  elif c == '{': depth += 1
+                  elif c == '}':
+                      depth -= 1
+                      if depth == 0: return m.start(), i+1, i
+                  i += 1
+              raise RuntimeError('Unclosed C function: ' + name)
+          
+          
+          def replace_body_fragment(name, old, new):
+              global code
+              a,b,_ = function_bounds(name)
+              body = code[a:b]
+              n = body.count(old)
+              if n != 1: raise RuntimeError('V29.1 function fragment count %s: %d' % (name,n))
+              code = code[:a] + body.replace(old, new, 1) + code[b:]
+          
+          
+          def append_function(name, extra):
+              global code
+              _,_,end = function_bounds(name)
+              code = code[:end] + '\n' + extra.strip('\n') + '\n' + code[end:]
+          
+          
+          # New mountain-pass houses and additional Storm Arena village cottages.
+          # Avoid blocking the cross-region central road (x=0), crystal columns at x=+/-250,
+          # tower entrances at x=+/-165,z=875, and existing outdoor NPC spawn points.
+          new_houses = [
+              (1, -145, 450, 42, 0, 1),
+              (1,  145, 310, 44, 1, 0),
+              (1, -145, 635, 42, 1, 1),
+              (1,  145, 770, 42, 0, 0),
+              (1, -145, 985, 43, 0, 1),
+              (1,  145,1055, 43, 1, 0),
+              (2, -165, 590, 41, 0, 1),
+              (2,  175, 680, 42, 1, 0),
+              (2, -165,1080, 43, 0, 1),
+              (2,  175,1075, 42, 1, 1),
+          ]
+          assert len(new_houses) == 10
+          
+          # The collision table is authoritative for indoor roof visibility as well,
+          # so graphics, doorway physics and resident home indices match 1:1.
+          house_pattern = re.compile(
+              r'(static\s+const\s+vt_v281_blocker_t\s+vt_v281_houses\[\]\s*=\s*\{)(.*?)(\n\};)',
+              re.S)
+          match = house_pattern.search(code)
+          if not match or len(list(house_pattern.finditer(code))) != 1:
+              raise RuntimeError('House table missing in source')
+          original_entries = re.findall(r'\{\s*(\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(\d+)\s*\}',match.group(2))
+          if len(original_entries) != 9:
+              raise RuntimeError('V29.1 requires original nine houses, found %d' % len(original_entries))
+          expected = [(0,-205,265),(0,15,330),(0,208,280),
+                      (0,-380,395),(0,365,397),(0,-100,500),(0,165,495),
+                      (2,-390,365),(2,370,375)]
+          if [(int(x[0]),int(x[1]),int(x[2])) for x in original_entries] != expected:
+              raise RuntimeError('V29 original collision table positions changed')
+          added_table = ',\n' + ',\n'.join('    {%d,%d,%d,%d}'%(r,x,z,half) for r,x,z,half,roof,style in new_houses)
+          segment = match.group(1)+match.group(2).rstrip()+added_table+match.group(3)
+          code = code[:match.start()]+segment+code[match.end():]
+          
+          # NPC logic is already bounded by its individual spawn radius. Add exactly
+          # one resident per new house. Original nine indoor NPCs and eight wanderers remain.
+          npc_pattern = re.compile(
+              r'(static\s+vt_v282_npc_t\s+vt_v282_npcs\[\]\s*=\s*\{)(.*?)(\n\};)',re.S)
+          m = npc_pattern.search(code)
+          if not m or len(list(npc_pattern.finditer(code))) != 1:
+              raise RuntimeError('V29 NPC table missing')
+          initial_npcs = re.findall(r'\{\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*0\s*,\s*0\s*,\s*(\d+)\s*,\s*0\s*,\s*0\s*,\s*(-?\d+)\s*,\s*([01])\s*\}', m.group(2))
+          if len(initial_npcs)!=17: raise RuntimeError('V29.1 expected 17 existing NPCs, found %d' % len(initial_npcs))
+          extra_npcs=[]
+          for i,(r,x,z,half,roof,style) in enumerate(new_houses):
+              extra_npcs.append('    {%d,%d,%d,0,0,%d,0,0,%d,%d}'%(r,x,z,19+(i%5),9+i,i%2))
+          addition = ',\n' + ',\n'.join(extra_npcs)
+          code = code[:m.start()]+m.group(1)+m.group(2).rstrip()+addition+m.group(3)+code[m.end():]
+          
+          # Add all the Crystal Pass and Storm Arena houses using the *same* function as
+          # Sunmeadow. The existing function handles walls, floor, interiors and roof.
+          crystal_lines = '\n'.join(
+              '        vt_v241_building(%d,%d,%d,%d,%d); /* V29.1 Crystal Pass */' % (x,z,h,roof,style)
+              for region_id,x,z,h,roof,style in new_houses if region_id==1)
+          storm_lines = '\n'.join(
+              '        vt_v241_building(%d,%d,%d,%d,%d); /* V29.1 Storm Arena */' % (x,z,h,roof,style)
+              for region_id,x,z,h,roof,style in new_houses if region_id==2)
+          replace_body_fragment('vt_v24_draw_overworld',
+              'vt_v241_ruins(-190,780);',crystal_lines+'\n        vt_v241_ruins(-190,780);')
+          replace_body_fragment('vt_v24_draw_overworld',
+              'vt_v241_ruins(-330,740);',storm_lines+'\n        vt_v241_ruins(-330,740);')
+          
+          # Roof is removed only when the player is inside this house or the house is
+          # occluding the camera. On entering a house its walls must still be drawn.
+          replace_body_fragment('vt_v241_building',
+              'occluded=vt_v28_house_blocks_view(x,z,s);',
+              'occluded=vt_v28_house_blocks_view(x,z,s) && !inside;')
+          
+          # PS1 polygon budget: low-cost close-up house accents, skip far-away detail.
+          # Higher resolution / increased internal framebuffer would be unsafe to assume
+          # without knowing VRAM usage; this is artistic improvement within flat shading.
+          replace_body_fragment('vt_v241_building',
+              '    if (inside) vt_v282_draw_house_npcs(x,z);', r'''
+              /* V29.1: better material separation with only a few local polygons. */
+              if (!occluded && vt_v281_abs(x-px)<410 && vt_v281_abs(z-pz)<580) {
+                  /* Facade posts, sill, threshold; the center of the doorway stays open. */
+                  draw_box(x-s+8,-27,z-s+3,4,128,81,54);
+                  draw_box(x+s-8,-27,z-s+3,4,128,81,54);
+                  draw_box(x-31,34,z-s-3,9,178,137,84);
+                  draw_box(x+31,34,z-s-3,9,178,137,84);
+                  if (!hide_roof) {
+                      /* Clay/amber ridge highlights distinguish rooftops at a distance. */
+                      vt_pyramid(x,-92,z,s-28,11,r0+19,g0+20,b0+15);
+                  } else if (inside) {
+                      /* A warm hearth and one table remain visible when roof is gone. */
+                      draw_box(x+s/2,25,z+s/3,8,121,81,59);
+                      vt_pyramid(x+s/2,12,z+s/3,5,9,244,158,65);
+                  }
+              }
+              if (inside) vt_v282_draw_house_npcs(x,z);''')
+          
+          # Additional landmarks and ground material, clipped on both axes. Nothing
+          # impassable is placed on central road. Adds no lights/VRAM allocations/textures.
+          new_scenery = r'''
+          /* V29.1: region-wide fantasy polish tuned for PS1 fixed-function rendering. */
+          static void vt_v291_world_polish(void) {
+              int i, gz, x, z, frame;
+              frame=(vt_v18_tick>>4)&3;
+              /* Subtle stone patches in main road; no collision or extra game states. */
+              gz=(pz/92)*92;
+              for (i=-1;i<9;i++) {
+                  z=gz+i*92;
+                  x=((i*19+region*13)&31)-16;
+                  if (z<-400 || z>2200) continue;
+                  if (vt_v281_abs(z-pz)>690) continue;
+                  vt_v241_flat(x-12,z-6,x+10,z+4,31,188,150,106);
+                  vt_v241_flat(x+27,z+16,x+43,z+22,31,209,170,117);
+              }
+              if (region==1) {
+                  /* Crystal Pass: cyan clusters, blue rock shelves, cold scenic colors. */
+                  for (i=0;i<7;i++) {
+                      x=(i&1)?-305:305;
+                      z=265+i*160;
+                      if (!vt_v241_visible(x,z,650)) continue;
+                      vt_pyramid(x,9,z,12,31,65,145,176);
+                      vt_pyramid(x-8,-15,z+12,6,20,139,229,248);
+                      vt_pyramid(x+10,-6,z-4,5,25,86,209,247);
+                      if ((i&1)==frame/2) vt_pyramid(x,-15,z,3,7,213,243,250);
+                  }
+              } else if (region==2) {
+                  /* Storm Arena: colored banners and stone approach markers. */
+                  if (vt_v241_visible(0,870,750)) {
+                      draw_box(-244,-23,870,8,80,91,132);
+                      draw_box(244,-23,870,8,80,91,132);
+                      draw_box(-244,-61,872,6,208,97,66);
+                      draw_box(244,-61,872,6,220,168,70);
+                  }
+              } else {
+                  /* Sunmeadow: lively meadow banks, golden-flowered fence edges. */
+                  for (i=0;i<9;i++) {
+                      x=(i&1)?-214:214;
+                      z=190+i*88;
+                      if (!vt_v241_visible(x,z,450)) continue;
+                      vt_pyramid(x+frame-2,25,z,6,15,59,157,76);
+                      vt_pyramid(x+frame-2,13,z,4,8,244,211,85);
+                  }
+              }
+          }
+          '''
+          once('static void vt_v24_draw_overworld(void) {', new_scenery+'\nstatic void vt_v24_draw_overworld(void) {')
+          append_function('vt_v24_draw_overworld','    vt_v291_world_polish();')
+          
+          # A tiny sparkly leaf layer on close trees; avoid far-distance overdraw.
+          append_function('vt_v24_tree',r'''
+              if (x-px<360 && x-px>-360 && z-pz<490 && z-pz>-490) {
+                  vt_pyramid(x-7,-29,z+2,5+scale/8,10+scale/5,
+                             rr+23,gg+20,bb+16);
+              }
+          ''')
+          
+          preserve = (
+              'vt_v291_world_polish();','vt_v29_fantasy_landscape();',
+              'vt_v282_update_npcs();','vt_v282_draw_house_npcs(x,z);',
+              'vt_v282_house_wall(', 'vt_v281_resolve_movement();',
+              'vt_v23_field_dragon();','vt_v18_battle_bars();',
+              'vt_save_game(void)','vt_load_game(void)',
+              'vt_v21_party[3]','LYDRA WORLD OF DRAGON'
+          )
+          for marker in preserve:
+              if marker not in code: raise RuntimeError('Feature safety check failed: '+marker)
+          if code.count('static void vt_v24_draw_overworld(void)') != 1:
+              raise RuntimeError('Duplicate world function')
+          if code.count('static void vt_v291_world_polish(void)') != 1:
+              raise RuntimeError('Duplicate PS1 scene')
+          for r,x,z,h,roof,style in new_houses:
+              if code.count('vt_v241_building(%d,%d,%d,%d,%d);'%(x,z,h,roof,style)) != 1:
+                  raise RuntimeError('Missing/duplicate region home at %s,%s'%(x,z))
+          source.write_text(code,encoding='utf-8')
+          print('V29.1: 10 additional houses (Crystal Pass 6; Storm Arena 4).')
+          print('19 total houses, 27 bounded NPCs, region matched colliders/roofs/interiors.')
+          print('PS1-friendly close-up decorations, cold crystals, market and arena color.')
+          print('Original player saves, battle system, codex and camera retained.')
+          PY
+          python3 "$RUNNER_TEMP/apply_lydra_v291.py"
+
+      - name: V29.1 Schwarzes Startmenue Optionen Tasten Lautstaerke Texttempo
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/lydra_v291_options.py" <<'PY'
+          #!/usr/bin/env python3
+          """V29.1 Options & black menu integration into assembled Lydra src/main.c."""
+          import os, re
+          from pathlib import Path
+          p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+          s=p.read_text(encoding='utf-8')
+          
+          def once(old,new, n=1):
+              global s
+              hits=s.count(old)
+              if hits!=n: raise RuntimeError('OPTIONS patch expected %d occurrence(s), got %d for: %s'%(n,hits,repr(old[:90])))
+              s=s.replace(old,new,n)
+          
+          def find_c_body(text, function):
+              pat=r'\bstatic\s+void\s+'+re.escape(function)+r'\s*\([^;]*?\)\s*\{'
+              m=list(re.finditer(pat,text,re.S))
+              if len(m)!=1: raise RuntimeError('Function not unique: '+function)
+              a=m[0].end(); depth=1; i=a
+              state='code'
+              while i<len(text) and depth:
+                  ch=text[i]; nxt=text[i+1] if i+1<len(text) else ''
+                  if state=='code':
+                      if ch=='/' and nxt=='/':state='line';i+=1
+                      elif ch=='/' and nxt=='*':state='block';i+=1
+                      elif ch=='"':state='str'
+                      elif ch=="'":state='char'
+                      elif ch=='{':depth+=1
+                      elif ch=='}':depth-=1
+                  elif state=='line':
+                      if ch=='\n':state='code'
+                  elif state=='block':
+                      if ch=='*' and nxt=='/':state='code';i+=1
+                  else:
+                      if ch=='\\':i+=1
+                      elif (state=='str' and ch=='"') or (state=='char' and ch=="'"):state='code'
+                  i+=1
+              if depth:raise RuntimeError('Unclosed C function: '+function)
+              return m[0].start(),a,i-1
+          
+          # PSn00bSDK provides the hardware SPU master volume macro in psxspu.h.
+          if '#include <psxspu.h>' not in s:
+              first=re.search(r'(?m)^#include\s+<[^>]+>\s*$',s)
+              if not first:raise RuntimeError('No C includes found')
+              s=s[:first.end()]+'\n#include <psxspu.h>'+s[first.end():]
+          
+          helpers=r'''
+          /* V29.1 OPTIONS – controls and preferences are runtime-only. */
+          #define VT_OPT_ACTIONS 9
+          #define VT_OPT_BUTTONS 14
+          static const unsigned int vt_opt_virtual[VT_OPT_ACTIONS] = {
+              PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_CROSS,
+              PAD_SQUARE,PAD_CIRCLE,PAD_TRIANGLE,PAD_L1
+          };
+          static const char *vt_opt_action_name[VT_OPT_ACTIONS] = {
+              "GEHEN HOCH", "GEHEN RUNTER", "GEHEN LINKS", "GEHEN RECHTS",
+              "SPRECHEN / X", "KAMPF", "FANGEN", "ZURUECK", "DRACHE WECHSELN"
+          };
+          static const unsigned int vt_opt_button_bit[VT_OPT_BUTTONS] = {
+              PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_CROSS,PAD_SQUARE,
+              PAD_CIRCLE,PAD_TRIANGLE,PAD_L1,PAD_R1,PAD_L2,PAD_R2,PAD_SELECT,PAD_START
+          };
+          static const char *vt_opt_button_name[VT_OPT_BUTTONS] = {
+              "HOCH","RUNTER","LINKS","RECHTS","X","VIERECK",
+              "KREIS","DREIECK","L1","R1","L2","R2","SELECT","START"
+          };
+          /* Map logical gameplay actions to physical buttons. START is deliberately
+             protected so the player can always reopen/close the pause menu. */
+          static unsigned int vt_opt_physical[VT_OPT_ACTIONS] = {
+              PAD_UP,PAD_DOWN,PAD_LEFT,PAD_RIGHT,PAD_CROSS,
+              PAD_SQUARE,PAD_CIRCLE,PAD_TRIANGLE,PAD_L1
+          };
+          static int vt_opt_cursor=0, vt_opt_key_cursor=0;
+          static int vt_opt_volume=100, vt_opt_text_speed=2;
+          static int vt_opt_dialog_npc=-100, vt_opt_dialog_page=-100;
+          static int vt_opt_dialog_shown=0,vt_opt_dialog_frame=0;
+          static char vt_opt_dialog_buffer[256];
+          static char vt_opt_dialog_previous[256];
+          
+          static const char *vt_opt_keyname(unsigned int bit) {
+              int i;
+              for(i=0;i<VT_OPT_BUTTONS;i++)
+                  if (bit == vt_opt_button_bit[i]) return vt_opt_button_name[i];
+              return "?";
+          }
+          static unsigned int vt_opt_first_key(unsigned int pressed) {
+              int i;
+              for(i=0;i<VT_OPT_BUTTONS;i++)
+                  if (pressed & vt_opt_button_bit[i]) return vt_opt_button_bit[i];
+              return 0;
+          }
+          static void vt_opt_assign(int action,unsigned int key) {
+              int j;
+              unsigned int old;
+              if(action<0 || action>=VT_OPT_ACTIONS || !key || key==PAD_START) return;
+              old=vt_opt_physical[action];
+              /* Swap existing assignment instead of silently duplicating it. */
+              for(j=0;j<VT_OPT_ACTIONS;j++)
+                  if(j!=action && vt_opt_physical[j]==key) vt_opt_physical[j]=old;
+              vt_opt_physical[action]=key;
+          }
+          static unsigned int vt_opt_gamepad(unsigned int raw) {
+              unsigned int output=0;
+              int i;
+              for(i=0;i<VT_OPT_ACTIONS;i++)
+                  if(raw & vt_opt_physical[i])output|=vt_opt_virtual[i];
+              /* START always works, even when every other button was remapped. */
+              if(raw & PAD_START)output|=PAD_START;
+              return output;
+          }
+          static void vt_opt_apply_volume(void) {
+              int gain=(vt_opt_volume*0x3fff)/100;
+              SpuSetCommonMasterVolume(gain,gain);
+          }
+          static void vt_opt_input(unsigned int *pad, unsigned int *pressed) {
+              unsigned int key;
+              if (*pressed & PAD_START) {
+                  vt_menu_open=0;vt_menu_page=0;*pad=0;*pressed=0;return;
+              }
+              if(vt_menu_page==8) {
+                  key=vt_opt_first_key(*pressed);
+                  if (key==PAD_TRIANGLE) vt_menu_page=7; /* cancel */
+                  else if (key && key!=PAD_START) {
+                      vt_opt_assign(vt_opt_key_cursor,key);
+                      vt_menu_page=7;
+                  }
+              } else if(vt_menu_page==7) {
+                  if(*pressed & PAD_TRIANGLE)vt_menu_page=6;
+                  else {
+                      if(*pressed & PAD_UP)vt_opt_key_cursor=(vt_opt_key_cursor+VT_OPT_ACTIONS-1)%VT_OPT_ACTIONS;
+                      if(*pressed & PAD_DOWN)vt_opt_key_cursor=(vt_opt_key_cursor+1)%VT_OPT_ACTIONS;
+                      if(*pressed & PAD_CROSS)vt_menu_page=8;
+                  }
+              } else if(vt_menu_page==6) {
+                  if(*pressed & PAD_TRIANGLE)vt_menu_page=0;
+                  else {
+                      if(*pressed & PAD_UP)vt_opt_cursor=(vt_opt_cursor+2)%3;
+                      if(*pressed & PAD_DOWN)vt_opt_cursor=(vt_opt_cursor+1)%3;
+                      if(vt_opt_cursor==0 && (*pressed & PAD_CROSS))vt_menu_page=7;
+                      if(vt_opt_cursor==1) {
+                          if(*pressed & PAD_LEFT && vt_opt_volume>0)vt_opt_volume-=10;
+                          if(*pressed & PAD_RIGHT && vt_opt_volume<100)vt_opt_volume+=10;
+                          if(vt_opt_volume<0)vt_opt_volume=0;
+                          if(vt_opt_volume>100)vt_opt_volume=100;
+                          if(*pressed & (PAD_LEFT|PAD_RIGHT))vt_opt_apply_volume();
+                      }
+                      if(vt_opt_cursor==2) {
+                          if((*pressed & PAD_LEFT) && vt_opt_text_speed>1)vt_opt_text_speed--;
+                          if((*pressed & PAD_RIGHT) && vt_opt_text_speed<3)vt_opt_text_speed++;
+                      }
+                  }
+              }
+              *pad=0;*pressed=0; /* never leak option input into battle or movement */
+          }
+          /* Limit revealed NPC dialogue characters according to the selected setting. */
+          static const char *vt_opt_reveal_dialog(const char *src,int npc,int page) {
+              int length,rate;
+              if(!src)return "";
+              if(npc!=vt_opt_dialog_npc || page!=vt_opt_dialog_page ||
+                 strncmp(vt_opt_dialog_previous,src,255)!=0) {
+                  vt_opt_dialog_npc=npc;vt_opt_dialog_page=page;
+                  strncpy(vt_opt_dialog_previous,src,255);
+                  vt_opt_dialog_previous[255]=0;
+                  vt_opt_dialog_shown=0;vt_opt_dialog_frame=0;
+              }
+              length=(int)strlen(src);
+              if(length>255)length=255;
+              rate=(vt_opt_text_speed==1)?4:((vt_opt_text_speed==2)?2:1);
+              if(++vt_opt_dialog_frame>=rate) {
+                  vt_opt_dialog_frame=0;
+                  if(vt_opt_dialog_shown<length)vt_opt_dialog_shown++;
+              }
+              memcpy(vt_opt_dialog_buffer,src,(unsigned int)vt_opt_dialog_shown);
+              vt_opt_dialog_buffer[vt_opt_dialog_shown]=0;
+              return vt_opt_dialog_buffer;
+          }
+          static void vt_opt_draw_page(void) {
+              int i,first;
+              FntPrint(0,"LYDRA WORLD OF DRAGON - OPTIONEN\n\n");
+              if(vt_menu_page==6) {
+                  FntPrint(2,"OPTIONEN\n\n");
+                  FntPrint(2,"%c TASTENBELEGUNG\n\n",vt_opt_cursor==0?'>':' ');
+                  FntPrint(2,"%c LAUTSTAERKE: %d%%\n\n",vt_opt_cursor==1?'>':' ',vt_opt_volume);
+                  FntPrint(2,"%c TEXTTEMPO: %d (1-3)\n\n",vt_opt_cursor==2?'>':' ',vt_opt_text_speed);
+                  FntPrint(2,"LINKS/RECHTS AENDERN\nX WAHL  DREIECK ZURUECK\n");
+              } else if(vt_menu_page==7) {
+                  /* Show 5 entries at a time, avoiding 240p text overflow. */
+                  first=(vt_opt_key_cursor/5)*5;
+                  FntPrint(2,"TASTENBELEGUNG %d/%d\n",vt_opt_key_cursor+1,VT_OPT_ACTIONS);
+                  for(i=first;i<first+5 && i<VT_OPT_ACTIONS;i++)
+                      FntPrint(2,"%c %s: %s\n\n",i==vt_opt_key_cursor?'>':' ',
+                               vt_opt_action_name[i],vt_opt_keyname(vt_opt_physical[i]));
+                  FntPrint(2,"START: MENUE (FEST)\nX NEUE TASTE / DREIECK\n");
+              } else if(vt_menu_page==8) {
+                  FntPrint(2,"NEUE TASTE DRUECKEN\n\n");
+                  FntPrint(2,"%s\n\n",vt_opt_action_name[vt_opt_key_cursor]);
+                  FntPrint(2,"AKTUELL: %s\n\n",vt_opt_keyname(vt_opt_physical[vt_opt_key_cursor]));
+                  FntPrint(2,"DREIECK ABBRECHEN\nSTART MENUE\n");
+              }
+              FntFlush(0);FntFlush(2);
+          }
+          '''
+          once('static void draw_hud(void) {',helpers+'\nstatic void draw_hud(void) {\n'
+               '    if(vt_menu_open && vt_menu_page>=6 && vt_menu_page<=8) {\n'
+               '        vt_opt_draw_page();\n        return;\n    }')
+          
+          # Replace only the menu main-page layout. All original team/codex/item/save pages remain intact.
+          start=s.index('static void draw_hud(void) {')
+          p0=s.index('if (vt_menu_page == 0) {',start)
+          p1=s.find('} else if (vt_menu_page == 4) {',p0)
+          if p1<0:raise RuntimeError('Expected codex page not found')
+          main_menu=r'''if (vt_menu_page == 0) {
+                  FntPrint(2,"DRACHEN-MENUE\n");
+                  FntPrint(2,"%c DRACHEN KODEX\n",vt_menu_choice==0?'>':' ');
+                  FntPrint(2,"%c DRACHEN\n",vt_menu_choice==1?'>':' ');
+                  FntPrint(2,"%c ITEMS\n",vt_menu_choice==2?'>':' ');
+                  FntPrint(2,"%c SPEICHERN\n",vt_menu_choice==3?'>':' ');
+                  FntPrint(2,"%c LADEN\n",vt_menu_choice==4?'>':' ');
+                  FntPrint(2,"%c OPTIONEN\n",vt_menu_choice==5?'>':' ');
+                  FntPrint(2,"X WAHL  DREIECK ZURUECK\n");
+          
+              '''
+          s=s[:p0]+main_menu+s[p1:]
+          
+          # Existing menu input still handles pages 0-5. Options 6-8 are intercepted
+          # before the original menu block and use physical controls for recovery.
+          start=s.index('int main(void) {')
+          p0=s.index('if (vt_menu_open) {',start)
+          p1=s.index('/* Never send menu keys',p0)
+          ctl=s[p0:p1]
+          assert ctl.count('vt_menu_choice = 4;')==1, 'main menu wrap up changed'
+          assert ctl.count('vt_menu_choice > 4')==1, 'main menu wrap down changed'
+          ctl=ctl.replace('vt_menu_choice = 4;','vt_menu_choice = 5;',1)
+          ctl=ctl.replace('vt_menu_choice > 4','vt_menu_choice > 5',1)
+          # Load was the final unqualified else of the option handling branch.
+          needle='int result = vt_load_game();'
+          pos=ctl.find(needle)
+          if pos<0: raise RuntimeError('Load action changed')
+          prev=ctl.rfind('} else {',0,pos)
+          if prev<0:raise RuntimeError('Load else not found')
+          ctl=ctl[:prev]+'''} else if (vt_menu_choice == 5) {
+                                      vt_menu_page=6;
+                                      vt_opt_cursor=0;
+                                  '''+ctl[prev:]
+          s=s[:p0]+ctl+s[p1:]
+          
+          # Raw physical button information must be used for option selection.
+          # Outside menu, all gameplay action reads are remapped, including held D-pad.
+          needle='        previous_pad = pad;'
+          addition=r'''
+                  if(vt_menu_open && vt_menu_page>=6 && vt_menu_page<=8) {
+                      vt_opt_input((unsigned int *)&pad,(unsigned int *)&pressed);
+                  } else if(!vt_menu_open && !vt_v21_force_switch) {
+                      unsigned int physical_pad=(unsigned int)pad;
+                      unsigned int physical_pressed=(unsigned int)pressed;
+                      pad=vt_opt_gamepad(physical_pad);
+                      pressed=vt_opt_gamepad(physical_pressed);
+                  }
+          '''
+          # Avoid pointer casting on potentially 16-bit pad/pressed local types:
+          # use locals and assign back on every path (works with uint16_t and int).
+          addition=r'''
+                  if(vt_menu_open && vt_menu_page>=6 && vt_menu_page<=8) {
+                      unsigned int physical_pad=(unsigned int)pad;
+                      unsigned int physical_pressed=(unsigned int)pressed;
+                      vt_opt_input(&physical_pad,&physical_pressed);
+                      pad=physical_pad;
+                      pressed=physical_pressed;
+                  } else if(!vt_menu_open && !vt_v21_force_switch) {
+                      unsigned int physical_pad=(unsigned int)pad;
+                      unsigned int physical_pressed=(unsigned int)pressed;
+                      pad=vt_opt_gamepad(physical_pad);
+                      pressed=vt_opt_gamepad(physical_pressed);
+                  }
+          '''
+          once(needle,needle+addition)
+          
+          # Full-screen BLACK when menu is open: suppress the 3D world and HUD panel,
+          # then draw a black tile behind menu text. Normal gameplay draw is unchanged.
+          once('        draw_ground();', '        if(!vt_menu_open) {\n        draw_ground();')
+          once('        vt_draw_panels();', '        }\n        if(!vt_menu_open) vt_draw_panels();')
+          # Ensure the existing menu tile is 320x240 pure black, not the blue inset.
+          once('setXY0(panel, 8, 67);','setXY0(panel, 0, 0);')
+          once('setWH(panel, 304, 168);','setWH(panel, 320, 240);')
+          once('setRGB0(panel, 18, 29, 62);','setRGB0(panel, 0, 0, 0);')
+          
+          # Typewriter effect for the quest conversations shown in the HUD (not menu UI).
+          # NPC dialogues can still be advanced with X; speed controls how fast characters appear.
+          pattern=r'vt_dialog_text\s*\(\s*vt_npc_dialog\s*,\s*vt_npc_page\s*\)'
+          s,count=re.subn(pattern,'vt_opt_reveal_dialog(vt_dialog_text(vt_npc_dialog, vt_npc_page),vt_npc_dialog,vt_npc_page)',s,count=1)
+          if count!=1: raise RuntimeError('NPC dialogue source changed')
+          
+          for tag in ['vt_v21_force_switch','vt_v282_inside(', 'vt_v281_resolve_movement();',
+                      'vt_v20_entry','vt_save_game(void)','vt_load_game(void)',
+                      'vt_opt_draw_page','vt_opt_apply_volume','vt_opt_reveal_dialog']:
+              if tag not in s:raise RuntimeError('Missing feature after patch: '+tag)
+          if s.count('static void draw_hud(void) {')!=1:raise RuntimeError('HUD duplicated')
+          p.write_text(s,encoding='utf-8')
+          print('Options installed; all save layouts retained. PS1 build/test required.')
+          PY
+          python3 "$RUNNER_TEMP/lydra_v291_options.py"
+
       - name: PS1 SDK installieren – V27 Basis
         shell: bash
         run: |
           set -euo pipefail
           python3 "$RUNNER_TEMP/run_v27_step.py" "Install PSn00bSDK"
 
-      - name: Lydra V29 fuer PS1 kompilieren
+      - name: Lydra V29.1 mit Optionen fuer PS1 kompilieren
         shell: bash
         run: |
           set -euo pipefail
@@ -1051,10 +1611,10 @@ jobs:
           done
           echo "V29 Dateien vorhanden. Emulator-Pruefung ist anschliessend erforderlich."
 
-      - name: Lydra World Of Dragon V29 herunterladen
+      - name: Lydra V29.1 mit Optionen herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: Lydra-World-Of-Dragon-PS1-V29
+          name: Lydra-World-Of-Dragon-PS1-V29-1-Optionen
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
