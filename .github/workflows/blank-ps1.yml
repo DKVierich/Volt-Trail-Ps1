@@ -1,5 +1,4 @@
-
-name: Build Lydra World Of Dragon V27
+name: Build Lydra World Of Dragon V28
 
 on:
   workflow_dispatch:
@@ -9,329 +8,310 @@ permissions:
 
 jobs:
   build:
+    name: Lydra V28 PS1 (V27 safe base)
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout project
+      - name: Projekt laden
         uses: actions/checkout@v4
 
-      - name: Install build tools
+      - name: Build-Werkzeuge installieren
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y \
-            cmake ninja-build unzip curl \
-            ffmpeg python3-pil python3-yaml
+          sudo apt-get install -y cmake ninja-build unzip curl ffmpeg python3-pil python3-yaml
 
-      - name: Load stable V26
+      - name: Stabile V27-Quellkette laden
         shell: bash
         run: |
           set -euo pipefail
-
-          BASE="351e48f77530f79b09e0e76c4cfe71e8b71e4504"
-
-          curl -fLsS --retry 4 \
-            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/$BASE/.github/workflows/blank-ps1.yml" \
-            -o "$RUNNER_TEMP/v26.yml"
-
-          cat > "$RUNNER_TEMP/v26_step.py" <<'PY'
-          import os
-          import sys
-          import subprocess
+          # V27 ist absichtlich auf genau diesen funktionierenden Git-Commit fixiert.
+          V27_COMMIT="f43c4c44b3b4cd2a9d7788f21cb0d68d4f86572d"
+          curl -fLsS --retry 4 --retry-delay 2 \
+            "https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/${V27_COMMIT}/.github/workflows/blank-ps1.yml" \
+            -o "$RUNNER_TEMP/lydra_stable_v27.yml"
+          cat > "$RUNNER_TEMP/run_v27_step.py" <<'PY'
+          import os, sys, subprocess, yaml
           from pathlib import Path
-          import yaml
-
-          path = Path(os.environ["RUNNER_TEMP"]) / "v26.yml"
-          data = yaml.safe_load(path.read_text(encoding="utf-8"))
-          steps = data["jobs"]["build"]["steps"]
-
-          wanted = sys.argv[1]
-          matches = [
-              step for step in steps
-              if step.get("name") == wanted
-          ]
-
-          if len(matches) != 1:
-              raise RuntimeError("V26 step missing: " + wanted)
-
-          print("Running:", wanted, flush=True)
-
-          subprocess.run(
-              ["bash", "-euo", "pipefail", "-c", matches[0]["run"]],
-              env=os.environ.copy(),
-              check=True
-          )
+          workflow=Path(os.environ['RUNNER_TEMP'])/'lydra_stable_v27.yml'
+          steps=yaml.safe_load(workflow.read_text(encoding='utf-8'))['jobs']['build']['steps']
+          wanted=sys.argv[1]
+          matching=[s for s in steps if s.get('name') == wanted and 'run' in s]
+          if len(matching)!=1:
+              raise RuntimeError('Stable V27 step missing or ambiguous: '+wanted)
+          print('Running unmodified V27 step:',wanted, flush=True)
+          subprocess.run(['bash','-euo','pipefail','-c',matching[0]['run']],
+                         env=os.environ.copy(), check=True)
           PY
 
-          python3 "$RUNNER_TEMP/v26_step.py" \
-            "Load stable V25"
-
-      - name: Prepare game
+      - name: V27 Grundlage – V26 laden
         shell: bash
         run: |
           set -euo pipefail
-          python3 "$RUNNER_TEMP/v26_step.py" \
-            "Prepare game"
+          python3 "$RUNNER_TEMP/run_v27_step.py" "Load stable V26"
 
-      - name: Restore gameplay
+      - name: V27 Spiel vorbereiten
         shell: bash
         run: |
           set -euo pipefail
-          python3 "$RUNNER_TEMP/v26_step.py" \
-            "Restore original gameplay"
+          python3 "$RUNNER_TEMP/run_v27_step.py" "Prepare game"
 
-      - name: Restore Lydra V25
+      - name: V27 Spielmechaniken erhalten
         shell: bash
         run: |
           set -euo pipefail
-          python3 "$RUNNER_TEMP/v26_step.py" \
-            "Restore Lydra V25"
+          python3 "$RUNNER_TEMP/run_v27_step.py" "Restore gameplay"
 
-      - name: Restore stable V26 models
+      - name: V27 Lydra-Grafik laden
         shell: bash
         run: |
           set -euo pipefail
-          python3 "$RUNNER_TEMP/v26_step.py" \
-            "Improve V26 dragon and world models"
+          python3 "$RUNNER_TEMP/run_v27_step.py" "Restore Lydra V25"
 
-      - name: Add V27 animations and graphics
+      - name: V27 Drachenmodelle erhalten
         shell: bash
         run: |
           set -euo pipefail
+          python3 "$RUNNER_TEMP/run_v27_step.py" "Restore stable V26 models"
 
-          python3 - <<'PY'
+      - name: V27 Animationen wiederherstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/run_v27_step.py" "Add V27 animations and graphics"
+
+      - name: V28 Kamera Landschaft und Drachen verbessern
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/apply_lydra_v28.py" <<'PY'
+          #!/usr/bin/env python3
+          """Lydra World Of Dragon V28 – vorsichtiger, prüfbarer Patch auf V27 C-Quelle.
+          Dieser Patch wird NACH dem V27-Grafikschritt und VOR dem PS1-Build angewendet.
+          """
           import os
           import re
           from pathlib import Path
-
-          path = Path(os.environ["PROJECT_DIR"]) / "src/main.c"
-          code = path.read_text(encoding="utf-8")
-
-          def enhance(name, detail):
+          
+          source = Path(os.environ['PROJECT_DIR']) / 'src/main.c'
+          code = source.read_text(encoding='utf-8')
+          
+          
+          def unique_replace(old, new):
               global code
-
-              pattern = (
-                  r"\bstatic\s+void\s+"
-                  + re.escape(name)
-                  + r"\s*\([^;]*?\)\s*\{"
-              )
-
+              count = code.count(old)
+              if count != 1:
+                  raise RuntimeError(f'V28 erwartet genau 1 Anker ({count} gefunden): {old[:75]!r}')
+              code = code.replace(old, new, 1)
+          
+          
+          def func_header(name):
+              pattern = r'\bstatic\s+void\s+' + re.escape(name) + r'\s*\([^;]*?\)\s*\{'
               matches = list(re.finditer(pattern, code, re.S))
-
               if len(matches) != 1:
-                  raise RuntimeError(
-                      "V27 model missing: " + name
-                  )
-
-              pos = matches[0].end()
-              depth = 1
-
-              while pos < len(code) and depth:
-                  if code[pos] == "{":
-                      depth += 1
-                  elif code[pos] == "}":
-                      depth -= 1
+                  raise RuntimeError(f'V28 erwartet genau 1 Funktion {name}, gefunden: {len(matches)}')
+              return matches[0]
+          
+          
+          def at_start(name, additions):
+              global code
+              m = func_header(name)
+              code = code[:m.end()] + '\n' + additions.strip('\n') + '\n' + code[m.end():]
+          
+          
+          def at_end(name, additions):
+              global code
+              m = func_header(name)
+              pos = m.end()
+              braces = 1
+              state = 'code'
+              while pos < len(code):
+                  c = code[pos]
+                  n = code[pos + 1] if pos + 1 < len(code) else ''
+                  if state == 'line':
+                      if c == '\n': state = 'code'
+                  elif state == 'block':
+                      if c == '*' and n == '/':
+                          pos += 1
+                          state = 'code'
+                  elif state in ('string','char'):
+                      if c == '\\':
+                          pos += 1
+                      elif (state == 'string' and c == '"') or (state == 'char' and c == "'"):
+                          state = 'code'
+                  elif c == '/' and n == '/':
+                      state = 'line'; pos += 1
+                  elif c == '/' and n == '*':
+                      state = 'block'; pos += 1
+                  elif c == '"': state = 'string'
+                  elif c == "'": state = 'char'
+                  elif c == '{': braces += 1
+                  elif c == '}':
+                      braces -= 1
+                      if braces == 0:
+                          code = code[:pos] + '\n' + additions.strip('\n') + '\n' + code[pos:]
+                          return
                   pos += 1
-
-              if depth:
-                  raise RuntimeError(
-                      "Unclosed function: " + name
-                  )
-
-              pos -= 1
-              code = (
-                  code[:pos]
-                  + "\n"
-                  + detail
-                  + "\n"
-                  + code[pos:]
-              )
-
-          # Better animated player.
-          enhance("vt_player", r'''
-              /* V27: adventurer clothing and movement. */
-              draw_box(
-                  x, 17, z + 11,
-                  10, 114, 77, 46
-              );
-
-              /* Backpack buckle. */
-              draw_box(
-                  x, 13, z + 20,
-                  3, 208, 177, 94
-              );
-
-              /* Belt. */
-              draw_box(
-                  x, 27, z - 3,
-                  10, 65, 50, 46
-              );
-
-              /* Moving scarf. */
-              draw_box(
-                  x + 12,
-                  9 + stride / 2,
-                  z + 4,
-                  5, 211, 65, 58
-              );
-
-              /* Face and hair accents. */
-              draw_box(
-                  x - 4, 1, z - 10,
-                  2, 54, 42, 39
-              );
-
-              draw_box(
-                  x + 4, 1, z - 10,
-                  2, 54, 42, 39
-              );
+              raise RuntimeError('V28 could not close C function ' + name)
+          
+          
+          # Die Hilfe steht vor beiden vorhandenen Gebäudefunktionen. Alle Änderungen
+          # bleiben im flüchtigen Grafiksystem; keine Änderung am Memory-Card-Format.
+          helper = r'''
+          /* V28: dynamic camera corridor and scene details. Save-game layout unchanged. */
+          static int vt_v28_house_in_sight = 0;
+          static int vt_v28_camera_blend = 0;
+          
+          static int vt_v28_house_blocks_view(int x, int z, int radius) {
+              int dx = x - px;
+              int dz = z - pz;
+              if (dx < 0) dx = -dx;
+              /* Objects behind and next to the avatar block the follow camera. */
+              if (dx < radius + 58 && dz > -205 && dz < 82) {
+                  vt_v28_house_in_sight = 1;
+                  return 1;
+              }
+              return 0;
+          }
+          
+          static void vt_v28_living_landscape(void) {
+              int i, x, z, dx, dz, sway;
+              sway = ((vt_v18_tick >> 3) & 3) - 1;
+              /* Fixed seed positions: smooth PS1 performance and no new save fields. */
+              for (i = 0; i < 18; i++) {
+                  x = -610 + (i * 173 + region * 43) % 1220;
+                  z = 120 + (i * 197) % 1540;
+                  dx = x - px;
+                  dz = z - pz;
+                  if (dx < -590 || dx > 590 || dz < -55 || dz > 850) continue;
+                  /* Wind-swaying grass with a flower / seedhead highlight. */
+                  vt_pyramid(x + sway, 25, z, 5, 15, 48, 133, 57);
+                  vt_pyramid(x - 8 - sway, 30, z + 6, 4, 11, 78, 156, 73);
+                  if ((i & 1) == 0) {
+                      vt_pyramid(x + sway, 11, z, 3, 8, 231, 186, 65);
+                  } else {
+                      vt_pyramid(x + sway, 12, z, 3, 7, 188, 120, 196);
+                  }
+              }
+          }
+          '''
+          unique_replace('static void vt_v24_house(', helper + '\nstatic void vt_v24_house(')
+          
+          # In camera obstruction corridor do not draw high walls/roof directly in front
+          # of the player. Retain a low ground-level marker so buildings don't vanish
+          # completely. Includes V26/V27 house decorations only outside that corridor.
+          at_start('vt_v24_house', r'''
+              /* V28: reveal the avatar when the house is between avatar and camera. */
+              if (vt_v28_house_blocks_view(x, z, 36)) {
+                  draw_box(x, 42, z, 14, body_r * 3 / 4, body_g * 3 / 4,
+                           body_b * 3 / 4);
+                  return;
+              }
           ''')
-
-          # Sparkit and Voltigon animation.
-          enhance("vt_sparkit", r'''
-              /* V27: animated outer wing tips. */
-              vt_dragon_wing(
-                  x, z, -1, grown ? 53 : 45,
-                  flap ? 13 : -5,
-                  r * 3 / 4,
-                  g * 3 / 4,
-                  b * 3 / 4
-              );
-
-              vt_dragon_wing(
-                  x, z, 1, grown ? 53 : 45,
-                  flap ? -5 : 13,
-                  r * 3 / 4,
-                  g * 3 / 4,
-                  b * 3 / 4
-              );
-
-              /* Animated tail detail. */
-              vt_pyramid(
-                  x + 23,
-                  10 - bounce,
-                  z + 37,
-                  5, 13,
-                  250, 214, 91
-              );
+          at_start('vt_v241_building', r'''
+              /* V28: camera-friendly large villages and buildings. */
+              if (vt_v28_house_blocks_view(x, z, size)) {
+                  draw_box(x, 43, z, size / 2, 125, 112, 93);
+                  return;
+              }
           ''')
-
-          # More pronounced wings for wild dragons.
-          enhance("vt_v19_wild_dragon", r'''
-              /* V27: animated outer wing membranes. */
-              vt_dragon_wing(
-                  x, z, -1, 51,
-                  flap ? 16 : -6,
-                  r * 2 / 3,
-                  g * 2 / 3,
-                  b * 2 / 3
-              );
-
-              vt_dragon_wing(
-                  x, z, 1, 51,
-                  flap ? -6 : 16,
-                  r * 2 / 3,
-                  g * 2 / 3,
-                  b * 2 / 3
-              );
-
-              /* Additional back scales. */
-              vt_pyramid(
-                  x, -11, z + 11,
-                  5, 15,
-                  r, g, b
-              );
+          
+          # Reset is performed on rendering the next world frame, after the camera has
+          # already read the previous frame's visibility result. No reordering of gameplay.
+          unique_replace('vt_v24_draw_overworld();',
+                         'vt_v28_house_in_sight = 0;\n        vt_v24_draw_overworld();')
+          
+          # This call occurs before the existing game rendering, in the established
+          # geometry/lighting context. It adds only cullable low-poly geometry.
+          unique_replace('lydra_v25_nature();',
+                         'lydra_v25_nature();\n        vt_v28_living_landscape();')
+          
+          # Camera locals are in main(), so edit them immediately before matrix setup.
+          # Smooth 1/4 interpolation avoids camera popping near house thresholds.
+          unique_replace('RotMatrix(&camera_rot, &m);', r'''
+                  {
+                      int wanted = vt_v28_house_in_sight ? 48 : 0;
+                      if (vt_v28_camera_blend < wanted)
+                          vt_v28_camera_blend += (wanted - vt_v28_camera_blend + 3) / 4;
+                      else if (vt_v28_camera_blend > wanted)
+                          vt_v28_camera_blend -= (vt_v28_camera_blend - wanted + 3) / 4;
+                      camera_rot.vx = 104 + vt_v28_camera_blend;
+                      camera_pos.vy = 62 + (vt_v28_camera_blend * 5) / 6;
+                      camera_pos.vz = CAMERA_Z - vt_v28_camera_blend;
+                  }
+                  RotMatrix(&camera_rot, &m);''')
+          
+          # PS1-friendly details: few extra flat-shaded polygons, animated with the
+          # existing tick/flap, and no textures, VRAM allocations or extra game states.
+          at_end('vt_sparkit', r'''
+              /* V28: animated crest, eyes and brighter back scale. */
+              vt_pyramid(x, -34 - bounce / 3, z - 8, 7, 15, 239, 205, 80);
+              draw_box(x - 11, -8, z - 20, 3, 242, 235, 184);
+              draw_box(x + 11, -8, z - 20, 3, 242, 235, 184);
+              vt_pyramid(x + (flap ? 3 : -3), -8, z + 12, 6, 12,
+                         r * 4 / 5, g * 4 / 5, b * 4 / 5);
           ''')
-
-          # More depth in forests.
-          enhance("vt_v24_tree", r'''
-              /* V27: highlighted foliage. */
-              vt_pyramid(
-                  x + 7,
-                  -34,
-                  z - 5,
-                  8 + scale / 5,
-                  19 + scale / 3,
-                  rr + 15,
-                  gg + 14,
-                  bb + 12
-              );
+          at_end('vt_v19_wild_dragon', r'''
+              /* V28: distinct double crest and articulated wing shoulder details. */
+              vt_pyramid(x - 9, -19, z - 6, 5, 16, r, g, b);
+              vt_pyramid(x + 9, -19, z - 6, 5, 16, r, g, b);
+              vt_pyramid(x - 17, 3, z + 4, 5, 11, r * 3 / 4, g * 3 / 4, b * 3 / 4);
+              vt_pyramid(x + 17, 3, z + 4, 5, 11, r * 3 / 4, g * 3 / 4, b * 3 / 4);
           ''')
-
-          # Roofs and entrances.
-          enhance("vt_v24_house", r'''
-              /* V27: entrance step. */
-              draw_box(
-                  x, 40, z - 31,
-                  11, 131, 116, 98
-              );
-
-              /* Roof accent. */
-              vt_pyramid(
-                  x - 16,
-                  -22,
-                  z + 11,
-                  5, 12,
-                  roof_r,
-                  roof_g,
-                  roof_b
-              );
+          at_end('vt_v24_tree', r'''
+              /* V28: tiny wind sway at the treetop, distance-culling remains in V27. */
+              vt_pyramid(x + ((vt_v18_tick >> 4) & 3) - 1,
+                         -47, z, 5 + scale / 6, 12,
+                         rr + 10, gg + 12, bb + 8);
           ''')
-
-          required = [
-              "LYDRA WORLD OF DRAGON",
-              "V27: adventurer clothing",
-              "V27: animated outer wing tips",
-              "V27: highlighted foliage",
-              "lydra_v25_nature();",
-              "vt_v24_draw_overworld();",
-              "vt_v23_field_dragon();",
-              "vt_v18_battle_bars();",
-              "vt_save_game(void)",
-              "vt_load_game(void)",
-              "vt_play_intro();"
-          ]
-
-          for marker in required:
-              if marker not in code:
-                  raise RuntimeError(
-                      "Missing feature: " + marker
-                  )
-
-          path.write_text(code, encoding="utf-8")
-          print("LYDRA WORLD OF DRAGON V27")
-          print("Player animation improved")
-          print("Dragon wings improved")
-          print("World models improved")
-          print("Original gameplay retained")
+          
+          checks = ['vt_v28_house_blocks_view(', 'vt_v28_living_landscape();',
+                    'camera_pos.vz = CAMERA_Z - vt_v28_camera_blend;',
+                    'vt_save_game(void)', 'vt_load_game(void)',
+                    'vt_v23_field_dragon();', 'vt_v18_battle_bars();',
+                    'vt_v21_party[3]', 'lydra_v25_nature();', 'LYDRA WORLD OF DRAGON']
+          for text in checks:
+              if text not in code:
+                  raise RuntimeError('V28 safety check failed: ' + text)
+          if code.count('vt_v28_living_landscape();') != 1:
+              raise RuntimeError('V28 landscape inserted more than once')
+          source.write_text(code, encoding='utf-8')
+          print('V28 ready: smooth near-house camera, occlusion-safe houses, wind/flowers, dragon/tree detail')
+          print('V27 combat, capture, codex, switching and save/load unchanged')
           PY
+          python3 "$RUNNER_TEMP/apply_lydra_v28.py"
 
-      - name: Install PSn00bSDK
+      - name: PS1 SDK installieren – V27 Basis
         shell: bash
         run: |
           set -euo pipefail
-          python3 "$RUNNER_TEMP/v26_step.py" \
-            "Install PSn00bSDK"
+          python3 "$RUNNER_TEMP/run_v27_step.py" "Install PSn00bSDK"
 
-      - name: Build Lydra V27
+      - name: Lydra V28 fuer PS1 kompilieren
         shell: bash
         run: |
           set -euo pipefail
-          python3 "$RUNNER_TEMP/v26_step.py" \
-            "Build Lydra V26"
+          python3 "$RUNNER_TEMP/run_v27_step.py" "Build Lydra V27"
 
-      - name: Collect game files
+      - name: Fertige PS1-Dateien einsammeln
         shell: bash
         run: |
           set -euo pipefail
-          python3 "$RUNNER_TEMP/v26_step.py" \
-            "Collect PS1 game files"
+          python3 "$RUNNER_TEMP/run_v27_step.py" "Collect game files"
 
-      - name: Upload Lydra V27
+      - name: PS1 Artefakte pruefen
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
+            test -s "artifacts/$f" || { echo "Fehlende PS1-Datei: $f"; exit 1; }
+          done
+          echo "V28 Dateien vorhanden. Emulator-Pruefung ist anschliessend erforderlich."
+
+      - name: Lydra World Of Dragon V28 herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: Lydra-World-Of-Dragon-PS1-V27
+          name: Lydra-World-Of-Dragon-PS1-V28
           path: artifacts/*
           if-no-files-found: error
           retention-days: 14
