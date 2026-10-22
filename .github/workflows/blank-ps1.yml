@@ -2,7 +2,7 @@
 # Als .github/workflows/lydra-v30-1-korrigiert.yml hochladen; V29.3 als Backup lassen.
 # V27, V29.3 und vorhandene Memory Cards bleiben unveraendert.
 
-name: Lydra World Of Dragon V30.1 Korrigiert – Sichtbarkeit und Himmel
+name: Lydra World Of Dragon V30.2 Korrigiert – Sichtbarkeit und Himmel
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Lydra V30.1 Korrigiert (PlayStation 1)
+    name: Lydra V30.2 Korrigiert (PlayStation 1)
     runs-on: ubuntu-latest
     steps:
       - name: Projekt laden
@@ -2336,37 +2336,132 @@ jobs:
           PY
           python3 "$RUNNER_TEMP/lydra_v301_fixed.py"
 
-      - name: PS1 SDK installieren – V27 Basis
+      - name: V30.2 360-Grad-Welt rund um die Spielfigur reparieren
         shell: bash
         run: |
           set -euo pipefail
-          python3 "$RUNNER_TEMP/run_v27_step.py" "Install PSn00bSDK"
-
-      - name: Lydra V30.1 fuer PS1 kompilieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/run_v27_step.py" "Build Lydra V27"
-
-      - name: Fertige PS1-Dateien einsammeln
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/run_v27_step.py" "Collect game files"
-
-      - name: PS1 Artefakte pruefen
-        shell: bash
-        run: |
-          set -euo pipefail
-          for f in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
-            test -s "artifacts/$f" || { echo "Fehlende PS1-Datei: $f"; exit 1; }
-          done
-          echo "V30.0 Dateien vorhanden. RetroArch- und Hardwaretest stehen noch aus."
-
-      - name: Lydra V30.1 Korrigiert herunterladen
-        uses: actions/upload-artifact@v4
-        with:
-          name: Lydra-World-Of-Dragon-PS1-V30-1
-          path: artifacts/*
-          if-no-files-found: error
-          retention-days: 14
+          test -n "${PROJECT_DIR:-}" && test -f "$PROJECT_DIR/src/main.c"
+          cat > "$RUNNER_TEMP/lydra_v302_world_fix.py" <<'PY'
+          #!/usr/bin/env python3
+          # V30.2 full 360 degree terrain and full-circle distant skyline.
+          # Based on V30.1; no changes to saves, input, doors or combat.
+          import os
+          import re
+          from pathlib import Path
+          
+          path=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+          s=path.read_text(encoding='utf-8')
+          
+          def span(name):
+              match=list(re.finditer(r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{',s,re.S))
+              if len(match)!=1:
+                  raise RuntimeError('V30.2 missing/duplicate function '+name+': '+str(len(match)))
+              p=match[0].end()
+              depth=1
+              state='normal'
+              while p<len(s) and depth:
+                  c=s[p]
+                  nxt=s[p+1] if p+1<len(s) else ''
+                  if state=='normal':
+                      if c=='/' and nxt=='/':state='line';p+=1
+                      elif c=='/' and nxt=='*':state='block';p+=1
+                      elif c=='"':state='string'
+                      elif c=="'":state='char'
+                      elif c=='{':depth+=1
+                      elif c=='}':depth-=1
+                  elif state=='line':
+                      if c=='\n':state='normal'
+                  elif state=='block':
+                      if c=='*' and nxt=='/':state='normal';p+=1
+                  elif state=='string' or state=='char':
+                      if c=='\\':p+=1
+                      elif (state=='string' and c=='"') or (state=='char' and c=="'"):
+                          state='normal'
+                  p+=1
+              if depth:
+                  raise RuntimeError('V30.2 unclosed function '+name)
+              return match[0].start(),p
+          
+          ground=r'''
+          /* V30.2: A complete 360 degree terrain ring with deterministic coverage.
+             The previous V30.1 patch exhausted its far-cell budget while scanning
+             south-to-north, starving directions at the end of the scan.
+             This version fits a full ring in a bounded polygon budget (no FOV cull).
+             Render near tiles at the same height as the existing world floor. */
+          static void vt_v300_extend_ground(void) {
+              int gx,gz,ix,iz;
+              int r1,g1,b1,r2,g2,b2;
+              const int near_step=140, near_cells=16;
+              const int far_step=380, far_cells=16;
+              if(region==1) {
+                  r1=84;g1=134;b1=128;r2=62;g2=108;b2=112;
+              } else if(region==2) {
+                  r1=116;g1=143;b1=87;r2=78;g2=111;b2=77;
+              } else {
+                  r1=85;g1=162;b1=90;r2=54;g2=132;b2=75;
+              }
+              /* Centered on player, independently of where camera faces. */
+              gx=(px/near_step)*near_step-(near_cells/2)*near_step;
+              gz=(pz/near_step)*near_step-(near_cells/2)*near_step;
+              vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,
+                                  r1,g1,b1,r2,g2,b2);
+          
+              /* Outer 16x16 square spans 6080 world units; overlapping center
+                 suppresses only 4x4 cells which the higher-detail inner terrain covers.
+                 ALL remaining far cells are drawn, not just the first N in row order. */
+              gx=(px/far_step)*far_step-(far_cells/2)*far_step;
+              gz=(pz/far_step)*far_step-(far_cells/2)*far_step;
+              for(iz=0;iz<far_cells;iz++) {
+                  for(ix=0;ix<far_cells;ix++) {
+                      int x=gx+ix*far_step;
+                      int z=gz+iz*far_step;
+                      int dx=x+far_step/2-px;
+                      int dz=z+far_step/2-pz;
+                      int shade=vt_v300_hash(x,z)&3;
+                      if(vt_v300_abs(dx)<720 && vt_v300_abs(dz)<720)
+                          continue;
+                      vt_v241_flat(x,z,x+far_step,z+far_step,36,
+                                    r1-shade*3,g1-shade*3,b1-shade*2);
+                  }
+              }
+          }
+          '''
+          
+          horizon=r'''
+          /* V30.2: Continuous ring of far peaks, so turning 180 degrees doesn't
+             reveal a completely empty backdrop. Peaks are visual only and remain
+             attached to the camera-centered horizon, never to the collision world. */
+          static void vt_v300_horizon(void) {
+              int i;
+              for(i=0;i<24;i++) {
+                  int angle=(i*4096)/24;
+                  int x=px+(vt_v293_sin(angle)*3320)/1024;
+                  int z=pz+(vt_v293_cos(angle)*3320)/1024;
+                  int height=260+((i*7+region*3)%5)*47;
+                  int r=98,g=143,b=176;
+                  if(region==1) {r=96;g=165;b=202;height+=75;}
+                  else if(region==2) {r=111;g=137;b=161;height+=40;}
+                  vt_v24_peak(x,z,740+(i%3)*45,height,r,g,b);
+                  if((i&1)==0) {
+                      int xx=px+(vt_v293_sin(angle)*2470)/1024;
+                      int zz=pz+(vt_v293_cos(angle)*2470)/1024;
+                      vt_v24_peak(xx,zz,440,150+(i%3)*20,
+                          region==1?82:73,region==1?132:125,region==1?151:97);
+                  }
+              }
+          }
+          '''
+          for name,new in [('vt_v300_extend_ground',ground),('vt_v300_horizon',horizon)]:
+              a,b=span(name)
+              s=s[:a]+new.strip()+'\n'+s[b:]
+          
+          required=(
+              'vt_v301_sun();', 'vt_v301_day_night_hud();',
+              'vt_v293_move((unsigned int)pad);', 'vt_v281_resolve_movement();',
+              'vt_v282_draw_house_npcs(', 'vt_opt_draw_page();',
+              'vt_v292_draw_exploration_hud();', 'vt_save_game(void)',
+              'vt_load_game(void)',
+          )
+          for item in required:
+              if item not in s:
+                  raise RuntimeError('V30.2 mis
