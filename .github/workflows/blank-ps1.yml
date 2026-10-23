@@ -1,4 +1,5 @@
-name: Lydra World Of Dragon V31.7.2 - Video Hauptmenue HUD und Bewegung
+# Lydra World Of Dragon V31.7.3 - echtes Videomenue und HUD Schriftkanal Fix
+name: Lydra World Of Dragon V31.7.3 - Titelmenue und Uhr HUD FIX
 'on':
   workflow_dispatch: null
 permissions:
@@ -20,11 +21,22 @@ jobs:
         '
     - name: Funktionierende V31.6 FIX2 herunterladen
       shell: bash
-      run: "set -euo pipefail\ncurl -fLsS --retry 4 --retry-delay 2 'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/8c17f9bc45d1a3e9481ef1eda51da27fd728eee2/.github/workflows/blank-ps1.yml' \\\n  -o \"$RUNNER_TEMP/lydra_v316_base.yml\"\ntest -s \"$RUNNER_TEMP/lydra_v316_base.yml\"\n"
+      run: "set -euo pipefail\ncurl -fLsS --retry 4 --retry-delay 2 'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/8c17f9bc45d1a3e9481ef1eda51da27fd728eee2/.github/workflows/blank-ps1.yml'\
+        \ \\\n  -o \"$RUNNER_TEMP/lydra_v316_base.yml\"\ntest -s \"$RUNNER_TEMP/lydra_v316_base.yml\"\n"
     - name: V31.7 Stabiler Einzel-Schritt-Build vorbereiten
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_run_base_step.py\" <<'LYDRA_BASE_STEP_PY'\n#!/usr/bin/env python3\n\"\"\"Execute exactly one trusted V31.6 FIX2 build step on this GitHub job runner.\n\nImportant: The outer workflow invokes this script in separate GitHub Actions\nsteps, so env additions in GITHUB_ENV are reloaded by GitHub after each step.\n\"\"\"\nimport os, sys, subprocess\nfrom pathlib import Path\nimport yaml\n\nif len(sys.argv) != 2:\n    raise SystemExit('Usage: python3 lydra_run_base_step.py \"EXACT STEP NAME\"')\nworkflow = Path(os.environ['RUNNER_TEMP'])/'lydra_v316_base.yml'\nif not workflow.is_file():\n    raise RuntimeError('V31.6 FIX2 baseline workflow missing')\nsource=yaml.safe_load(workflow.read_text(encoding='utf-8'))\nsteps=source['jobs']['build']['steps']\nwanted=sys.argv[1]\nfound=[s for s in steps if s.get('name')==wanted and isinstance(s.get('run'),str)]\nif len(found)!=1:\n    raise RuntimeError('Expected exactly one V31.6 step '+repr(wanted)+', got '+str(len(found)))\nprint('V31.6\
-        \ BASIS:',wanted, flush=True)\nsubprocess.run(['bash','-euo','pipefail','-c',found[0]['run']],\n               check=True,env=os.environ.copy())\nprint('FERTIG:',wanted,flush=True)\nLYDRA_BASE_STEP_PY\npython3 -m py_compile \"$RUNNER_TEMP/lydra_run_base_step.py\"\n"
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_run_base_step.py\" <<'LYDRA_BASE_STEP_PY'\n#!/usr/bin/env\
+        \ python3\n\"\"\"Execute exactly one trusted V31.6 FIX2 build step on this GitHub job runner.\n\nImportant:\
+        \ The outer workflow invokes this script in separate GitHub Actions\nsteps, so env additions in GITHUB_ENV\
+        \ are reloaded by GitHub after each step.\n\"\"\"\nimport os, sys, subprocess\nfrom pathlib import Path\n\
+        import yaml\n\nif len(sys.argv) != 2:\n    raise SystemExit('Usage: python3 lydra_run_base_step.py \"EXACT\
+        \ STEP NAME\"')\nworkflow = Path(os.environ['RUNNER_TEMP'])/'lydra_v316_base.yml'\nif not workflow.is_file():\n\
+        \    raise RuntimeError('V31.6 FIX2 baseline workflow missing')\nsource=yaml.safe_load(workflow.read_text(encoding='utf-8'))\n\
+        steps=source['jobs']['build']['steps']\nwanted=sys.argv[1]\nfound=[s for s in steps if s.get('name')==wanted\
+        \ and isinstance(s.get('run'),str)]\nif len(found)!=1:\n    raise RuntimeError('Expected exactly one V31.6\
+        \ step '+repr(wanted)+', got '+str(len(found)))\nprint('V31.6 BASIS:',wanted, flush=True)\nsubprocess.run(['bash','-euo','pipefail','-c',found[0]['run']],\n\
+        \               check=True,env=os.environ.copy())\nprint('FERTIG:',wanted,flush=True)\nLYDRA_BASE_STEP_PY\n\
+        python3 -m py_compile \"$RUNNER_TEMP/lydra_run_base_step.py\"\n"
     - name: V31.6 Basis | Funktionierende V30.1 Build-Schritte laden
       shell: bash
       run: 'set -euo pipefail
@@ -1150,8 +1162,24 @@ jobs:
         '
     - name: Video-Szenen als voll deckende PS1-Bilder umwandeln
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/make_intro_frames.py\" <<'LYDRA_GEN_PY'\n#!/usr/bin/env python3\nimport os,base64,struct\nfrom pathlib import Path\nfrom PIL import Image\nhome=Path(os.environ['RUNNER_TEMP'])/'lydra_new_menu'\nimages=[]\nfor i in range(8):\n    p=home/f'frame_{i}.jpg'\n    if not p.exists():raise RuntimeError('Frame missing: '+str(p))\n    with Image.open(p) as img:\n        img=img.convert('RGB')\n        if img.size!=(160,120):raise RuntimeError('Frame size mismatch '+str(img.size))\n        # PS1 treats RGB555 color 0x0000 as transparent, even for opaque polygons.\n        # 0x8000 represents truly opaque black when setSemiTrans(q,0).\n        # Change ONLY zero pixels: preserve all other source-video colors.\n        colors=[]\n        for r,g,b in img.getdata():\n            value=((b>>3)<<10)|((g>>3)<<5)|(r>>3)\n            colors.append(value if value else 0x8000)\n        assert 0 not in colors, 'Transparent pixel left in title texture'\n    images.append(colors)\nlines=['/* Frames captured\
-        \ from user-provided 38942.mp4, resized for PS1. */',\n       '#ifndef LYDRA_V314_FRAMES_H','#define LYDRA_V314_FRAMES_H']\nfor i,colors in enumerate(images):\n    lines.append('static const unsigned short vt_v314_image_%d[19200] __attribute__((aligned(4))) = {'%i)\n    for j in range(0,len(colors),16):\n        lines.append(' '+','.join('0x%04x'%v for v in colors[j:j+16])+',')\n    lines.append('};')\nlines.append('static const unsigned short *const vt_v314_images[8] = {')\nlines.append(','.join('vt_v314_image_%d'%i for i in range(8))+'};')\nlines.append('#endif')\nsrc=Path(os.environ['PROJECT_DIR'])/'src'\nassert (src/'main.c').exists()\np=src/'lydra_v314_frames.h'\np.write_text('\\n'.join(lines)+'\\n',encoding='utf-8')\nif p.stat().st_size<750_000:raise RuntimeError('Generated header truncated')\nprint('User video frames installed:',p,p.stat().st_size)\nLYDRA_GEN_PY\npython3 \"$RUNNER_TEMP/make_intro_frames.py\"\n"
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/make_intro_frames.py\" <<'LYDRA_GEN_PY'\n#!/usr/bin/env python3\n\
+        import os,base64,struct\nfrom pathlib import Path\nfrom PIL import Image\nhome=Path(os.environ['RUNNER_TEMP'])/'lydra_new_menu'\n\
+        images=[]\nfor i in range(8):\n    p=home/f'frame_{i}.jpg'\n    if not p.exists():raise RuntimeError('Frame\
+        \ missing: '+str(p))\n    with Image.open(p) as img:\n        img=img.convert('RGB')\n        if img.size!=(160,120):raise\
+        \ RuntimeError('Frame size mismatch '+str(img.size))\n        # PS1 treats RGB555 color 0x0000 as transparent,\
+        \ even for opaque polygons.\n        # 0x8000 represents truly opaque black when setSemiTrans(q,0).\n  \
+        \      # Change ONLY zero pixels: preserve all other source-video colors.\n        colors=[]\n        for\
+        \ r,g,b in img.getdata():\n            value=((b>>3)<<10)|((g>>3)<<5)|(r>>3)\n            colors.append(value\
+        \ if value else 0x8000)\n        assert 0 not in colors, 'Transparent pixel left in title texture'\n   \
+        \ images.append(colors)\nlines=['/* Frames captured from user-provided 38942.mp4, resized for PS1. */',\n\
+        \       '#ifndef LYDRA_V314_FRAMES_H','#define LYDRA_V314_FRAMES_H']\nfor i,colors in enumerate(images):\n\
+        \    lines.append('static const unsigned short vt_v314_image_%d[19200] __attribute__((aligned(4))) = {'%i)\n\
+        \    for j in range(0,len(colors),16):\n        lines.append(' '+','.join('0x%04x'%v for v in colors[j:j+16])+',')\n\
+        \    lines.append('};')\nlines.append('static const unsigned short *const vt_v314_images[8] = {')\nlines.append(','.join('vt_v314_image_%d'%i\
+        \ for i in range(8))+'};')\nlines.append('#endif')\nsrc=Path(os.environ['PROJECT_DIR'])/'src'\nassert (src/'main.c').exists()\n\
+        p=src/'lydra_v314_frames.h'\np.write_text('\\n'.join(lines)+'\\n',encoding='utf-8')\nif p.stat().st_size<750_000:raise\
+        \ RuntimeError('Generated header truncated')\nprint('User video frames installed:',p,p.stat().st_size)\n\
+        LYDRA_GEN_PY\npython3 \"$RUNNER_TEMP/make_intro_frames.py\"\n"
     - name: V31.6 Basis | V31.6 Hauptmenue in V31.3 einbauen und vorbereiten
       shell: bash
       run: 'set -euo pipefail
@@ -1161,11 +1189,48 @@ jobs:
         '
     - name: Video-Uebergaenge und interaktive Menueauswahl aktivieren
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/patch_video_menu.py\" <<'LYDRA_PATCH_PY'\n#!/usr/bin/env python3\n\"\"\"Replace the static title and duplicate labels with an interactive video-derived menu.\"\"\"\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\ndef once(old,new):\n    global s\n    n=s.count(old)\n    if n!=1:raise RuntimeError('V31.7 title patch anchor count=%d: %r'%(n,old[:80]))\n    s=s.replace(old,new,1)\n\n# The logo presentation is automatic: intro frames 0-3, title frames 4-6,\n# then wait for START while flashing the prompt.\n# Use whitespace-independent anchors: the base YAML strips eight indentation columns.\nonce('else if(++vt_v314_elapsed>=150)', 'else if(++vt_v314_elapsed>=180)')\ns,n=re.subn(r'(\\} else if\\(\\+\\+vt_v314_elapsed>=180\\) \\{\\s*)vt_v314_phase=1;',\n            r'\\g<1>vt_v314_phase=0;',s,count=1)\nif n!=1:raise RuntimeError('Intro phase transition not found')\nstart_phase=r'\\} else if\\(vt_v314_phase==1\\\
-        ) \\{\\s*if\\(pressed&\\(PAD_START\\|PAD_CROSS\\)\\)'\nreplacement=('} else if(vt_v314_phase==0) {\\n'\n             '    if((pressed&(PAD_START|PAD_CROSS)) || ++vt_v314_elapsed>=126) {\\n'\n             '        vt_v314_phase=1; vt_v314_elapsed=0;\\n'\n             '    }\\n'\n             '} else if(vt_v314_phase==1) {\\n'\n             '    if(pressed&(PAD_START|PAD_CROSS))')\ns,n=re.subn(start_phase,lambda _:replacement,s,count=1)\nif n!=1:raise RuntimeError('Title transition anchor not found')\n\n# Video has exactly three menu slots, no extra INTRO line.\nonce('vt_v314_cursor=(vt_v314_cursor+3)%4;', 'vt_v314_cursor=(vt_v314_cursor+2)%3;')\nonce('vt_v314_cursor=(vt_v314_cursor+1)%4;', 'vt_v314_cursor=(vt_v314_cursor+1)%3;')\nchoice=r\"\"\"static int vt_v314_choice_frame(void) {\n    if(vt_v314_phase==-1){\n        if(vt_v314_elapsed<24)return 0;\n        if(vt_v314_elapsed<64)return 1;\n        if(vt_v314_elapsed<112)return 2;\n        return 3;\n    }\n    if(vt_v314_phase==0){\n        if(vt_v314_elapsed<30)return\
-        \ 4;\n        if(vt_v314_elapsed<75)return 5;\n        return 6;\n    }\n    if(vt_v314_phase==1)return 6;\n    return 7;\n}\n\"\"\"\npat=r'static int vt_v314_choice_frame\\(void\\)\\s*\\{\\s*if\\(vt_v314_phase==-1\\)return -1;\\s*return 7;\\s*\\}'\ns,n=re.subn(pat,lambda _:choice.strip(),s,count=1)\nif n!=1:raise RuntimeError('Title-frame selector missing')\n\n# Keep artwork supplied by user; no second dark menu and no duplicate words.\ns,n=re.subn(r'if\\(vt_v314_phase>=2\\) \\{\\s*/\\* Place an opaque ink-blue submenu tile behind the text\\.',\n            'if(vt_v314_phase==3) {\\n    /* Place an opaque ink-blue submenu tile behind the text.',s,count=1)\nif n!=1:raise RuntimeError('Submenu panel anchor not found')\nonce('setXY0(panel,190,157);','setXY0(panel,94,159);')\nonce('setWH(panel,130,83);','setWH(panel,150,81);')\nonce('FntOpen(196, 162, 124, 76, 0, 512); /* title menu */',\n     'FntOpen(105, 167, 120, 70, 0, 512); /* title menu cursor / options */')\n\n# The branded intro artwork includes the studio text already.\n\
-        once('if(vt_v314_elapsed>12)FntPrint(6,\"DKVierich Produktion\");',\n     '/* Logo and DKVierich Produktion come directly from the video frames. */')\ns,n=re.subn(r'if\\(vt_v314_elapsed>40 && \\(vt_v314_blink%80u\\)<54u\\)\\s*FntPrint\\(4,\"   START\"\\);',\n            '/* The intro frames contain the production name; START appears only on title. */',s,count=1)\nif n!=1:raise RuntimeError('Old premature START overlay not found')\n\n# Show only a moving cursor; names and background are native source-video artwork.\nmenu_pat=r'FntPrint\\(5,\"%c NEUES SPIEL\\\\n\\\\n\"[^;]*;[\\s\\S]*?FntPrint\\(5,\"%c INTRO\\\\n\"[^;]*;'\nmenu_cursor=('FntPrint(5,\"%c\\\\n\\\\n%c\\\\n\\\\n%c\\\\n\",\\n'\n             '   vt_v314_cursor==0?\\'>\\':\\' \\',\\n'\n             '   vt_v314_cursor==1?\\'>\\':\\' \\',\\n'\n             '   vt_v314_cursor==2?\\'>\\':\\' \\');')\ns,n=re.subn(menu_pat,lambda _:menu_cursor,s,count=1)\nif n!=1:raise RuntimeError('Original four-choice menu text not found')\n\nfor tag in ('vt_v314_choice_frame(void)','vt_v314_input(unsigned\
-        \ int pressed)',\n            'vt_v281_resolve_movement();','vt_save_game(void)','vt_load_game(void)',\n            'vt_v293_move((unsigned int)pad);'):\n    if tag not in s:raise RuntimeError('Gameplay/title function missing: '+tag)\np.write_text(s,encoding='utf-8')\nprint('V31.7 video-derived interactive main menu installed. Saving and gameplay unchanged.')\nLYDRA_PATCH_PY\npython3 \"$RUNNER_TEMP/patch_video_menu.py\"\n"
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/patch_video_menu.py\" <<'LYDRA_PATCH_PY'\n#!/usr/bin/env python3\n\
+        \"\"\"Replace the static title and duplicate labels with an interactive video-derived menu.\"\"\"\nimport\
+        \ os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\n\
+        def once(old,new):\n    global s\n    n=s.count(old)\n    if n!=1:raise RuntimeError('V31.7 title patch\
+        \ anchor count=%d: %r'%(n,old[:80]))\n    s=s.replace(old,new,1)\n\n# The logo presentation is automatic:\
+        \ intro frames 0-3, title frames 4-6,\n# then wait for START while flashing the prompt.\n# Use whitespace-independent\
+        \ anchors: the base YAML strips eight indentation columns.\nonce('else if(++vt_v314_elapsed>=150)', 'else\
+        \ if(++vt_v314_elapsed>=180)')\ns,n=re.subn(r'(\\} else if\\(\\+\\+vt_v314_elapsed>=180\\) \\{\\s*)vt_v314_phase=1;',\n\
+        \            r'\\g<1>vt_v314_phase=0;',s,count=1)\nif n!=1:raise RuntimeError('Intro phase transition not\
+        \ found')\nstart_phase=r'\\} else if\\(vt_v314_phase==1\\) \\{\\s*if\\(pressed&\\(PAD_START\\|PAD_CROSS\\\
+        )\\)'\nreplacement=('} else if(vt_v314_phase==0) {\\n'\n             '    if((pressed&(PAD_START|PAD_CROSS))\
+        \ || ++vt_v314_elapsed>=126) {\\n'\n             '        vt_v314_phase=1; vt_v314_elapsed=0;\\n'\n    \
+        \         '    }\\n'\n             '} else if(vt_v314_phase==1) {\\n'\n             '    if(pressed&(PAD_START|PAD_CROSS))')\n\
+        s,n=re.subn(start_phase,lambda _:replacement,s,count=1)\nif n!=1:raise RuntimeError('Title transition anchor\
+        \ not found')\n\n# Video has exactly three menu slots, no extra INTRO line.\nonce('vt_v314_cursor=(vt_v314_cursor+3)%4;',\
+        \ 'vt_v314_cursor=(vt_v314_cursor+2)%3;')\nonce('vt_v314_cursor=(vt_v314_cursor+1)%4;', 'vt_v314_cursor=(vt_v314_cursor+1)%3;')\n\
+        choice=r\"\"\"static int vt_v314_choice_frame(void) {\n    if(vt_v314_phase==-1){\n        if(vt_v314_elapsed<24)return\
+        \ 0;\n        if(vt_v314_elapsed<64)return 1;\n        if(vt_v314_elapsed<112)return 2;\n        return\
+        \ 3;\n    }\n    if(vt_v314_phase==0){\n        if(vt_v314_elapsed<30)return 4;\n        if(vt_v314_elapsed<75)return\
+        \ 5;\n        return 6;\n    }\n    if(vt_v314_phase==1)return 6;\n    return 7;\n}\n\"\"\"\npat=r'static\
+        \ int vt_v314_choice_frame\\(void\\)\\s*\\{\\s*if\\(vt_v314_phase==-1\\)return -1;\\s*return 7;\\s*\\}'\n\
+        s,n=re.subn(pat,lambda _:choice.strip(),s,count=1)\nif n!=1:raise RuntimeError('Title-frame selector missing')\n\
+        \n# Keep artwork supplied by user; no second dark menu and no duplicate words.\ns,n=re.subn(r'if\\(vt_v314_phase>=2\\\
+        ) \\{\\s*/\\* Place an opaque ink-blue submenu tile behind the text\\.',\n            'if(vt_v314_phase==3)\
+        \ {\\n    /* Place an opaque ink-blue submenu tile behind the text.',s,count=1)\nif n!=1:raise RuntimeError('Submenu\
+        \ panel anchor not found')\nonce('setXY0(panel,190,157);','setXY0(panel,94,159);')\nonce('setWH(panel,130,83);','setWH(panel,150,81);')\n\
+        once('FntOpen(196, 162, 124, 76, 0, 512); /* title menu */',\n     'FntOpen(105, 167, 120, 70, 0, 512);\
+        \ /* title menu cursor / options */')\n\n# The branded intro artwork includes the studio text already.\n\
+        once('if(vt_v314_elapsed>12)FntPrint(6,\"DKVierich Produktion\");',\n     '/* Logo and DKVierich Produktion\
+        \ come directly from the video frames. */')\ns,n=re.subn(r'if\\(vt_v314_elapsed>40 && \\(vt_v314_blink%80u\\\
+        )<54u\\)\\s*FntPrint\\(4,\"   START\"\\);',\n            '/* The intro frames contain the production name;\
+        \ START appears only on title. */',s,count=1)\nif n!=1:raise RuntimeError('Old premature START overlay not\
+        \ found')\n\n# Show only a moving cursor; names and background are native source-video artwork.\nmenu_pat=r'FntPrint\\\
+        (5,\"%c NEUES SPIEL\\\\n\\\\n\"[^;]*;[\\s\\S]*?FntPrint\\(5,\"%c INTRO\\\\n\"[^;]*;'\nmenu_cursor=('FntPrint(5,\"\
+        %c\\\\n\\\\n%c\\\\n\\\\n%c\\\\n\",\\n'\n             '   vt_v314_cursor==0?\\'>\\':\\' \\',\\n'\n      \
+        \       '   vt_v314_cursor==1?\\'>\\':\\' \\',\\n'\n             '   vt_v314_cursor==2?\\'>\\':\\' \\');')\n\
+        s,n=re.subn(menu_pat,lambda _:menu_cursor,s,count=1)\nif n!=1:raise RuntimeError('Original four-choice menu\
+        \ text not found')\n\nfor tag in ('vt_v314_choice_frame(void)','vt_v314_input(unsigned int pressed)',\n\
+        \            'vt_v281_resolve_movement();','vt_save_game(void)','vt_load_game(void)',\n            'vt_v293_move((unsigned\
+        \ int)pad);'):\n    if tag not in s:raise RuntimeError('Gameplay/title function missing: '+tag)\np.write_text(s,encoding='utf-8')\n\
+        print('V31.7 video-derived interactive main menu installed. Saving and gameplay unchanged.')\nLYDRA_PATCH_PY\n\
+        python3 \"$RUNNER_TEMP/patch_video_menu.py\"\n"
     - name: V31.6 Basis | V31.6 FIX2 Schnelle Bewegung und Kamera sicher anwenden
       shell: bash
       run: 'set -euo pipefail
@@ -1175,40 +1240,153 @@ jobs:
         '
     - name: V31.7.2 Aktives Video-Menue HUD und Geschwindigkeit reparieren
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_v3172_patch.py\" <<'LYDRA_V3172_PATCH'\n#!/usr/bin/env python3\n'''V31.7.2: correct font stream numbers, replace artwork's inert slots by real menu,\nprevent 3D world rendering during the title, tune gameplay response.\n'''\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\n\ndef once(old,new):\n    global s\n    n=s.count(old)\n    if n!=1:\n        raise RuntimeError('V31.7.2 required source marker count=%d: %r' % (n,old[:90]))\n    s=s.replace(old,new,1)\n\ndef function_span(name):\n    pattern=r'\\bstatic\\s+(?:void|int)\\s+'+re.escape(name)+r'\\s*\\([^;]*?\\)\\s*\\{'\n    hits=list(re.finditer(pattern,s,re.S))\n    if len(hits)!=1:raise RuntimeError('V31.7.2 function missing or repeated: '+name)\n    pos=hits[0].end(); depth=1; state='code'\n    while pos<len(s) and depth:\n        ch=s[pos]; nx=s[pos+1] if pos+1<len(s) else ''\n        if state=='code':\n            if ch=='/' and nx=='/':state='line';pos+=1\n\
-        \            elif ch=='/' and nx=='*':state='block';pos+=1\n            elif ch=='\"':state='string'\n            elif ch==\"'\":state='char'\n            elif ch=='{':depth+=1\n            elif ch=='}':depth-=1\n        elif state=='line':\n            if ch=='\\n':state='code'\n        elif state=='block':\n            if ch=='*' and nx=='/':state='code';pos+=1\n        else:\n            if ch=='\\\\':pos+=1\n            elif (state=='string' and ch=='\"') or (state=='char' and ch==\"'\"):state='code'\n        pos+=1\n    if depth:raise RuntimeError('V31.7.2 unclosed function: '+name)\n    return hits[0].start(),pos\n\ndef edit_function(name,fn):\n    global s\n    a,b=function_span(name)\n    original=s[a:b]\n    revision=fn(original)\n    if revision==original:raise RuntimeError('V31.7.2 no edits made for '+name)\n    s=s[:a]+revision+s[b:]\n\n# The day/night meter already owns font stream 4. V31.6 incorrectly re-used it.\n# The title fonts were opened AFTER stream 4, so START=5, MENU=6, SPLASH=7.\ndef fix_title_hud(src):\n\
-        \    src=src.replace('FntPrint(6,','FntPrint(7,') # production stream\n    src=src.replace('FntPrint(5,','FntPrint(6,') # menu stream\n    src=src.replace('FntPrint(4,','FntPrint(5,') # START stream\n    src=src.replace('FntFlush(4);FntFlush(5);FntFlush(6);',\n                    'FntFlush(5);FntFlush(6);FntFlush(7);')\n    # User video contains old baked-in text. Draw actual interactive labels over it.\n    old='FntPrint(6,\"%c\\\\n\\\\n%c\\\\n\\\\n%c\\\\n\",'\n    new='FntPrint(6,\"%c NEUES SPIEL\\\\n\\\\n%c SPIEL LADEN\\\\n\\\\n%c OPTIONEN\\\\n\",'\n    if old not in src:raise RuntimeError('Title cursor-only text not found')\n    src=src.replace(old,new,1)\n    return src\nedit_function('vt_v314_hud',fix_title_hud)\n\n# The menu font was at (105,167) and printed under the painted menu.\nonce('FntOpen(105, 167, 120, 70, 0, 512); /* title menu cursor / options */',\n     'FntOpen(106, 144, 117, 80, 0, 512); /* interactive menu text, stream 6 */')\n\n# This is a true PS1 menu overlay. Each choice has a separately highlighted\
-        \ row.\n# The row tiles are queued before the title quad, hence drawn AFTER it in this OT (LIFO).\nmenus=r'''\nstatic void vt_v3172_menu_slots(void) {\n    int i, count, selected;\n    TILE *tile;\n    unsigned int aligned;\n    if(vt_v314_phase!=2 && vt_v314_phase!=3)return;\n    count=3;\n    selected=(vt_v314_phase==2)?vt_v314_cursor:vt_v314_opt_cursor;\n    for(i=0;i<count;i++) {\n        aligned=(prim_used+3u)&~3u;\n        if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;\n        tile=(TILE *)(prim_arena[db]+aligned);\n        prim_used=aligned+sizeof(TILE);\n        setTile(tile);\n        setXY0(tile,103,140+17*i);\n        setWH(tile,122,17);\n        if(i==selected)setRGB0(tile,19,61,105);\n        else setRGB0(tile,10,21,40);\n        addPrim(ot[db],tile);\n    }\n    /* Options page receives a plain dark panel below its three rows. */\n    if(vt_v314_phase==3) {\n        aligned=(prim_used+3u)&~3u;\n        if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;\n        tile=(TILE *)(prim_arena[db]+aligned);\n\
-        \        prim_used=aligned+sizeof(TILE);\n        setTile(tile);\n        setXY0(tile,97,132);\n        setWH(tile,135,80);\n        setRGB0(tile,12,19,37);\n        addPrim(ot[db],tile);\n    }\n}\n'''\nonce('static void vt_v314_draw(void) {',menus+'\\nstatic void vt_v314_draw(void) {')\ndef fix_title_render(src):\n    # Remove old unused submenu rectangle; the new overlay occupies the correct slot area.\n    target='if(vt_v314_phase==3) {'\n    if src.count(target)!=1:raise RuntimeError('Old options panel unexpected')\n    src=src.replace(target,'if(0) { /* replaced by V31.7.2 menu overlay */',1)\n    anchor='    aligned=(prim_used+3u)&~3u;\\n    if(aligned+sizeof(POLY_FT4)'\n    if src.count(anchor)!=1:raise RuntimeError('Title textured quad anchor missing')\n    src=src.replace(anchor,'    vt_v3172_menu_slots();\\n'+anchor,1)\n    return src\nedit_function('vt_v314_draw',fix_title_render)\n\n# Disable costly 3D scene when title is visible (but do not touch the active save\n# structure, controls or geometry). Declare\
-        \ active flag before world function.\nonce('static int vt_v314_active=1;', '/* vt_v314_active declared before overworld drawing below. */')\nonce('static void vt_v24_draw_overworld(void) {',\n     'static int vt_v314_active=1;\\nstatic void vt_v24_draw_overworld(void) {\\n    if(vt_v314_active)return;')\n\n# NPC roaming does not need to update on the title screen either.\nif 'vt_v282_update_npcs();' in s:\n    once('vt_v282_update_npcs();','if(!vt_v314_active)vt_v282_update_npcs();')\n\n# More responsive gameplay only AFTER selecting a new/loaded game.\n# The existing fractional move accumulator and collision resolution remain intact.\nonce('target=forward*11264;', 'target=forward*14336;')\nonce('if(turn)vt_v292_cam_yaw=(vt_v292_cam_yaw+turn*56+4096)&4095;',\n     'if(turn)vt_v292_cam_yaw=(vt_v292_cam_yaw+turn*64+4096)&4095;')\n\n# Verify the critical systems and prevent a silently green build with the wrong UI.\nfor func in ('vt_v314_input','vt_v314_draw','vt_v314_hud','vt_v3172_menu_slots',\n             'vt_v24_draw_overworld'):\n\
-        \    function_span(func)\nfor marker in ('vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',\n               'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)',\n               'vt_v293_move((unsigned int)pad);','vt_v301_sun(void)',\n               'vt_v314_cursor==0','vt_v314_cursor==1','vt_v314_cursor==2'):\n    if marker not in s:raise RuntimeError('V31.7.2 retained system missing: '+marker)\nif 'FntFlush(4);FntFlush(5);FntFlush(6);' in s:\n    raise RuntimeError('Old font index collision still exists')\np.write_text(s,encoding='utf-8')\nprint('V31.7.2: Title fonts 5/6/7, time display remains font 4.')\nprint('V31.7.2: Menu choices are interactive labels over independently highlighted rows.')\nprint('V31.7.2: World render paused in title, faster movement/camera while playing.')\n\nLYDRA_V3172_PATCH\npython3 \"$RUNNER_TEMP/lydra_v3172_patch.py\"\n"
-    - name: V31.7.2 Menue HUD und Kamerasteuerung pruefen
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_v3172_patch.py\" <<'LYDRA_V3172_PATCH'\n#!/usr/bin/env\
+        \ python3\n'''V31.7.2: correct font stream numbers, replace artwork's inert slots by real menu,\nprevent\
+        \ 3D world rendering during the title, tune gameplay response.\n'''\nimport os,re\nfrom pathlib import Path\n\
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\n\ndef once(old,new):\n\
+        \    global s\n    n=s.count(old)\n    if n!=1:\n        raise RuntimeError('V31.7.2 required source marker\
+        \ count=%d: %r' % (n,old[:90]))\n    s=s.replace(old,new,1)\n\ndef function_span(name):\n    pattern=r'\\\
+        bstatic\\s+(?:void|int)\\s+'+re.escape(name)+r'\\s*\\([^;]*?\\)\\s*\\{'\n    hits=list(re.finditer(pattern,s,re.S))\n\
+        \    if len(hits)!=1:raise RuntimeError('V31.7.2 function missing or repeated: '+name)\n    pos=hits[0].end();\
+        \ depth=1; state='code'\n    while pos<len(s) and depth:\n        ch=s[pos]; nx=s[pos+1] if pos+1<len(s)\
+        \ else ''\n        if state=='code':\n            if ch=='/' and nx=='/':state='line';pos+=1\n         \
+        \   elif ch=='/' and nx=='*':state='block';pos+=1\n            elif ch=='\"':state='string'\n          \
+        \  elif ch==\"'\":state='char'\n            elif ch=='{':depth+=1\n            elif ch=='}':depth-=1\n \
+        \       elif state=='line':\n            if ch=='\\n':state='code'\n        elif state=='block':\n     \
+        \       if ch=='*' and nx=='/':state='code';pos+=1\n        else:\n            if ch=='\\\\':pos+=1\n  \
+        \          elif (state=='string' and ch=='\"') or (state=='char' and ch==\"'\"):state='code'\n        pos+=1\n\
+        \    if depth:raise RuntimeError('V31.7.2 unclosed function: '+name)\n    return hits[0].start(),pos\n\n\
+        def edit_function(name,fn):\n    global s\n    a,b=function_span(name)\n    original=s[a:b]\n    revision=fn(original)\n\
+        \    if revision==original:raise RuntimeError('V31.7.2 no edits made for '+name)\n    s=s[:a]+revision+s[b:]\n\
+        \n# The day/night meter already owns font stream 4. V31.6 incorrectly re-used it.\n# The title fonts were\
+        \ opened AFTER stream 4, so START=5, MENU=6, SPLASH=7.\ndef fix_title_hud(src):\n    src=src.replace('FntPrint(6,','FntPrint(7,')\
+        \ # production stream\n    src=src.replace('FntPrint(5,','FntPrint(6,') # menu stream\n    src=src.replace('FntPrint(4,','FntPrint(5,')\
+        \ # START stream\n    src=src.replace('FntFlush(4);FntFlush(5);FntFlush(6);',\n                    'FntFlush(5);FntFlush(6);FntFlush(7);')\n\
+        \    # User video contains old baked-in text. Draw actual interactive labels over it.\n    old='FntPrint(6,\"\
+        %c\\\\n\\\\n%c\\\\n\\\\n%c\\\\n\",'\n    new='FntPrint(6,\"%c NEUES SPIEL\\\\n\\\\n%c SPIEL LADEN\\\\n\\\
+        \\n%c OPTIONEN\\\\n\",'\n    if old not in src:raise RuntimeError('Title cursor-only text not found')\n\
+        \    src=src.replace(old,new,1)\n    return src\nedit_function('vt_v314_hud',fix_title_hud)\n\n# The menu\
+        \ font was at (105,167) and printed under the painted menu.\nonce('FntOpen(105, 167, 120, 70, 0, 512); /*\
+        \ title menu cursor / options */',\n     'FntOpen(106, 144, 117, 80, 0, 512); /* interactive menu text,\
+        \ stream 6 */')\n\n# This is a true PS1 menu overlay. Each choice has a separately highlighted row.\n# The\
+        \ row tiles are queued before the title quad, hence drawn AFTER it in this OT (LIFO).\nmenus=r'''\nstatic\
+        \ void vt_v3172_menu_slots(void) {\n    int i, count, selected;\n    TILE *tile;\n    unsigned int aligned;\n\
+        \    if(vt_v314_phase!=2 && vt_v314_phase!=3)return;\n    count=3;\n    selected=(vt_v314_phase==2)?vt_v314_cursor:vt_v314_opt_cursor;\n\
+        \    for(i=0;i<count;i++) {\n        aligned=(prim_used+3u)&~3u;\n        if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;\n\
+        \        tile=(TILE *)(prim_arena[db]+aligned);\n        prim_used=aligned+sizeof(TILE);\n        setTile(tile);\n\
+        \        setXY0(tile,103,140+17*i);\n        setWH(tile,122,17);\n        if(i==selected)setRGB0(tile,19,61,105);\n\
+        \        else setRGB0(tile,10,21,40);\n        addPrim(ot[db],tile);\n    }\n    /* Options page receives\
+        \ a plain dark panel below its three rows. */\n    if(vt_v314_phase==3) {\n        aligned=(prim_used+3u)&~3u;\n\
+        \        if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;\n        tile=(TILE *)(prim_arena[db]+aligned);\n\
+        \        prim_used=aligned+sizeof(TILE);\n        setTile(tile);\n        setXY0(tile,97,132);\n       \
+        \ setWH(tile,135,80);\n        setRGB0(tile,12,19,37);\n        addPrim(ot[db],tile);\n    }\n}\n'''\nonce('static\
+        \ void vt_v314_draw(void) {',menus+'\\nstatic void vt_v314_draw(void) {')\ndef fix_title_render(src):\n\
+        \    # Remove old unused submenu rectangle; the new overlay occupies the correct slot area.\n    target='if(vt_v314_phase==3)\
+        \ {'\n    if src.count(target)!=1:raise RuntimeError('Old options panel unexpected')\n    src=src.replace(target,'if(0)\
+        \ { /* replaced by V31.7.2 menu overlay */',1)\n    anchor='    aligned=(prim_used+3u)&~3u;\\n    if(aligned+sizeof(POLY_FT4)'\n\
+        \    if src.count(anchor)!=1:raise RuntimeError('Title textured quad anchor missing')\n    src=src.replace(anchor,'\
+        \    vt_v3172_menu_slots();\\n'+anchor,1)\n    return src\nedit_function('vt_v314_draw',fix_title_render)\n\
+        \n# Disable costly 3D scene when title is visible (but do not touch the active save\n# structure, controls\
+        \ or geometry). Declare active flag before world function.\nonce('static int vt_v314_active=1;', '/* vt_v314_active\
+        \ declared before overworld drawing below. */')\nonce('static void vt_v24_draw_overworld(void) {',\n   \
+        \  'static int vt_v314_active=1;\\nstatic void vt_v24_draw_overworld(void) {\\n    if(vt_v314_active)return;')\n\
+        \n# NPC roaming does not need to update on the title screen either.\nif 'vt_v282_update_npcs();' in s:\n\
+        \    once('vt_v282_update_npcs();','if(!vt_v314_active)vt_v282_update_npcs();')\n\n# More responsive gameplay\
+        \ only AFTER selecting a new/loaded game.\n# The existing fractional move accumulator and collision resolution\
+        \ remain intact.\nonce('target=forward*11264;', 'target=forward*14336;')\nonce('if(turn)vt_v292_cam_yaw=(vt_v292_cam_yaw+turn*56+4096)&4095;',\n\
+        \     'if(turn)vt_v292_cam_yaw=(vt_v292_cam_yaw+turn*64+4096)&4095;')\n\n# Verify the critical systems and\
+        \ prevent a silently green build with the wrong UI.\nfor func in ('vt_v314_input','vt_v314_draw','vt_v314_hud','vt_v3172_menu_slots',\n\
+        \             'vt_v24_draw_overworld'):\n    function_span(func)\nfor marker in ('vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',\n\
+        \               'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)',\n               'vt_v293_move((unsigned\
+        \ int)pad);','vt_v301_sun(void)',\n               'vt_v314_cursor==0','vt_v314_cursor==1','vt_v314_cursor==2'):\n\
+        \    if marker not in s:raise RuntimeError('V31.7.2 retained system missing: '+marker)\nif 'FntFlush(4);FntFlush(5);FntFlush(6);'\
+        \ in s:\n    raise RuntimeError('Old font index collision still exists')\np.write_text(s,encoding='utf-8')\n\
+        print('V31.7.2: Title fonts 5/6/7, time display remains font 4.')\nprint('V31.7.2: Menu choices are interactive\
+        \ labels over independently highlighted rows.')\nprint('V31.7.2: World render paused in title, faster movement/camera\
+        \ while playing.')\n\nLYDRA_V3172_PATCH\npython3 \"$RUNNER_TEMP/lydra_v3172_patch.py\"\n"
+    - name: V31.7.3 Echte Schriftkanal IDs Menue und Tag Nacht
       shell: bash
-      run: 'set -euo pipefail
-
-        SRC="$PROJECT_DIR/src/main.c"
-
-        grep -q ''vt_v3172_menu_slots'' "$SRC"
-
-        grep -q ''FntPrint(6,"%c NEUES SPIEL'' "$SRC"
-
-        grep -q ''FntOpen(106, 144, 117, 80'' "$SRC"
-
-        grep -q ''FntFlush(5);FntFlush(6);FntFlush(7);'' "$SRC"
-
-        grep -q ''target=forward\*14336;'' "$SRC"
-
-        grep -q ''if(vt_v314_active)return;'' "$SRC"
-
-        grep -q ''vt_load_game(void)'' "$SRC"
-
-        echo ''OK: Interactive menu text, HUD streams, frame budget and legacy saves verified.''
-
-        '
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_v3173_patch.py\" <<'LYDRA_V3173_SCRIPT'\n#!/usr/bin/env\
+        \ python3\n\"\"\"V31.7.3 fix title font channels and reposition interactive menu.\"\"\"\nimport os,re\n\
+        from pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\n\
+        \ndef once(old,new):\n    global s\n    count=s.count(old)\n    if count!=1:\n        raise RuntimeError('V31.7.3\
+        \ required unique anchor %r: %d' % (old[:85],count))\n    s=s.replace(old,new,1)\n\ndef fspan(name):\n \
+        \   pat=r'\\bstatic\\s+(?:void|int)\\s+'+re.escape(name)+r'\\s*\\([^;]*?\\)\\s*\\{'\n    matches=list(re.finditer(pat,s,re.S))\n\
+        \    if len(matches)!=1:\n        raise RuntimeError('V31.7.3 expected function '+name+': '+str(len(matches)))\n\
+        \    start=matches[0].start()\n    pos=matches[0].end()\n    depth=1;state='code'\n    while pos<len(s)\
+        \ and depth:\n        ch=s[pos];nx=s[pos+1] if pos+1<len(s) else ''\n        if state=='code':\n       \
+        \     if ch=='/' and nx=='/':state='line';pos+=1\n            elif ch=='/' and nx=='*':state='block';pos+=1\n\
+        \            elif ch=='\"':state='str'\n            elif ch==\"'\":state='char'\n            elif ch=='{':depth+=1\n\
+        \            elif ch=='}':depth-=1\n        elif state=='line':\n            if ch=='\\n':state='code'\n\
+        \        elif state=='block':\n            if ch=='*' and nx=='/':state='code';pos+=1\n        else:\n \
+        \           if ch=='\\\\':pos+=1\n            elif (state=='str' and ch=='\"') or (state=='char' and ch==\"\
+        '\"):state='code'\n        pos+=1\n    if depth:raise RuntimeError('V31.7.3 unbalanced braces '+name)\n\
+        \    return start,pos\n\ndef edit(name,func):\n    global s\n    a,b=fspan(name)\n    old=s[a:b]\n    new=func(old)\n\
+        \    if old==new:raise RuntimeError('V31.7.3 no edit made in '+name)\n    s=s[:a]+new+s[b:]\n\n# Never assume\
+        \ FntOpen stream numbers: IDs depend on how many earlier calls\n# succeeded. In the last build, the title\
+        \ stream was accidentally used by\n# the day/night HUD, explaining the clock printed at screen y=217.\n\
+        once('static void vt_v301_day_night_hud(void) {',\n     'static int vt_v3173_time_font=-1;\\n'\n     'static\
+        \ int vt_v3173_start_font=-1;\\n'\n     'static int vt_v3173_menu_font=-1;\\n'\n     'static void vt_v301_day_night_hud(void)\
+        \ {')\n\nonce('FntOpen(177, 6, 68, 42, 0, 128); /* day-night meter */',\n     'vt_v3173_time_font=FntOpen(177,\
+        \ 6, 68, 42, 0, 128); /* day-night meter */')\nonce('FntOpen(108, 217, 205, 20, 0, 128); /* title START\
+        \ */',\n     'vt_v3173_start_font=FntOpen(110, 207, 120, 24, 0, 128); /* blinking START */')\nonce('FntOpen(106,\
+        \ 144, 117, 80, 0, 512); /* interactive menu text, stream 6 */',\n     'vt_v3173_menu_font=FntOpen(106,\
+        \ 141, 116, 76, 0, 512); /* real menu text */')\n# The production name is already present in the video artwork;\
+        \ its additional\n# font stream is unused and would waste one of the eight available streams.\nonce('FntOpen(73,\
+        \ 108, 212, 30, 0, 128); /* centered production splash */',\n     '/* V31.7.3: production text is embedded\
+        \ in the intro artwork. */')\n\ndef clock(c):\n    if c.count('FntPrint(4,')!=1:raise RuntimeError('Unexpected\
+        \ clock font write')\n    return c.replace('FntPrint(4,','FntPrint(vt_v3173_time_font,')\nedit('vt_v301_day_night_hud',clock)\n\
+        \n# Only change the 4th stream FntFlush in the *exploration* HUD; keep the\n# original in-game menu and\
+        \ other stream numbers intact.\ndef exploration(c):\n    if c.count('FntFlush(4);')!=1:raise RuntimeError('V31.7.3\
+        \ time flush missing')\n    return c.replace('FntFlush(4);','FntFlush(vt_v3173_time_font);')\nedit('vt_v292_draw_exploration_hud',exploration)\n\
+        \ndef title_hud(c):\n    if c.count('FntPrint(6,')<1 or c.count('FntPrint(5,')<1:\n        raise RuntimeError('V31.7.3\
+        \ unexpected title font usage')\n    c=c.replace('FntPrint(6,','FntPrint(vt_v3173_menu_font,')\n    c=c.replace('FntPrint(5,','FntPrint(vt_v3173_start_font,')\n\
+        \    if 'FntPrint(7,' in c:\n        # The logo is already in the MP4-derived artwork; no duplicate logo.\n\
+        \        raise RuntimeError('V31.7.3 unexpected production overlay')\n    old='FntFlush(5);FntFlush(6);FntFlush(7);'\n\
+        \    if c.count(old)!=1:raise RuntimeError('V31.7.3 title flush pattern absent')\n    c=c.replace(old,'FntFlush(vt_v3173_start_font);FntFlush(vt_v3173_menu_font);')\n\
+        \    return c\nedit('vt_v314_hud',title_hud)\n\n# Replace large, touching opaque rectangles with inset rows\
+        \ separated by\n# visible gaps, within the blue central artwork frame. The actual font\n# string goes on\
+        \ top through its own stream.\ndef slots(c):\n    c=c.replace('setXY0(tile,103,140+17*i);','setXY0(tile,103,139+18*i);')\n\
+        \    c=c.replace('setWH(tile,122,17);','setWH(tile,124,16);')\n    if 'setXY0(tile,103,139+18*i);' not in\
+        \ c or 'setWH(tile,124,16);' not in c:\n        raise RuntimeError('V31.7.3 menu layout mismatch')\n   \
+        \ # The options background should sit below all the options rows in draw\n    # order. Existing PS1 OT LIFO\
+        \ order is retained.\n    return c\nedit('vt_v3172_menu_slots',slots)\n\nfor f in ('vt_v314_hud','vt_v314_draw','vt_v314_input','vt_v292_draw_exploration_hud',\n\
+        \          'vt_v301_day_night_hud','vt_v3172_menu_slots'):\n    fspan(f)\nfor token in ('vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',\n\
+        \              'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)',\n              'vt_v293_move((unsigned\
+        \ int)pad);','vt_v314_cursor==0',\n              'vt_v314_cursor==1','vt_v314_cursor==2','vt_v314_active=1'):\n\
+        \    if token not in s:raise RuntimeError('V31.7.3 missing gameplay system: '+token)\nif 'FntPrint(4,\"\
+        TAG' in s or 'FntFlush(5);FntFlush(6);FntFlush(7);' in s:\n    raise RuntimeError('V31.7.3 leftover hardcoded\
+        \ font IDs')\n\np.write_text(s,encoding='utf-8')\nprint('V31.7.3 menu text uses FntOpen return IDs, rows\
+        \ are aligned to artwork.')\nprint('V31.7.3 clock uses its own screen-fixed font and stays at top right.')\n\
+        LYDRA_V3173_SCRIPT\npython3 \"$RUNNER_TEMP/lydra_v3173_patch.py\"\n"
+    - name: V31.7.3 Menu und HUD pruefen
+      shell: bash
+      run: "set -euo pipefail\nSRC=\"$PROJECT_DIR/src/main.c\"\nfor marker in 'vt_v3173_time_font=FntOpen(177' 'vt_v3173_menu_font=FntOpen(106'\
+        \ 'FntPrint(vt_v3173_menu_font,' 'FntPrint(vt_v3173_time_font,' 'FntFlush(vt_v3173_time_font);' 'vt_v3172_menu_slots'\
+        \ 'if(vt_v314_active)return;' 'vt_load_game(void)' 'vt_save_game(void)'; do\n  grep -Fq \"$marker\" \"$SRC\"\
+        \ || { echo \"::error::V31.7.3 Spiel-Element fehlt: $marker\"; exit 1; }\ndone\nif grep -Fq 'FntFlush(5);FntFlush(6);FntFlush(7);'\
+        \ \"$SRC\"; then\n  echo '::error::Alte Schriftfenster-Nummern gefunden'; exit 1\nfi\necho 'V31.7.3 Titelmenue,\
+        \ Tag/Nacht und Speicherfunktionen bereit.'\n"
     - name: V31.7.1 Hauptmenue und deckende Videotexturen pruefen
       shell: bash
-      run: "set -euo pipefail\nSRC=\"$PROJECT_DIR/src\"\ntest -s \"$SRC/main.c\" || { echo \"::error::main.c fehlt\"; exit 1; }\ntest -s \"$SRC/lydra_v314_frames.h\" || { echo \"::error::PS1-Videobilder fehlen\"; exit 1; }\ngrep -q 'vt_v314_image_7' \"$SRC/lydra_v314_frames.h\" || { echo \"::error::Bild 8 fehlt\"; exit 1; }\ngrep -q 'vt_v314_input(unsigned int pressed)' \"$SRC/main.c\" || { echo \"::error::Hauptmenue-Eingabe fehlt\"; exit 1; }\ngrep -q 'vt_v314_choice_frame(void)' \"$SRC/main.c\" || { echo \"::error::Video-Uebergaenge fehlen\"; exit 1; }\ngrep -q 'vt_v314_phase==0' \"$SRC/main.c\" || { echo \"::error::Titel-Uebergang fehlt\"; exit 1; }\ngrep -q 'vt_save_game(void)' \"$SRC/main.c\" || { echo \"::error::Speichersystem fehlt\"; exit 1; }\ngrep -q 'vt_load_game(void)' \"$SRC/main.c\" || { echo \"::error::Ladesystem fehlt\"; exit 1; }\necho \"OK: Acht PS1-Videobilder, Hauptmenue mit Auswahl und Speicherfunktionen vorhanden.\"\n\n# The title polygon must be opaque, since 0x8000 is only opaque in this draw mode.\ngrep\
-        \ -q 'setSemiTrans(q,0);' \"$SRC/main.c\" || { echo '::error::Hauptmenue wird halbtransparent gezeichnet'; exit 1; }\n# RGB555 black must use 0x8000 rather than transparent 0x0000.\npython3 - <<'PY'\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/lydra_v314_frames.h'\ns=p.read_text(encoding='utf-8')\nfor i in range(8):\n    m=re.search(r'vt_v314_image_'+str(i)+r'\\[19200\\].*?\\{(.*?)\\};',s,re.S)\n    if not m:raise RuntimeError('Video frame missing: '+str(i))\n    pixels=re.findall(r'0x([0-9a-f]{4})',m.group(1))\n    if len(pixels)!=19200:raise RuntimeError('Invalid pixel count: '+str(i))\n    if '0000' in pixels:raise RuntimeError('Transparent black remains in frame '+str(i))\nprint('V31.7.1: Eight title images have 19200 opaque texels each. No transparent black pixels.')\nPY\n"
+      run: "set -euo pipefail\nSRC=\"$PROJECT_DIR/src\"\ntest -s \"$SRC/main.c\" || { echo \"::error::main.c fehlt\"\
+        ; exit 1; }\ntest -s \"$SRC/lydra_v314_frames.h\" || { echo \"::error::PS1-Videobilder fehlen\"; exit 1;\
+        \ }\ngrep -q 'vt_v314_image_7' \"$SRC/lydra_v314_frames.h\" || { echo \"::error::Bild 8 fehlt\"; exit 1;\
+        \ }\ngrep -q 'vt_v314_input(unsigned int pressed)' \"$SRC/main.c\" || { echo \"::error::Hauptmenue-Eingabe\
+        \ fehlt\"; exit 1; }\ngrep -q 'vt_v314_choice_frame(void)' \"$SRC/main.c\" || { echo \"::error::Video-Uebergaenge\
+        \ fehlen\"; exit 1; }\ngrep -q 'vt_v314_phase==0' \"$SRC/main.c\" || { echo \"::error::Titel-Uebergang fehlt\"\
+        ; exit 1; }\ngrep -q 'vt_save_game(void)' \"$SRC/main.c\" || { echo \"::error::Speichersystem fehlt\"; exit\
+        \ 1; }\ngrep -q 'vt_load_game(void)' \"$SRC/main.c\" || { echo \"::error::Ladesystem fehlt\"; exit 1; }\n\
+        echo \"OK: Acht PS1-Videobilder, Hauptmenue mit Auswahl und Speicherfunktionen vorhanden.\"\n\n# The title\
+        \ polygon must be opaque, since 0x8000 is only opaque in this draw mode.\ngrep -q 'setSemiTrans(q,0);' \"\
+        $SRC/main.c\" || { echo '::error::Hauptmenue wird halbtransparent gezeichnet'; exit 1; }\n# RGB555 black\
+        \ must use 0x8000 rather than transparent 0x0000.\npython3 - <<'PY'\nimport os,re\nfrom pathlib import Path\n\
+        p=Path(os.environ['PROJECT_DIR'])/'src/lydra_v314_frames.h'\ns=p.read_text(encoding='utf-8')\nfor i in range(8):\n\
+        \    m=re.search(r'vt_v314_image_'+str(i)+r'\\[19200\\].*?\\{(.*?)\\};',s,re.S)\n    if not m:raise RuntimeError('Video\
+        \ frame missing: '+str(i))\n    pixels=re.findall(r'0x([0-9a-f]{4})',m.group(1))\n    if len(pixels)!=19200:raise\
+        \ RuntimeError('Invalid pixel count: '+str(i))\n    if '0000' in pixels:raise RuntimeError('Transparent\
+        \ black remains in frame '+str(i))\nprint('V31.7.1: Eight title images have 19200 opaque texels each. No\
+        \ transparent black pixels.')\nPY\n"
     - name: V31.6 Basis | PS1 SDK installieren
       shell: bash
       run: 'set -euo pipefail
@@ -1241,15 +1419,16 @@ jobs:
       shell: bash
       run: 'set -euo pipefail
 
-        for f in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do test -s "artifacts/$f" || { echo "::error::PS1-Datei fehlt: $f"; exit 1; }; done
+        for f in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do test -s "artifacts/$f" || { echo "::error::PS1-Datei
+        fehlt: $f"; exit 1; }; done
 
         grep -qi ''VTRAIL.bin'' artifacts/VTRAIL.cue
 
         '
-    - name: V31.7.2 PS1 Hauptmenue-Artefakt hochladen
+    - name: V31.7.3 PS1 Hauptmenue-Artefakt hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-World-Of-Dragon-PS1-V31-7-2
+        name: Lydra-World-Of-Dragon-PS1-V31-7-3
         path: artifacts/VTRAIL.*
         if-no-files-found: error
         retention-days: 14
