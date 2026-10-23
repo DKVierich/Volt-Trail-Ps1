@@ -1,6 +1,5 @@
-# FIX3: GitHub Workflows muessen unter 128 KiB bleiben; Frames JPEG-komprimiert.
-name: Lydra World Of Dragon V31.6 FIX2 - DKVierich Produktion und Hauptmenue
-on:
+name: Lydra World Of Dragon - Originalvideo Intro und interaktives Hauptmenue
+'on':
   workflow_dispatch: null
 permissions:
   contents: read
@@ -12,1870 +11,1062 @@ jobs:
       uses: actions/checkout@v4
     - name: Werkzeuge installieren
       shell: bash
-      run: |
-        set -euo pipefail
+      run: 'set -euo pipefail
+
         sudo apt-get update
+
         sudo apt-get install -y cmake ninja-build unzip curl ffmpeg python3-pil python3-yaml
-    - name: Funktionierende V30.1 Build-Schritte laden
+
+        '
+    - name: Funktionierende V31.6 FIX2 herunterladen
       shell: bash
-      run: |
-        set -euo pipefail
-        curl -fL --retry 3 \
-          'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/755ea4e126a0f5e008a477532f21b588f055379e/.github/workflows/blank-ps1.yml' \
-          -o "$RUNNER_TEMP/v301_stabil.yml"
-        cat > "$RUNNER_TEMP/replay_v301.py" <<'PY'
-        import os,sys,subprocess,yaml
-        from pathlib import Path
-        y=Path(os.environ['RUNNER_TEMP'])/'v301_stabil.yml'
-        steps=yaml.safe_load(y.read_text(encoding='utf-8'))['jobs']['build']['steps']
-        matches=[s for s in steps if s.get('name')==sys.argv[1] and isinstance(s.get('run'),str)]
-        if len(matches)!=1:
-            raise RuntimeError('V30.1 Schritt nicht gefunden: '+sys.argv[1])
-        print('Replay:',sys.argv[1],flush=True)
-        subprocess.run(['bash','-euo','pipefail','-c',matches[0]['run']], check=True, env=os.environ.copy())
-        PY
-        python3 -m py_compile "$RUNNER_TEMP/replay_v301.py"
-    - name: Stabile V27-Quellkette laden
+      run: "set -euo pipefail\ncurl -fLsS --retry 4 --retry-delay 2 'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/8c17f9bc45d1a3e9481ef1eda51da27fd728eee2/.github/workflows/blank-ps1.yml'\
+        \ \\\n  -o \"$RUNNER_TEMP/lydra_v316_base.yml\"\ntest -s \"$RUNNER_TEMP/lydra_v316_base.yml\"\n"
+    - name: V31.6 Basis wiedergeben - ohne alte Intro Bilder
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'Stabile V27-Quellkette laden'
-    - name: V27 Grundlage – V26 laden
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/replay_menu_base.py\" <<'LYDRA_REPLAY_PY'\n#!/usr/bin/env python3\n\
+        import os,sys,subprocess,yaml\nfrom pathlib import Path\np=Path(os.environ['RUNNER_TEMP'])/'lydra_v316_base.yml'\n\
+        s=yaml.safe_load(p.read_text(encoding='utf-8'))['jobs']['build']['steps']\nmode=sys.argv[1]\nseen_menu=False\n\
+        seen_intro=False\nexecuted=[]\nfor step in s:\n    name=step.get('name','')\n    if name=='V31.4 Introbild\
+        \ 1/8 vorbereiten':seen_intro=True\n    if 'Hauptmenue in V31.3 einbauen' in name:seen_menu=True\n    if\
+        \ mode=='prepare':\n        take=not seen_intro and 'run' in step and name not in ('Werkzeuge installieren',)\n\
+        \    elif mode=='menu':\n        take='Hauptmenue in V31.3 einbauen' in name\n    elif mode=='finish':\n\
+        \        take=seen_menu and 'Hauptmenue in V31.3 einbauen' not in name and 'run' in step\n        if name.endswith('PS1-Artefakt\
+        \ wurde hochgeladen'):take=False\n    else:raise RuntimeError('Unknown mode: '+mode)\n    if name=='Quellprojekt\
+        \ auschecken':take=False\n    if take:\n        cmd=step.get('run')\n        if not isinstance(cmd,str):continue\n\
+        \        print('BASE STEP:',name,flush=True)\n        subprocess.run(['bash','-euo','pipefail','-c',cmd],env=os.environ.copy(),check=True)\n\
+        \        executed.append(name)\nif not executed:raise RuntimeError('No base steps executed: '+mode)\nprint('Replayed',len(executed),'steps:',mode)\n\
+        LYDRA_REPLAY_PY\npython3 \"$RUNNER_TEMP/replay_menu_base.py\"\npython3 \"$RUNNER_TEMP/replay_menu_base.py\"\
+        \ prepare\n"
+    - name: Acht Szenen aus dem Originalvideo laden
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Grundlage – V26 laden'
-    - name: V27 Spiel vorbereiten
+      run: 'set -euo pipefail
+
+        mkdir -p "$RUNNER_TEMP/lydra_new_menu"
+
+        base64 -d > "$RUNNER_TEMP/lydra_new_menu/frame_0.jpg" <<''FRAME_0_END''
+
+        /9j/4AAQSkZJRgABAQAAAQABAAD//gAQTGF2YzYxLjE5LjEwMQD/2wBDAAcFBQYFBAcGBQYIBwcIChELCgkJChUPEAwRGBUaGRgV
+
+        GBcbHichGx0lHRcYIi4iJSgpKywrGiAvMy8qMicqKyr/2wBDAQcICAoJChQLCxQqHBgcKioqKioqKioqKioqKioqKioqKioqKioq
+
+        KioqKioqKioqKioqKioqKioqKioqKioqKir/wAARCAB4AKADAREAAhEBAxEB/8QAGQABAQEBAQEAAAAAAAAAAAAAAQACAwQI/8QA
+
+        MRABAAECAwUGAwkAAAAAAAAAAAIDEhMiMgERQoHwBCFSU3FyUWFiBRQVIzFBVJHh/8QAFwEBAQEBAAAAAAAAAAAAAAAAAAECA//E
+
+        ABcRAQEBAQAAAAAAAAAAAAAAAAARARL/2gAMAwEAAhEDEQA/APnB1RDVTLKGqipUUqBAgQJoQJkQIECBAhABjqio9f3WeDGpjQzd
+
+        9t3eM15rcspeFGnej2PbWhGWJCN23dm3jO63+HywpVMall9fhv3fo3ynbWz7NqSjsljUs0Nk9Xx5HJ28tSnhzlG663iiy6MAQQJR
+
+        AEECAAkEBul4hFLXIADtGpTjHNRuBVKlKUMtO2XuUNGpTjroYnXooKlSMtFOMf6UZy5cv+g9GNQ/jxVHCWaeSNoC1FVoK0FaCBAy
+
+        ABIAAypBCIC0EGlEBVCCtRTaCtAWggAIADKAAMqgTSECo0BUIFRq0DaQRBLBWkGbWYAgAABBkAgAIEGlCBUajEDGKhzA3b7moLKQ
+
+        VsfksFbEgLWYMSICUWQAygAZQAICDbQQaMGmsG4riNxjqawdLW0MY6vcCtSDEY5CDFueXJFZlFBhzVngBlAAwyAEDYFoaBowbawa
+
+        jJcRqMtWVvB17/paRqnHVm4gP0rBiOiJBz45MKzJBhzVzAIMgGRkABBtQg00NRBuMmsGoyztjVy1G8pRmXukUZjKVnCUFzNGZSSj
+
+        EmFZAMjIMIAEBBpQgWgxA3A01Rq5ahxCiuyFBcUVzNGCgRWQDIAZQABkIFoaAqICoQNzVCUSAuAIIGUEAQZAMgBAgLQQSjQFRASi
+
+        KJQArkEAQQMoAAyACCBAQTQQSo0CFQJBAgZBAATIAQIDHWDtiRtjHBjl7vX57d4M4kfLj1yBYkfLj1yBY0fLj1yUWNHy49clDjR8
+
+        uPXJUbo9ojRu/JhK7bxfsg51KmJWlK227hiquYFAAgQAECZECAy1yAIqul4pABEBFQIRAgQIECBAgQAVAbpeKQiB/9k=
+
+        FRAME_0_END
+
+        base64 -d > "$RUNNER_TEMP/lydra_new_menu/frame_1.jpg" <<''FRAME_1_END''
+
+        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
+
+        FRAME_1_END
+
+        base64 -d > "$RUNNER_TEMP/lydra_new_menu/frame_2.jpg" <<''FRAME_2_END''
+
+        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
+
+        fiJAIP/Z
+
+        FRAME_2_END
+
+        base64 -d > "$RUNNER_TEMP/lydra_new_menu/frame_3.jpg" <<''FRAME_3_END''
+
+        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
+
+        gED3F+IkCQf/2Q==
+
+        FRAME_3_END
+
+        base64 -d > "$RUNNER_TEMP/lydra_new_menu/frame_4.jpg" <<''FRAME_4_END''
+
+        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
+
+        i7xFReqVXhDPLNraxt1BOGyO0eH3YZIY9uGyFVEc0+1UFRKpVFVUUkzS5OGcOsmSMaQymwfA8ex2RZ7M0/vGLlURfBDoq5qqKuaV
+
+        7q0WNjqJJclIysL7K7OTG/dtbIvNbaEA/wCIpRPhEJTc2O1ZYN4O4IXG3cJerz598I5x+x1gl7Qc3ItCHLbpX306LlCbpemVUIrt
+
+        AkuQzhvfOW7l4m9PclP5ikbZJ8D9zzed6N0M4WJvr0eYzGp20OUeaPKodkbJEybTwabTSCjY8cmlmJybL5x2bfbH0idWq+wR/eFT
+
+        kumdsoqXyZb7Js4piRuTcw4bko3UBFymte+vh78415Ev2YmOD3X6LWYbw5s7ZiZ3OqlxElPZ4L4LSvSGeR+irx4/Y4tn23AuDUJZ
+
+        iVtf0WBZmuzPx4y6A3tmR9H9ootSSel+gctlxH7Ai+6f8Q6zok9JL0Q/4+z58kZf7xfxDvUQfZGWkyfQXI7PyhTbA/Jd3zo80wS5
+
+        V4UpTOGjmgTlpsn0RzGz8oLzg/JZDrL/AFBcK5JREplA8+NGx02R+hWdl2y/0BD/ALxfxEXq4I6I6HI/Qf8A4aJfYW/iVf1SIfnQ
+
+        Op/46ZK3smN/LG/mL7GjoJItZfZm3zR/FE5a6PZaOikTuS8hI3DOiIkI13fX39fhCrLOfMRnjxY/2CJeX30oJSQjuCrylx9v9rGy
+
+        yLHK5spFLIvgR/I7heaX99sP+bFdk3prfBj8DbEdrHpYyAWiu0iPFcqJFFmcY2ecsf8A3bS+2flSxDBmZkx89xO/gS98Y9ZXxL49
+
+        Oq3Hk4y5DKE+Yl856uXsiVnMo3EhJm6RGyDca4fGyZmYbetbdLdkNBu8Ovv/AF6w7f0LDJfxmez4LLsDgLDmFOCUsIadPdxqiLVF
+
+        8FjknNXyj2sUYxhx0eaTT2JbcbSEMqV2pRaEuUB7+HWlawzkoLk85RlnyVE3ezuyuNYLMCPaWHJQq3sCJLnTKlU99UpwjmnNS6PT
+
+        w6TJjlyagpUR55S74/vHO5/07vFEeMqz58sY+kVv8QjlL7DxIcUjJEBOOiTYj9o4OXxiSyz9DvHElbweU0uNedykILT8khZaia7N
+
+        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
+
+        FRAME_4_END
+
+        base64 -d > "$RUNNER_TEMP/lydra_new_menu/frame_5.jpg" <<''FRAME_5_END''
+
+        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
+
+        FRAME_5_END
+
+        base64 -d > "$RUNNER_TEMP/lydra_new_menu/frame_6.jpg" <<''FRAME_6_END''
+
+        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
+
+        hnAmSdnTDjPRBYa1vGpkTlOpE5RLREnZ/9k=
+
+        FRAME_6_END
+
+        base64 -d > "$RUNNER_TEMP/lydra_new_menu/frame_7.jpg" <<''FRAME_7_END''
+
+        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
+
+        FRAME_7_END
+
+        '
+    - name: Video-Szenen fuer die PlayStation 1 umwandeln
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Spiel vorbereiten'
-    - name: V27 Spielmechaniken erhalten
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/make_intro_frames.py\" <<'LYDRA_GEN_PY'\n#!/usr/bin/env python3\n\
+        import os,base64,struct\nfrom pathlib import Path\nfrom PIL import Image\nhome=Path(os.environ['RUNNER_TEMP'])/'lydra_new_menu'\n\
+        images=[]\nfor i in range(8):\n    p=home/f'frame_{i}.jpg'\n    if not p.exists():raise RuntimeError('Frame\
+        \ missing: '+str(p))\n    with Image.open(p) as img:\n        img=img.convert('RGB')\n        if img.size!=(160,120):raise\
+        \ RuntimeError('Frame size mismatch '+str(img.size))\n        colors=[((b>>3)<<10)|((g>>3)<<5)|(r>>3) for\
+        \ r,g,b in img.getdata()]\n    images.append(colors)\nlines=['/* Frames captured from user-provided 38942.mp4,\
+        \ resized for PS1. */',\n       '#ifndef LYDRA_V314_FRAMES_H','#define LYDRA_V314_FRAMES_H']\nfor i,colors\
+        \ in enumerate(images):\n    lines.append('static const unsigned short vt_v314_image_%d[19200] __attribute__((aligned(4)))\
+        \ = {'%i)\n    for j in range(0,len(colors),16):\n        lines.append(' '+','.join('0x%04x'%v for v in\
+        \ colors[j:j+16])+',')\n    lines.append('};')\nlines.append('static const unsigned short *const vt_v314_images[8]\
+        \ = {')\nlines.append(','.join('vt_v314_image_%d'%i for i in range(8))+'};')\nlines.append('#endif')\nsrc=Path(os.environ['PROJECT_DIR'])/'src'\n\
+        assert (src/'main.c').exists()\np=src/'lydra_v314_frames.h'\np.write_text('\\n'.join(lines)+'\\n',encoding='utf-8')\n\
+        if p.stat().st_size<750_000:raise RuntimeError('Generated header truncated')\nprint('User video frames installed:',p,p.stat().st_size)\n\
+        LYDRA_GEN_PY\npython3 \"$RUNNER_TEMP/make_intro_frames.py\"\n"
+    - name: Vorhandenen Hauptmenue-Controller vorbereiten
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Spielmechaniken erhalten'
-    - name: V27 Lydra-Grafik laden
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/replay_menu_base.py" menu
+
+        '
+    - name: Video-Uebergaenge und interaktive Menueauswahl aktivieren
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Lydra-Grafik laden'
-    - name: V27 Drachenmodelle erhalten
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/patch_video_menu.py\" <<'LYDRA_PATCH_PY'\n#!/usr/bin/env python3\n\
+        \"\"\"Replace the static title and duplicate labels with an interactive video-derived menu.\"\"\"\nimport\
+        \ os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\n\
+        def once(old,new):\n    global s\n    n=s.count(old)\n    if n!=1:raise RuntimeError('V31.7 title patch\
+        \ anchor count=%d: %r'%(n,old[:80]))\n    s=s.replace(old,new,1)\n\n# The logo presentation is automatic:\
+        \ intro frames 0-3, title frames 4-6,\n# then wait for START while flashing the prompt.\n# Use whitespace-independent\
+        \ anchors: the base YAML strips eight indentation columns.\nonce('else if(++vt_v314_elapsed>=150)', 'else\
+        \ if(++vt_v314_elapsed>=180)')\ns,n=re.subn(r'(\\} else if\\(\\+\\+vt_v314_elapsed>=180\\) \\{\\s*)vt_v314_phase=1;',\n\
+        \            r'\\g<1>vt_v314_phase=0;',s,count=1)\nif n!=1:raise RuntimeError('Intro phase transition not\
+        \ found')\nstart_phase=r'\\} else if\\(vt_v314_phase==1\\) \\{\\s*if\\(pressed&\\(PAD_START\\|PAD_CROSS\\\
+        )\\)'\nreplacement=('} else if(vt_v314_phase==0) {\\n'\n             '    if((pressed&(PAD_START|PAD_CROSS))\
+        \ || ++vt_v314_elapsed>=126) {\\n'\n             '        vt_v314_phase=1; vt_v314_elapsed=0;\\n'\n    \
+        \         '    }\\n'\n             '} else if(vt_v314_phase==1) {\\n'\n             '    if(pressed&(PAD_START|PAD_CROSS))')\n\
+        s,n=re.subn(start_phase,lambda _:replacement,s,count=1)\nif n!=1:raise RuntimeError('Title transition anchor\
+        \ not found')\n\n# Video has exactly three menu slots, no extra INTRO line.\nonce('vt_v314_cursor=(vt_v314_cursor+3)%4;',\
+        \ 'vt_v314_cursor=(vt_v314_cursor+2)%3;')\nonce('vt_v314_cursor=(vt_v314_cursor+1)%4;', 'vt_v314_cursor=(vt_v314_cursor+1)%3;')\n\
+        choice=r\"\"\"static int vt_v314_choice_frame(void) {\n    if(vt_v314_phase==-1){\n        if(vt_v314_elapsed<24)return\
+        \ 0;\n        if(vt_v314_elapsed<64)return 1;\n        if(vt_v314_elapsed<112)return 2;\n        return\
+        \ 3;\n    }\n    if(vt_v314_phase==0){\n        if(vt_v314_elapsed<30)return 4;\n        if(vt_v314_elapsed<75)return\
+        \ 5;\n        return 6;\n    }\n    if(vt_v314_phase==1)return 6;\n    return 7;\n}\n\"\"\"\npat=r'static\
+        \ int vt_v314_choice_frame\\(void\\)\\s*\\{\\s*if\\(vt_v314_phase==-1\\)return -1;\\s*return 7;\\s*\\}'\n\
+        s,n=re.subn(pat,lambda _:choice.strip(),s,count=1)\nif n!=1:raise RuntimeError('Title-frame selector missing')\n\
+        \n# Keep artwork supplied by user; no second dark menu and no duplicate words.\ns,n=re.subn(r'if\\(vt_v314_phase>=2\\\
+        ) \\{\\s*/\\* Place an opaque ink-blue submenu tile behind the text\\.',\n            'if(vt_v314_phase==3)\
+        \ {\\n    /* Place an opaque ink-blue submenu tile behind the text.',s,count=1)\nif n!=1:raise RuntimeError('Submenu\
+        \ panel anchor not found')\nonce('setXY0(panel,190,157);','setXY0(panel,94,159);')\nonce('setWH(panel,130,83);','setWH(panel,150,81);')\n\
+        once('FntOpen(196, 162, 124, 76, 0, 512); /* title menu */',\n     'FntOpen(105, 167, 120, 70, 0, 512);\
+        \ /* title menu cursor / options */')\n\n# The branded intro artwork includes the studio text already.\n\
+        once('if(vt_v314_elapsed>12)FntPrint(6,\"DKVierich Produktion\");',\n     '/* Logo and DKVierich Produktion\
+        \ come directly from the video frames. */')\ns,n=re.subn(r'if\\(vt_v314_elapsed>40 && \\(vt_v314_blink%80u\\\
+        )<54u\\)\\s*FntPrint\\(4,\"   START\"\\);',\n            '/* The intro frames contain the production name;\
+        \ START appears only on title. */',s,count=1)\nif n!=1:raise RuntimeError('Old premature START overlay not\
+        \ found')\n\n# Show only a moving cursor; names and background are native source-video artwork.\nmenu_pat=r'FntPrint\\\
+        (5,\"%c NEUES SPIEL\\\\n\\\\n\"[^;]*;[\\s\\S]*?FntPrint\\(5,\"%c INTRO\\\\n\"[^;]*;'\nmenu_cursor=('FntPrint(5,\"\
+        %c\\\\n\\\\n%c\\\\n\\\\n%c\\\\n\",\\n'\n             '   vt_v314_cursor==0?\\'>\\':\\' \\',\\n'\n      \
+        \       '   vt_v314_cursor==1?\\'>\\':\\' \\',\\n'\n             '   vt_v314_cursor==2?\\'>\\':\\' \\');')\n\
+        s,n=re.subn(menu_pat,lambda _:menu_cursor,s,count=1)\nif n!=1:raise RuntimeError('Original four-choice menu\
+        \ text not found')\n\nfor tag in ('vt_v314_choice_frame(void)','vt_v314_input(unsigned int pressed)',\n\
+        \            'vt_v281_resolve_movement();','vt_save_game(void)','vt_load_game(void)',\n            'vt_v293_move((unsigned\
+        \ int)pad);'):\n    if tag not in s:raise RuntimeError('Gameplay/title function missing: '+tag)\np.write_text(s,encoding='utf-8')\n\
+        print('V31.7 video-derived interactive main menu installed. Saving and gameplay unchanged.')\nLYDRA_PATCH_PY\n\
+        python3 \"$RUNNER_TEMP/patch_video_menu.py\"\n"
+    - name: Spielmechanik und PS1 Builder der Basis ausfuehren
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Drachenmodelle erhalten'
-    - name: V27 Animationen wiederherstellen
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/replay_menu_base.py" finish
+
+        '
+    - name: PS1 Dateien vor Upload pruefen
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V27 Animationen wiederherstellen'
-    - name: V28 Kamera Landschaft und Drachen verbessern
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V28 Kamera Landschaft und Drachen verbessern'
-    - name: V28.1 Kollision und Kamera-Sicht korrigieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V28.1 Kollision und Kamera-Sicht korrigieren'
-    - name: V28.2 Begehbare Haeuser Innenraeume und wandernde NPCs
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V28.2 Begehbare Haeuser Innenraeume und wandernde NPCs'
-    - name: V29 Fantasy Grafikstil aus Referenzbild
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V29 Fantasy Grafikstil aus Referenzbild'
-    - name: V29.1 Einheitliche Staedte und PS1-Grafikpolitur
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V29.1 Einheitliche Staedte und PS1-Grafikpolitur'
-    - name: V29.1 Schwarzes Startmenue Optionen Tasten Lautstaerke Texttempo
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V29.1 Schwarzes Startmenue Optionen Tasten Lautstaerke Texttempo'
-    - name: V29.2 Vollbild Ortsnamen Kompass Kontext Aktion Kamera
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V29.2 Vollbild Ortsnamen Kompass Kontext Aktion Kamera'
-    - name: V29.3 Kameraschwenk und Laufrichtung reparieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V29.3 Kameraschwenk und Laufrichtung reparieren'
-    - name: V30.0 – 360 Grad Boden, Ferngebirge und LOD
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V30.0 – 360 Grad Boden, Ferngebirge und LOD'
-    - name: V30.1 Korrigiert – Sichtbarkeit Sonne und Tag Nacht
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'V30.1 Korrigiert – Sichtbarkeit Sonne und Tag Nacht'
-    - name: V30.2 360-Grad-Gelaende-Fix anwenden
-      shell: bash
-      run: |
-        set -euo pipefail
-        test -n "${PROJECT_DIR:-}" && test -f "$PROJECT_DIR/src/main.c"
-        cat > "$RUNNER_TEMP/lydra_v302_world_fix.py" <<'PY'
-        #!/usr/bin/env python3
-        # V30.2 full 360 degree terrain and full-circle distant skyline.
-        # Based on V30.1; no changes to saves, input, doors or combat.
-        import os
-        import re
-        from pathlib import Path
+      run: 'set -euo pipefail
 
-        path=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-        s=path.read_text(encoding='utf-8')
+        for f in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do test -s "artifacts/$f" || { echo "::error::PS1-Datei
+        fehlt: $f"; exit 1; }; done
 
-        def span(name):
-            match=list(re.finditer(r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{',s,re.S))
-            if len(match)!=1:
-                raise RuntimeError('V30.2 missing/duplicate function '+name+': '+str(len(match)))
-            p=match[0].end()
-            depth=1
-            state='normal'
-            while p<len(s) and depth:
-                c=s[p]
-                nxt=s[p+1] if p+1<len(s) else ''
-                if state=='normal':
-                    if c=='/' and nxt=='/':state='line';p+=1
-                    elif c=='/' and nxt=='*':state='block';p+=1
-                    elif c=='"':state='string'
-                    elif c=="'":state='char'
-                    elif c=='{':depth+=1
-                    elif c=='}':depth-=1
-                elif state=='line':
-                    if c=='\n':state='normal'
-                elif state=='block':
-                    if c=='*' and nxt=='/':state='normal';p+=1
-                elif state=='string' or state=='char':
-                    if c=='\\':p+=1
-                    elif (state=='string' and c=='"') or (state=='char' and c=="'"):
-                        state='normal'
-                p+=1
-            if depth:
-                raise RuntimeError('V30.2 unclosed function '+name)
-            return match[0].start(),p
+        grep -qi ''VTRAIL.bin'' artifacts/VTRAIL.cue
 
-        ground=r'''
-        /* V30.2: A complete 360 degree terrain ring with deterministic coverage.
-           The previous V30.1 patch exhausted its far-cell budget while scanning
-           south-to-north, starving directions at the end of the scan.
-           This version fits a full ring in a bounded polygon budget (no FOV cull).
-           Render near tiles at the same height as the existing world floor. */
-        static void vt_v300_extend_ground(void) {
-            int gx,gz,ix,iz;
-            int r1,g1,b1,r2,g2,b2;
-            const int near_step=140, near_cells=16;
-            const int far_step=380, far_cells=16;
-            if(region==1) {
-                r1=84;g1=134;b1=128;r2=62;g2=108;b2=112;
-            } else if(region==2) {
-                r1=116;g1=143;b1=87;r2=78;g2=111;b2=77;
-            } else {
-                r1=85;g1=162;b1=90;r2=54;g2=132;b2=75;
-            }
-            /* Centered on player, independently of where camera faces. */
-            gx=(px/near_step)*near_step-(near_cells/2)*near_step;
-            gz=(pz/near_step)*near_step-(near_cells/2)*near_step;
-            vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,
-                                r1,g1,b1,r2,g2,b2);
-
-            /* Outer 16x16 square spans 6080 world units; overlapping center
-               suppresses only 4x4 cells which the higher-detail inner terrain covers.
-               ALL remaining far cells are drawn, not just the first N in row order. */
-            gx=(px/far_step)*far_step-(far_cells/2)*far_step;
-            gz=(pz/far_step)*far_step-(far_cells/2)*far_step;
-            for(iz=0;iz<far_cells;iz++) {
-                for(ix=0;ix<far_cells;ix++) {
-                    int x=gx+ix*far_step;
-                    int z=gz+iz*far_step;
-                    int dx=x+far_step/2-px;
-                    int dz=z+far_step/2-pz;
-                    int shade=vt_v300_hash(x,z)&3;
-                    if(vt_v300_abs(dx)<720 && vt_v300_abs(dz)<720)
-                        continue;
-                    vt_v241_flat(x,z,x+far_step,z+far_step,36,
-                                  r1-shade*3,g1-shade*3,b1-shade*2);
-                }
-            }
-        }
-        '''
-
-        horizon=r'''
-        /* V30.2: Continuous ring of far peaks, so turning 180 degrees doesn't
-           reveal a completely empty backdrop. Peaks are visual only and remain
-           attached to the camera-centered horizon, never to the collision world. */
-        static void vt_v300_horizon(void) {
-            int i;
-            for(i=0;i<24;i++) {
-                int angle=(i*4096)/24;
-                int x=px+(vt_v293_sin(angle)*3320)/1024;
-                int z=pz+(vt_v293_cos(angle)*3320)/1024;
-                int height=260+((i*7+region*3)%5)*47;
-                int r=98,g=143,b=176;
-                if(region==1) {r=96;g=165;b=202;height+=75;}
-                else if(region==2) {r=111;g=137;b=161;height+=40;}
-                vt_v24_peak(x,z,740+(i%3)*45,height,r,g,b);
-                if((i&1)==0) {
-                    int xx=px+(vt_v293_sin(angle)*2470)/1024;
-                    int zz=pz+(vt_v293_cos(angle)*2470)/1024;
-                    vt_v24_peak(xx,zz,440,150+(i%3)*20,
-                        region==1?82:73,region==1?132:125,region==1?151:97);
-                }
-            }
-        }
-        '''
-        for name,new in [('vt_v300_extend_ground',ground),('vt_v300_horizon',horizon)]:
-            a,b=span(name)
-            s=s[:a]+new.strip()+'\n'+s[b:]
-
-        required=(
-            'vt_v301_sun();', 'vt_v301_day_night_hud();',
-            'vt_v293_move((unsigned int)pad);', 'vt_v281_resolve_movement();',
-            'vt_v282_draw_house_npcs(', 'vt_opt_draw_page();',
-            'vt_v292_draw_exploration_hud();', 'vt_save_game(void)',
-            'vt_load_game(void)',
-        )
-        for item in required:
-            if item not in s:
-                raise RuntimeError('V30.2 missing preserved system: '+item)
-        if 'if(rendered>=VT_V300_FAR_CELL_BUDGET)return;' in s:
-            raise RuntimeError('V30.2 still contains one-sided cell budget cutoff')
-        if s.count('static void vt_v300_extend_ground(void)')!=1 or s.count('static void vt_v300_horizon(void)')!=1:
-            raise RuntimeError('V30.2 functions were duplicated')
-        path.write_text(s,encoding='utf-8')
-        print('V30.2: centered 16x16 near mesh, 360-degree coarse 16x16 ring.')
-        print('V30.2: no camera-direction filter / scan-order limit; full distant mountains.')
-        print('V30.2: preserved V30.1 game systems and Memory Card layout.')
-        PY
-        python3 "$RUNNER_TEMP/lydra_v302_world_fix.py"
-    - name: V30.3 Sicht, Boden, Himmel und HUD reparieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lydra_v303_patch.py" <<'PY'
-        #!/usr/bin/env python3
-        """V30.3 view-space clipping and OT capacity correction for actual PS1 source.
-        Input must be V30.2 source created from the successful V30.1 chain + V30.2 fix.
-        """
-        import os
-        import re
-        from pathlib import Path
-        p=Path(os.environ['PROJECT_DIR']) / 'src/main.c'
-        s=p.read_text(encoding='utf-8')
-
-        def once(old,new):
-            global s
-            n=s.count(old)
-            if n!=1: raise RuntimeError('V30.3 expected one anchor %r, found %d'%(old[:90],n))
-            s=s.replace(old,new,1)
-
-        def span(name):
-            matches=list(re.finditer(r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{',s,re.S))
-            if len(matches)!=1: raise RuntimeError('V30.3 missing or duplicate function %s: %d'%(name,len(matches)))
-            p0=matches[0].end(); pos=p0; depth=1; state='code'
-            while pos<len(s) and depth:
-                c=s[pos]; nxt=s[pos+1] if pos+1<len(s) else ''
-                if state=='code':
-                    if c=='/' and nxt=='/':state='line';pos+=1
-                    elif c=='/' and nxt=='*':state='block';pos+=1
-                    elif c=='"':state='string'
-                    elif c=="'":state='char'
-                    elif c=='{':depth+=1
-                    elif c=='}':depth-=1
-                elif state=='line':
-                    if c=='\n':state='code'
-                elif state=='block':
-                    if c=='*' and nxt=='/':state='code';pos+=1
-                elif state in ('string','char'):
-                    if c=='\\':pos+=1
-                    elif (state=='string' and c=='"') or (state=='char' and c=="'"):state='code'
-                pos+=1
-            if depth:raise RuntimeError('V30.3 unbalanced function '+name)
-            return matches[0].start(),pos
-
-        def replace_func(name,definition):
-            global s
-            a,b=span(name)
-            s=s[:a]+definition.strip()+'\n'+s[b:]
-
-        # Original engine discards triangles based on UNROTATED Z. When the camera turns
-        # this makes perfectly visible landscape disappear. Correct in camera/view space.
-        once('#define OT_LEN 256','#define OT_LEN 1024')
-        once('static unsigned char prim_arena[2][65536]', 'static unsigned char prim_arena[2][131072]')
-        once('bucket = (int)(depth >> 2);','bucket = (int)(depth >> 3);')
-        anchor='static void draw_triangle3(SVECTOR *v0, SVECTOR *v1, SVECTOR *v2, int r, int g, int b) {'
-        once(anchor, '''/* Camera functions/globals are defined farther down by V29.3. */
-        static int vt_v292_cam_yaw;
-        static int vt_v293_sin(int angle);
-        static int vt_v293_cos(int angle);
-        '''+anchor)
-        # Original old clipping from V7: remove the three unrotated z+CAMERA_Z checks.
-        clip=re.compile(r'/\* Never project a vertex behind the camera or across the near plane\. \*/\s*if\s*\(v0->vz\s*\+\s*CAMERA_Z\s*<\s*NEAR_Z\s*\|\|\s*v1->vz\s*\+\s*CAMERA_Z\s*<\s*NEAR_Z\s*\|\|\s*v2->vz\s*\+\s*CAMERA_Z\s*<\s*NEAR_Z\)\s*return\s*;',re.S)
-        clipping='''/* V30.3: view-space near clipping matching the rotating camera. */
-            {
-                int sn=vt_v293_sin(vt_v292_cam_yaw);
-                int cs=vt_v293_cos(vt_v292_cam_yaw);
-                long z0=((long)v0->vz*cs-(long)v0->vx*sn)/1024 + CAMERA_Z - 70;
-                long z1=((long)v1->vz*cs-(long)v1->vx*sn)/1024 + CAMERA_Z - 70;
-                long z2=((long)v2->vz*cs-(long)v2->vx*sn)/1024 + CAMERA_Z - 70;
-                if(z0<NEAR_Z || z1<NEAR_Z || z2<NEAR_Z)return;
-            }'''
-        s,n=clip.subn(clipping,s,count=1)
-        if n!=1:raise RuntimeError('V30.3: original erroneous unrotated near-plane test not found')
-
-        # Old prototype front-only ground overlaps V30.2 terrain; avoid z-fighting.
-        replace_func('draw_ground', '''static void draw_ground(void) {
-            /* V30.3: Terrain is supplied by vt_v300_extend_ground in the world renderer.
-               The old fixed front-only ground caused overlapping surfaces and polygons. */
-        }''')
-
-        # Near and far terrain are both generated around player regardless of camera angle;
-        # the far tiles sit below the near tiles to avoid overpainting the avatar.
-        replace_func('vt_v300_extend_ground',r'''
-        static void vt_v300_extend_ground(void) {
-            int ix, iz, gx, gz;
-            int r1,g1,b1,r2,g2,b2;
-            const int near_step=140, near_cells=16;
-            const int far_step=420, far_cells=14;
-            if(region==1){r1=84;g1=134;b1=128;r2=62;g2=108;b2=112;}
-            else if(region==2){r1=116;g1=143;b1=87;r2=78;g2=111;b2=77;}
-            else {r1=85;g1=162;b1=90;r2=54;g2=132;b2=75;}
-            /* Coarse 360-degree ring first: stable in fixed world coordinates. */
-            gx=(px/far_step)*far_step-(far_cells/2)*far_step;
-            gz=(pz/far_step)*far_step-(far_cells/2)*far_step;
-            for(iz=0;iz<far_cells;iz++)for(ix=0;ix<far_cells;ix++){
-                int x=gx+ix*far_step, z=gz+iz*far_step;
-                int dx=x+far_step/2-px, dz=z+far_step/2-pz;
-                int shade=vt_v300_hash(x,z)&3;
-                /* Only skip cells fully inside the detailed center. */
-                if(vt_v300_abs(dx)+far_step/2<840 &&
-                   vt_v300_abs(dz)+far_step/2<840)continue;
-                vt_v241_flat(x,z,x+far_step,z+far_step,44,
-                    r1-shade*3,g1-shade*3,b1-shade*2);
-            }
-            /* Fine center extends in every direction, without a directional cutoff. */
-            gx=(px/near_step)*near_step-(near_cells/2)*near_step;
-            gz=(pz/near_step)*near_step-(near_cells/2)*near_step;
-            vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,
-                                r1,g1,b1,r2,g2,b2);
-        }
-        ''')
-
-        # Scenic mountain loop retains a full ring but uses a regular spacing and
-        # bounded number of polygons, with enough arc overlap to avoid giant gaps.
-        replace_func('vt_v300_horizon',r'''
-        static void vt_v300_horizon(void) {
-            int i;
-            for(i=0;i<24;i++) {
-                int angle=(i*4096)/24;
-                int x=px+(vt_v293_sin(angle)*2600)/1024;
-                int z=pz+(vt_v293_cos(angle)*2600)/1024;
-                int high=260+((i*7+region*3)%5)*37;
-                int r=93,g=140,b=179;
-                if(region==1){r=104;g=162;b=201;high+=75;}
-                else if(region==2){r=109;g=140;b=168;high+=40;}
-                vt_v24_peak(x,z,790,high,r,g,b);
-            }
-        }
-        ''')
-
-        # Slightly look down so ground fills more of the screen, with a more centered
-        # follow view. Keep original obstruction blend for houses.
-        if 'camera_rot.vx = 104 + vt_v28_camera_blend / 3;' in s:
-            once('camera_rot.vx = 104 + vt_v28_camera_blend / 3;',
-                 'camera_rot.vx = 160 + vt_v28_camera_blend / 4;')
-        if 'camera_pos.vy = 72 + vt_v28_camera_blend / 3;' in s:
-            once('camera_pos.vy = 72 + vt_v28_camera_blend / 3;',
-                 'camera_pos.vy = 48 + vt_v28_camera_blend / 4;')
-
-        # Cleaner counter next to compass. Preserve actual frame-based timekeeping.
-        once('FntPrint(4,"TAG %3d%%\\nNAC %3d%%\\n",tag,nacht);',
-             'FntPrint(4,"T %3d%%\\nN %3d%%\\n",tag,nacht);')
-
-        # Daytime sky and a screen-space sun are drawn behind the polygons; night gets
-        # a darker sky and moon. This avoids the 3-D sun being culled by the GTE far limit.
-        replace_func('vt_v301_sun',r'''
-        static void vt_v301_sun(void) {
-            unsigned int t=vt_v301_clock%7200u;
-            int daytime=t<4800u;
-            int sx,sy,alt;
-            TILE *disc;
-            unsigned int aligned;
-            if(daytime){
-                alt=(t<2400u)?(int)t:(int)(4800u-t);
-                draw[db].r0=(unsigned char)(64+alt/120);
-                draw[db].g0=(unsigned char)(112+alt/80);
-                draw[db].b0=(unsigned char)(180+alt/110);
-                sx=24+(int)(t*270u/4800u);
-                sy=86-alt/42;
-            } else {
-                alt=(int)(t-4800u);
-                draw[db].r0=12;
-                draw[db].g0=25;
-                draw[db].b0=55;
-                sx=30+alt*245/2400;
-                sy=45;
-            }
-            aligned=(prim_used+3u)&~3u;
-            if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;
-            disc=(TILE*)(prim_arena[db]+aligned);
-            prim_used=aligned+sizeof(TILE);
-            setTile(disc);
-            setXY0(disc,sx-(daytime?12:8),sy-(daytime?12:8));
-            setWH(disc,daytime?24:16,daytime?24:16);
-            if(daytime)setRGB0(disc,255,231,129);
-            else setRGB0(disc,194,217,241);
-            /* High-depth OT entry draws behind scenery, not over the player's face. */
-            addPrim(ot[db]+OT_LEN-2,disc);
-        }
-        ''')
-
-        required=['vt_v293_move((unsigned int)pad);','vt_v281_resolve_movement();',
-                  'vt_v282_draw_house_npcs(', 'vt_opt_draw_page();','vt_save_game(void)',
-                  'vt_load_game(void)','vt_v292_draw_exploration_hud();']
-        for feature in required:
-            if feature not in s:raise RuntimeError('V30.3 missing gameplay feature '+feature)
-        assert s.count('static void vt_v300_extend_ground(void)')==1
-        assert s.count('static void vt_v301_sun(void)')==1
-        p.write_text(s,encoding='utf-8')
-        print('V30.3: camera-aware near clipping, longer depth sorting, balanced 360° terrain.')
-        print('V30.3: removed duplicate front-only ground; tuned camera, sun/moon and time label.')
-        print('Existing save/card structure, controls, capture, NPCs, indoor houses untouched.')
-        PY
-        python3 "$RUNNER_TEMP/lydra_v303_patch.py"
-    - name: V30.4 Sonne und Mond weltfest ausrichten
-      shell: bash
-      run: |
-        set -euo pipefail
-        test -s "$PROJECT_DIR/src/main.c"
-        cat > "$RUNNER_TEMP/lydra_v304_sonne.py" <<'PY'
-        #!/usr/bin/env python3
-        """Fix sky-body rotation without changing gameplay or Memory Card layout."""
-        import os,re
-        from pathlib import Path
-        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-        s=p.read_text(encoding='utf-8')
-        pattern=r'(?ms)^static void vt_v301_sun\(void\)\s*\{.*?^\}'
-        new_code='/* V30.4: celestial body has a compass bearing independent of the camera.\n   Day: east -> south -> west. The moon travels the same path at night.\n   A distant sky object uses angular projection, so it also stays steady\n   when the player walks or the camera turns. */\nstatic void vt_v301_sun(void) {\n    unsigned int t=vt_v301_clock%7200u;\n    int day=(t<4800u);\n    int segment=day?(int)t:(int)(t-4800u);\n    int duration=day?4800:2400;\n    int half=duration/2;\n    int rise=(segment<half)?segment:(duration-segment);\n    int bearing=3072-(segment*2048)/duration;\n    int relative=(bearing-vt_v292_cam_yaw+2048)&4095;\n    int sx,sy;\n    TILE *disc;\n    unsigned int aligned;\n\n    relative-=2048;\n    /* Preserve existing day/night sky illumination regardless of camera. */\n    if(day) {\n        draw[db].r0=(unsigned char)(64+rise/120);\n        draw[db].g0=(unsigned char)(112+rise/80);\n        draw[db].b0=(unsigned char)(180+rise/110);\n    } else {\n        draw[db].r0=12;\n        draw[db].g0=25;\n        draw[db].b0=55;\n    }\n    /* Approximately 72-degree horizontal field of view: hide objects outside it.\n       In particular, never draw a sun/moon permanently in the same screen spot. */\n    if(relative < -490 || relative > 490)return;\n    sx=160-(relative*160)/490;\n    sy=day?(89-rise/47):(79-rise/42);\n    aligned=(prim_used+3u)&~3u;\n    if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;\n    disc=(TILE*)(prim_arena[db]+aligned);\n    prim_used=aligned+sizeof(TILE);\n    setTile(disc);\n    setXY0(disc,sx-(day?12:8),sy-(day?12:8));\n    setWH(disc,day?24:16,day?24:16);\n    if(day)setRGB0(disc,255,231,129);\n    else setRGB0(disc,194,217,241);\n    addPrim(ot[db]+OT_LEN-2,disc);\n}'
-        s,count=re.subn(pattern,lambda m:new_code,s)
-        if count!=1:
-            raise RuntimeError('V30.4 sun function missing or duplicated: '+str(count))
-        for marker in ('vt_v301_day_night_hud();','vt_v293_move((unsigned int)pad);',
-                       'vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',
-                       'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)'):
-            if marker not in s:raise RuntimeError('V30.4 expected system missing: '+marker)
-        if s.count('static void vt_v301_sun(void)')!=1:
-            raise RuntimeError('V30.4 sun replaced more than once')
-        p.write_text(s,encoding='utf-8')
-        print('V30.4 sun/moon anchored to world compass, day clock unchanged.')
-        print('Camera yaw affects screen projection but no longer celestial world bearing.')
-        PY
-        python3 "$RUNNER_TEMP/lydra_v304_sonne.py"
-    - name: V30.5 Sonnenaufgang Osten Sonnenuntergang Westen
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 - <<'PY'
-        import os
-        from pathlib import Path
-        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-        s=p.read_text(encoding='utf-8')
-        old='int bearing=3072-(segment*2048)/duration;'
-        new='int bearing=1024+(segment*2048)/duration;'
-        if s.count(old)!=1:
-            raise RuntimeError('V30.5: Himmelsrichtung-Anker fehlt oder ist doppelt: '+str(s.count(old)))
-        s=s.replace(old,new,1)
-        # Konvention des vorhandenen Kompasses: 0=N, 1024=O, 2048=S, 3072=W.
-        # Sonne: 0...4799; Mond: 4800...7199 im 7200-Takt-Zyklus.
-        for duration in (4800,2400):
-            assert 1024+(0*2048)//duration==1024
-            assert 1024+((duration//2)*2048)//duration==2048
-            assert 1024+((duration-1)*2048)//duration==3072-((2048+duration-1)//duration)
-        for marker in ('vt_v301_day_night_hud();','vt_v293_move((unsigned int)pad);',
-                       'vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',
-                       'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)'):
-            if marker not in s:
-                raise RuntimeError('V30.5: Spielsystem fehlt: '+marker)
-        p.write_text(s,encoding='utf-8')
-        print('V30.5: Sonne und Mond Osten -> Sueden -> Westen; Kamera unveraendert.')
-        PY
-    - name: V31 Figuren Drachen und Boden grafisch reparieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        test -s "$PROJECT_DIR/src/main.c"
-        cat > "$RUNNER_TEMP/lydra_v31_patch.py" <<'LYDRA_V31_PYTHON'
-        #!/usr/bin/env python3
-        """V31 source patch for Lydra World Of Dragon's V30.5 PS1 C program."""
-        import os, re
-        from pathlib import Path
-
-        src=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-        s=src.read_text(encoding='utf-8')
-
-        def span(name):
-            matches=list(re.finditer(r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{',s,re.S))
-            if len(matches)!=1:
-                raise RuntimeError('V31: expected one function '+name+', found '+str(len(matches)))
-            p=matches[0].end(); level=1; state='code'; at=p
-            while p<len(s) and level:
-                c=s[p]; nxt=s[p+1] if p+1<len(s) else ''
-                if state=='code':
-                    if c=='/' and nxt=='/': state='line';p+=1
-                    elif c=='/' and nxt=='*': state='block';p+=1
-                    elif c=='"': state='string'
-                    elif c=="'": state='char'
-                    elif c=='{':level+=1
-                    elif c=='}':level-=1
-                elif state=='line':
-                    if c=='\n':state='code'
-                elif state=='block':
-                    if c=='*' and nxt=='/':state='code';p+=1
-                elif state in ('string','char'):
-                    if c=='\\':p+=1
-                    elif (state=='string' and c=='"') or (state=='char' and c=="'"): state='code'
-                p+=1
-            if level: raise RuntimeError('V31 unmatched braces in '+name)
-            return matches[0].start(),at,p-1,p
-
-        def append(name, code):
-            global s
-            a,opening,closing,end=span(name)
-            s=s[:closing]+'\n'+code+'\n'+s[closing:]
-
-        def once(old,new):
-            global s
-            n=s.count(old)
-            if n!=1:raise RuntimeError('V31 expected exact anchor %r, got %d'%(old[:90],n))
-            s=s.replace(old,new,1)
-
-        for token in ('vt_v293_player_box(', 'vt_v300_extend_ground(void)',
-                      'vt_v301_sun(void)', 'vt_v281_resolve_movement();',
-                      'vt_v282_draw_house_npcs(', 'vt_v292_draw_exploration_hud();',
-                      'vt_save_game(void)', 'vt_load_game(void)', 'vt_v21_party[3]'):
-            if token not in s:raise RuntimeError('V31 missing V30.5 subsystem: '+token)
-        if 'static void vt_v31_oval(' in s:
-            raise RuntimeError('V31 already applied')
-
-        # Correct foreground holes: finer centered terrain, plus real view-space near-plane
-        # clipping rather than discarding every triangle with any vertex behind camera.
-        a,opening,closing,end=span('vt_v300_extend_ground')
-        body=s[opening:closing]
-        if 'near_step=140, near_cells=16' not in body:
-            raise RuntimeError('V31: unexpected stable V30.5 near-terrain layout')
-        body=body.replace('near_step=140, near_cells=16', 'near_step=120, near_cells=20')
-        s=s[:opening]+body+s[closing:]
-
-        start,op,cl,finish=span('draw_triangle3')
-        body=s[op:cl]
-        near=re.compile(r'/\* V30\.3: view-space near clipping matching the rotating camera\. \*/\s*\{.*?\n\s*\}',re.S)
-        clip=r'''/* V31: clip the polygon at the rotated camera's near plane.
-               Dropping an entire terrain triangle when just one corner is behind
-               was the main reason for the blue wedge at the bottom of the screen. */
-            if (!vt_v31_clipping) {
-                SVECTOR vertices[3]={*v0,*v1,*v2};
-                SVECTOR clipped[4];
-                long view_z[3];
-                int n=0, i, prev=2;
-                int sn=vt_v293_sin(vt_v292_cam_yaw);
-                int cs=vt_v293_cos(vt_v292_cam_yaw);
-                const long near_plane=NEAR_Z+18;
-                for(i=0;i<3;i++)
-                    view_z[i]=((long)vertices[i].vz*cs-(long)vertices[i].vx*sn)/1024
-                              +CAMERA_Z-70;
-                for(i=0;i<3;i++) {
-                    int old_in=view_z[prev]>=near_plane;
-                    int now_in=view_z[i]>=near_plane;
-                    if(old_in!=now_in) {
-                        long denom=view_z[i]-view_z[prev];
-                        long fac=denom ? ((near_plane-view_z[prev])*4096)/denom : 0;
-                        SVECTOR cut;
-                        if(fac<0)fac=0;if(fac>4096)fac=4096;
-                        cut.vx=(short)(vertices[prev].vx+
-                               ((long)(vertices[i].vx-vertices[prev].vx)*fac)/4096);
-                        cut.vy=(short)(vertices[prev].vy+
-                               ((long)(vertices[i].vy-vertices[prev].vy)*fac)/4096);
-                        cut.vz=(short)(vertices[prev].vz+
-                               ((long)(vertices[i].vz-vertices[prev].vz)*fac)/4096);
-                        cut.pad=0;
-                        if(n<4)clipped[n++]=cut;
-                    }
-                    if(now_in && n<4)clipped[n++]=vertices[i];
-                    prev=i;
-                }
-                if(n<3)return;
-                if(n!=3 || view_z[0]<near_plane || view_z[1]<near_plane || view_z[2]<near_plane) {
-                    vt_v31_clipping=1;
-                    draw_triangle3(&clipped[0],&clipped[1],&clipped[2],r,g,b);
-                    if(n==4)draw_triangle3(&clipped[0],&clipped[2],&clipped[3],r,g,b);
-                    vt_v31_clipping=0;
-                    return;
-                }
-            }'''
-        new_body,count=near.subn(clip,body,count=1)
-        if count!=1:
-            raise RuntimeError('V31: V30.3 camera view clipping block not found')
-        s=s[:op]+new_body+s[cl:]
-        # Need declaration before draw_triangle3 and definition once.
-        start,op,cl,finish=span('draw_triangle3')
-        s=s[:start]+'static int vt_v31_clipping=0;\n'+s[start:]
-
-        # Rounder low-poly primitives made of triangular bands rather than a cube.
-        models=r'''
-        /* V31: eight-sided, faceted oval. ~32 triangles per model detail. */
-        static void vt_v31_oval(int wx,int wy,int wz,int rx,int ry,int rz,
-                                int r,int g,int b) {
-            int i;
-            SVECTOR top={(short)(wx-px),(short)(wy-ry),(short)(wz-pz),0};
-            SVECTOR bottom={(short)(wx-px),(short)(wy+ry),(short)(wz-pz),0};
-            for(i=0;i<8;i++) {
-                int ca=vt_v293_cos(i*512),sa=vt_v293_sin(i*512);
-                int cb=vt_v293_cos(((i+1)&7)*512),sb=vt_v293_sin(((i+1)&7)*512);
-                SVECTOR a={(short)(wx+rx*ca/1024-px),(short)(wy-ry/3),(short)(wz+rz*sa/1024-pz),0};
-                SVECTOR d={(short)(wx+rx*cb/1024-px),(short)(wy-ry/3),(short)(wz+rz*sb/1024-pz),0};
-                SVECTOR c={(short)a.vx,(short)(wy+ry/3),(short)a.vz,0};
-                SVECTOR e={(short)d.vx,(short)(wy+ry/3),(short)d.vz,0};
-                int tint=(i&1)?92:100;
-                draw_triangle3(&top,&a,&d,r*tint/100,g*tint/100,b*tint/100);
-                draw_triangle3(&a,&c,&d,r,g,b);
-                draw_triangle3(&d,&c,&e,r*4/5,g*4/5,b*4/5);
-                draw_triangle3(&bottom,&e,&c,r*3/4,g*3/4,b*3/4);
-            }
-        }
-        static void vt_v31_flat_shadow(int wx,int wz,int radius) {
-            int i;
-            SVECTOR center={(short)(wx-px),34,(short)(wz-pz),0};
-            for(i=0;i<8;i++){
-                int ang=i*512,next=((i+1)&7)*512;
-                SVECTOR a={(short)(wx+radius*vt_v293_cos(ang)/1024-px),34,
-                           (short)(wz+radius*vt_v293_sin(ang)/1024-pz),0};
-                SVECTOR b={(short)(wx+radius*vt_v293_cos(next)/1024-px),34,
-                           (short)(wz+radius*vt_v293_sin(next)/1024-pz),0};
-                draw_triangle3(&center,&a,&b,31,75,47);
-            }
-        }
-        '''
-        indices=[span('vt_player')[0],span('vt_sparkit')[0]]
-        idx=min(indices)
-        s=s[:idx]+models+'\n'+s[idx:]
-
-        player_extra=r'''
-            /* V31: faceted rounded head, narrow neck, shoulders and moving limbs. */
-            {
-                int step_anim=(step_count&7)<4?3:-3;
-                vt_v31_flat_shadow(x,z+4,22);
-                vt_v31_oval(x,-35,z-2,10,13,9,224,175,127);
-                vt_v31_oval(x,-44,z-6,10,4,8,69,47,29);
-                vt_v293_player_box(x,-22,z,7,42,88,181);
-                vt_v293_player_box(x-13,-12,z+step_anim,5,206,157,109);
-                vt_v293_player_box(x+13,-12,z-step_anim,5,206,157,109);
-                vt_v293_player_box(x-6,18,z-step_anim,6,34,57,114);
-                vt_v293_player_box(x+6,18,z+step_anim,6,34,57,114);
-                vt_v293_player_box(x-6,29,z-step_anim+3,5,57,49,46);
-                vt_v293_player_box(x+6,29,z+step_anim+3,5,57,49,46);
-                /* Eyes face local minus Z and rotate with the player. */
-                vt_v293_player_box(x-4,-35,z-12,2,46,44,40);
-                vt_v293_player_box(x+4,-35,z-12,2,46,44,40);
-            }
-        '''
-        append('vt_player',player_extra)
-
-        dragon_extra=r'''
-            /* V31: rounded chest/head, extended muzzle, tail, claws and flapping wings. */
-            {
-                int flap=((vt_v18_tick/9)&1)?-8:6;
-                SVECTOR a,b,c,d,e;
-                vt_v31_flat_shadow(x,z,25);
-                vt_v31_oval(x,-9-bounce/3,z,19,18,24,236,173,51);
-                vt_v31_oval(x,-22-bounce/3,z+18,13,13,13,253,203,66);
-                vt_v31_oval(x,-24-bounce/3,z+32,9,6,13,246,187,70);
-                vt_pyramid(x,-38-bounce/3,z+14,7,14,255,228,128);
-                vt_pyramid(x-8,-38-bounce/3,z+16,5,12,233,156,51);
-                vt_pyramid(x+8,-38-bounce/3,z+16,5,12,233,156,51);
-                vt_pyramid(x,-1-bounce/3,z-38,8,22,236,136,41);
-                draw_box(x-12,15,z+13,6,201,128,38);
-                draw_box(x+12,15,z+13,6,201,128,38);
-                /* Colorful triangular membranes, visibly dragon-like in the PS1 silhouette. */
-                a=(SVECTOR){(short)(x-11-px),(short)(-22-bounce/3),(short)(z-pz),0};
-                b=(SVECTOR){(short)(x-41-px),(short)(-37+flap-bounce/3),(short)(z-10-pz),0};
-                c=(SVECTOR){(short)(x-28-px),(short)(-4+flap/2-bounce/3),(short)(z+15-pz),0};
-                d=(SVECTOR){(short)(x+11-px),(short)(-22-bounce/3),(short)(z-pz),0};
-                e=(SVECTOR){(short)(x+41-px),(short)(-37+flap-bounce/3),(short)(z-10-pz),0};
-                draw_triangle3(&a,&b,&c,244,119,41);
-                c.vx=(short)(x+28-px);
-                draw_triangle3(&d,&c,&e,244,145,45);
-                draw_box(x-6,-27-bounce/3,z+37,2,53,45,29);
-                draw_box(x+6,-27-bounce/3,z+37,2,53,45,29);
-            }
-        '''
-        append('vt_sparkit',dragon_extra)
-
-        # Decorative house plinths, front corner beams and flowering pots; no roof surface
-        # added, so the per-building automatic roof-hide logic is left untouched.
-        house_detail=r'''
-            /* V31: richer walls without modifying doors, collisions or roof logic. */
-            draw_box(x-size+5,14,z-size/2,4,122,83,53);
-            draw_box(x+size-5,14,z-size/2,4,122,83,53);
-            draw_box(x-size+7,-size/2,z-size/2,4,151,109,66);
-            draw_box(x+size-7,-size/2,z-size/2,4,151,109,66);
-        '''
-        append('vt_v241_building',house_detail)
-
-        for check in ('vt_v31_oval(', 'vt_v31_flat_shadow(', 'vt_v31_clipping=1;',
-                      'near_step=120, near_cells=20','vt_v293_move((unsigned int)pad);',
-                      'vt_v281_resolve_movement();','vt_save_game(void)','vt_load_game(void)'):
-            if check not in s:raise RuntimeError('V31 integrity check failed: '+check)
-        # Match old serialization / party storage names, leave unmodified.
-        src.write_text(s,encoding='utf-8')
-        print('V31: triangle near-plane clipping, finer foreground terrain, PS1 models + house details.')
-        print('V31: controls, dragons/battles, 19 houses, 27 NPCs and existing saves retained.')
-        LYDRA_V31_PYTHON
-        python3 "$RUNNER_TEMP/lydra_v31_patch.py"
-        echo 'V31 source patch installed. PS1 compilation follows.'
-    - name: V31.1 Fluessige Kamera Bewegung und Animation
-      shell: bash
-      run: |
-        set -euo pipefail
-        test -s "$PROJECT_DIR/src/main.c"
-        cat > "$RUNNER_TEMP/lydra_v311_apply.py" <<'LYDRA_V311_PATCH'
-        #!/usr/bin/env python3
-        """Patch final V31 source: fixed-point movement, interpolated 64-entry trig and lighter terrain."""
-        import os,re
-        from pathlib import Path
-        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-        s=p.read_text(encoding='utf-8')
-
-        def span(name):
-            pattern=r'\bstatic\s+(?:void|int)\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
-            matches=list(re.finditer(pattern,s,re.S))
-            if len(matches)!=1: raise RuntimeError(f'V31.1: expected one {name}, got {len(matches)}')
-            a=matches[0].start();i=matches[0].end();depth=1; state='code'
-            while i<len(s) and depth:
-                c=s[i];n=s[i+1] if i+1<len(s) else ''
-                if state=='code':
-                    if c=='/' and n=='/':state='line';i+=1
-                    elif c=='/' and n=='*':state='block';i+=1
-                    elif c=='"':state='string'
-                    elif c=="'":state='char'
-                    elif c=='{':depth+=1
-                    elif c=='}':depth-=1
-                elif state=='line':
-                    if c=='\n':state='code'
-                elif state=='block':
-                    if c=='*' and n=='/':state='code';i+=1
-                else:
-                    if c=='\\':i+=1
-                    elif (state=='string' and c=='"') or (state=='char' and c=="'"):state='code'
-                i+=1
-            if depth: raise RuntimeError('V31.1: unclosed '+name)
-            return a,i
-
-        def replace_func(name,code):
-            global s
-            a,b=span(name)
-            s=s[:a]+code.strip()+'\n'+s[b:]
-
-        # Interpolate between LUT entries. Original function jumped in 64-angle increments.
-        replace_func('vt_v293_sin',r'''
-        static int vt_v293_sin(int angle) {
-            unsigned int a=(unsigned int)angle&4095u;
-            int i=(int)(a>>6);
-            int f=(int)(a&63u);
-            int v0=vt_v293_sin_table[i];
-            int v1=vt_v293_sin_table[(i+1)&63];
-            return v0+((v1-v0)*f)/64;
-        }
-        ''')
-
-        # Sub-unit velocity accumulator: x/z no longer jump differently at diagonal angles.
-        replace_func('vt_v293_move',r'''
-        /* V31.1: smooth and collision-aware fixed-point PS1 movement. */
-        static void vt_v293_move(unsigned int pad) {
-            static int remainder_x=0, remainder_z=0;
-            static int previous_x=0, previous_z=0;
-            static int initialized=0;
-            int direction=0,dx=0,dz=0;
-            int vx,vz;
-
-            /* Other mechanics can reposition the player (doors, transitions, collisions).
-               Reset fractions after such corrections, without changing save data. */
-            if(!initialized || px!=previous_x || pz!=previous_z) {
-                remainder_x=0; remainder_z=0; initialized=1;
-            }
-
-            /* D-Pad horizontal controls turn the view ONLY, in smaller, even steps.
-               24/4096 of a revolution instead of 64/4096 per update. */
-            if((pad & PAD_RIGHT) && !(pad & PAD_LEFT))
-                vt_v292_cam_yaw=(vt_v292_cam_yaw+4096-24)&4095;
-            else if((pad & PAD_LEFT) && !(pad & PAD_RIGHT))
-                vt_v292_cam_yaw=(vt_v292_cam_yaw+24)&4095;
-            vt_v292_yaw_target=vt_v292_cam_yaw;
-
-            if((pad & PAD_UP) && !(pad & PAD_DOWN))direction=1;
-            else if((pad & PAD_DOWN) && !(pad & PAD_UP))direction=-1;
-
-            if(direction) {
-                /* Speed: four world units per logic tick, exact independent of angle. */
-                vx=direction*(-vt_v293_sin(vt_v292_cam_yaw)*4);
-                vz=direction*( vt_v293_cos(vt_v292_cam_yaw)*4);
-                remainder_x+=vx;
-                remainder_z+=vz;
-                dx=remainder_x/1024;
-                dz=remainder_z/1024;
-                remainder_x-=dx*1024;
-                remainder_z-=dz*1024;
-                px+=dx;
-                pz+=dz;
-                if(px < -WORLD_LIMIT) {px=-WORLD_LIMIT;remainder_x=0;}
-                if(px > WORLD_LIMIT)  {px= WORLD_LIMIT;remainder_x=0;}
-                if(pz < -WORLD_LIMIT) {pz=-WORLD_LIMIT;remainder_z=0;}
-                if(pz > WORLD_LIMIT)  {pz= WORLD_LIMIT;remainder_z=0;}
-                if(dx||dz)step_count++;
-                vt_v293_avatar_yaw=((direction>0?2048:0)-vt_v292_cam_yaw+4096)&4095;
-                if(dx>0 && dx>= (dz<0?-dz:dz))facing=2;
-                else if(dx<0 && -dx>= (dz<0?-dz:dz))facing=1;
-                else facing=(dz>=0)?3:0;
-            } else {
-                /* Avoid carrying fractions between separate walking bouts. */
-                remainder_x=0;
-                remainder_z=0;
-            }
-            previous_x=px;
-            previous_z=pz;
-        }
-        ''')
-
-        # Reduce frame load while keeping a larger ground radius; shorter cells create more triangles.
-        a,b=span('vt_v300_extend_ground')
-        old=s[a:b]
-        if 'near_step=120, near_cells=20' not in old:
-            raise RuntimeError('V31.1: V31 terrain layout not found')
-        new=old.replace('near_step=120, near_cells=20','near_step=140, near_cells=18')
-        s=s[:a]+new+s[b:]
-
-        # Smooth cosmetic animation instead of jumping every 4 or 9 ticks.
-        if s.count('int step_anim=(step_count&7)<4?3:-3;')!=1:
-            raise RuntimeError('V31.1: player animation anchor changed')
-        s=s.replace('int step_anim=(step_count&7)<4?3:-3;',
-                    'int step_anim=(vt_v293_sin((step_count&31)*128)*4)/1024;',1)
-        if s.count('int flap=((vt_v18_tick/9)&1)?-8:6;')!=1:
-            raise RuntimeError('V31.1: dragon animation anchor changed')
-        s=s.replace('int flap=((vt_v18_tick/9)&1)?-8:6;',
-                    'int flap=(vt_v293_sin((vt_v18_tick*48)&4095)*8)/1024;',1)
-
-        for feat in ('vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',
-                     'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)',
-                     'vt_v31_oval(','vt_v301_sun(void)','vt_v292_draw_exploration_hud();'):
-            if feat not in s:raise RuntimeError('V31.1: lost feature '+feat)
-        p.write_text(s,encoding='utf-8')
-        print('V31.1: LUT interpolation, fixed-point movement, smooth turning and animation.')
-        print('V31.1: near-world terrain 18x18 (instead of 20x20) to improve frame pacing.')
-        print('V31.1: collision system and memory-card serialization preserved.')
-        LYDRA_V311_PATCH
-        python3 "$RUNNER_TEMP/lydra_v311_apply.py"
-    - name: V31.2 Korrigiert - Kamera Bewegung Performance
-      shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lydra_v312_apply.py" <<'LYDRA_V312_PATCH'
-        #!/usr/bin/env python3
-        """Lydra V31.2: movement acceleration and consistent terrain draw budget."""
-        import os,re
-        from pathlib import Path
-        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-        s=p.read_text(encoding='utf-8')
-
-        def span(name):
-            match=list(re.finditer(r'\bstatic\s+(?:void|int)\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{',s,re.S))
-            if len(match)!=1:
-                raise RuntimeError('V31.2 expected exactly one '+name+': '+str(len(match)))
-            start=match[0].start();pos=match[0].end();depth=1;state='code'
-            while pos<len(s) and depth:
-                ch=s[pos];nextc=s[pos+1] if pos+1<len(s) else ''
-                if state=='code':
-                    if ch=='/' and nextc=='/':state='line';pos+=1
-                    elif ch=='/' and nextc=='*':state='block';pos+=1
-                    elif ch=='"':state='string'
-                    elif ch=="'":state='char'
-                    elif ch=='{':depth+=1
-                    elif ch=='}':depth-=1
-                elif state=='line':
-                    if ch=='\n':state='code'
-                elif state=='block':
-                    if ch=='*' and nextc=='/':state='code';pos+=1
-                elif state in ('string','char'):
-                    if ch=='\\':pos+=1
-                    elif (state=='string' and ch=='"') or (state=='char' and ch=="'"):state='code'
-                pos+=1
-            if depth:raise RuntimeError('Unclosed function '+name)
-            return start,pos
-
-        def replace_func(name,new):
-            global s
-            a,b=span(name)
-            s=s[:a]+new.strip()+'\n'+s[b:]
-
-        move=r'''
-        /* V31.2: accelerate/decelerate subunits and ease turn initiation.
-           Input retains UP forward, DOWN backward, LEFT/RIGHT camera only.
-           The established movement/collision/save formats are untouched. */
-        static void vt_v293_move(unsigned int pad) {
-            static int rem_x=0,rem_z=0;
-            static int last_x=0,last_z=0,ready=0;
-            static int velocity=0;        /* -4096 to 4096, signed running speed */
-            static int turn_velocity=0;   /* signed angle units per frame, in Q8 */
-            int direction=0,turn=0,desired_turn,desired_velocity;
-            int diff,dx=0,dz=0,vx,vz;
-            if(!ready || px!=last_x || pz!=last_z) {
-                rem_x=rem_z=velocity=0;
-                ready=1;
-            }
-
-            if((pad&PAD_RIGHT) && !(pad&PAD_LEFT))turn=-1;
-            else if((pad&PAD_LEFT) && !(pad&PAD_RIGHT))turn=1;
-
-            if(turn) {
-                desired_turn=turn*20*256; /* full turn is ~1.76 degrees per rendered frame */
-                diff=desired_turn-turn_velocity;
-                turn_velocity+=(diff/3);
-                if(diff>-3 && diff<3)turn_velocity=desired_turn;
-                vt_v292_cam_yaw=(vt_v292_cam_yaw+(turn_velocity/256)+4096)&4095;
-            } else {
-                turn_velocity=0; /* no drift after releasing the camera turn */
-            }
-            vt_v292_yaw_target=vt_v292_cam_yaw;
-
-            if((pad&PAD_UP) && !(pad&PAD_DOWN))direction=1;
-            else if((pad&PAD_DOWN) && !(pad&PAD_UP))direction=-1;
-            desired_velocity=direction*4096;
-            diff=desired_velocity-velocity;
-            velocity+=diff/4;
-            if(diff>-8 && diff<8)velocity=desired_velocity;
-            if(velocity>-30 && velocity<30 && !direction)velocity=0;
-            if(velocity) {
-                /* X/Z velocity in units * 1024; keep fractional remainder on diagonal headings. */
-                vx=(-vt_v293_sin(vt_v292_cam_yaw)*velocity)/1024;
-                vz=( vt_v293_cos(vt_v292_cam_yaw)*velocity)/1024;
-                rem_x+=vx;
-                rem_z+=vz;
-                dx=rem_x/1024;
-                dz=rem_z/1024;
-                rem_x-=dx*1024;
-                rem_z-=dz*1024;
-                px+=dx; pz+=dz;
-                if(px < -WORLD_LIMIT) {px=-WORLD_LIMIT;rem_x=0;velocity=0;}
-                if(px >  WORLD_LIMIT) {px= WORLD_LIMIT;rem_x=0;velocity=0;}
-                if(pz < -WORLD_LIMIT) {pz=-WORLD_LIMIT;rem_z=0;velocity=0;}
-                if(pz >  WORLD_LIMIT) {pz= WORLD_LIMIT;rem_z=0;velocity=0;}
-                if(dx || dz)step_count++;
-                if(dx || dz) {
-                    vt_v293_avatar_yaw=((velocity>0?2048:0)-vt_v292_cam_yaw+4096)&4095;
-                    if(dx>0 && dx>= (dz<0?-dz:dz))facing=2;
-                    else if(dx<0 && -dx>= (dz<0?-dz:dz))facing=1;
-                    else facing=(dz>=0)?3:0;
-                }
-            } else {
-                rem_x=rem_z=0;
-            }
-            last_x=px;last_z=pz;
-        }
-        '''
-        replace_func('vt_v293_move',move)
-
-        # Keep the same terrain extent at a lower polygon cost.
-        a,b=span('vt_v300_extend_ground')
-        body=s[a:b]
-        if 'near_step=140, near_cells=18' not in body:
-            raise RuntimeError('Expected V31.1 near terrain settings, found different source')
-        body=body.replace('near_step=140, near_cells=18', 'near_step=158, near_cells=16')
-        # V31.2 KORRIGIERT: do not rely on C whitespace-specific string matches.
-        # Keep ALL distant terrain tiles: this protects full 360-degree visibility
-        # while the near terrain mesh (above) uses fewer polygons.
-        if 'vt_v241_flat(x,z,x+far_step,z+far_step,44,' not in body:
-            raise RuntimeError('V31.2: expected 360-degree far terrain renderer is missing')
-        s=s[:a]+body+s[b:]
-
-        # Horizon is a distant visual ring: still closes 360 degrees with 16 wider peaks.
-        a,b=span('vt_v300_horizon')
-        body=s[a:b]
-        if 'for(i=0;i<24;i++)' not in body or '(i*4096)/24' not in body:
-            raise RuntimeError('V30.3 horizon changed unexpectedly')
-        body=body.replace('for(i=0;i<24;i++)','for(i=0;i<16;i++)',1)
-        body=body.replace('(i*4096)/24','(i*4096)/16',1)
-        s=s[:a]+body+s[b:]
-
-        for name in ('vt_v293_sin','vt_v293_move','vt_v300_extend_ground','vt_v300_horizon','vt_player','vt_sparkit'):
-            span(name)
-        for feat in ('vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',
-                     'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)',
-                     'vt_v31_oval(', 'vt_v301_sun(void)','vt_v292_draw_exploration_hud();'):
-            if feat not in s:raise RuntimeError('V31.2 lost feature '+feat)
-        p.write_text(s,encoding='utf-8')
-        print('V31.2: eased camera turn/movement; no sideways translation on LEFT/RIGHT.')
-        print('V31.2: lower ground draw cost while retaining 360-degree streaming coverage.')
-        LYDRA_V312_PATCH
-        python3 "$RUNNER_TEMP/lydra_v312_apply.py"
-    - name: V31.3 Kamerakonflikt und langsame Bewegung reparieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lydra_v313_patch.py" <<'LYDRA_V313_PATCH'
-        #!/usr/bin/env python3
-        # V31.3 remove competing auto-follow yaw, improve movement response and terrain load.
-        import os,re
-        from pathlib import Path
-        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-        s=p.read_text(encoding='utf-8')
-
-        def span(name):
-            pattern=r'\bstatic\s+(?:void|int)\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
-            matches=list(re.finditer(pattern,s,re.S))
-            if len(matches)!=1:
-                raise RuntimeError('V31.3 expected exactly one '+name+': '+str(len(matches)))
-            start=matches[0].start();pos=matches[0].end();depth=1;state='code'
-            while pos<len(s) and depth:
-                ch=s[pos];nex=s[pos+1] if pos+1<len(s) else ''
-                if state=='code':
-                    if ch=='/' and nex=='/':state='line';pos+=1
-                    elif ch=='/' and nex=='*':state='block';pos+=1
-                    elif ch=='"':state='string'
-                    elif ch=="'":state='char'
-                    elif ch=='{':depth+=1
-                    elif ch=='}':depth-=1
-                elif state=='line':
-                    if ch=='\n':state='code'
-                elif state=='block':
-                    if ch=='*' and nex=='/':state='code';pos+=1
-                else:
-                    if ch=='\\':pos+=1
-                    elif (state=='string' and ch=='"') or (state=='char' and ch=="'"):state='code'
-                pos+=1
-            if depth:raise RuntimeError('V31.3 unclosed '+name)
-            return start,pos
-
-        def replace(name,body):
-            global s
-            a,b=span(name)
-            s=s[:a]+body.strip()+'\n'+s[b:]
-
-        # Root cause: old V29.2 auto-follow recomputes yaw target from movement dx/dz
-        # every frame and fights the manual LEFT/RIGHT camera established in V29.3.
-        replace('vt_v292_update_camera',r'''
-        static void vt_v292_update_camera(void) {
-            /* V31.3: manual camera only, no turning based on walking. */
-            vt_v292_last_x=px;
-            vt_v292_last_z=pz;
-            vt_v292_tracking=1;
-            vt_v292_yaw_target=vt_v292_cam_yaw;
-        }
-        ''')
-
-        replace('vt_v293_move',r'''
-        /* V31.3: responsive manual camera and faster camera-relative movement.
-           Q10 subunits preserve diagonal motion between PS1 frames. */
-        static void vt_v293_move(unsigned int pad) {
-            static int fraction_x=0,fraction_z=0;
-            static int last_px=0,last_pz=0,initialized=0;
-            static int speed_q10=0;
-            int forward=0,turn=0,target;
-            int vx,vz,dx,dz;
-            /* Only reset velocity after teleports, not small collision adjustments. */
-            if(!initialized || px-last_px>80 || px-last_px< -80 ||
-               pz-last_pz>80 || pz-last_pz< -80) {
-                fraction_x=fraction_z=0;
-                speed_q10=0;
-                initialized=1;
-            }
-            if((pad&PAD_RIGHT) && !(pad&PAD_LEFT))turn=-1;
-            else if((pad&PAD_LEFT) && !(pad&PAD_RIGHT))turn=1;
-            if(turn)vt_v292_cam_yaw=(vt_v292_cam_yaw+turn*40+4096)&4095;
-            vt_v292_yaw_target=vt_v292_cam_yaw;
-            if((pad&PAD_UP) && !(pad&PAD_DOWN))forward=1;
-            else if((pad&PAD_DOWN) && !(pad&PAD_UP))forward=-1;
-            if(!forward) {
-                speed_q10=0;
-                fraction_x=fraction_z=0;
-            } else {
-                /* Full 8 units per frame after at most three movement updates. */
-                target=forward*8192;
-                if(speed_q10<target) {
-                    speed_q10+=3072;
-                    if(speed_q10>target)speed_q10=target;
-                } else if(speed_q10>target) {
-                    speed_q10-=3072;
-                    if(speed_q10<target)speed_q10=target;
-                }
-                vx=(-vt_v293_sin(vt_v292_cam_yaw)*speed_q10)/1024;
-                vz=( vt_v293_cos(vt_v292_cam_yaw)*speed_q10)/1024;
-                fraction_x+=vx;
-                fraction_z+=vz;
-                dx=fraction_x/1024;
-                dz=fraction_z/1024;
-                fraction_x-=dx*1024;
-                fraction_z-=dz*1024;
-                px+=dx;pz+=dz;
-                if(px < -WORLD_LIMIT) {px=-WORLD_LIMIT;fraction_x=0;speed_q10=0;}
-                if(px > WORLD_LIMIT)  {px=WORLD_LIMIT;fraction_x=0;speed_q10=0;}
-                if(pz < -WORLD_LIMIT) {pz=-WORLD_LIMIT;fraction_z=0;speed_q10=0;}
-                if(pz > WORLD_LIMIT)  {pz=WORLD_LIMIT;fraction_z=0;speed_q10=0;}
-                if(dx||dz) {
-                    step_count++;
-                    vt_v293_avatar_yaw=((speed_q10>0?2048:0)-vt_v292_cam_yaw+4096)&4095;
-                    if(dx>0 && dx>= (dz<0?-dz:dz))facing=2;
-                    else if(dx<0 && -dx>= (dz<0?-dz:dz))facing=1;
-                    else facing=(dz>=0)?3:0;
-                }
-            }
-            last_px=px;last_pz=pz;
-        }
-        ''')
-
-        # 256 to 196 visible near-field cells, same near-field span (2528 -> 2520).
-        a,b=span('vt_v300_extend_ground')
-        block=s[a:b]
-        old='near_step=158, near_cells=16'
-        if block.count(old)!=1:
-            raise RuntimeError('V31.3 expected corrected V31.2 near terrain source')
-        block=block.replace(old,'near_step=180, near_cells=14',1)
-        s=s[:a]+block+s[b:]
-
-        for x in ('vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',
-                  'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)',
-                  'vt_v31_oval(','vt_v301_sun(void)','vt_v292_draw_exploration_hud();'):
-            if x not in s:raise RuntimeError('V31.3 lost system '+x)
-        for name in ('vt_v293_move','vt_v292_update_camera','vt_v300_extend_ground'):
-            span(name)
-        p.write_text(s,encoding='utf-8')
-        print('V31.3: fixed manual camera, 2x movement speed and 23 percent less near terrain.')
-        LYDRA_V313_PATCH
-        python3 "$RUNNER_TEMP/lydra_v313_patch.py"
-    - name: V31.4 Introbild 1/8 vorbereiten
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p "$RUNNER_TEMP/lydra_intro"
-        base64 -d > "$RUNNER_TEMP/lydra_intro/scene_0.jpg" <<'LYDRA_FRAME_00_END'
-        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
-        LYDRA_FRAME_00_END
-        printf '%s  %s\n' '85c0f276604235c3ba0bcc171b8fda820923b0ffb7e6fae14d7bc18cf6b121fb' "$RUNNER_TEMP/lydra_intro/scene_0.jpg" | sha256sum -c -
-    - name: V31.4 Introbild 2/8 vorbereiten
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p "$RUNNER_TEMP/lydra_intro"
-        base64 -d > "$RUNNER_TEMP/lydra_intro/scene_1.jpg" <<'LYDRA_FRAME_01_END'
-        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
-        LYDRA_FRAME_01_END
-        printf '%s  %s\n' 'a0edca40951764503090e9d463edddb72af32856e8b7f19b89d92c3e2cecb5d1' "$RUNNER_TEMP/lydra_intro/scene_1.jpg" | sha256sum -c -
-    - name: V31.4 Introbild 3/8 vorbereiten
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p "$RUNNER_TEMP/lydra_intro"
-        base64 -d > "$RUNNER_TEMP/lydra_intro/scene_2.jpg" <<'LYDRA_FRAME_02_END'
-        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
-        LYDRA_FRAME_02_END
-        printf '%s  %s\n' '0a64b3ccdd642082f87bc81e281b3bc9a1a2b4672d50f151dcff7641d0bea2e1' "$RUNNER_TEMP/lydra_intro/scene_2.jpg" | sha256sum -c -
-    - name: V31.4 Introbild 4/8 vorbereiten
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p "$RUNNER_TEMP/lydra_intro"
-        base64 -d > "$RUNNER_TEMP/lydra_intro/scene_3.jpg" <<'LYDRA_FRAME_03_END'
-        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
-        LYDRA_FRAME_03_END
-        printf '%s  %s\n' '7601d2d5df646a05b8ff00c2f894539839c076ecdc412a529150811855e0dc82' "$RUNNER_TEMP/lydra_intro/scene_3.jpg" | sha256sum -c -
-    - name: V31.4 Introbild 5/8 vorbereiten
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p "$RUNNER_TEMP/lydra_intro"
-        base64 -d > "$RUNNER_TEMP/lydra_intro/scene_4.jpg" <<'LYDRA_FRAME_04_END'
-        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
-        LYDRA_FRAME_04_END
-        printf '%s  %s\n' '858733b30951cf6e7ba4a3348f08d22439019da2404c0c6ce7dd5669b165d7d8' "$RUNNER_TEMP/lydra_intro/scene_4.jpg" | sha256sum -c -
-    - name: V31.4 Introbild 6/8 vorbereiten
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p "$RUNNER_TEMP/lydra_intro"
-        base64 -d > "$RUNNER_TEMP/lydra_intro/scene_5.jpg" <<'LYDRA_FRAME_05_END'
-        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
-        oV9ShxhCSo81ck7J2cH7AiaaNKCP/9k=
-        LYDRA_FRAME_05_END
-        printf '%s  %s\n' '42261548fa3be4c007168959e64f7263a3214663e06544d49b9fafb6bccf10d4' "$RUNNER_TEMP/lydra_intro/scene_5.jpg" | sha256sum -c -
-    - name: V31.4 Introbild 7/8 vorbereiten
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p "$RUNNER_TEMP/lydra_intro"
-        base64 -d > "$RUNNER_TEMP/lydra_intro/scene_6.jpg" <<'LYDRA_FRAME_06_END'
-        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
-        LYDRA_FRAME_06_END
-        printf '%s  %s\n' 'e8dd964dd4d96b925537f7e832d12417ac4a198d90dd9e61d4cb109ffe243ec3' "$RUNNER_TEMP/lydra_intro/scene_6.jpg" | sha256sum -c -
-    - name: V31.4 Introbild 8/8 vorbereiten
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p "$RUNNER_TEMP/lydra_intro"
-        base64 -d > "$RUNNER_TEMP/lydra_intro/scene_7.jpg" <<'LYDRA_FRAME_07_END'
-        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
-        LYDRA_FRAME_07_END
-        printf '%s  %s\n' '2d3de676a7e4da61dad5e454a6bf52d5d2d115899cbfaf03c0a2e38408cd04eb' "$RUNNER_TEMP/lydra_intro/scene_7.jpg" | sha256sum -c -
-    - name: V31.4 Alle acht Frames pruefen und PS1 RGB555-Bilder erzeugen
-      shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lydra_v314_generate.py" <<'LYDRA_V314_GENERATE'
-        #!/usr/bin/env python3
-        import hashlib,os,struct
-        from pathlib import Path
-        from PIL import Image, ImageEnhance
-        home=Path(os.environ['RUNNER_TEMP'])/'lydra_intro'
-        expected=['85c0f276604235c3ba0bcc171b8fda820923b0ffb7e6fae14d7bc18cf6b121fb', 'a0edca40951764503090e9d463edddb72af32856e8b7f19b89d92c3e2cecb5d1', '0a64b3ccdd642082f87bc81e281b3bc9a1a2b4672d50f151dcff7641d0bea2e1', '7601d2d5df646a05b8ff00c2f894539839c076ecdc412a529150811855e0dc82', '858733b30951cf6e7ba4a3348f08d22439019da2404c0c6ce7dd5669b165d7d8', '42261548fa3be4c007168959e64f7263a3214663e06544d49b9fafb6bccf10d4', 'e8dd964dd4d96b925537f7e832d12417ac4a198d90dd9e61d4cb109ffe243ec3', '2d3de676a7e4da61dad5e454a6bf52d5d2d115899cbfaf03c0a2e38408cd04eb']
-        frames=[]
-        for i,sha in enumerate(expected):
-            file=home/f'scene_{i}.jpg'
-            if not file.is_file():raise RuntimeError(f'Intro-Bild {i} fehlt')
-            data=file.read_bytes()
-            if hashlib.sha256(data).hexdigest()!=sha:
-                raise RuntimeError(f'Intro-Bild {i}: Daten unvollstaendig')
-            with Image.open(file) as img:
-                img=img.convert('RGB')
-                if img.size!=(160,120):raise RuntimeError('Falsche Introbild-Abmessung')
-                # V31.6: keep the picture close to the original source image.
-                # Only a slight cleanup is applied so PS1 artifacts are not amplified.
-                img=ImageEnhance.Contrast(img).enhance(1.04)
-                img=ImageEnhance.Color(img).enhance(1.02)
-                pixels=[]
-                for r,g,b in img.getdata():
-                    pixels.append(((b>>3)<<10)|((g>>3)<<5)|(r>>3))
-            frames.append(pixels)
-        assert len(frames)==8
-        lines=['/* Lydra V31.4: PS1 RGB555 video keyframes. */',
-               '#ifndef LYDRA_V314_FRAMES_H','#define LYDRA_V314_FRAMES_H']
-        for i,px in enumerate(frames):
-            lines.append(f'static const unsigned short vt_v314_image_{i}[19200] __attribute__((aligned(4))) = {{')
-            for j in range(0,len(px),16):
-                lines.append(' '+','.join('0x%04x'%v for v in px[j:j+16])+',')
-            lines.append('};')
-        lines.append('static const unsigned short *const vt_v314_images[8] = {')
-        lines.append(','.join('vt_v314_image_%d'%i for i in range(8))+'};')
-        lines.append('#endif')
-        source=Path(os.environ['PROJECT_DIR'])/'src'
-        assert source.is_dir(),f'Spielquellverzeichnis fehlt: {source}'
-        output=source/'lydra_v314_frames.h'
-        output.write_text('\n'.join(lines)+'\n',encoding='utf-8')
-        if output.stat().st_size<800_000:raise RuntimeError('Intro-C-Header nicht vollstaendig')
-        print('Alle acht PS1-Intro-Bilder sind verifiziert und in RGB555 konvertiert:',output.stat().st_size,'Bytes')
-        LYDRA_V314_GENERATE
-        python3 "$RUNNER_TEMP/lydra_v314_generate.py"
-    - name: V31.6 Hauptmenue in V31.3 einbauen und vorbereiten
-      shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lydra_v314_title.py" <<'LYDRA_V314_MENU_PATCH'
-        #!/usr/bin/env python3
-        '''Integrates native PS1 title screen/menu in existing Lydra V31.3 main.c.
-        No save-format changes; does not attempt to decode MP4 on real PS1 hardware.
-        '''
-        import os
-        from pathlib import Path
-        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-        s=p.read_text(encoding='utf-8')
-
-
-        def once(old,new):
-            global s
-            n=s.count(old)
-            if n!=1:
-                raise RuntimeError('V31.4: expected one source marker, got %d: %r'%(n,old[:105]))
-            s=s.replace(old,new,1)
-
-        helpers=r'''
-        /* LYDRA V31.4: hardware-safe title / intro; 8 original MP4 keyframes in RGB555.
-           Video/audio codec H.264/AAC is intentionally NOT injected into a PS1 binary.
-           Texture uses only VRAM x=640..799 y=0..119, away from the two framebuffers
-           and the font upload area at x>=960. Memory Card bytes are unchanged. */
-        #include "lydra_v314_frames.h"
-        static int vt_v314_active=1;
-        static int vt_v314_phase=-1;     /* -1 DKVierich splash, 1 blinking START, 2 main, 3 options */
-        static int vt_v314_elapsed=0;
-        static int vt_v314_vram_frame=-1;
-        static int vt_v314_cursor=0,vt_v314_opt_cursor=0;
-        static const char *vt_v314_message="";
-        static unsigned int vt_v314_blink=0;
-
-        static void vt_v314_input(unsigned int pressed) {
-            vt_v314_blink++;
-            if(vt_v314_phase==-1) {
-                if(pressed&(PAD_START|PAD_CROSS)) {
-                    vt_v314_phase=1;
-                    vt_v314_elapsed=0;
-                } else if(++vt_v314_elapsed>=150) {
-                    vt_v314_phase=1;
-                    vt_v314_elapsed=0;
-                }
-            } else if(vt_v314_phase==1) {
-                if(pressed&(PAD_START|PAD_CROSS)) {
-                    vt_v314_phase=2;
-                    vt_v314_message="";
-                }
-            } else if(vt_v314_phase==2) {
-                if(pressed&PAD_UP) vt_v314_cursor=(vt_v314_cursor+3)%4;
-                if(pressed&PAD_DOWN) vt_v314_cursor=(vt_v314_cursor+1)%4;
-                if(pressed&PAD_TRIANGLE)vt_v314_phase=1;
-                if(pressed&(PAD_CROSS|PAD_START)) {
-                    if(vt_v314_cursor==0) {
-                        vt_v314_active=0;vt_menu_open=0;vt_menu_page=0;
-                        vt_v314_message="";
-                    } else if(vt_v314_cursor==1) {
-                        int result=vt_load_game();
-                        if(result==1) {
-                            vt_v314_active=0;vt_menu_open=0;vt_menu_page=0;
-                            vt_v314_message="";
-                        } else {
-                            vt_v314_message=(result==-1)?"DATEI UNGUELTIG":"KEIN SPIELSTAND";
-                        }
-                    } else if(vt_v314_cursor==2) {
-                        vt_v314_phase=3;vt_v314_opt_cursor=0;
-                        vt_v314_message="";
-                    } else {
-                        vt_v314_phase=-1;vt_v314_elapsed=0;
-                        vt_v314_message="";
-                    }
-                }
-            } else if(vt_v314_phase==3) {
-                if(pressed&PAD_UP)vt_v314_opt_cursor=(vt_v314_opt_cursor+2)%3;
-                if(pressed&PAD_DOWN)vt_v314_opt_cursor=(vt_v314_opt_cursor+1)%3;
-                if(pressed&PAD_TRIANGLE)vt_v314_phase=2;
-                if(vt_v314_opt_cursor==0) {
-                    if((pressed&PAD_LEFT) && vt_opt_volume>0)vt_opt_volume-=10;
-                    if((pressed&PAD_RIGHT) && vt_opt_volume<100)vt_opt_volume+=10;
-                    if(pressed&(PAD_LEFT|PAD_RIGHT))vt_opt_apply_volume();
-                } else if(vt_v314_opt_cursor==1) {
-                    if((pressed&PAD_LEFT) && vt_opt_text_speed>1)vt_opt_text_speed--;
-                    if((pressed&PAD_RIGHT) && vt_opt_text_speed<3)vt_opt_text_speed++;
-                } else if(pressed&(PAD_CROSS|PAD_START))vt_v314_phase=2;
-            }
-            if(vt_v314_active) {
-                /* Keep world clock, walking, NPC interaction and combat paused in title. */
-                vt_menu_open=1;vt_menu_page=0;
-            }
-        }
-
-        static int vt_v314_choice_frame(void) {
-            if(vt_v314_phase==-1)return -1;
-            return 7;
-        }
-
-        static void vt_v314_draw(void) {
-            POLY_FT4 *q;
-            TILE *bg;
-            unsigned int aligned;
-            RECT texture_rect;
-            int current=vt_v314_choice_frame();
-            int brightness=128;
-            if(current<0) {
-                unsigned int bg_aligned=(prim_used+3u)&~3u;
-                if(bg_aligned+sizeof(TILE)<=sizeof(prim_arena[db])) {
-                    bg=(TILE *)(prim_arena[db]+bg_aligned);
-                    prim_used=bg_aligned+sizeof(TILE);
-                    setTile(bg);
-                    setXY0(bg,0,0);
-                    setWH(bg,320,240);
-                    setRGB0(bg,0,0,0);
-                    addPrim(ot[db],bg);
-                }
-                return;
-            }
-            if(current!=vt_v314_vram_frame) {
-                setRECT(&texture_rect,640,0,160,120);
-                DrawSync(0);
-                LoadImage(&texture_rect,(u_long *)(void *)vt_v314_images[current]);
-                DrawSync(0);
-                vt_v314_vram_frame=current;
-            }
-            if(vt_v314_phase>=2) {
-                /* Place an opaque ink-blue submenu tile behind the text.
-                   Insert it BEFORE the image primitive: the game's OT is LIFO. */
-                TILE *panel;
-                unsigned int panel_aligned=(prim_used+3u)&~3u;
-                if(panel_aligned+sizeof(TILE)<=sizeof(prim_arena[db])) {
-                    panel=(TILE *)(prim_arena[db]+panel_aligned);
-                    prim_used=panel_aligned+sizeof(TILE);
-                    setTile(panel);
-                    setXY0(panel,190,157);
-                    setWH(panel,130,83);
-                    setRGB0(panel,13,19,36);
-                    addPrim(ot[db],panel);
-                }
-            }
-            aligned=(prim_used+3u)&~3u;
-            if(aligned+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;
-            q=(POLY_FT4 *)(prim_arena[db]+aligned);
-            prim_used=aligned+sizeof(POLY_FT4);
-            setPolyFT4(q);
-            setXY4(q,0,0,320,0,0,240,320,240);
-            setUV4(q,0,0,159,0,0,119,159,119);
-            setTPage(q,2,0,640,0);
-            setSemiTrans(q,0);
-            setShadeTex(q,0);
-            setRGB0(q,brightness,brightness,brightness);
-            /* Existing render order draws the world first, then this full-screen quad. */
-            addPrim(ot[db],q);
-        }
-
-        static void vt_v314_hud(void) {
-            if(vt_v314_phase==-1) {
-                if(vt_v314_elapsed>12)FntPrint(6,"DKVierich Produktion");
-                if(vt_v314_elapsed>40 && (vt_v314_blink%80u)<54u)
-                    FntPrint(4,"   START");
-            } else if(vt_v314_phase==1) {
-                if((vt_v314_blink%78u)<52u)FntPrint(4,"   START");
-            } else if(vt_v314_phase==2) {
-                FntPrint(5,"%c NEUES SPIEL\n\n",vt_v314_cursor==0?'>':' ');
-                FntPrint(5,"%c LADEN\n\n",vt_v314_cursor==1?'>':' ');
-                FntPrint(5,"%c OPTIONEN\n\n",vt_v314_cursor==2?'>':' ');
-                FntPrint(5,"%c INTRO\n",vt_v314_cursor==3?'>':' ');
-                if(vt_v314_message[0])FntPrint(4,"%s",vt_v314_message);
-            } else if(vt_v314_phase==3) {
-                FntPrint(5,"OPTIONEN\n\n");
-                FntPrint(5,"%c TON %d%%\n\n",vt_v314_opt_cursor==0?'>':' ',vt_opt_volume);
-                FntPrint(5,"%c TEXT %d\n\n",vt_v314_opt_cursor==1?'>':' ',vt_opt_text_speed);
-                FntPrint(5,"%c ZURUECK\n",vt_v314_opt_cursor==2?'>':' ');
-            }
-            FntFlush(4);FntFlush(5);FntFlush(6);
-        }
-        '''
-
-        # Replace the old V17 boot splash so that only the new V31.4 intro is shown.
-        # All gameplay initialization remains outside that presentation-only call.
-        if 'vt_play_intro();' in s:
-            once('vt_play_intro();','/* V31.4: legacy title splash replaced by new intro. */')
-
-        # Insert title helpers just before the HUD; V29-31 systems are already declared.
-        once('static void draw_hud(void) {',helpers+'\nstatic void draw_hud(void) {\n    if(vt_v314_active) { vt_v314_hud(); return; }')
-
-        # Fonts: 0-3 are the existing streams; add two separate title streams.
-        once('FntOpen(247, 6, 69, 65, 0, 128);',
-             'FntOpen(247, 6, 69, 65, 0, 128);\n    FntOpen(108, 217, 205, 20, 0, 128); /* title START */\n    FntOpen(196, 162, 124, 76, 0, 512); /* title menu */\n    FntOpen(73, 108, 212, 30, 0, 128); /* centered production splash */')
-
-        # All menu controls already follow this line. Hide input from the old menus.
-        once('        previous_pad = pad;',
-             '        previous_pad = pad;\n        if(vt_v314_active) {\n            vt_v314_input((unsigned int)pressed);\n            pad=0;pressed=0;\n        }')
-
-        # The old menu panel is scheduled *before* world primitives, i.e. is drawn on top.
-        # Use the same exact point for the full-screen image; leave existing in-game panel alone.
-        once('        vt_draw_menu_panel();',
-             '        if(vt_v314_active)vt_v314_draw();\n        else vt_draw_menu_panel();')
-
-        for feature in ('vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',
-                        'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)',
-                        'vt_v293_move((unsigned int)pad);','vt_v301_sun(void)',
-                        'vt_v292_draw_exploration_hud();'):
-            if feature not in s:raise RuntimeError('V31.4 lost existing mechanic '+feature)
-        if 'vt_v314_input((unsigned int)pressed)' not in s:raise RuntimeError('V31.4 title controller missing')
-        if 'vt_v314_draw();' not in s:raise RuntimeError('V31.4 title drawing missing')
-        p.write_text(s,encoding='utf-8')
-        print('V31.4 title: PS1 video keyframes, blinking START, new/load/options/replay.')
-        print('V31.3 camera, terrain, dragons, combat, saves and ingame menu retained.')
-        LYDRA_V314_MENU_PATCH
-        python3 "$RUNNER_TEMP/lydra_v314_title.py"
-    - name: V31.6 FIX2 Schnelle Bewegung und Kamera sicher anwenden
-      shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lydra_v316_fix2_speed_patch.py" <<'PY'
-        #!/usr/bin/env python3
-        import os
-        from pathlib import Path
-
-        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-        s=p.read_text(encoding='utf-8')
-
-        def once(old,new):
-            global s
-            n=s.count(old)
-            if n!=1:
-                raise RuntimeError('V31.6 anchor expected once, got %d for: %r'%(n,old[:100]))
-            s=s.replace(old,new,1)
-
-        # Main menu frame selection is managed by the V31.6 title code.
-
-        # Faster manual camera response.
-        once('if(turn)vt_v292_cam_yaw=(vt_v292_cam_yaw+turn*40+4096)&4095;',
-             'if(turn)vt_v292_cam_yaw=(vt_v292_cam_yaw+turn*56+4096)&4095;')
-
-        # Faster walking while preserving collision logic and diagonal consistency.
-        once('target=forward*8192;', 'target=forward*11264;')
-        once('speed_q10+=3072;', 'speed_q10+=4096;')
-        once('speed_q10-=3072;', 'speed_q10-=4096;')
-
-        # START timing is already updated by V31.6 title code.
-
-        p.write_text(s,encoding='utf-8')
-        print('V31.6 FIX2: no stale title anchors.')
-        print('V31.6 FIX2: player speed increased from 8 to 11 units per frame target.')
-        print('V31.6 FIX2: camera yaw speed increased from 40 to 56 units per update.')
-        PY
-        python3 "$RUNNER_TEMP/lydra_v316_fix2_speed_patch.py"
-    - name: V31.6 FIX2 Grafiken Hauptmenue und Laufgeschwindigkeit pruefen
-      shell: bash
-      run: |
-        set -euo pipefail
-        SRC="$PROJECT_DIR/src"
-        test -s "$SRC/main.c" || { echo '::error::Spiel-Hauptquelle fehlt'; exit 1; }
-        test -s "$SRC/lydra_v314_frames.h" || { echo '::error::Intro-Bilder fehlen'; exit 1; }
-        grep -q 'vt_v314_input' "$SRC/main.c" || { echo '::error::Hauptmenue fehlt'; exit 1; }
-        grep -q 'vt_v314_image_7' "$SRC/lydra_v314_frames.h" || { echo '::error::Bild 8 fehlt'; exit 1; }
-        grep -q 'speed_q10+=4096;' "$SRC/main.c" || { echo '::error::Bewegungspatch fehlt'; exit 1; }
-        grep -q 'FntPrint(6,"DKVierich Produktion")' "$SRC/main.c" || { echo '::error::Produktion fehlt'; exit 1; }
-        echo 'DKVierich-Produktion-Splash, Hauptmenue und schnellere Bewegungswerte stehen zur Kompilierung bereit.'
-    - name: PS1 SDK installieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'PS1 SDK installieren – V27 Basis'
-    - name: V31.6 FIX2 PS1-Spiel kompilieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'Lydra V30.1 fuer PS1 kompilieren'
-    - name: Fertige BIN und CUE einsammeln
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/replay_v301.py" 'Fertige PS1-Dateien einsammeln'
-    - name: V31.6 FIX2 PS1-Dateien vor Upload pruefen
-      shell: bash
-      run: |
-        set -euo pipefail
-        ls -lah artifacts/
-        for file in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
-          test -s "artifacts/$file" || { echo "::error::PS1 Datei fehlt: $file"; exit 1; }
-        done
-        grep -qi 'VTRAIL.bin' artifacts/VTRAIL.cue || { echo '::error::CUE verweist nicht auf VTRAIL.bin'; exit 1; }
-        echo 'Alle PS1-Dateien sind vorhanden.'
-    - name: V31.6 FIX2 BIN CUE ELF EXE hochladen
+        '
+    - name: PS1 Hauptmenue-Artefakt hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-World-Of-Dragon-V31-6-FIX2-PS1
+        name: Lydra-World-Of-Dragon-Video-Menue-PS1
         path: artifacts/VTRAIL.*
         if-no-files-found: error
         retention-days: 14
-    - name: V31.6 FIX2 PS1-Artefakt wurde hochgeladen
-      shell: bash
-      run: |
-        set -euo pipefail
-        for f in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do
-            test -s "artifacts/$f" || { echo "::error::Kein PS1-Artefakt: $f"; exit 1; }
-        done
-        echo "FERTIG: BIN, CUE, EXE, ELF wurden als GitHub-Actions-Artefakt hochgeladen."
