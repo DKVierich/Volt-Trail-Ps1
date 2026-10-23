@@ -1,5 +1,5 @@
 # FIX3: GitHub Workflows muessen unter 128 KiB bleiben; Frames JPEG-komprimiert.
-name: Lydra World Of Dragon V31.6 - DKVierich Produktion und Hauptmenue
+name: Lydra World Of Dragon V31.6 FIX2 - DKVierich Produktion und Hauptmenue
 on:
   workflow_dispatch: null
 permissions:
@@ -1735,7 +1735,7 @@ jobs:
 
         static void vt_v314_hud(void) {
             if(vt_v314_phase==-1) {
-                FntPrint(5,"\nDKVierich\n\nProduktion\n");
+                if(vt_v314_elapsed>12)FntPrint(6,"DKVierich Produktion");
                 if(vt_v314_elapsed>40 && (vt_v314_blink%80u)<54u)
                     FntPrint(4,"   START");
             } else if(vt_v314_phase==1) {
@@ -1752,7 +1752,7 @@ jobs:
                 FntPrint(5,"%c TEXT %d\n\n",vt_v314_opt_cursor==1?'>':' ',vt_opt_text_speed);
                 FntPrint(5,"%c ZURUECK\n",vt_v314_opt_cursor==2?'>':' ');
             }
-            FntFlush(4);FntFlush(5);
+            FntFlush(4);FntFlush(5);FntFlush(6);
         }
         '''
 
@@ -1766,7 +1766,7 @@ jobs:
 
         # Fonts: 0-3 are the existing streams; add two separate title streams.
         once('FntOpen(247, 6, 69, 65, 0, 128);',
-             'FntOpen(247, 6, 69, 65, 0, 128);\n    FntOpen(108, 217, 205, 20, 0, 128); /* title START */\n    FntOpen(196, 162, 124, 76, 0, 512); /* title menu */')
+             'FntOpen(247, 6, 69, 65, 0, 128);\n    FntOpen(108, 217, 205, 20, 0, 128); /* title START */\n    FntOpen(196, 162, 124, 76, 0, 512); /* title menu */\n    FntOpen(73, 108, 212, 30, 0, 128); /* centered production splash */')
 
         # All menu controls already follow this line. Hide input from the old menus.
         once('        previous_pad = pad;',
@@ -1789,11 +1789,11 @@ jobs:
         print('V31.3 camera, terrain, dragons, combat, saves and ingame menu retained.')
         LYDRA_V314_MENU_PATCH
         python3 "$RUNNER_TEMP/lydra_v314_title.py"
-    - name: V31.6 Hauptmenue schaerfen sowie Bewegung und Kamera beschleunigen
+    - name: V31.6 FIX2 Schnelle Bewegung und Kamera sicher anwenden
       shell: bash
       run: |
         set -euo pipefail
-        cat > "$RUNNER_TEMP/lydra_v315_speed_patch.py" <<'PY'
+        cat > "$RUNNER_TEMP/lydra_v316_fix2_speed_patch.py" <<'PY'
         #!/usr/bin/env python3
         import os
         from pathlib import Path
@@ -1808,9 +1808,7 @@ jobs:
                 raise RuntimeError('V31.6 anchor expected once, got %d for: %r'%(n,old[:100]))
             s=s.replace(old,new,1)
 
-        # Sharper title/menu readability: keep the title keyframe visible after the intro.
-        once('if(vt_v314_phase==1 || vt_v314_phase==2 || vt_v314_phase==3)return 0;',
-             'if(vt_v314_phase==1 || vt_v314_phase==2 || vt_v314_phase==3)return 0;')
+        # Main menu frame selection is managed by the V31.6 title code.
 
         # Faster manual camera response.
         once('if(turn)vt_v292_cam_yaw=(vt_v292_cam_yaw+turn*40+4096)&4095;',
@@ -1821,17 +1819,15 @@ jobs:
         once('speed_q10+=3072;', 'speed_q10+=4096;')
         once('speed_q10-=3072;', 'speed_q10-=4096;')
 
-        # Make the on-title START hint slightly more readable by showing it a bit longer.
-        once('if((vt_v314_blink%70u)<39u)FntPrint(4,"   START");',
-             'if((vt_v314_blink%78u)<52u)FntPrint(4,"   START");')
+        # START timing is already updated by V31.6 title code.
 
         p.write_text(s,encoding='utf-8')
-        print('V31.5: sharper title/menu image preparation retained.')
-        print('V31.5: player speed increased from 8 to 11 units per frame target.')
-        print('V31.5: camera yaw speed increased from 40 to 56 units per update.')
+        print('V31.6 FIX2: no stale title anchors.')
+        print('V31.6 FIX2: player speed increased from 8 to 11 units per frame target.')
+        print('V31.6 FIX2: camera yaw speed increased from 40 to 56 units per update.')
         PY
-        python3 "$RUNNER_TEMP/lydra_v315_speed_patch.py"
-    - name: V31.6 Grafik und Hauptmenue vor Kompilierung pruefen
+        python3 "$RUNNER_TEMP/lydra_v316_fix2_speed_patch.py"
+    - name: V31.6 FIX2 Grafiken Hauptmenue und Laufgeschwindigkeit pruefen
       shell: bash
       run: |
         set -euo pipefail
@@ -1840,13 +1836,15 @@ jobs:
         test -s "$SRC/lydra_v314_frames.h" || { echo '::error::Intro-Bilder fehlen'; exit 1; }
         grep -q 'vt_v314_input' "$SRC/main.c" || { echo '::error::Hauptmenue fehlt'; exit 1; }
         grep -q 'vt_v314_image_7' "$SRC/lydra_v314_frames.h" || { echo '::error::Bild 8 fehlt'; exit 1; }
+        grep -q 'speed_q10+=4096;' "$SRC/main.c" || { echo '::error::Bewegungspatch fehlt'; exit 1; }
+        grep -q 'FntPrint(6,"DKVierich Produktion")' "$SRC/main.c" || { echo '::error::Produktion fehlt'; exit 1; }
         echo 'DKVierich-Produktion-Splash, Hauptmenue und schnellere Bewegungswerte stehen zur Kompilierung bereit.'
     - name: PS1 SDK installieren
       shell: bash
       run: |
         set -euo pipefail
         python3 "$RUNNER_TEMP/replay_v301.py" 'PS1 SDK installieren – V27 Basis'
-    - name: V31.6 PS1-Spiel kompilieren
+    - name: V31.6 FIX2 PS1-Spiel kompilieren
       shell: bash
       run: |
         set -euo pipefail
@@ -1856,7 +1854,7 @@ jobs:
       run: |
         set -euo pipefail
         python3 "$RUNNER_TEMP/replay_v301.py" 'Fertige PS1-Dateien einsammeln'
-    - name: V31.6 PS1-Dateien vor Upload pruefen
+    - name: V31.6 FIX2 PS1-Dateien vor Upload pruefen
       shell: bash
       run: |
         set -euo pipefail
@@ -1866,14 +1864,14 @@ jobs:
         done
         grep -qi 'VTRAIL.bin' artifacts/VTRAIL.cue || { echo '::error::CUE verweist nicht auf VTRAIL.bin'; exit 1; }
         echo 'Alle PS1-Dateien sind vorhanden.'
-    - name: V31.4 BIN CUE ELF EXE hochladen
+    - name: V31.6 FIX2 BIN CUE ELF EXE hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-World-Of-Dragon-V31-6-PS1
+        name: Lydra-World-Of-Dragon-V31-6-FIX2-PS1
         path: artifacts/VTRAIL.*
         if-no-files-found: error
         retention-days: 14
-    - name: V31.6 PS1-Artefakt wurde hochgeladen
+    - name: V31.6 FIX2 PS1-Artefakt wurde hochgeladen
       shell: bash
       run: |
         set -euo pipefail
