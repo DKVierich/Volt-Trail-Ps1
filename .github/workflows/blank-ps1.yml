@@ -1,6 +1,6 @@
 # V30.3 Vollstaendiger PS1 Build. Basis V30.1 + V30.2 + Sichtreparatur.
 # V27 und Memory Card bleiben unveraendert.
-name: Lydra World Of Dragon V30.3 - Kamera, Welt und Himmel Fix
+name: Lydra World Of Dragon V30.4 - Kamera, Welt und Himmel Fix
 on:
   workflow_dispatch: null
 permissions:
@@ -455,12 +455,41 @@ jobs:
         print('Existing save/card structure, controls, capture, NPCs, indoor houses untouched.')
         PY
         python3 "$RUNNER_TEMP/lydra_v303_patch.py"
+    - name: V30.4 Sonne und Mond weltfest ausrichten
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -s "$PROJECT_DIR/src/main.c"
+        cat > "$RUNNER_TEMP/lydra_v304_sonne.py" <<'PY'
+        #!/usr/bin/env python3
+        """Fix sky-body rotation without changing gameplay or Memory Card layout."""
+        import os,re
+        from pathlib import Path
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text(encoding='utf-8')
+        pattern=r'(?ms)^static void vt_v301_sun\(void\)\s*\{.*?^\}'
+        new_code='/* V30.4: celestial body has a compass bearing independent of the camera.\n   Day: east -> south -> west. The moon travels the same path at night.\n   A distant sky object uses angular projection, so it also stays steady\n   when the player walks or the camera turns. */\nstatic void vt_v301_sun(void) {\n    unsigned int t=vt_v301_clock%7200u;\n    int day=(t<4800u);\n    int segment=day?(int)t:(int)(t-4800u);\n    int duration=day?4800:2400;\n    int half=duration/2;\n    int rise=(segment<half)?segment:(duration-segment);\n    int bearing=3072-(segment*2048)/duration;\n    int relative=(bearing-vt_v292_cam_yaw+2048)&4095;\n    int sx,sy;\n    TILE *disc;\n    unsigned int aligned;\n\n    relative-=2048;\n    /* Preserve existing day/night sky illumination regardless of camera. */\n    if(day) {\n        draw[db].r0=(unsigned char)(64+rise/120);\n        draw[db].g0=(unsigned char)(112+rise/80);\n        draw[db].b0=(unsigned char)(180+rise/110);\n    } else {\n        draw[db].r0=12;\n        draw[db].g0=25;\n        draw[db].b0=55;\n    }\n    /* Approximately 72-degree horizontal field of view: hide objects outside it.\n       In particular, never draw a sun/moon permanently in the same screen spot. */\n    if(relative < -490 || relative > 490)return;\n    sx=160-(relative*160)/490;\n    sy=day?(89-rise/47):(79-rise/42);\n    aligned=(prim_used+3u)&~3u;\n    if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;\n    disc=(TILE*)(prim_arena[db]+aligned);\n    prim_used=aligned+sizeof(TILE);\n    setTile(disc);\n    setXY0(disc,sx-(day?12:8),sy-(day?12:8));\n    setWH(disc,day?24:16,day?24:16);\n    if(day)setRGB0(disc,255,231,129);\n    else setRGB0(disc,194,217,241);\n    addPrim(ot[db]+OT_LEN-2,disc);\n}'
+        s,count=re.subn(pattern,lambda m:new_code,s)
+        if count!=1:
+            raise RuntimeError('V30.4 sun function missing or duplicated: '+str(count))
+        for marker in ('vt_v301_day_night_hud();','vt_v293_move((unsigned int)pad);',
+                       'vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',
+                       'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)'):
+            if marker not in s:raise RuntimeError('V30.4 expected system missing: '+marker)
+        if s.count('static void vt_v301_sun(void)')!=1:
+            raise RuntimeError('V30.4 sun replaced more than once')
+        p.write_text(s,encoding='utf-8')
+        print('V30.4 sun/moon anchored to world compass, day clock unchanged.')
+        print('Camera yaw affects screen projection but no longer celestial world bearing.')
+        PY
+        python3 "$RUNNER_TEMP/lydra_v304_sonne.py"
+
     - name: PS1 SDK installieren
       shell: bash
       run: |
         set -euo pipefail
         python3 "$RUNNER_TEMP/replay_v301.py" 'PS1 SDK installieren – V27 Basis'
-    - name: Echtes V30.3 PS1-Spiel kompilieren
+    - name: Echtes V30.4 PS1-Spiel kompilieren
       shell: bash
       run: |
         set -euo pipefail
@@ -470,7 +499,7 @@ jobs:
       run: |
         set -euo pipefail
         python3 "$RUNNER_TEMP/replay_v301.py" 'Fertige PS1-Dateien einsammeln'
-    - name: V30.3 PS1-Dateien pruefen
+    - name: V30.4 PS1-Dateien pruefen
       shell: bash
       run: |
         set -euo pipefail
@@ -480,10 +509,10 @@ jobs:
         done
         grep -qi 'VTRAIL.bin' artifacts/VTRAIL.cue || { echo '::error::CUE verweist nicht auf VTRAIL.bin'; exit 1; }
         echo 'Alle PS1-Dateien sind vorhanden.'
-    - name: V30.3 BIN CUE ELF EXE als Artefakt hochladen
+    - name: V30.4 BIN CUE ELF EXE als Artefakt hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-World-Of-Dragon-PS1-V30-3
+        name: Lydra-World-Of-Dragon-PS1-V30-4
         path: artifacts/VTRAIL.*
         if-no-files-found: error
         retention-days: 14
