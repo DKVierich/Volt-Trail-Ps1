@@ -1,7 +1,7 @@
 # V30.5: KORRIGIERTER GitHub-Workflow. Baut V30.4 + Ost-Sued-West-Fix.
 # V30.3 Vollstaendiger PS1 Build. Basis V30.1 + V30.2 + Sichtreparatur.
 # V27 und Memory Card bleiben unveraendert.
-name: Lydra World Of Dragon V31.2 - Fluessige Bewegung und Kamera
+name: Lydra World Of Dragon V31.2 Korrigiert - Kamera und Bewegung
 on:
   workflow_dispatch: null
 permissions:
@@ -888,7 +888,7 @@ jobs:
         print('V31.1: collision system and memory-card serialization preserved.')
         LYDRA_V311_PATCH
         python3 "$RUNNER_TEMP/lydra_v311_apply.py"
-    - name: V31.2 Stabilere Kamera Bewegung und Performance
+    - name: V31.2 Korrigiert - Kamera Bewegung Performance
       shell: bash
       run: |
         set -euo pipefail
@@ -1003,24 +1003,13 @@ jobs:
         if 'near_step=140, near_cells=18' not in body:
             raise RuntimeError('Expected V31.1 near terrain settings, found different source')
         body=body.replace('near_step=140, near_cells=18', 'near_step=158, near_cells=16')
-        # Filter only distant tiles which are well behind the camera and fully out of view.
-        old='''                vt_v241_flat(x,z,x+far_step,z+far_step,44,
-                            r1-shade*3,g1-shade*3,b1-shade*2);'''
-        new='''                /* Conserve GTE/CPU time: don't submit distant tiles far behind the view.
-                           Front / side tiles remain and regenerate on every camera turn. */
-                        {
-                            int sn=vt_v293_sin(vt_v292_cam_yaw);
-                            int cs=vt_v293_cos(vt_v292_cam_yaw);
-                            long ahead=-(long)dx*sn+(long)dz*cs;
-                            if(ahead < -(long)(far_step*2)*1024L)continue;
-                        }
-                        vt_v241_flat(x,z,x+far_step,z+far_step,44,
-                            r1-shade*3,g1-shade*3,b1-shade*2);'''
-        if body.count(old)!=1:
-            raise RuntimeError('Expected V30.3 far terrain tile anchor not found')
-        body=body.replace(old,new,1)
+        # V31.2 KORRIGIERT: do not rely on C whitespace-specific string matches.
+        # Keep ALL distant terrain tiles: this protects full 360-degree visibility
+        # while the near terrain mesh (above) uses fewer polygons.
+        if 'vt_v241_flat(x,z,x+far_step,z+far_step,44,' not in body:
+            raise RuntimeError('V31.2: expected 360-degree far terrain renderer is missing')
         s=s[:a]+body+s[b:]
-        
+
         # Horizon is a distant visual ring: still closes 360 degrees with 16 wider peaks.
         a,b=span('vt_v300_horizon')
         body=s[a:b]
@@ -1069,7 +1058,7 @@ jobs:
     - name: V31.2 BIN CUE ELF EXE als Artefakt hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-World-Of-Dragon-PS1-V31-2
+        name: Lydra-World-Of-Dragon-PS1-V31-2-FIX
         path: artifacts/VTRAIL.*
         if-no-files-found: error
         retention-days: 14
