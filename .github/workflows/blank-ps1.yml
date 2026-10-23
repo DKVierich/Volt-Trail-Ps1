@@ -1,7 +1,7 @@
 # V30.5: KORRIGIERTER GitHub-Workflow. Baut V30.4 + Ost-Sued-West-Fix.
 # V30.3 Vollstaendiger PS1 Build. Basis V30.1 + V30.2 + Sichtreparatur.
 # V27 und Memory Card bleiben unveraendert.
-name: Lydra World Of Dragon V31.2 Korrigiert - Kamera und Bewegung
+name: Lydra World Of Dragon V31.3 - Fluessige Kamera und schnelle Bewegung
 on:
   workflow_dispatch: null
 permissions:
@@ -1030,12 +1030,147 @@ jobs:
         print('V31.2: lower ground draw cost while retaining 360-degree streaming coverage.')
         LYDRA_V312_PATCH
         python3 "$RUNNER_TEMP/lydra_v312_apply.py"
+
+    - name: V31.3 Kamerakonflikt und langsame Bewegung reparieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > "$RUNNER_TEMP/lydra_v313_patch.py" <<'LYDRA_V313_PATCH'
+        #!/usr/bin/env python3
+        # V31.3 remove competing auto-follow yaw, improve movement response and terrain load.
+        import os,re
+        from pathlib import Path
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text(encoding='utf-8')
+        
+        def span(name):
+            pattern=r'\bstatic\s+(?:void|int)\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
+            matches=list(re.finditer(pattern,s,re.S))
+            if len(matches)!=1:
+                raise RuntimeError('V31.3 expected exactly one '+name+': '+str(len(matches)))
+            start=matches[0].start();pos=matches[0].end();depth=1;state='code'
+            while pos<len(s) and depth:
+                ch=s[pos];nex=s[pos+1] if pos+1<len(s) else ''
+                if state=='code':
+                    if ch=='/' and nex=='/':state='line';pos+=1
+                    elif ch=='/' and nex=='*':state='block';pos+=1
+                    elif ch=='"':state='string'
+                    elif ch=="'":state='char'
+                    elif ch=='{':depth+=1
+                    elif ch=='}':depth-=1
+                elif state=='line':
+                    if ch=='\n':state='code'
+                elif state=='block':
+                    if ch=='*' and nex=='/':state='code';pos+=1
+                else:
+                    if ch=='\\':pos+=1
+                    elif (state=='string' and ch=='"') or (state=='char' and ch=="'"):state='code'
+                pos+=1
+            if depth:raise RuntimeError('V31.3 unclosed '+name)
+            return start,pos
+        
+        def replace(name,body):
+            global s
+            a,b=span(name)
+            s=s[:a]+body.strip()+'\n'+s[b:]
+        
+        # Root cause: old V29.2 auto-follow recomputes yaw target from movement dx/dz
+        # every frame and fights the manual LEFT/RIGHT camera established in V29.3.
+        replace('vt_v292_update_camera',r'''
+        static void vt_v292_update_camera(void) {
+            /* V31.3: manual camera only, no turning based on walking. */
+            vt_v292_last_x=px;
+            vt_v292_last_z=pz;
+            vt_v292_tracking=1;
+            vt_v292_yaw_target=vt_v292_cam_yaw;
+        }
+        ''')
+        
+        replace('vt_v293_move',r'''
+        /* V31.3: responsive manual camera and faster camera-relative movement.
+           Q10 subunits preserve diagonal motion between PS1 frames. */
+        static void vt_v293_move(unsigned int pad) {
+            static int fraction_x=0,fraction_z=0;
+            static int last_px=0,last_pz=0,initialized=0;
+            static int speed_q10=0;
+            int forward=0,turn=0,target;
+            int vx,vz,dx,dz;
+            /* Only reset velocity after teleports, not small collision adjustments. */
+            if(!initialized || px-last_px>80 || px-last_px< -80 ||
+               pz-last_pz>80 || pz-last_pz< -80) {
+                fraction_x=fraction_z=0;
+                speed_q10=0;
+                initialized=1;
+            }
+            if((pad&PAD_RIGHT) && !(pad&PAD_LEFT))turn=-1;
+            else if((pad&PAD_LEFT) && !(pad&PAD_RIGHT))turn=1;
+            if(turn)vt_v292_cam_yaw=(vt_v292_cam_yaw+turn*40+4096)&4095;
+            vt_v292_yaw_target=vt_v292_cam_yaw;
+            if((pad&PAD_UP) && !(pad&PAD_DOWN))forward=1;
+            else if((pad&PAD_DOWN) && !(pad&PAD_UP))forward=-1;
+            if(!forward) {
+                speed_q10=0;
+                fraction_x=fraction_z=0;
+            } else {
+                /* Full 8 units per frame after at most three movement updates. */
+                target=forward*8192;
+                if(speed_q10<target) {
+                    speed_q10+=3072;
+                    if(speed_q10>target)speed_q10=target;
+                } else if(speed_q10>target) {
+                    speed_q10-=3072;
+                    if(speed_q10<target)speed_q10=target;
+                }
+                vx=(-vt_v293_sin(vt_v292_cam_yaw)*speed_q10)/1024;
+                vz=( vt_v293_cos(vt_v292_cam_yaw)*speed_q10)/1024;
+                fraction_x+=vx;
+                fraction_z+=vz;
+                dx=fraction_x/1024;
+                dz=fraction_z/1024;
+                fraction_x-=dx*1024;
+                fraction_z-=dz*1024;
+                px+=dx;pz+=dz;
+                if(px < -WORLD_LIMIT) {px=-WORLD_LIMIT;fraction_x=0;speed_q10=0;}
+                if(px > WORLD_LIMIT)  {px=WORLD_LIMIT;fraction_x=0;speed_q10=0;}
+                if(pz < -WORLD_LIMIT) {pz=-WORLD_LIMIT;fraction_z=0;speed_q10=0;}
+                if(pz > WORLD_LIMIT)  {pz=WORLD_LIMIT;fraction_z=0;speed_q10=0;}
+                if(dx||dz) {
+                    step_count++;
+                    vt_v293_avatar_yaw=((speed_q10>0?2048:0)-vt_v292_cam_yaw+4096)&4095;
+                    if(dx>0 && dx>= (dz<0?-dz:dz))facing=2;
+                    else if(dx<0 && -dx>= (dz<0?-dz:dz))facing=1;
+                    else facing=(dz>=0)?3:0;
+                }
+            }
+            last_px=px;last_pz=pz;
+        }
+        ''')
+        
+        # 256 to 196 visible near-field cells, same near-field span (2528 -> 2520).
+        a,b=span('vt_v300_extend_ground')
+        block=s[a:b]
+        old='near_step=158, near_cells=16'
+        if block.count(old)!=1:
+            raise RuntimeError('V31.3 expected corrected V31.2 near terrain source')
+        block=block.replace(old,'near_step=180, near_cells=14',1)
+        s=s[:a]+block+s[b:]
+        
+        for x in ('vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',
+                  'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)',
+                  'vt_v31_oval(','vt_v301_sun(void)','vt_v292_draw_exploration_hud();'):
+            if x not in s:raise RuntimeError('V31.3 lost system '+x)
+        for name in ('vt_v293_move','vt_v292_update_camera','vt_v300_extend_ground'):
+            span(name)
+        p.write_text(s,encoding='utf-8')
+        print('V31.3: fixed manual camera, 2x movement speed and 23 percent less near terrain.')
+        LYDRA_V313_PATCH
+        python3 "$RUNNER_TEMP/lydra_v313_patch.py"
     - name: PS1 SDK installieren
       shell: bash
       run: |
         set -euo pipefail
         python3 "$RUNNER_TEMP/replay_v301.py" 'PS1 SDK installieren – V27 Basis'
-    - name: Echtes V31.2 PS1-Spiel kompilieren
+    - name: Echtes V31.3 PS1-Spiel kompilieren
       shell: bash
       run: |
         set -euo pipefail
@@ -1045,7 +1180,7 @@ jobs:
       run: |
         set -euo pipefail
         python3 "$RUNNER_TEMP/replay_v301.py" 'Fertige PS1-Dateien einsammeln'
-    - name: V31.2 PS1-Dateien pruefen
+    - name: V31.3 PS1-Dateien pruefen
       shell: bash
       run: |
         set -euo pipefail
@@ -1055,10 +1190,10 @@ jobs:
         done
         grep -qi 'VTRAIL.bin' artifacts/VTRAIL.cue || { echo '::error::CUE verweist nicht auf VTRAIL.bin'; exit 1; }
         echo 'Alle PS1-Dateien sind vorhanden.'
-    - name: V31.2 BIN CUE ELF EXE als Artefakt hochladen
+    - name: V31.3 BIN CUE ELF EXE als Artefakt hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-World-Of-Dragon-PS1-V31-2-FIX
+        name: Lydra-World-Of-Dragon-PS1-V31-3
         path: artifacts/VTRAIL.*
         if-no-files-found: error
         retention-days: 14
