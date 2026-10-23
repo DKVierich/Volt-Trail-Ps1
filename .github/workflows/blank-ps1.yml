@@ -1,7 +1,7 @@
 # V30.5: KORRIGIERTER GitHub-Workflow. Baut V30.4 + Ost-Sued-West-Fix.
 # V30.3 Vollstaendiger PS1 Build. Basis V30.1 + V30.2 + Sichtreparatur.
 # V27 und Memory Card bleiben unveraendert.
-name: Lydra World Of Dragon V31.1 - Fluessige Bewegung und Kamera
+name: Lydra World Of Dragon V31.2 - Fluessige Bewegung und Kamera
 on:
   workflow_dispatch: null
 permissions:
@@ -888,12 +888,165 @@ jobs:
         print('V31.1: collision system and memory-card serialization preserved.')
         LYDRA_V311_PATCH
         python3 "$RUNNER_TEMP/lydra_v311_apply.py"
+    - name: V31.2 Stabilere Kamera Bewegung und Performance
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > "$RUNNER_TEMP/lydra_v312_apply.py" <<'LYDRA_V312_PATCH'
+        #!/usr/bin/env python3
+        """Lydra V31.2: movement acceleration and consistent terrain draw budget."""
+        import os,re
+        from pathlib import Path
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text(encoding='utf-8')
+        
+        def span(name):
+            match=list(re.finditer(r'\bstatic\s+(?:void|int)\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{',s,re.S))
+            if len(match)!=1:
+                raise RuntimeError('V31.2 expected exactly one '+name+': '+str(len(match)))
+            start=match[0].start();pos=match[0].end();depth=1;state='code'
+            while pos<len(s) and depth:
+                ch=s[pos];nextc=s[pos+1] if pos+1<len(s) else ''
+                if state=='code':
+                    if ch=='/' and nextc=='/':state='line';pos+=1
+                    elif ch=='/' and nextc=='*':state='block';pos+=1
+                    elif ch=='"':state='string'
+                    elif ch=="'":state='char'
+                    elif ch=='{':depth+=1
+                    elif ch=='}':depth-=1
+                elif state=='line':
+                    if ch=='\n':state='code'
+                elif state=='block':
+                    if ch=='*' and nextc=='/':state='code';pos+=1
+                elif state in ('string','char'):
+                    if ch=='\\':pos+=1
+                    elif (state=='string' and ch=='"') or (state=='char' and ch=="'"):state='code'
+                pos+=1
+            if depth:raise RuntimeError('Unclosed function '+name)
+            return start,pos
+        
+        def replace_func(name,new):
+            global s
+            a,b=span(name)
+            s=s[:a]+new.strip()+'\n'+s[b:]
+        
+        move=r'''
+        /* V31.2: accelerate/decelerate subunits and ease turn initiation.
+           Input retains UP forward, DOWN backward, LEFT/RIGHT camera only.
+           The established movement/collision/save formats are untouched. */
+        static void vt_v293_move(unsigned int pad) {
+            static int rem_x=0,rem_z=0;
+            static int last_x=0,last_z=0,ready=0;
+            static int velocity=0;        /* -4096 to 4096, signed running speed */
+            static int turn_velocity=0;   /* signed angle units per frame, in Q8 */
+            int direction=0,turn=0,desired_turn,desired_velocity;
+            int diff,dx=0,dz=0,vx,vz;
+            if(!ready || px!=last_x || pz!=last_z) {
+                rem_x=rem_z=velocity=0;
+                ready=1;
+            }
+        
+            if((pad&PAD_RIGHT) && !(pad&PAD_LEFT))turn=-1;
+            else if((pad&PAD_LEFT) && !(pad&PAD_RIGHT))turn=1;
+        
+            if(turn) {
+                desired_turn=turn*20*256; /* full turn is ~1.76 degrees per rendered frame */
+                diff=desired_turn-turn_velocity;
+                turn_velocity+=(diff/3);
+                if(diff>-3 && diff<3)turn_velocity=desired_turn;
+                vt_v292_cam_yaw=(vt_v292_cam_yaw+(turn_velocity/256)+4096)&4095;
+            } else {
+                turn_velocity=0; /* no drift after releasing the camera turn */
+            }
+            vt_v292_yaw_target=vt_v292_cam_yaw;
+        
+            if((pad&PAD_UP) && !(pad&PAD_DOWN))direction=1;
+            else if((pad&PAD_DOWN) && !(pad&PAD_UP))direction=-1;
+            desired_velocity=direction*4096;
+            diff=desired_velocity-velocity;
+            velocity+=diff/4;
+            if(diff>-8 && diff<8)velocity=desired_velocity;
+            if(velocity>-30 && velocity<30 && !direction)velocity=0;
+            if(velocity) {
+                /* X/Z velocity in units * 1024; keep fractional remainder on diagonal headings. */
+                vx=(-vt_v293_sin(vt_v292_cam_yaw)*velocity)/1024;
+                vz=( vt_v293_cos(vt_v292_cam_yaw)*velocity)/1024;
+                rem_x+=vx;
+                rem_z+=vz;
+                dx=rem_x/1024;
+                dz=rem_z/1024;
+                rem_x-=dx*1024;
+                rem_z-=dz*1024;
+                px+=dx; pz+=dz;
+                if(px < -WORLD_LIMIT) {px=-WORLD_LIMIT;rem_x=0;velocity=0;}
+                if(px >  WORLD_LIMIT) {px= WORLD_LIMIT;rem_x=0;velocity=0;}
+                if(pz < -WORLD_LIMIT) {pz=-WORLD_LIMIT;rem_z=0;velocity=0;}
+                if(pz >  WORLD_LIMIT) {pz= WORLD_LIMIT;rem_z=0;velocity=0;}
+                if(dx || dz)step_count++;
+                if(dx || dz) {
+                    vt_v293_avatar_yaw=((velocity>0?2048:0)-vt_v292_cam_yaw+4096)&4095;
+                    if(dx>0 && dx>= (dz<0?-dz:dz))facing=2;
+                    else if(dx<0 && -dx>= (dz<0?-dz:dz))facing=1;
+                    else facing=(dz>=0)?3:0;
+                }
+            } else {
+                rem_x=rem_z=0;
+            }
+            last_x=px;last_z=pz;
+        }
+        '''
+        replace_func('vt_v293_move',move)
+        
+        # Keep the same terrain extent at a lower polygon cost.
+        a,b=span('vt_v300_extend_ground')
+        body=s[a:b]
+        if 'near_step=140, near_cells=18' not in body:
+            raise RuntimeError('Expected V31.1 near terrain settings, found different source')
+        body=body.replace('near_step=140, near_cells=18', 'near_step=158, near_cells=16')
+        # Filter only distant tiles which are well behind the camera and fully out of view.
+        old='''                vt_v241_flat(x,z,x+far_step,z+far_step,44,
+                            r1-shade*3,g1-shade*3,b1-shade*2);'''
+        new='''                /* Conserve GTE/CPU time: don't submit distant tiles far behind the view.
+                           Front / side tiles remain and regenerate on every camera turn. */
+                        {
+                            int sn=vt_v293_sin(vt_v292_cam_yaw);
+                            int cs=vt_v293_cos(vt_v292_cam_yaw);
+                            long ahead=-(long)dx*sn+(long)dz*cs;
+                            if(ahead < -(long)(far_step*2)*1024L)continue;
+                        }
+                        vt_v241_flat(x,z,x+far_step,z+far_step,44,
+                            r1-shade*3,g1-shade*3,b1-shade*2);'''
+        if body.count(old)!=1:
+            raise RuntimeError('Expected V30.3 far terrain tile anchor not found')
+        body=body.replace(old,new,1)
+        s=s[:a]+body+s[b:]
+        
+        # Horizon is a distant visual ring: still closes 360 degrees with 16 wider peaks.
+        a,b=span('vt_v300_horizon')
+        body=s[a:b]
+        if 'for(i=0;i<24;i++)' not in body or '(i*4096)/24' not in body:
+            raise RuntimeError('V30.3 horizon changed unexpectedly')
+        body=body.replace('for(i=0;i<24;i++)','for(i=0;i<16;i++)',1)
+        body=body.replace('(i*4096)/24','(i*4096)/16',1)
+        s=s[:a]+body+s[b:]
+        
+        for name in ('vt_v293_sin','vt_v293_move','vt_v300_extend_ground','vt_v300_horizon','vt_player','vt_sparkit'):
+            span(name)
+        for feat in ('vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',
+                     'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)',
+                     'vt_v31_oval(', 'vt_v301_sun(void)','vt_v292_draw_exploration_hud();'):
+            if feat not in s:raise RuntimeError('V31.2 lost feature '+feat)
+        p.write_text(s,encoding='utf-8')
+        print('V31.2: eased camera turn/movement; no sideways translation on LEFT/RIGHT.')
+        print('V31.2: lower ground draw cost while retaining 360-degree streaming coverage.')
+        LYDRA_V312_PATCH
+        python3 "$RUNNER_TEMP/lydra_v312_apply.py"
     - name: PS1 SDK installieren
       shell: bash
       run: |
         set -euo pipefail
         python3 "$RUNNER_TEMP/replay_v301.py" 'PS1 SDK installieren – V27 Basis'
-    - name: Echtes V31.1 PS1-Spiel kompilieren
+    - name: Echtes V31.2 PS1-Spiel kompilieren
       shell: bash
       run: |
         set -euo pipefail
@@ -903,7 +1056,7 @@ jobs:
       run: |
         set -euo pipefail
         python3 "$RUNNER_TEMP/replay_v301.py" 'Fertige PS1-Dateien einsammeln'
-    - name: V31.1 PS1-Dateien pruefen
+    - name: V31.2 PS1-Dateien pruefen
       shell: bash
       run: |
         set -euo pipefail
@@ -913,10 +1066,10 @@ jobs:
         done
         grep -qi 'VTRAIL.bin' artifacts/VTRAIL.cue || { echo '::error::CUE verweist nicht auf VTRAIL.bin'; exit 1; }
         echo 'Alle PS1-Dateien sind vorhanden.'
-    - name: V31.1 BIN CUE ELF EXE als Artefakt hochladen
+    - name: V31.2 BIN CUE ELF EXE als Artefakt hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-World-Of-Dragon-PS1-V31-1
+        name: Lydra-World-Of-Dragon-PS1-V31-2
         path: artifacts/VTRAIL.*
         if-no-files-found: error
         retention-days: 14
