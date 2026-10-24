@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.4.3 - Schnelleres Laufen und Kameradrehen
+name: Lydra World Of Dragon V31.9.5 - Bessere 3D-Landschaft mit stabilem Tempo
 'on':
   workflow_dispatch: {}
 permissions:
@@ -1182,6 +1182,122 @@ jobs:
             if marker not in s:raise RuntimeError('Feature missing: '+marker)
         print('V31.9.4.3 movement, FPS display, intro/menu and save/load intact')
         LYDRA_V31943_CHECK
+    - name: V31.9.5 Ruhigere Landschaftsfarben Berge und Baume
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'LYDRA_V3195_TERRAIN'
+        import os,re
+        from pathlib import Path
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text(encoding='utf-8')
+        def one(old,new):
+            global s
+            if s.count(old)!=1:raise RuntimeError('V31.9.5 unexpected source: '+old[:75])
+            s=s.replace(old,new,1)
+        def span(name):
+            matches=list(re.finditer(r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{',s,re.S))
+            if len(matches)!=1:raise RuntimeError('Missing function '+name)
+            a=matches[0].start();i=matches[0].end();depth=1;state='code'
+            while i<len(s) and depth:
+                c=s[i];n=s[i+1] if i+1<len(s) else ''
+                if state=='code':
+                    if c=='/' and n=='/':state='line';i+=1
+                    elif c=='/' and n=='*':state='comment';i+=1
+                    elif c=='"':state='string'
+                    elif c=="'":state='char'
+                    elif c=='{':depth+=1
+                    elif c=='}':depth-=1
+                elif state=='line':
+                    if c=='\n':state='code'
+                elif state=='comment':
+                    if c=='*' and n=='/':state='code';i+=1
+                else:
+                    if c=='\\':i+=1
+                    elif (state=='string' and c=='"') or (state=='char' and c=="'"):state='code'
+                i+=1
+            if depth:raise RuntimeError('Unbalanced '+name)
+            return a,i
+        a,b=span('vt_v300_extend_ground')
+        ground=s[a:b]
+        if 'near_cells=10' not in ground or 'far_cells=12' not in ground:
+            raise RuntimeError('Expected V31.9.4.3 10x10 terrain not found')
+        # Reduce the harsh alternating light/dark green stripes without
+        # adding a single triangle or affecting the player collision plane.
+        shades=(
+            ('r1=84;g1=134;b1=128;r2=62;g2=108;b2=112;',
+             'r1=84;g1=134;b1=128;r2=76;g2=124;b2=122;'),
+            ('r1=116;g1=143;b1=87;r2=78;g2=111;b2=77;',
+             'r1=116;g1=143;b1=87;r2=102;g2=132;b2=83;'),
+            ('r1=85;g1=162;b1=90;r2=54;g2=132;b2=75;',
+             'r1=85;g1=162;b1=90;r2=74;g2=149;b2=84;'),
+        )
+        for before,after in shades:
+            if ground.count(before)!=1:raise RuntimeError('Terrain palette layout changed')
+            ground=ground.replace(before,after,1)
+        s=s[:a]+ground+s[b:]
+        # Same calls, less jagged mountains, 14+7 peaks instead of 16+8.
+        a,b=span('vt_v300_horizon')
+        if 'vt_v24_peak(' not in s[a:b]:raise RuntimeError('Expected distant mountains')
+        mountains="""/* V31.9.5: broad staggered peaks and lower rolling foothills.
+           Only distant visual geometry; player physics remains flat. */
+        static void vt_v300_horizon(void) {
+            int i;
+            for(i=0;i<14;i++) {
+                int angle=(i*4096)/14;
+                int x=px+(vt_v293_sin(angle)*(2800+(i%3)*110))/1024;
+                int z=pz+(vt_v293_cos(angle)*(2800+(i%3)*110))/1024;
+                int seed=vt_v300_hash(i*427,region*311+i*89);
+                int height=215+((seed>>3)&3)*29;
+                int r=95,g=140,b=174;
+                if(vt_v300_forward(x-px,z-pz)<-400)continue;
+                if(region==1){r=104;g=157;b=194;height+=82;}
+                else if(region==2){r=113;g=147;b=161;height+=34;}
+                vt_v24_peak(x,z,1120,height,r,g,b);
+                if((i&1)==0) {
+                    int fx=px+(vt_v293_sin(angle)*2100)/1024;
+                    int fz=pz+(vt_v293_cos(angle)*2100)/1024;
+                    int fh=75+((seed>>7)&3)*23;
+                    vt_v24_peak(fx,fz,720,fh,r-13,g-12,b-13);
+                }
+            }
+        }"""
+        s=s[:a]+mountains+s[b:]
+        # Variation in existing distant tree model only: object count unchanged.
+        a,b=span('vt_v300_mid_detail')
+        trees=s[a:b]
+        old='vt_v24_tree(x,z,10+((h>>3)&7),((h>>5)%3));'
+        if trees.count(old)!=1 or 'amount>=8' not in trees:
+            raise RuntimeError('V31.9.4.3 distant tree budget changed')
+        trees=trees.replace(old,'vt_v24_tree(x,z,10+((h>>3)&11),((h>>6)%3));')
+        s=s[:a]+trees+s[b:]
+        for feature in ('target=forward*17920;', 'desired_turn=turn*45*256;',
+                        'vt_v3194_perf_hud(', 'vt_v31813_draw_start(',
+                        'vt_v3172_menu_slots(', 'vt_save_game(void)',
+                        'vt_load_game(void)', 'vt_v281_resolve_movement();'):
+            if feature not in s:raise RuntimeError('Preserved gameplay missing: '+feature)
+        p.write_text(s,encoding='utf-8')
+        print('V31.9.5: palette blended; 14+7 broad mountains; distant trees diversified')
+        print('V31.9.4.3: 10x10 near mesh, frame timing, speed +25%, menus and saves intact')
+        LYDRA_V3195_TERRAIN
+    - name: V31.9.5 Neue Grafik und Performance-Budget pruefen
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'LYDRA_V3195_VERIFY'
+        import os,re
+        from pathlib import Path
+        s=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')
+        checks=('for(i=0;i<14;i++)', 'vt_v24_peak(x,z,1120,height,r,g,b);',
+                'near_cells=10', 'far_cells=12', 'amount>=8',
+                'target=forward*17920;', 'desired_turn=turn*45*256;',
+                'vt_v3194_perf_hud(', 'vt_v31813_draw_start(',
+                'vt_save_game(void)', 'vt_load_game(void)')
+        for c in checks:
+            if c not in s:raise RuntimeError('V31.9.5 missing component: '+c)
+        if s.count('for(i=0;i<14;i++)')<1:raise RuntimeError('Wrong horizon budget')
+        print('V31.9.5 graphics present; no new ground cells or extra vegetation')
+        LYDRA_V3195_VERIFY
     - name: Basis 50
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
@@ -1251,16 +1367,16 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p artifacts
-        printf '%s\n'   'LYDRA WORLD OF DRAGON V31.9.4.3 (TEMPO +25%)'   'RUNTIME: FPS-Anzeige unten rechts (F + zwei Ziffern)'   'Nahlandschaft 14x14 -> 10x10, Fernlandschaft unveraendert'   'FPS-Zaehler misst neue Weltbilder anhand PS1-VBlanks, nicht Bildschirmaufnahme-FPS.'   'Tempo V31.9.4.3: Bewegung +25 Prozent, Kameraschwenk +25 Prozent'   > artifacts/VERSION_V31_9_4_3.txt
-        for f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe VERSION_V31_9_4_3.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do
+        printf '%s\n'   'LYDRA WORLD OF DRAGON V31.9.5 (GRAFIK + TEMPO)'   'RUNTIME: FPS-Anzeige unten rechts (F + zwei Ziffern)'   'Nahlandschaft 14x14 -> 10x10, Fernlandschaft unveraendert'   'FPS-Zaehler misst neue Weltbilder anhand PS1-VBlanks, nicht Bildschirmaufnahme-FPS.'   'Tempo V31.9.4.3: +25 Prozent beibehalten' 'V31.9.5: sanftere Farbkontraste, breite Berge und variable Baumgroessen'   > artifacts/VERSION_V31_9_5.txt
+        for f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe VERSION_V31_9_5.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do
             test -s "artifacts/$f" || { echo "::error::Fehlende Datei: artifacts/$f"; exit 1; }
         done
-        cat artifacts/VERSION_V31_9_4_3.txt
+        cat artifacts/VERSION_V31_9_5.txt
         cat artifacts/RENDERER_PRUEFUNG_V31_9_3_1.txt
     - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-PS1-V31-9-4-3-TEMPO-PLUS-25
+        name: Lydra-PS1-V31-9-5-GRAFIK-LOD
         path: artifacts/
         if-no-files-found: error
         retention-days: 14
