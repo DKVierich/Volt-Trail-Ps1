@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.7 - Wiesen und Waldlandschaften
+name: Lydra World Of Dragon V31.9.7.1 - Wald-Patch korrigiert
 'on':
   workflow_dispatch: {}
 permissions:
@@ -719,7 +719,7 @@ jobs:
         for marker in ('near_cells=10','far_cells=12','amount>=8',\n               'target=forward*17920;','desired_turn=turn*45*256;',\n\
         \               'vt_v3194_perf_hud(','vt_save_game(void)'):\n    if marker not in s:raise RuntimeError('Lost\
         \ stable feature '+marker)\np.write_text(s)\nprint('V31.9.6.1: mountain and tree variants updated')\nLYDRA_3196\n"
-    - name: V31.9.7 Naturregionen und Waldgruppen bauen
+    - name: V31.9.7.1 Naturregionen und Waldgruppen - Kommentar-Fix
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_V3197_PATCH'\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
         s=p.read_text(encoding='utf-8')\ndef change(name, pairs):\n    global s\n    m=list(re.finditer(r'\\bstatic\\\
@@ -742,18 +742,19 @@ jobs:
         \ no new polygons. */\\n'\n  '    { int tone=(vt_v293_sin(px/3)+vt_v293_cos(pz/3))/256;\\n'\n  '      vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,\\\
         n'\n  '                         r1+tone,g1+tone*2,b1+tone/2,\\n'\n  '                         r2+tone,g2+tone*2,b2+tone/2);\
         \ }'),\n])\n# Trees form small groves rather than even random scatter; 8-object hard limit unchanged.\n\
-        change('vt_v300_mid_detail',[\n ('if((h&7)>2 || amount>=8)continue;',\n  'if(((h&7)>2 && ((vt_v300_hash(x/900,z/900)>>4)&3)!=0)\
-        \ || amount>=8)continue;'),\n ('vt_v24_tree(x,z,11+((h>>3)&15),((h>>6)%3));',\n  'vt_v24_tree(x,z,11+((h>>3)&15),((vt_v300_hash(x/900,z/900)>>6)%3));'),\n\
+        change('vt_v300_mid_detail',[\n ('if((h&7)>2 || amount>=8 /* V31.9.4 distant vegetation budget */)continue;',\n\
+        \  'if(((h&7)>2 && ((vt_v300_hash(x/900,z/900)>>4)&3)!=0) || amount>=8 /* V31.9.4 distant vegetation budget\
+        \ */)continue;'),\n ('vt_v24_tree(x,z,11+((h>>3)&15),((h>>6)%3));',\n  'vt_v24_tree(x,z,11+((h>>3)&15),((vt_v300_hash(x/900,z/900)>>6)%3));'),\n\
         ])\nfor needle in ('near_step=180,near_cells=10','far_step=560,far_cells=12',\n 'amount>=8','for(i=0;i<14;i++)','3060+(i%4)*130',\n\
         \ 'target=forward*17920;','desired_turn=turn*45*256;',\n 'vt_v3194_perf_hud(', 'vt_v31813_draw_start(',\n\
         \ 'vt_save_game(void)', 'vt_load_game(void)'):\n    if needle not in s:raise RuntimeError('V31.9.7 missing\
         \ inherited part: '+needle)\np.write_text(s,encoding='utf-8')\nprint('V31.9.7: regional green meadows and\
         \ small forest groves; PS1 geometry budget unchanged')\nLYDRA_V3197_PATCH\n"
-    - name: V31.9.7 Landschaft und Performance-Limits pruefen
+    - name: V31.9.7.1 Landschaft und Performance-Limits pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_V3197_CHECK'\nimport os\nfrom pathlib import Path\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
         for x in ('meadow=((vt_v300_hash(x/1440,z/1440)>>5)&7)-3;',\n          'vt_v293_sin(px/3)+vt_v293_cos(pz/3)',\n\
-        \          'vt_v300_hash(x/900,z/900)','amount>=8',\n          'near_cells=10','far_cells=12','for(i=0;i<14;i++)',\n\
+        \          'vt_v300_hash(x/900,z/900)','amount>=8 /* V31.9.4 distant vegetation budget */',\n          'near_cells=10','far_cells=12','for(i=0;i<14;i++)',\n\
         \          'target=forward*17920;', 'desired_turn=turn*45*256;',\n          'vt_save_game(void)','vt_load_game(void)'):\n\
         \    if x not in s:raise RuntimeError('Missing V31.9.7 feature '+x)\nprint('V31.9.7: world patches, forest\
         \ groves, camera and save verified')\nLYDRA_V3197_CHECK\n"
@@ -835,13 +836,13 @@ jobs:
         \   'RUNTIME: FPS-Anzeige unten rechts (F + zwei Ziffern)'   'Nahlandschaft 14x14 -> 10x10, Fernlandschaft\
         \ unveraendert'   'FPS-Zaehler misst neue Weltbilder anhand PS1-VBlanks, nicht Bildschirmaufnahme-FPS.'\
         \   'Tempo V31.9.4.3: +25 Prozent beibehalten' 'V31.9.5: sanftere Farbkontraste, breite Berge und variable\
-        \ Baumgroessen'   > artifacts/VERSION_V31_9_7.txt\nfor f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe\
-        \ VERSION_V31_9_7.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do\n    test -s \"artifacts/$f\" || { echo \"::error::Fehlende\
-        \ Datei: artifacts/$f\"; exit 1; }\ndone\ncat artifacts/VERSION_V31_9_7.txt\ncat artifacts/RENDERER_PRUEFUNG_V31_9_3_1.txt\n"
+        \ Baumgroessen'   > artifacts/VERSION_V31_9_7_1.txt\nfor f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe\
+        \ VERSION_V31_9_7_1.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do\n    test -s \"artifacts/$f\" || { echo \"::error::Fehlende\
+        \ Datei: artifacts/$f\"; exit 1; }\ndone\ncat artifacts/VERSION_V31_9_7_1.txt\ncat artifacts/RENDERER_PRUEFUNG_V31_9_3_1.txt\n"
     - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-PS1-V31-9-7-WIESEN-WALD-WELT
+        name: Lydra-PS1-V31-9-7-1-WALD-PATCH-FIX
         path: artifacts/
         if-no-files-found: error
         retention-days: 14
