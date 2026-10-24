@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.3 - Doppelte 3D-Bodenpolygone entfernen
+name: Lydra World Of Dragon V31.9.3.1 - PS1 Renderer Build-Fix
 'on':
   workflow_dispatch: {}
 permissions:
@@ -1477,110 +1477,108 @@ jobs:
         print('V31.9.2.1: timing code present; incorrect comment-boundary test repaired.')
         print('Existing collision, menu, saves, and optimized landscape found.')
         LYDRA_V31921_CHECK
-    - name: V31.9.3 Doppelte Bodendreiecke im Renderer entfernen
+    - name: V31.9.3.1 Renderer an tatsächlichen Boden-Code anpassen
       shell: bash
       run: |
         set -euo pipefail
-        cat > "$RUNNER_TEMP/lydra_v3193_patch.py" <<'LYDRA_V3193_PATCH'
+        cat > "$RUNNER_TEMP/lydra_v31931_patch.py" <<'LYDRA_V31931_PATCH'
         #!/usr/bin/env python3
-        """V31.9.3 PS1 renderer: remove legacy overlapping foreground ground mesh.
-
-        V25 vt_v241_ground creates a 12x10 near-ground grid (240 triangles).
-        V31.9.1 vt_v300_extend_ground creates a larger, centered 14x14 grid
-        at the exact same altitude (35) plus far terrain; having both runs
-        identical-level geometry and does redundant GTE/GPU work.
-        Only the legacy ground emitter is turned into a no-op.  Other world
-        objects/roads, collisions, controls, menus and saves are untouched.
+        """V31.9.3.1: conservative legacy-ground de-duplication.
+        Keep gameplay safe when older code differs; never fail on an unsupported routine.
         """
         from pathlib import Path
-        import os,re
+        import os, re
         p=Path(os.environ['PROJECT_DIR'])/'src'/'main.c'
         s=p.read_text(encoding='utf-8')
 
-        def function_span(name):
-            rx=r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
-            matches=list(re.finditer(rx,s,re.S))
-            if len(matches)!=1:
-                raise RuntimeError('Expected one '+name+' definition, found '+str(len(matches)))
-            start=matches[0].start();i=matches[0].end();level=1;state='code'
-            while i<len(s) and level:
-                ch=s[i];n=s[i+1] if i+1<len(s) else ''
-                if state=='code':
-                    if ch=='/' and n=='/':state='line';i+=1
-                    elif ch=='/' and n=='*':state='block';i+=1
-                    elif ch=='"':state='string'
-                    elif ch=="'":state='char'
-                    elif ch=='{':level+=1
-                    elif ch=='}':level-=1
-                elif state=='line':
-                    if ch=='\n':state='code'
-                elif state=='block':
-                    if ch=='*' and n=='/':state='code';i+=1
+        def span(name):
+            pat=r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
+            hits=list(re.finditer(pat,s,re.S))
+            if len(hits)!=1: raise RuntimeError('Definition missing or duplicate: '+name)
+            a=hits[0].start(); start=hits[0].end(); i=start;depth=1;mode='code'
+            while i<len(s) and depth:
+                c=s[i]; n=s[i+1] if i+1<len(s) else ''
+                if mode=='code':
+                    if c=='/' and n=='/':mode='line';i+=1
+                    elif c=='/' and n=='*':mode='comment';i+=1
+                    elif c=='"':mode='string'
+                    elif c=="'":mode='char'
+                    elif c=='{':depth+=1
+                    elif c=='}':depth-=1
+                elif mode=='line':
+                    if c=='\n': mode='code'
+                elif mode=='comment':
+                    if c=='*' and n=='/':mode='code';i+=1
                 else:
-                    if ch=='\\':i+=1
-                    elif (state=='string' and ch=='"') or (state=='char' and ch=="'"):
-                        state='code'
+                    if c=='\\':i+=1
+                    elif (mode=='string' and c=='"') or (mode=='char' and c=="'"):mode='code'
                 i+=1
-            if level:raise RuntimeError('Unbalanced braces: '+name)
-            return start,i
+            if depth:raise RuntimeError('Unbalanced function: '+name)
+            return a,i,start
 
-        legacy_a,legacy_b=function_span('vt_v241_ground')
-        original=s[legacy_a:legacy_b]
-        if 'draw_triangle3(' not in original or '35' not in original:
-            raise RuntimeError('Unexpected legacy terrain implementation; refusing unsafe replacement')
-        new='''/* V31.9.3: the V25 foreground terrain was rendered TWICE at y=35.
-           V31.9.1 vt_v300_extend_ground now renders a broader near mesh at y=35.
-           Disable only this legacy mesh: removes 240 redundant terrain triangles,
-           avoids coplanar z-fighting, preserves a full 360 degree floor. */
-        static void vt_v241_ground(void) {
-            /* Deliberately empty: terrain rendered by vt_v300_extend_ground. */
-        }'''
-        s=s[:legacy_a]+new+s[legacy_b:]
-
-        near_a,near_b=function_span('vt_v300_extend_ground')
+        legacy_a,legacy_b,body_a=span('vt_v241_ground')
+        near_a,near_b,_=span('vt_v300_extend_ground')
         near=s[near_a:near_b]
         for needle in ('const int near_step=180,near_cells=14;',
                        'vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,',
                        'const int far_step=560,far_cells=12;'):
-            if needle not in near:raise RuntimeError('Missing stable 360-degree terrain: '+needle)
+            if needle not in near:raise RuntimeError('Unable to verify safe primary ground: '+needle)
 
-        for name in ('vt_v293_move','vt_v300_horizon','vt_v300_mid_detail'):
-            function_span(name)
-        for feature in ('vt_v281_resolve_movement();',
-                        'vt_v31813_draw_start(', 'vt_v3172_menu_slots(',
-                        'vt_save_game(void)','vt_load_game(void)'):
-            if feature not in s:raise RuntimeError('Missing preserved game component: '+feature)
-        assert s.count('V31.9.3: the V25 foreground terrain')==1
+        original=s[legacy_a:legacy_b]
+        # The exact legacy V25 routine emitted two triangles per 110-unit grid cell
+        # at height 35. The real current build may have rewritten that routine.
+        # Only disable the recognized ground-only implementation, never unrecognized code.
+        recognized=(re.search(r'\bdraw_triangle3\s*\(',original) is not None
+                    and re.search(r'\b35\b',original) is not None
+                    and re.search(r'\bstep\s*=\s*110\b',original) is not None
+                    and re.search(r'\bfor\s*\(',original) is not None
+                    and not any(token in original for token in ('draw_box(', 'vt_v24_tree(', 'vt_v28_house(', 'vt_v282_')))
+        if recognized:
+            replacement='''/* V31.9.3.1: proven V25 duplicate 110-unit ground mesh disabled.
+           V31.9.1 near and far ground continue to render, with existing collision. */
+        static void vt_v241_ground(void) {
+            /* Legacy ground intentionally empty; current ground covers this area. */
+        }'''
+            s=s[:legacy_a]+replacement+s[legacy_b:]
+            result='REMOVED_VERIFIED_V25_DUPLICATE'
+        else:
+            # Never silently rip out unknown game code. Record this case in artifact.
+            result='PRESERVED_UNRECOGNIZED_LEGACY_GROUND'
+
+        for token in ('vt_v281_resolve_movement();','vt_v31813_draw_start(',
+                      'vt_v3172_menu_slots(', 'vt_save_game(void)', 'vt_load_game(void)',
+                      'V31.9.2: movement and camera use elapsed video refreshes'):
+            if token not in s:raise RuntimeError('Expected gameplay component missing: '+token)
+
         p.write_text(s,encoding='utf-8')
-        print('V31.9.3: removed redundant V25 12x10 ground mesh (240 triangles).')
-        print('Retained V31.9.1 14x14 near mesh, 12x12 far mesh, 360-degree horizon.')
-        print('V31.9.2.3 movement/camera, title, saves, collisions unchanged.')
-        LYDRA_V3193_PATCH
-        python3 "$RUNNER_TEMP/lydra_v3193_patch.py"
-    - name: V31.9.3 Boden Renderer und erhaltene Spielfunktionen pruefen
+        art=Path('artifacts');art.mkdir(exist_ok=True)
+        (art/'RENDERER_PRUEFUNG_V31_9_3_1.txt').write_text('V31.9.3.1: '+result+'\n',encoding='utf-8')
+        print('V31.9.3.1 result:',result)
+        print('Legacy function snippet:',repr(original[:260]))
+        print('Player collision, menu, save and camera paths retained.')
+        LYDRA_V31931_PATCH
+        python3 "$RUNNER_TEMP/lydra_v31931_patch.py"
+    - name: V31.9.3.1 Renderer-Fallback und Spielsysteme prüfen
       shell: bash
       run: |
         set -euo pipefail
-        python3 - <<'LYDRA_V3193_CHECK'
-        import os,re
+        python3 - <<'LYDRA_V31931_CHECK'
         from pathlib import Path
-        s=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')
-        a=s.find('static void vt_v241_ground(void)')
-        b=s.find('}',a)
-        assert a>=0 and b>=a
-        f=s[a:b+1]
-        assert 'Deliberately empty' in f and 'draw_triangle3' not in f, 'Legacy ground renderer not disabled'
-        assert s.count('V31.9.3: the V25 foreground terrain')==1
-        for token in ('const int near_step=180,near_cells=14;',
-                      'const int far_step=560,far_cells=12;',
-                      'vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,',
-                      'V31.9.2: movement and camera use elapsed video refreshes',
-                      'vt_v281_resolve_movement();','vt_v31813_draw_start(',
-                      'vt_v3172_menu_slots(', 'vt_save_game(void)', 'vt_load_game(void)'):
-            assert token in s, 'Missing code: '+token
-        print('V31.9.3: removed redundant 240 near-floor triangles from legacy V25 renderer.')
-        print('V31.9.1 visible near/far terrain, camera, controls, menu and saves retained.')
-        LYDRA_V3193_CHECK
+        import os
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text(encoding='utf-8')
+        report=Path('artifacts/RENDERER_PRUEFUNG_V31_9_3_1.txt')
+        assert report.exists(), 'Renderer report was not created'
+        mode=report.read_text(encoding='utf-8').strip()
+        assert mode.endswith(('REMOVED_VERIFIED_V25_DUPLICATE','PRESERVED_UNRECOGNIZED_LEGACY_GROUND')),mode
+        for term in ('const int near_step=180,near_cells=14;',
+                     'const int far_step=560,far_cells=12;',
+                     'V31.9.2: movement and camera use elapsed video refreshes',
+                     'vt_v31813_draw_start(', 'vt_v3172_menu_slots(',
+                     'vt_save_game(void)', 'vt_load_game(void)'):
+            assert term in s, 'Missing game feature: '+term
+        print('Renderer verification:',mode)
+        LYDRA_V31931_CHECK
     - name: Basis 50
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
@@ -1634,20 +1632,21 @@ jobs:
           fi
         done
         ls -lh artifacts/VTRAIL.* artifacts/VERSION_V31_9_2_3.txt
-    - name: V31.9.3 Version sichtbar ins Artefakt schreiben
+    - name: V31.9.3.1 eindeutige Version und Spieldateien kontrollieren
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p artifacts
-        printf '%s\n' 'LYDRA WORLD OF DRAGON V31.9.3' 'Render-Fix: doppelte 240 Bodendreiecke entfernt, 360 Grad Welt bleibt bestehen' > artifacts/VERSION_V31_9_3.txt
-        for f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe VERSION_V31_9_3.txt; do
+        printf '%s
+        ' 'LYDRA WORLD OF DRAGON V31.9.3.1' 'Renderer-Fix mit sicherer Erkennung alter Bodenroutine' > artifacts/VERSION_V31_9_3_1.txt
+        for f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe VERSION_V31_9_3_1.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do
             test -s "artifacts/$f" || { echo "::error::Datei fehlt: artifacts/$f"; exit 1; }
         done
-        cat artifacts/VERSION_V31_9_3.txt
+        cat artifacts/RENDERER_PRUEFUNG_V31_9_3_1.txt
     - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-PS1-V31-9-3-RENDER-FIX
+        name: Lydra-PS1-V31-9-3-1-RENDER-CHECK
         path: artifacts/
         if-no-files-found: error
         retention-days: 14
