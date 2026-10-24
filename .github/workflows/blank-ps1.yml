@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.8.13 - Blinkendes START vor Hauptmenue
+name: Lydra World Of Dragon V31.8.14 - Kleineres elegantes START
 'on':
   workflow_dispatch: {}
 permissions:
@@ -600,6 +600,164 @@ jobs:
         \             'vt_v31813_draw_start'):\n    function_span(func)\np.write_text(s,encoding='utf-8')\nprint('V31.8.13:\
         \ 7s original intro -> blinking START phase 4 -> START button -> original menu phase 2')\nLYDRA_V31813_PATCH\n\
         python3 \"$RUNNER_TEMP/lydra_v31813_patch.py\"\n"
+    - name: V31.8.14 START kleiner und im Lydra-Serifenstil zeichnen
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > "$RUNNER_TEMP/lydra_v31814_patch.py" <<'LYDRA_V31814_PATCH'
+        #!/usr/bin/env python3
+        # V31.8.14: real PS1 title prompt in a small elegant serif, no extra image.
+        from pathlib import Path
+        import os, re
+        from PIL import Image, ImageDraw, ImageFont
+
+        p = Path(os.environ['PROJECT_DIR']) / 'src' / 'main.c'
+        s = p.read_text(encoding='utf-8')
+
+        # We only replace the old START glyph renderer, preserving controller logic.
+        name = 'vt_v31813_draw_start'
+        rx = r'\bstatic\s+void\s+' + name + r'\s*\([^;]*?\)\s*\{'
+        matches = list(re.finditer(rx, s, re.S))
+        if len(matches) != 1:
+            raise RuntimeError(f'Need exactly one old START draw function, found {len(matches)}')
+        a = matches[0].start()
+        b = matches[0].end()
+        depth = 1
+        state = 'code'
+        while b < len(s) and depth:
+            c = s[b]
+            n = s[b + 1] if b + 1 < len(s) else ''
+            if state == 'code':
+                if c == '/' and n == '/':
+                    state = 'line'; b += 1
+                elif c == '/' and n == '*':
+                    state = 'block'; b += 1
+                elif c == '"':
+                    state = 'str'
+                elif c == "'":
+                    state = 'char'
+                elif c == '{':
+                    depth += 1
+                elif c == '}':
+                    depth -= 1
+            elif state == 'line':
+                if c == '\n':
+                    state = 'code'
+            elif state == 'block':
+                if c == '*' and n == '/':
+                    state = 'code'; b += 1
+            elif state in ('str', 'char'):
+                if c == '\\':
+                    b += 1
+                elif (state == 'str' and c == '"') or (state == 'char' and c == "'"):
+                    state = 'code'
+            b += 1
+        if depth:
+            raise RuntimeError('Old START function has unbalanced braces')
+
+        # Built-in Ubuntu fonts; sampled into literal small PS1 GPU rectangles. This
+        # does not import or display a separate picture and does not touch the logo art.
+        font_candidates = [
+            '/usr/share/fonts/truetype/liberation2/LiberationSerif-Regular.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf'
+        ]
+        font_file = next((f for f in font_candidates if Path(f).is_file()), None)
+        if font_file is None:
+            raise RuntimeError('No TTF serif font installed on the GitHub Ubuntu runner')
+        font = ImageFont.truetype(font_file, 21)
+        bbox = font.getbbox('START')
+        width, height = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        if not 50 <= width <= 80 or not 10 <= height <= 20:
+            raise RuntimeError(f'Unexpected START dimensions {width}x{height}')
+        canvas = Image.new('L', (width, height), 0)
+        draw = ImageDraw.Draw(canvas)
+        draw.text((-bbox[0], -bbox[1]), 'START', font=font, fill=255)
+
+        # Runs of opaque pixels yield crisp, compact geometry without large block font.
+        pixels = canvas.load()
+        runs = []
+        for y in range(height):
+            x = 0
+            while x < width:
+                if pixels[x, y] < 100:
+                    x += 1
+                    continue
+                start = x
+                while x < width and pixels[x, y] >= 100:
+                    x += 1
+                runs.append((start, y, x - start))
+        if not 30 < len(runs) < 250:
+            raise RuntimeError(f'Unusual serif font raster {len(runs)} runs')
+
+        # START fits 50-80 PS1 pixels; previous blocky text was 90+ pixels wide.
+        # The center at 160 and baseline around y=186 match the original title screen.
+        x0 = (320 - width) // 2
+        y0 = 177
+        array = ',\n'.join('    {%d,%d,%d}' % run for run in runs)
+        new_function = '''/* V31.8.14: compact, pale-icy serif START matching the Lydra fantasy logo.
+           Blinks in 90-frame periods; no menu window until the actual START press. */
+        static void vt_v31813_draw_start(void)
+        {
+            static const unsigned char letter_runs[][3] = {
+        %s
+            };
+            int k, pulse, x, y;
+            if(vt_v314_phase!=4)return;
+            if((vt_v314_blink%%90u)>=60u)return;
+            pulse = (int)(vt_v314_blink %% 30u);
+            if(pulse > 15) pulse = 30 - pulse;
+
+            /* Fine cyan ornaments -- no heavy border, no oversized START. */
+            vt_v3188_tile(%d,185,18,1,42,118+pulse,186+pulse);
+            vt_v3188_tile(%d,185,18,1,42,118+pulse,186+pulse);
+            vt_v3188_tile(%d,183,2,3,102,204,246);
+            vt_v3188_tile(%d,183,2,3,102,204,246);
+            for(k = 0; k < (int)(sizeof(letter_runs)/sizeof(letter_runs[0])); k++) {
+                x = %d + (int)letter_runs[k][0];
+                y = %d + (int)letter_runs[k][1];
+                /* Slight shadow, followed by white-blue polished serif lettering. */
+                vt_v3188_tile(x + 1,y + 1,letter_runs[k][2],1,11,41,83);
+                vt_v3188_tile(x,y,letter_runs[k][2],1,198+pulse/2,221+pulse/3,255);
+            }
+        }
+        ''' % (array, x0-23, x0+width+5, x0-26, x0+width+24, x0, y0)
+
+        s = s[:a] + new_function + s[b:]
+
+        # No modification to startup phases, existing movie frames, menu selection, or saving.
+        for marker in (
+            'vt_v314_phase==4', 'if(pressed & PAD_START)',
+            'vt_v31813_draw_start();', 'vt_v31812_row_top',
+            'vt_load_game(void)', 'vt_save_game(void)',
+            'vt_v3187_pixels', 'vt_v3182_menu_8bpp'
+        ):
+            if marker not in s:
+                raise RuntimeError('Existing system lost: ' + marker)
+        if s.count('static void vt_v31813_draw_start(') != 1:
+            raise RuntimeError('Duplicate START renderer')
+        p.write_text(s, encoding='utf-8')
+        print('V31.8.14: intro unchanged -> smaller %dx%d serif START blinking -> existing 3-slot menu'% (width,height))
+
+        LYDRA_V31814_PATCH
+        python3 "$RUNNER_TEMP/lydra_v31814_patch.py"
+    - name: V31.8.14 Titeltext und Steuerung pruefen
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY_V31814_CHECK'
+        from pathlib import Path
+        import os
+        s=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')
+        for marker in ('V31.8.14: compact, pale-icy serif START',
+                       'vt_v314_phase!=4', 'letter_runs[][3]',
+                       'vt_v31813_draw_start();', 'if(pressed & PAD_START)',
+                       'vt_v31812_row_top', 'vt_load_game(void)',
+                       'vt_save_game(void)'):
+            if marker not in s:raise SystemExit('Missing expected code: '+marker)
+        assert s.count('static void vt_v31813_draw_start(')==1
+        print('PASS: START is now smaller serif text; blink/menu/gameplay kept.')
+        PY_V31814_CHECK
     - name: V31.8.13 Starttaste, Titel-Blinken und Spielmechanik pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'PY_CHECK_31813'\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
@@ -642,22 +800,22 @@ jobs:
     - name: 'Basis 54: V31.8.1 Basis | PS1 Dateien vor Upload pruefen'
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 54
-    - name: V31.8.13 Artefakt eindeutig kennzeichnen
+    - name: V31.8.14 Artefakt eindeutig kennzeichnen
       shell: bash
       run: 'set -euo pipefail
 
-        printf ''%s\n'' ''LYDRA WORLD OF DRAGON V31.8.13'' ''Nach 7 Sekunden blinkt START; START-Taste oeffnet die drei
-        Menuepunkte.'' > artifacts/VERSION_V31_8_13.txt
+        printf ''%s\n'' ''LYDRA WORLD OF DRAGON V31.8.14'' ''Nach 7 Sekunden blinkt START; START-Taste oeffnet die drei
+        Menuepunkte.'' > artifacts/VERSION_V31_8_14.txt
 
-        cat artifacts/VERSION_V31_8_13.txt
+        cat artifacts/VERSION_V31_8_14.txt
 
         '
     - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-PS1-V31-8-13-BLINKENDES-START
+        name: Lydra-PS1-V31-8-14-KLEINER-FANTASY-START
         path: 'artifacts/VTRAIL.*
 
-          artifacts/VERSION_V31_8_13.txt'
+          artifacts/VERSION_V31_8_14.txt'
         if-no-files-found: error
         retention-days: 14
