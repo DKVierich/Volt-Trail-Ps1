@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.8.1 - Boden Rendering YAML FIX
+name: Lydra World Of Dragon V31.9.8.1 - Boden Rendering FIX2
 'on':
   workflow_dispatch: {}
 permissions:
@@ -1194,11 +1194,11 @@ jobs:
             if x not in s:raise RuntimeError('Missing V31.9.7 feature '+x)
         print('V31.9.7: world patches, forest groves, camera and save verified')
         LYDRA_V3197_CHECK
-    - name: V31.9.8.1 Bodenpolygone Wege und Ueberdeckung reparieren
+    - name: V31.9.8.1 FIX2 Quellpatch Teil 1 von 4
       shell: bash
       run: |
         set -euo pipefail
-        python3 - <<'LYDRA_V31981_PATCH'
+        cat > "$RUNNER_TEMP/lydra_v31981_patch.py" <<'LYDRA_GROUND_FIX2_PART_1'
         import os, re
         from pathlib import Path
 
@@ -1253,6 +1253,12 @@ jobs:
         s = s[:a] + body + s[b:]
 
         # FIX 2: Both triangles of each grass cell receive the same blended tint.
+        LYDRA_GROUND_FIX2_PART_1
+    - name: V31.9.8.1 FIX2 Quellpatch Teil 2 von 4
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat >> "$RUNNER_TEMP/lydra_v31981_patch.py" <<'LYDRA_GROUND_FIX2_PART_2'
         # Same 2 triangles per cell, same 10x10 grid, but no checkerboard/diagonal seam.
         a,b = function_span('vt_v24_ground_patch')
         original = s[a:b]
@@ -1279,8 +1285,4 @@ jobs:
         # Test all four corners against the known V30.3 camera near-plane: draw both
         # road triangles or neither. Prevents one clipped half becoming a brown wedge.
         replace_function('vt_v24_path_band', r'''
-        /* V31.9.8.1: seam-free road segments, without extra polygons. */
-        static void vt_v24_path_band(int z, int width, int r, int g, int b) {
-            int w0 = width * 3 / 4;
-            int w1 = (width + ((z + 70) / 24 - z / 24)) * 3 / 4;
-            SVECTOR a = {-w0 - px, 33, z - pz, 
+        /* V31.9.8.1: seam-free road segments, without extra 
