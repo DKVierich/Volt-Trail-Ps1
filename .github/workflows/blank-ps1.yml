@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.1 - Performance und flüssigere Landschaft
+name: Lydra World Of Dragon V31.9.2 - Kamera und Bewegung fluessiger
 'on':
   workflow_dispatch: {}
 permissions:
@@ -1733,6 +1733,181 @@ jobs:
             if c not in s:raise SystemExit('V31.9.1 expected code missing: '+c)
         print('V31.9.1: LOD lower complexity, all gameplay and UI retained.')
         LYDRA_V3191_CHECK
+    - name: V31.9.2 Gleichmaessige Kamera und Bewegung mit VBlank-Zeitbasis
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > "$RUNNER_TEMP/lydra_v3192_patch.py" <<'LYDRA_V3192_PATCH'
+        #!/usr/bin/env python3
+        """V31.9.2: temporal consistency in PS1 camera + player locomotion.
+        Keeps collision, geometry, gameplay, saves, title, and graphics unchanged.
+        """
+        from pathlib import Path
+        import os,re
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text(encoding='utf-8')
+
+        def fnspan(name):
+            match=list(re.finditer(r'\bstatic\s+(?:void|int)\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{',s,re.S))
+            if len(match)!=1:raise RuntimeError(f'Need exactly one {name}, got {len(match)}')
+            start=match[0].start();i=match[0].end();depth=1;state='code'
+            while i<len(s) and depth:
+                c=s[i];n=s[i+1] if i+1<len(s) else ''
+                if state=='code':
+                    if c=='/' and n=='/':state='line';i+=1
+                    elif c=='/' and n=='*':state='block';i+=1
+                    elif c=='"':state='str'
+                    elif c=="'":state='chr'
+                    elif c=='{':depth+=1
+                    elif c=='}':depth-=1
+                elif state=='line':
+                    if c=='\n':state='code'
+                elif state=='block':
+                    if c=='*' and n=='/':state='code';i+=1
+                else:
+                    if c=='\\':i+=1
+                    elif (state=='str' and c=='"') or (state=='chr' and c=="'"):state='code'
+                i+=1
+            if depth:raise RuntimeError('Unbalanced braces '+name)
+            return start,i
+
+        start,end=fnspan('vt_v293_move')
+        old=s[start:end]
+        if old.count('target=forward*14336;')!=1:
+            raise RuntimeError('Expected currently deployed V31.9.1 movement (V31.7.2 velocity anchor)')
+        if old.count('turn*64+')!=1:
+            raise RuntimeError('Expected currently deployed V31.9.1 camera turn anchor')
+
+        new=r'''
+        /* V31.9.2: movement and camera use elapsed video refreshes, not rendered frames.
+           This reduces tempo changes when expensive world frames miss a VBlank.
+           Keep UP/DOWN move only, LEFT/RIGHT turn camera only; never add turn drift. */
+        static void vt_v293_move(unsigned int pad) {
+            static int frac_x=0,frac_z=0;
+            static int last_x=0,last_z=0,started=0;
+            static int speed_q10=0;
+            static int turn_q8=0,turn_fraction_q8=0;
+            static unsigned int previous_vblank=0;
+            unsigned int now=(unsigned int)VSync(-1);
+            unsigned int elapsed;
+            int dt=1,forward=0,turn=0,target,dx=0,dz=0;
+            int vx,vz,desired_turn,delta,inc;
+
+            /* Do not integrate a long delay after pause, transitions or memory-card I/O.
+               A 2-vblank cap avoids large collision-penetrating movement jumps. */
+            if(previous_vblank) {
+                elapsed=now-previous_vblank;
+                if(elapsed>=2u && elapsed<=5u)dt=2;
+            }
+            previous_vblank=now;
+
+            /* Only a real teleport should reset subpixel motion and acceleration. */
+            if(!started || px-last_x>80 || px-last_x< -80 ||
+               pz-last_z>80 || pz-last_z< -80) {
+                frac_x=frac_z=0;
+                speed_q10=0;
+                turn_q8=turn_fraction_q8=0;
+                started=1;
+            }
+
+            if((pad&PAD_RIGHT) && !(pad&PAD_LEFT))turn=-1;
+            else if((pad&PAD_LEFT) && !(pad&PAD_RIGHT))turn=1;
+            if(turn) {
+                /* Q8 fractional angular velocity, eased without momentum on release.
+                   36 angle units / vblank versus the old abrupt 64 per game frame. */
+                desired_turn=turn*36*256;
+                delta=desired_turn-turn_q8;
+                turn_q8+=(delta*dt)/3;
+                turn_fraction_q8+=turn_q8*dt;
+                inc=turn_fraction_q8/256;
+                turn_fraction_q8-=inc*256;
+                vt_v292_cam_yaw=(vt_v292_cam_yaw+inc+4096)&4095;
+            } else {
+                turn_q8=0;
+                turn_fraction_q8=0;
+            }
+            vt_v292_yaw_target=vt_v292_cam_yaw;
+
+            if((pad&PAD_UP) && !(pad&PAD_DOWN))forward=1;
+            else if((pad&PAD_DOWN) && !(pad&PAD_UP))forward=-1;
+            if(!forward) {
+                speed_q10=0;
+                frac_x=frac_z=0;
+            } else {
+                /* Equivalent world units per second when rendering at 60 or 30 fps.
+                   Signed Q10 speed keeps diagonal movement from rounding unevenly. */
+                target=forward*14336;
+                if(speed_q10<target) {
+                    speed_q10+=3072*dt;
+                    if(speed_q10>target)speed_q10=target;
+                } else if(speed_q10>target) {
+                    speed_q10-=3072*dt;
+                    if(speed_q10<target)speed_q10=target;
+                }
+                vx=(-vt_v293_sin(vt_v292_cam_yaw)*speed_q10)/1024;
+                vz=( vt_v293_cos(vt_v292_cam_yaw)*speed_q10)/1024;
+                frac_x+=vx*dt;
+                frac_z+=vz*dt;
+                dx=frac_x/1024;
+                dz=frac_z/1024;
+                frac_x-=dx*1024;
+                frac_z-=dz*1024;
+                px+=dx;
+                pz+=dz;
+                if(px< -WORLD_LIMIT){px=-WORLD_LIMIT;frac_x=0;speed_q10=0;}
+                if(px> WORLD_LIMIT){px= WORLD_LIMIT;frac_x=0;speed_q10=0;}
+                if(pz< -WORLD_LIMIT){pz=-WORLD_LIMIT;frac_z=0;speed_q10=0;}
+                if(pz> WORLD_LIMIT){pz= WORLD_LIMIT;frac_z=0;speed_q10=0;}
+                if(dx||dz) {
+                    step_count++;
+                    vt_v293_avatar_yaw=((speed_q10>0?2048:0)-vt_v292_cam_yaw+4096)&4095;
+                    if(dx>0 && dx >= (dz<0?-dz:dz))facing=2;
+                    else if(dx<0 && -dx >= (dz<0?-dz:dz))facing=1;
+                    else facing=(dz>=0)?3:0;
+                }
+            }
+            last_x=px;
+            last_z=pz;
+        }
+        '''
+        s=s[:start]+new.strip()+'\n'+s[end:]
+        # Existing collision and camera update routines MUST continue running once per world frame.
+        for name in ('vt_v293_move','vt_v292_update_camera','vt_v300_extend_ground'):
+            fnspan(name)
+        for term in ('vt_v281_resolve_movement();', 'vt_v282_draw_house_npcs(',
+                     'vt_v3172_menu_slots(', 'vt_v31813_draw_start(',
+                     'vt_save_game(void)', 'vt_load_game(void)',
+                     'vt_v319' if False else 'vt_v300_mid_detail('):
+            if term not in s:raise RuntimeError('Missing existing subsystem: '+term)
+        if s.count('V31.9.2: movement and camera use elapsed video refreshes')!=1:
+            raise RuntimeError('Temporal movement patch not applied exactly once')
+        p.write_text(s,encoding='utf-8')
+        print('V31.9.2: camera turn eased, motion frame-time compensated and collision preserved.')
+        LYDRA_V3192_PATCH
+        python3 "$RUNNER_TEMP/lydra_v3192_patch.py"
+    - name: V31.9.2 Timing-Fix und Spielsysteme sicher pruefen
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'LYDRA_V3192_CHECK'
+        import os,re
+        from pathlib import Path
+        source=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')
+        start=source.find('static void vt_v293_move(unsigned int pad)')
+        stop=source.find('static void vt_v292_',start)
+        if start<0:raise SystemExit('::error::V31.9.2 movement function missing')
+        block=source[start:stop if stop>start else start+4500]
+        for x in ('V31.9.2: movement and camera use elapsed video refreshes',
+                  'VSync(-1)','turn*36*256','target=forward*14336;',
+                  'frac_x+=vx*dt;','vt_v292_yaw_target=vt_v292_cam_yaw;'):
+            if x not in block:raise SystemExit('::error::V31.9.2 missing feature: '+x)
+        for x in ('V31.9.1: lighter far-terrain LOD','V31.9.0: sparse distant objects',
+                  'vt_v281_resolve_movement();','vt_v31813_draw_start(',
+                  'vt_v3172_menu_slots(', 'vt_save_game(void)', 'vt_load_game(void)'):
+            if x not in source:raise SystemExit('::error::Retained gameplay feature missing: '+x)
+        print('V31.9.2 movement/camera: VBlank-time compensation and immediate camera stop on release.')
+        print('V31.9.1 landscape LOD, collision, saved game, intro, and title/menu retained.')
+        LYDRA_V3192_CHECK
     - name: 'Basis 50: V31.8.1 Basis | V31.6 Basis | PS1 SDK installieren'
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
@@ -1769,12 +1944,20 @@ jobs:
         printf '%s
         ' 'LYDRA WORLD OF DRAGON V31.9.1' 'Leichtere Fernlandschaft; Startmenue V31.8.14 beibehalten.' > artifacts/VERSION_V31_9_1.txt
         cat artifacts/VERSION_V31_9_1.txt
+    - name: V31.9.2 Eindeutige Build-Version fuer RetroArch
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p artifacts
+        printf '%s
+        ' 'LYDRA WORLD OF DRAGON V31.9.2' 'Zeitbasierte Bewegung / gedämpfte Kameradrehung / Fernlandschaft V31.9.1' > artifacts/VERSION_V31_9_2.txt
+        cat artifacts/VERSION_V31_9_2.txt
     - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-PS1-V31-9-1-PERFORMANCE-LOD
+        name: Lydra-PS1-V31-9-2-KAMERA-FLUSS
         path: |-
           artifacts/VTRAIL.*
-          artifacts/VERSION_V31_9_1.txt
+          artifacts/VERSION_V31_9_2.txt
         if-no-files-found: error
         retention-days: 14
