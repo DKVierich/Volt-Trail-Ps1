@@ -1,5 +1,5 @@
-name: Lydra World Of Dragon V31.8.7 FIX - Kompakt und YAML gueltig
-on:
+name: Lydra World Of Dragon V31.8.8 - Fantasy Menue und echte Bedienung
+true:
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -752,6 +752,63 @@ jobs:
         \               'getClut(640,layer?243:242)','(vt_v314_elapsed*2)/15',\n               'vt_v3172_menu_slots();','vt_load_game(void)'):\n\
         \    assert marker in s,marker\nprint('OK: 28 Originalframes 256x192, 256 Farben, GPU 8 FPS, volle Breite,\
         \ kein extra Schlussbild.')\nPYCHECK\n"
+    - name: V31.8.8 Fantasy-Menue mit echtem blauen PS1-Rahmen
+      shell: bash
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_v3188_style.py\" <<'LYDRA_V3188_STYLE'\n#!/usr/bin/env\
+        \ python3\n\"\"\"Lydra V31.8.8: actual interactive PS1 fantasy menu primitives, no image baking.\"\"\"\n\
+        from pathlib import Path\nimport os, re\n\np = Path(os.environ['PROJECT_DIR']) / 'src/main.c'\ns = p.read_text(encoding='utf-8')\n\
+        \ndef span(name):\n    rx = r'\\bstatic\\s+(?:void|int)\\s+'+re.escape(name)+r'\\s*\\([^;]*?\\)\\s*\\{'\n\
+        \    ms = list(re.finditer(rx,s,re.S))\n    if len(ms) != 1:\n        raise RuntimeError(f'V31.8.8 requires\
+        \ one {name}, found {len(ms)}')\n    a = ms[0].start(); i=ms[0].end(); depth=1; mode='code'\n    while depth\
+        \ and i < len(s):\n        c=s[i]; n=s[i+1] if i+1<len(s) else ''\n        if mode=='code':\n          \
+        \  if c=='/' and n=='/':mode='line';i+=1\n            elif c=='/' and n=='*':mode='comment';i+=1\n     \
+        \       elif c=='\"':mode='string'\n            elif c==\"'\":mode='char'\n            elif c=='{':depth+=1\n\
+        \            elif c=='}':depth-=1\n        elif mode=='line':\n            if c=='\\n':mode='code'\n   \
+        \     elif mode=='comment':\n            if c=='*' and n=='/':mode='code';i+=1\n        else:\n        \
+        \    if c=='\\\\':i+=1\n            elif (mode=='string' and c=='\"') or (mode=='char' and c==\"'\"):mode='code'\n\
+        \        i+=1\n    if depth:raise RuntimeError('V31.8.8 malformed C block: '+name)\n    return a,i\n\na,b=span('vt_v3172_menu_slots')\n\
+        replacement = r'''\n/* V31.8.8 menu drawing is a REAL PS1 overlay, not a bitmap.\n   The existing PAD input\
+        \ / save / options functions are unchanged.\n   OT is LIFO: embellishments are enqueued first, dark panel\
+        \ last.\n   After the textured title backdrop, this produces layered fantasy UI. */\nstatic void vt_v3188_tile(int\
+        \ x,int y,int w,int h,int red,int green,int blue)\n{\n    TILE *tile;\n    unsigned int aligned;\n    if(w<=0\
+        \ || h<=0)return;\n    aligned=(prim_used+3u)&~3u;\n    if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;\n\
+        \    tile=(TILE *)(prim_arena[db]+aligned);\n    prim_used=aligned+sizeof(TILE);\n    setTile(tile);\n \
+        \   setXY0(tile,x,y);\n    setWH(tile,w,h);\n    setRGB0(tile,red,green,blue);\n    addPrim(ot[db],tile);\n\
+        }\n\nstatic void vt_v3172_menu_slots(void)\n{\n    int i, selected, y;\n    int glow, shimmer;\n    if(vt_v314_phase!=2\
+        \ && vt_v314_phase!=3)return;\n    selected=(vt_v314_phase==2)?vt_v314_cursor:vt_v314_opt_cursor;\n    if(selected<0)selected=0;\n\
+        \    if(selected>2)selected=2;\n\n    /* White PS1 font remains printed by vt_v314_hud OVER these tiles.\n\
+        \       Frame ornaments + pulsing active row added first for correct OT order. */\n    shimmer=(int)(vt_v314_blink%64u);\n\
+        \    glow=shimmer<32?shimmer:63-shimmer;  /* smooth two-way 0..31 pulse */\n    y=139+selected*18;\n   \
+        \ vt_v3188_tile(100,y+7,3,3,72,188,239); /* crystalline arrow cue */\n    vt_v3188_tile(101,y+5,1,7,101,223,255);\n\
+        \    vt_v3188_tile(223,y+5,2,7,50,142+glow,214);\n    vt_v3188_tile(105,y,117,1,58,144+glow,214);\n    vt_v3188_tile(105,y+15,117,1,41,111+glow,180);\n\
+        \    vt_v3188_tile(103,y+2,1,12,47,172,223);\n    vt_v3188_tile(226,y+2,1,12,47,172,223);\n\n    /* Eight\
+        \ tiny crystal notches give the same azure fantasy style as Lydra. */\n    vt_v3188_tile(93,128,4,2,49,168,224);\n\
+        \    vt_v3188_tile(91,130,2,4,49,168,224);\n    vt_v3188_tile(233,128,4,2,49,168,224);\n    vt_v3188_tile(237,130,2,4,49,168,224);\n\
+        \    vt_v3188_tile(93,209,4,2,49,168,224);\n    vt_v3188_tile(91,206,2,4,49,168,224);\n    vt_v3188_tile(233,209,4,2,49,168,224);\n\
+        \    vt_v3188_tile(237,206,2,4,49,168,224);\n    vt_v3188_tile(163,126,4,4,60,195,243);\n    vt_v3188_tile(164,127,2,2,164,238,255);\n\
+        \    vt_v3188_tile(163,211,4,4,60,195,243);\n    vt_v3188_tile(164,212,2,2,164,238,255);\n\n    /* Slender\
+        \ double bright trim; center artwork remains unobscured. */\n    vt_v3188_tile(97,130,136,1,34,108,163);\n\
+        \    vt_v3188_tile(97,210,136,1,34,108,163);\n    vt_v3188_tile(94,133,1,75,35,135,196);\n    vt_v3188_tile(235,133,1,75,35,135,196);\n\
+        \    vt_v3188_tile(98,134,134,1,30,80,130);\n    vt_v3188_tile(98,207,134,1,30,80,130);\n\n    /* Rows:\
+        \ opaque blue/navy tiles. Highlight breathes but never hides text. */\n    for(i=0;i<3;i++) {\n        y=139+18*i;\n\
+        \        if(i==selected) {\n            vt_v3188_tile(105,y+2,120,11,14,49+glow,87+glow);\n            vt_v3188_tile(103,y,124,16,15,56+glow,98+glow);\n\
+        \        } else {\n            vt_v3188_tile(104,y+1,122,1,23,54,87);\n            vt_v3188_tile(103,y,124,16,9,21,43);\n\
+        \        }\n    }\n\n    /* Dark blue base and bezel, enqueued last so it draws behind every row. */\n \
+        \   vt_v3188_tile(95,132,140,78,8,19,42);\n    vt_v3188_tile(94,131,142,80,17,56,91);\n    vt_v3188_tile(92,129,146,84,7,25,48);\n\
+        }\n'''\ns=s[:a]+replacement.strip()+'\\n'+s[b:]\n\n# Safety: no title image, input, intro, pause menu or\
+        \ gameplay changes.\nfor func in ('vt_v314_draw','vt_v314_input','vt_v314_hud','vt_v3172_menu_slots'):\n\
+        \    span(func)\nassert 'vt_v3172_menu_slots();' in s\nfor marker in ('vt_load_game(void)', 'vt_save_game(void)',\
+        \ 'vt_v281_resolve_movement();',\n               'vt_v3187_pixels','vt_v3182_menu_8bpp', 'vt_v314_cursor',\
+        \ 'vt_v314_opt_cursor'):\n    if marker not in s:\n        raise RuntimeError('Missing retained gameplay/menu\
+        \ system: '+marker)\np.write_text(s, encoding='utf-8')\nprint('V31.8.8: Glowing cyan framed menu, real PAD-selection\
+        \ and PS1 fonts kept.')\nLYDRA_V3188_STYLE\npython3 \"$RUNNER_TEMP/lydra_v3188_style.py\"\n"
+    - name: V31.8.8 Interaktive Menuefunktionen und Spiel pruefen
+      shell: bash
+      run: "set -euo pipefail\npython3 - <<'PYV3188'\nimport os,re\nfrom pathlib import Path\ns=(Path(os.environ['PROJECT_DIR'])/'src'/'main.c').read_text(encoding='utf-8')\n\
+        for x in ('static void vt_v3188_tile(', 'static void vt_v3172_menu_slots(',\n          'vt_v314_blink%64u',\
+        \ 'vt_v314_opt_cursor', 'vt_v3187_pixels',\n          'vt_v3172_menu_slots();', 'vt_load_game(void)', 'vt_save_game(void)'):\n\
+        \    if x not in s: raise SystemExit('FEHLER: Funktion fehlt: '+x)\nassert s.count('static void vt_v3172_menu_slots(')==1\n\
+        print('V31.8.8: Menue-Overlay und Spielsysteme erhalten.')\nPYV3188\n"
     - name: 'Basis 50: V31.8.1 Basis | V31.6 Basis | PS1 SDK installieren'
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
@@ -770,7 +827,7 @@ jobs:
     - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-World-Of-Dragon-V31-8-7-FIX-PS1
+        name: Lydra-World-Of-Dragon-PS1-V31-8-8-FANTASY-MENUE
         path: artifacts/VTRAIL.*
         if-no-files-found: error
         retention-days: 14
