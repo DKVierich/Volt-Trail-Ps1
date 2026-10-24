@@ -1,6 +1,6 @@
-name: Lydra World Of Dragon V31.8.1 - Video Intro und Hauptmenue YAML Fix
+name: Lydra World Of Dragon V31.8.2 - Schneller und Schaerfer
 'on':
-  workflow_dispatch: null
+  workflow_dispatch: {}
 permissions:
   contents: read
 jobs:
@@ -11,1337 +11,605 @@ jobs:
       uses: actions/checkout@v4
     - name: Werkzeuge installieren
       shell: bash
-      run: |
-        set -euo pipefail
+      run: 'set -euo pipefail
+
         sudo apt-get update
+
         sudo apt-get install -y cmake ninja-build unzip curl ffmpeg python3-pil python3-yaml
-    - name: Funktionierende V31.6 FIX2 herunterladen
-      shell: bash
-      run: |
-        set -euo pipefail
-        curl -fLsS --retry 4 --retry-delay 2 'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/8c17f9bc45d1a3e9481ef1eda51da27fd728eee2/.github/workflows/blank-ps1.yml' \
-          -o "$RUNNER_TEMP/lydra_v316_base.yml"
-        test -s "$RUNNER_TEMP/lydra_v316_base.yml"
-    - name: V31.7 Stabiler Einzel-Schritt-Build vorbereiten
-      shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lydra_run_base_step.py" <<'LYDRA_BASE_STEP_PY'
-        #!/usr/bin/env python3
-        """Execute exactly one trusted V31.6 FIX2 build step on this GitHub job runner.
 
-        Important: The outer workflow invokes this script in separate GitHub Actions
-        steps, so env additions in GITHUB_ENV are reloaded by GitHub after each step.
-        """
-        import os, sys, subprocess
+        '
+    - name: Stabile V31.8.1 Build-Basis laden und pruefen
+      shell: bash
+      run: 'set -euo pipefail
+
+        curl -fLsS --retry 4 --retry-delay 2 ''https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/d8a0a68f96195710f1f0f2ad7bd33c7ceb793cec/.github/workflows/blank-ps1.yml''
+        -o "$RUNNER_TEMP/lydra_v3181_reference.yml"
+
+        test -s "$RUNNER_TEMP/lydra_v3181_reference.yml" || { echo ''::error::V31.8.1 Basis fehlt''; exit 1; }
+
+        cat > "$RUNNER_TEMP/lydra_v3182_replay.py" <<''LYDRA_REPLAY_PY''
+
+        import os,sys,subprocess,yaml
+
         from pathlib import Path
-        import yaml
 
-        if len(sys.argv) != 2:
-            raise SystemExit('Usage: python3 lydra_run_base_step.py "EXACT STEP NAME"')
-        workflow = Path(os.environ['RUNNER_TEMP'])/'lydra_v316_base.yml'
-        if not workflow.is_file():
-            raise RuntimeError('V31.6 FIX2 baseline workflow missing')
-        source=yaml.safe_load(workflow.read_text(encoding='utf-8'))
-        steps=source['jobs']['build']['steps']
-        wanted=sys.argv[1]
-        found=[s for s in steps if s.get('name')==wanted and isinstance(s.get('run'),str)]
-        if len(found)!=1:
-            raise RuntimeError('Expected exactly one V31.6 step '+repr(wanted)+', got '+str(len(found)))
-        print('V31.6 BASIS:',wanted, flush=True)
-        subprocess.run(['bash','-euo','pipefail','-c',found[0]['run']],
-                       check=True,env=os.environ.copy())
-        print('FERTIG:',wanted,flush=True)
-        LYDRA_BASE_STEP_PY
-        python3 -m py_compile "$RUNNER_TEMP/lydra_run_base_step.py"
-    - name: V31.6 Basis | Funktionierende V30.1 Build-Schritte laden
+        path=Path(os.environ[''RUNNER_TEMP''])/''lydra_v3181_reference.yml''
+
+        base=yaml.safe_load(path.read_text(encoding=''utf-8''))
+
+        steps=base[''jobs''][''build''][''steps'']
+
+        name=sys.argv[1]
+
+        found=[s for s in steps if s.get(''name'')==name and ''run'' in s]
+
+        if len(found)!=1:raise RuntimeError(''Basis-Schritt fehlt oder ist mehrdeutig: ''+name)
+
+        print(''Wiederherstellen:'',name,flush=True)
+
+        subprocess.run([''bash'',''-euo'',''pipefail'',''-c'',found[0][''run'']],env=os.environ.copy(),check=True)
+
+        LYDRA_REPLAY_PY
+
+        python3 - "$RUNNER_TEMP/lydra_v3181_reference.yml" <<''LYDRA_CHECK_BASE''
+
+        import yaml,sys
+
+        p=yaml.safe_load(open(sys.argv[1]))
+
+        steps=p[''jobs''][''build''][''steps'']
+
+        assert len(steps)==46, ''Referenz-Build wurde geaendert''
+
+        assert steps[37][''name'']==''V31.8 Originalvideo 7 Sekunden Hauptmenue und PS1 Grafiken einbauen''
+
+        assert steps[41][''name'']==''V31.6 Basis | V31.6 FIX2 PS1-Spiel kompilieren''
+
+        print(''Verifizierte stabile V31.8.1 Basis:'',len(steps),''Schritte'')
+
+        LYDRA_CHECK_BASE
+
+        '
+    - name: V31.8.1 Basis | Funktionierende V31.6 FIX2 herunterladen
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'Funktionierende V30.1 Build-Schritte laden'
-    - name: V31.6 Basis | Stabile V27-Quellkette laden
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''Funktionierende V31.6 FIX2 herunterladen''
+
+        '
+    - name: V31.8.1 Basis | V31.7 Stabiler Einzel-Schritt-Build vorbereiten
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'Stabile V27-Quellkette laden'
-    - name: V31.6 Basis | V27 Grundlage – V26 laden
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.7 Stabiler Einzel-Schritt-Build vorbereiten''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | Funktionierende V30.1 Build-Schritte laden
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V27 Grundlage – V26 laden'
-    - name: V31.6 Basis | V27 Spiel vorbereiten
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | Funktionierende V30.1 Build-Schritte laden''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | Stabile V27-Quellkette laden
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V27 Spiel vorbereiten'
-    - name: V31.6 Basis | V27 Spielmechaniken erhalten
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | Stabile V27-Quellkette laden''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V27 Grundlage – V26 laden
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V27 Spielmechaniken erhalten'
-    - name: V31.6 Basis | V27 Lydra-Grafik laden
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V27 Grundlage – V26 laden''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V27 Spiel vorbereiten
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V27 Lydra-Grafik laden'
-    - name: V31.6 Basis | V27 Drachenmodelle erhalten
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V27 Spiel vorbereiten''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V27 Spielmechaniken erhalten
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V27 Drachenmodelle erhalten'
-    - name: V31.6 Basis | V27 Animationen wiederherstellen
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V27 Spielmechaniken erhalten''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V27 Lydra-Grafik laden
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V27 Animationen wiederherstellen'
-    - name: V31.6 Basis | V28 Kamera Landschaft und Drachen verbessern
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V27 Lydra-Grafik laden''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V27 Drachenmodelle erhalten
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V28 Kamera Landschaft und Drachen verbessern'
-    - name: V31.6 Basis | V28.1 Kollision und Kamera-Sicht korrigieren
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V27 Drachenmodelle erhalten''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V27 Animationen wiederherstellen
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V28.1 Kollision und Kamera-Sicht korrigieren'
-    - name: V31.6 Basis | V28.2 Begehbare Haeuser Innenraeume und wandernde NPCs
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V27 Animationen wiederherstellen''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V28 Kamera Landschaft und Drachen verbessern
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V28.2 Begehbare Haeuser Innenraeume und wandernde NPCs'
-    - name: V31.6 Basis | V29 Fantasy Grafikstil aus Referenzbild
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V28 Kamera Landschaft und Drachen verbessern''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V28.1 Kollision und Kamera-Sicht korrigieren
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V29 Fantasy Grafikstil aus Referenzbild'
-    - name: V31.6 Basis | V29.1 Einheitliche Staedte und PS1-Grafikpolitur
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V28.1 Kollision und Kamera-Sicht korrigieren''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V28.2 Begehbare Haeuser Innenraeume und wandernde NPCs
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V29.1 Einheitliche Staedte und PS1-Grafikpolitur'
-    - name: V31.6 Basis | V29.1 Schwarzes Startmenue Optionen Tasten Lautstaerke Texttempo
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V28.2 Begehbare Haeuser Innenraeume und wandernde NPCs''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V29 Fantasy Grafikstil aus Referenzbild
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V29.1 Schwarzes Startmenue Optionen Tasten Lautstaerke Texttempo'
-    - name: V31.6 Basis | V29.2 Vollbild Ortsnamen Kompass Kontext Aktion Kamera
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V29 Fantasy Grafikstil aus Referenzbild''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V29.1 Einheitliche Staedte und PS1-Grafikpolitur
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V29.2 Vollbild Ortsnamen Kompass Kontext Aktion Kamera'
-    - name: V31.6 Basis | V29.3 Kameraschwenk und Laufrichtung reparieren
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V29.1 Einheitliche Staedte und PS1-Grafikpolitur''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V29.1 Schwarzes Startmenue Optionen Tasten Lautstaerke Texttempo
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V29.3 Kameraschwenk und Laufrichtung reparieren'
-    - name: V31.6 Basis | V30.0 – 360 Grad Boden, Ferngebirge und LOD
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V29.1 Schwarzes Startmenue Optionen Tasten Lautstaerke Texttempo''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V29.2 Vollbild Ortsnamen Kompass Kontext Aktion Kamera
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V30.0 – 360 Grad Boden, Ferngebirge und LOD'
-    - name: V31.6 Basis | V30.1 Korrigiert – Sichtbarkeit Sonne und Tag Nacht
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V29.2 Vollbild Ortsnamen Kompass Kontext Aktion Kamera''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V29.3 Kameraschwenk und Laufrichtung reparieren
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V30.1 Korrigiert – Sichtbarkeit Sonne und Tag Nacht'
-    - name: V31.6 Basis | V30.2 360-Grad-Gelaende-Fix anwenden
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V29.3 Kameraschwenk und Laufrichtung reparieren''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V30.0 – 360 Grad Boden, Ferngebirge und LOD
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V30.2 360-Grad-Gelaende-Fix anwenden'
-    - name: V31.6 Basis | V30.3 Sicht, Boden, Himmel und HUD reparieren
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V30.0 – 360 Grad Boden, Ferngebirge und LOD''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V30.1 Korrigiert – Sichtbarkeit Sonne und Tag Nacht
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V30.3 Sicht, Boden, Himmel und HUD reparieren'
-    - name: V31.6 Basis | V30.4 Sonne und Mond weltfest ausrichten
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V30.1 Korrigiert – Sichtbarkeit Sonne und Tag Nacht''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V30.2 360-Grad-Gelaende-Fix anwenden
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V30.4 Sonne und Mond weltfest ausrichten'
-    - name: V31.6 Basis | V30.5 Sonnenaufgang Osten Sonnenuntergang Westen
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V30.2 360-Grad-Gelaende-Fix anwenden''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V30.3 Sicht, Boden, Himmel und HUD reparieren
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V30.5 Sonnenaufgang Osten Sonnenuntergang Westen'
-    - name: V31.6 Basis | V31 Figuren Drachen und Boden grafisch reparieren
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V30.3 Sicht, Boden, Himmel und HUD reparieren''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V30.4 Sonne und Mond weltfest ausrichten
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V31 Figuren Drachen und Boden grafisch reparieren'
-    - name: V31.6 Basis | V31.1 Fluessige Kamera Bewegung und Animation
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V30.4 Sonne und Mond weltfest ausrichten''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V30.5 Sonnenaufgang Osten Sonnenuntergang Westen
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V31.1 Fluessige Kamera Bewegung und Animation'
-    - name: V31.6 Basis | V31.2 Korrigiert - Kamera Bewegung Performance
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V30.5 Sonnenaufgang Osten Sonnenuntergang Westen''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V31 Figuren Drachen und Boden grafisch reparieren
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V31.2 Korrigiert - Kamera Bewegung Performance'
-    - name: V31.6 Basis | V31.3 Kamerakonflikt und langsame Bewegung reparieren
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V31 Figuren Drachen und Boden grafisch reparieren''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V31.1 Fluessige Kamera Bewegung und Animation
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V31.3 Kamerakonflikt und langsame Bewegung reparieren'
-    - name: V31.8.1 7 Sekunden Originalvideo und Hauptmenuebild einspielen
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V31.1 Fluessige Kamera Bewegung und Animation''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V31.2 Korrigiert - Kamera Bewegung Performance
       shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p "$RUNNER_TEMP/lydra_v318_video"
-        base64 -d > "$RUNNER_TEMP/lydra_v318_video/intro_frames.zip" <<'LYDRA_V318_ASSETS'
-        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
-        Xu4L1VIQOunAmNbx9szZa2ue7bZcsDmgO9yggaHk+eb1i/v4/eelfEn6bLXB1PJN6WO+intAo7hDzt4xumNsPlkByGFq4HTgAAbx
-        EQZVAQYmJkZmZhZmhJMZBIUUlRyYBYQVDAyNnAMSgC7lALqfkZXpn7Ckk+jKqAIpzaYjue6Mu9eztvxq2PSmoKjl/guHzY8zRCZ3
-        7uFhOse+Q1K+8zPH4tf+uydZzZ/QJau8k01n1wrHOMMZx21cbqdolonUemVujubfY2ppPXtl1lrveY3fNZfxc3POONu7fZPp1FtL
-        vabUPly4cwoQFnz6D3KouCAjAzNqCDI4BICdxszIaM+4wT0eqEpEED2cIa5nAilRhPiXGRhNbOxI5ggqCjAZOiQkFgopKBk4BgRC
-        /ctmz/Qk9lccq6SVxIPwXBtz5Rguq6kzfmf4Ksn7Fq6rbV30xnLPu1zjzG6R+SzOOf4p5z5VvkzzOhXi0rbfPyi1VTYiqWPpE36g
-        nWoCwGgGhjEzKyPc6YKKho6BBg6JAgqFAQkTF278CAtke8XfAtEX+T8f+1HMtndu/6eGZGcms6O6EWZvFkQLrD5gtqdMo8OsKfH6
-        r2kpi2dM22pX/sbVJPVfks5fVgbzecqfDcRqDmobm345trN/j5/59NUXObMSIiz7w9a1v/NRTEr5NC225tSrowsXGr9NmOn7iLEs
-        s2CBnt7D48dCL9eqOl1Tnc9fy3TLaml3Zu5CUa3LzKLPhJVulvMwqrEL+BxYOZ/X4aDIDC/GHQtXB73IvyS2MnfzR83PIkJXRbJt
-        +COfTF8yZfeUVWeWhl3afzLK52h+uLCwsNyMGTO+A+MPmtbBMShgwdBm8aiJQYGtek3prUcN0i9651oH/Vi+Ksw+xm/quqiFS/O+
-        OVQtMJq9cp9HQoMCy6aTCYtAgaaxCJJkpQQZmJhR8hOjIIMiMOLgiUHgZoe+UFBjT47D72fgxCMmiJZ2GAQNEAlDoKAJnDIYwVmB
-        BW42JJYcAhMVDAobBSZuXHgRHkkCL4sv3Km6Oq1RX8fZL85gpu0HoQsN7887/ylsP3s4Rzhf5W9IxIv6LgXG7IMaVy7X8GcoGX1R
-        OTD1yl7D52//M2xkP3GBr+E+u/NU54ftujWddeUXY3YW/T17MsHl9OZH2lJlD+UflN/iD3ovIsazyEpe/dnK6B2nJKWSube6HF0X
-        8S3q6ZGjByzPTma+0/fp4Lr5b/hl6swZ02/evpWerrtVmnUq9zNZXp1dO3KePuDZtWHZvafxEbKdwZmBr7WXamfp3Xtw5sQaPs7K
-        9pMxTsHcBxU53gaxNl/qF/wmGx4uscaDZ8PU1irF6R7XVayDT53ZLOgYl3BTs/itqpoa1+oziVKLVwi63DmUeTr0zPbL4kZh/h03
-        Lie/u6Sn2vNk0cYzzMy5kbd2+1RvmnT5TGjgNv25DrOXZtQtZdnaF2/K95+BfeXXmalZuWf99/z2CZ/5bX7mty/3H/+/CQBQSwME
-        FAAAAAgAYkBYXZgfijBGBQAA/AUAAAwAAABmcmFtZV8yMS5qcGeVlHs0lGkcx5/3fY3L1uodk1tjNSN3GjOTM2uaI+MSGdYtdIxY
-        RtNFK0faUrIzU2Q4aze7wyFrGlRySYYlum0xGqyUsi3VirGEastSjMrsjIpT/+3z/vW+v995ns/zfD/Pq+pTDQKU5e3rDSAIAEj9
-        ANU8QP1j98fRKCQKnUQhU4DqAfAElqZ4At7YkmBOsLOxdKBFMmhUKi0xMNQjMn1ftlCwj5eWW9YjzT3RVpzGa5xpausbmHg6kXNe
-        pZofVvWMTAxpJoFs7OxoZNpuBmP3UD4vf+h/D1ULwOqCFCBBIAsAYyEEC6lkwEQND2n4lwYEI1rqiuEnnzUV1X2wHIEAjCKo+u0F
-        f7ESsj6Svt5zmZWmiek4drlbOWAs9KqIARAXbtOvSZXe/SHMnmDQwYS2C5913bxXPXqJLqkPyo7QBToBqevnXAanlaOB3k7rqpDN
-        Ynk0+XHOoHqqBv+/Wte2rjtI1SxhC0SAD1aoyaxQAMMQrA0jS8gAa0BkIiiOYEElUzyDYtSkump+CAPP40w9DCvY36yyOyJL8L7e
-        fLavVixxvIQ3K/lyDnWcvo+xVCQioF4wqu0zkdZiO1N+6SeXk8ezzdb8fdQoKpRQU9AVJ7ZI6f8sKsN8xLn/XObU5wFpRVnx5/zE
-        gjeiuzoZ6V3bbzwYWtU5EnKa5Ua+/bBza+fWpgM8NacxFgLIxwcImEELZAgEuUG1Pl+ru1ZiPz3md/CwpoX4bruIOiUdzFIfhCWi
-        MIXpHhObZECwIAcFv9+uths8FjUXjTFlmAxuyXF13i3w2Vu/+pzeKc9n1ezHY2wnpOiW9V1agdS3XZiQ9bRwIDDNsSPioCGWeH78
-        X//asqrlwSuvaLSwQdUpwzDAIJhFdCyR4h6MEshMaWxSSVBM7vXJD4fsRnwrJO3MVA5z5XsHZLMSkx4BnpNfbZZqaySzV3o1POkr
-        JSj0MnkyH6svbryoUL6yOMGdnzTiubP0d9xxK+TXa51P/k56WT5qMyN2avcKYwji/3GNPjpljUrXJe/iPnKoMjqWdXKPnmhAYmzs
-        lwElHdC/Sq35ZSJ0LSdieuo2ac1laQLJeSOrUShPTW9vjGoFvoJeHNl+R+vmjSsLWFBTSVXIWPL4stALpq9ZnCPs0pxbki5xVYfT
-        ps5Eal6EqFKxRRH+MyVyQsHhxLXicOa8D6Iv5IfaAm0XBR8QtFOrk+4r+PixnGJGyGx5ZbhbVEBeDbvk9J5XXockdUUVVzdt4xO0
-        6jpiSheMLdVV/xJkAI8FkBbysQdYIpnivuQC2tyCy/YVIdnbCAHK3zT3Egvgj90BWPJ7eTRmoIVRcbIFOTRBQQiyaMe7oJjBsQSy
-        AE3KlfaULMaEjieWNN9i1922GhHu+v0Grlmcblqp7yTOnB5eUXSsz3rAd/bsxdV3hMB+0rb3z8MrdsLUactreb1XKCPP5q9tGGae
-        QRL1Mx54mDXMGLx5Xtq89+2dyFoLbr/hTcZWn6EdaZKXpEn3mM41EuWGBo9X33tqF7TsP1vQkCqve8gKJ0GdEWTX9hlhVvlrRL66
-        cdDxNSPV/+lIY5kfxkOZ6elHqsHTUxBStd2F5i33dDih3Uau3EqHeOtHRCqR7GKdrM9SmOhG6+n6JBx3NBel/Fg7cbGpjcPkplc7
-        9CwPU1/XCHpEPsfWoWuZFSntFCq7HvbcxPvEt7BtUcFX9Pjm4mJBoYP1S7yd9KW4cqNMmiMKp/OdDf4orvpV3h3CPphd2dg2VaaE
-        9+SVzIoM7tEP9zK65U9657rqGmij5d2Hzzh0KQNFykOJ46r+/wBQSwMEFAAAAAgAYkBYXeWBrEc7BQAA+wUAAAwAAABmcmFtZV8y
-        Mi5qcGf7f+P/AwYBLzdPNwZGRgYGRiBk+P+PQcAnsSzZzFDP0FLP0MCQ4f9tBmcGFUlpBWlxFQU5BU11FW2zaGszIyOzfP8Qp+iW
-        kq6OxpL62omLL26cOOvo3Nr6bd93HL1x79WbV73r////9/j/xaevHoIMYVTX1DQzMMu2ts5+OK1+2kOSwf9DDIIcDBUMC5gZlRiY
-        BBmZBRn/H2GQADqeEeR+BGBkYmYByoiiCYNk/t9i4GFmZGASYBYA8j40wGUWWUVbmhmsTAAyRZjOdZ95P/dhxRoXIJ8xlekU37rq
-        jZf7QpQYdaYwiGX03TlzN+tc9uZZ3KYcW4s5GNj9qq1+WTz48vOZv5u+8Wrm4HnH4wye9z4AGrXV5+5h3cPGlUYgKzQYpjA0MPAD
-        XaYqwMDExMjMzMKMcDKDoJCikgOzgLCCgaGRc0AC0KUcQPczsjL9E5Z0El0ZVSCl2XQk151x93rWll8Nm94UFLXcf+Gw+XGGyOTO
-        PTxM59h3sPb8bAn8uvzuSVn/E658E+80i8WGKKyXOJM8Tyl3k8huLrulJsXR/HtMLa1nr8xa6z2v8bvmMn5uzhlne7dvMp16a6nX
-        lNqHC3dOAcKCT/8ZgO4UF2RkYEYNQAaHALDLmBkZ7Rk3uMcDVYkIogczxPFMICWKEO8yA33Iwo5QxyioKGDI5JBYKKSgZOAYkBAI
-        9S6bPdMfvV9xrpJWEk/Cc23MlWO6rKbO+J3hqyTvm3Td7tDFMpk77wqNO2cH1QjybrQTsj35fOlMbc1AIal/85ac5rLacFSMK/5A
-        PdhSYDQzMTGwMTHD3S6oaOgYKGAAtHajwsKAhImwMLZX/Nehl9Hy9sO76AvzQ5ilDLRzgq4297sy3VISrWC7vt6po7lDTfY/Q9CZ
-        KS4bVv7+ojQr9V9Syv4DC9iNb9nfbPjMsr64buOe48/Uo+8+Pscx5fIOsXWPrz6xL0rkFjaJLH8WHqbLK2x3xzDk3o6GmFg9Edaj
-        d6x+vAq9PNfnwEadX3Ul2h1vdaK9ewWD1hoYxj000p1ecEAooZTlDNfK+by+IkGJmrxH+Ur12u0CtnoXzu/03xPgHRK4842x+qxP
-        voFT7iwNS9XaMfXX1CVnwn7umDFjxocjR44/h6VzcPQJaDC0WTxoYlBgq9apPPWoQfpF71zDoB9LV4XY+/JNXRe1cGnet4SqBZtm
-        r93nkdKgwLLpdMIicIJdxMEASgZSggxMzGhZTFARGG3wlCBwK2C9WFNXmFnL/Zr7oEwJ0oGaJgQNoCkHlCwEZsYmH4FHEiMwI8CM
-        h0SSQ2CigkFho8DEjRcXwiNJ4GX+wh1fV7Myz45om7NHYqbsWg5jD5l4W/6Px+TNeTb47pn8NbDE/qgA0/VOt2WzH1Q7Cty+MJkp
-        POjL8enb/3bYuZ3iYbsnyz2t/Yjm2ZqOd+HuRU9/z550oHN6ioXI20L51rnPBaqmVywwSBW88FP1nxbrW8nDbDMOla2YsbX68Jvt
-        QlO7G4qmFmq+c69MuO7/m/m4fO+B2G9l32bW3s7ITFgRb/AiM/Xq4fT1DKdXc+W+C73aeKPFOOnr1E9Tt4rnF6SlhLGz7Dn8ZJ2i
-        ZuuDCS1lN5kOvnTv+M23enVPmArP7pY12hdZQpWftGdpK+us2CL6jHXSdLtLHEkOq/YcE1xl1Sjie0ZtztaYc+cOnJk6+ZFZcFL1
-        lu7O1N4pYZYNJqJZ567eSr47Zdq8pFW9G2te/GdQ8L20xT6oKeq4/qyZnze+qk2LjJpdHPze7rLos9rlt2r3mv/4fxMAUEsDBBQA
-        AAAIAGJAWF1AJbc0RQUAAAAGAAAMAAAAZnJhbWVfMjMuanBn+3/j/wMGAS83TzcGRkYGBkYgZPj/j0HAJ7Es2cxQz9BSz9DAkOH/
-        bQZnBhVJaQVpcRUFOQVNdRVts2hrMyMjs3z/EKfolpKujsaS+tqJiy9unDjr6Nza+m3fdxy9ce/Vm1e96/////f4/8Wnrx6CDGFU
-        19Q0MzDLtrbOfjitftpDksH/QwyCHAwVDAuYGZUYmAQZmQUZ/x9hkAA6nhHkfgRgZGJmAcqIogmDZP7fYuBhZmRgEmAWAPI+NMBl
-        gqyiLc0MViYAmSJM57rPvJ/7sGKNC5DPmMq0wm9d9XI/SyaFkE0MjGkdb8+cvbbm2W7LBZsDusMNGhhKni/evriP339eypekz1Yb
-        TC3flD7mq7gHNIk75OwdozvG5pMVgBymBk4HDmAIH2FQFWBgYmJkYmNiRriYQVBI0YFZQFhBycjA0DkgAehQDqDzGVmZ/glLOomu
-        jMqR0mw6kut2cOe6oy1fGVNv3HiSaP5LQOfLLVaVR/nMDJsbnzEmf7V7KFJ9+e5JGf8TrnyCnxy79VYJhPukGZ4XtMlp1TvUXzQr
-        59rhn23L7c4e2Rq29LzDP6/M5kOH0oyTcz90xqwKWen+TEp6pvdM7+l874HOFBdkZGBGDT4GhwCww5gZGe0ZN7jHA1WJCKIHMsTt
-        TCAlihDfMgM9yMKOUMcoqChgyOSQWCikoGTgGJAQCPUtmz3TH71fca6SVhJPwnNtzJVjuqymzvid4ask71u4rrZ10RvLnXcepQub
-        LfmhJJ1Uo1auPm9aypqlLh7Zv6om62i8OiwSoVkPShTqAoygIGZmZmaFO11Q0dDRwCFQIHGjQuHCgITGiQdhYWyv+LdD90HL22+V
-        0974dzH2Sghu08w6eDyV6Y6L1gfe9X1HBdkFfKz/qc7U6EwM/nyjK3P+WcH0LyIMz6rdvxuIJUx9l3/NfMadI/8Ziq9t3OKtzHT1
-        mW10ib1RIrewSWT5s/AwXV5hqzuGIfdlHPT0pnMxPXonZ2c1teR50MJsofOHXy+IcS2K2DZdSmlpVJJhvMFMsdMrEjgNbByNmVal
-        Hw52FZnhxVzoPNd74XmP6KA76W81v3dxZnWZ27av+eR9yWj2lFVnloYL7RfaMrPr3jo1NTVbQ0PDr/8ZYOkcHIECGgxsFouaGBTY
-        qtdUnnrUIP2id65h0I+lqwLsede1ropauDTvW0LVgm2z1+7zSGlQYNl0MmERKMw0FkHSq7QgAyMLM2pCEFQ0MHREJAaBnYeEuzyn
-        MHelKPj93A/KloIMTKiJh0HQAJp6QElDYGZs8hFw6oDEFAszLLNCYsohMFHBoLBRYOPFiQvh8STwsvjCnaqrTY4n1mz0i+Px6fvB
-        YewhV/mi3s/g547cptwn87Qsqp8//rKIQbRiSlbmPvYtgrx7OQ1US/X9flbXb2Q/cdOx4fbhhUEXfrRKrp+o7/dLe7pe/M6dOhwz
-        y1yL/a4L/kjed6FqesWCD6mCF/ye7D/qtHcx14nLEn5XhcV2Jt/MU9UWZ3iq9Sj4Tt9HQZP/DBtqCn/cYd2fnp859c62tmlcrZ/5
-        2qbFxpgVfeDZtWHZvafxEbJbtXK6r0Ut2rZ08x3JiaKNB41nfAoXuHLog4eTdUhjxpfFR3LbQ68e0xZiiz0UJvqiTWviZ7ZNQZt1
-        VmwRfcY7abrdJYksNa7VZxKlFq8QdLlzKPN06Jk3b3hORtopJ/v27/bYMa2YVbQvgZc1avPWshnfU1WXz1i1OCfeyn6C2sso+ScL
-        pm08/WzhvTL7uOXXUqeu3G5q9/mtYVz6rZqZ377cf/z/JgBQSwMEFAAAAAgAYkBYXVO+QINABQAA/AUAAAwAAABmcmFtZV8yNC5q
-        cGf7f+P/AwYBLzdPNwZGRgYGRiBk+P+PQcAnsSzZzFDP0FLP0MCQ4f9tBmcGFUlpBWlxFQU5BU11FW2zaGszIyOzfP8Qp+iWkq6O
-        xpL62omLL26cOOvo3Nr6bd93HL1x79WbV73r////9/j/xaevHoIMYVTX1DQzMMu2ts5+OK1+2kOSwf9DDIIcDBUMC5gZlRiYBBmZ
-        BRn/H2GQADqeEeR+BGBkYmYByoiiCYNk/t9i4GFmZGASYBYA8j40wGUWWUVbmhmsTAAyRZjOdZ95P/dhxRoXIJ8xlWmK37rqjZd7
-        IpRYvRUYxDL67py5m3Uue/MsblOOrcUcDOx+1Va/LB58+fnM303feDVz8LzjcQbPex8Ajdrqc/ew7mHjSiOQFRoMUxgaGPiBLlMV
-        YGBiYmRmZmFGOJlBUEhRyYFZQFjBwNDIOSAB6FIOoPsZWZn+CUs6ia6MKpDSbDqS6864ez1ry6+GTW8Kilruv3DY/DhDZHLnHh6m
-        c+w7xOrUzyj1r7V75/GqzkmjpO+pxKZXC1krjiXLfBTOnbD0RuBXzcWzbtQ+fHnyzl3v0KyYL/w7fQ0qInyO5eTunai91Wuqxu/D
-        zsWaxZpFD5/+ZwC6U1yQkYEZNQAZHALALmNmZLRn3OAeD1QlIogezBDHM4GUKAIVqAgATWFkYmVFqGMUVBQwZBJySCxUUDJwTAiA
-        +pbNnumP3q+4VklriRfhvZZ5brtEyrUN/2b4KsnnJl23Z7pYIXPnU6Fx5+ygWkHejXbC1pOvexuFBS3myPiuFhF4tU2jL+kfMziA
-        gXEMDmBGuMMFFQ0dAw0cEgUUCjcGJCycCAtge8W/AtEXOW8/PLO/eeOvBRIXDvRu9A7j3a0h9kgxvCG34k2gQC7L4fU/dU66eHPN
-        33ck2C3+mdL5B0HNlY/sbzZ8Zllz5vplqWd2Hy3uxa1X1PXhZjd8dfXCv5MtOj4XU69Pvdp92Cn91mHRzMcZrDeXHmrYsbtdXlY1
-        1vxSiG5m+uH7Ttu6nmzM1d2ipCqVkLTnUKLu9IBnjGrsAj4HVs38cIVH0LNlgXSXzKpY3l9Ot6bdtheab+ioG+i2+cCZueGT4iZO
-        2T1l1ZmlYZf2B21pPZofLiwsLDdjxozvwLiDJnNw7AloMLRZPGpgUGD7rVN56lGD9Iu5cy2DfixfFWQfqde6Lmrh0rxvCVULlGav
-        2eeR0qDAsumkwiJQkCks4mAApQIpQQYmZrQcJqho4IhICAK3AtaLNXWFmbXcr7kPypMgHahJQtAAmnBAqUJgZmzyEVg0AeOJBW48
-        JJocAhMVDAobBSZuvLgQHk0CL/MX7vi6mpV5YkTbnD0SM2U/SDXZMN6fGcv+8Zi8Oe8G3z2TvwaW2B8VYMw+sjjY94Ptgo7TFyYz
-        hQd9OT59+98OO7dTPGz3ZLmmtR/RPFvTWVV+MWZn3UvdG4JGb350PZq7Tvk3e+2Cl3ofHRNOKS/8VJd1dHfP0onLDHaH+EQ97U+d
-        qXJNj/FU6JHlO+U+Hdzyn2HDnsIfd1jnp+dnTr22ra0x1fkzX9O02Bizog88uzYsu/c03rHvyMrZolWnfnrdmna+IM1FjZ1lx+Mn
-        6xQ1Wx9MaCu7yXTxtXvHb77Vq3vCVHg2TG2tUpzucV1F6uSpM5sWBYTPddgU9PyWM69LY2hlj3JIKZPG7Bm+llk7585tnKmtntU7
-        5cbvLd2d6QaBEc8YG8PWvI1dZlc06fKZ0NBt+nPln3DuCmt/pViw8fSzZTVvquZHTgtbdufK7/NbjlbOz/w2P9/3n/3/mwBQSwME
-        FAAAAAgAYkBYXer2rEQ/BQAA/gUAAAwAAABmcmFtZV8yNS5qcGeVk3s4VGkcx99zjsuU0jmGXGaX41JM7DQzasT0uFMZj0a5lFvj
-        WhtdhEgRVlY0xDMsymX0zFhlla70hMI8u4tE9KxFcmcl2+4yabVmz7RtVv/t+/5z3vP7Pb/zOd/v95X1yoYA6uK8yxlAEAAQsYFs
-        CaCugSeDWQwaw5LGoDOArB84ACNtCk7RNMJ1caqxkSnLl81iMlnHdnvY+6ZGZ6QnR59NyLnSVZNTJClOOHv3Ta2kd3B6Zpp/XSZb
-        GpV1jU8Py4dAxlQqi84KZ7PDh/PP5g//7yVrAhgJxIEyBDIAMAYhGCRrAVoEPCTnX14QjCgQFY1PXssrsj6wBoEAjCIocXqd9LFS
-        buVryaJX8ohHdbgjs/3X4uG4KkfiDIXCEtXq0zXdWR4GihwcrD+UNdD+/HBH+K0ila2kO1EkoOwWz47fNjT3dmK382bza8jeku8D
-        6JP8IWLUHdfnzV80m59iyj9hAgQgCawjyDagAIYhWAlGlpEBpqZvi6Bk3IBJZzhweQQpieCHFOElsra9RqVPhA41peWI86O6aknq
-        PBTa2zu+qrEz+aC4k2pMjtNSvLyOrqL9hnRlsGR250iivcnx7NwL+2O4KfeDGVlx50dDqCfVTwu6HkfYFMRHzQxwPA/7za0bExds
-        N9sYzGK9IOW1ilwEiYHCOgGxj8/KAIGpiUEAWakfsOW+B0MgyAa6seMA0aWOfaryP+ywvEWfaDBCiSkQpKz4nzmYPgqrMWx5gZG4
-        Ad2O++FnlWzgqQCrACdtttaYN9/iqHOdeqwp48/OIkfrvlG/dypOQ1Hnx/rCupmV1ulpvSU/lhjNP23PE3x7fq3uWNtqqxsS7EFA
-        0nt9CYthGCwLDAFMn2HnjtJtAyNrcCGXl/Ovvjb6S+m0Q6mvXs/6dpZ6IDp004g9z77KdoL70j2HKAH1qw1U8YLYvzhM9wHO6tJG
-        e6r4wITBk9dUu3ZptpS3ffGRqbnFS0p7YlBM/eBWfrmh29A+drbX4I5ZV/2gsEzau9ZpyXD5wf60TcbVuKYm51xyZKxqg1Ve9OQe
-        Ybjak4pJ+9qsp5LbtV2YSTeWcbkpxJcmbIddVcsKk/da6yRnUOkCJNLBWdQ52bq+5572gkCicMeJUtJsPvEgd+6C+A+qZ6FL9YZE
-        0ZcqGS8syGSyrlZBwTvCvQ85f+8fagJSto2kAFxp0exU60gSZaq42HLPguiql80R2rlqH6HoqNQ2vkx8qaphZ0gSrnCzjVcuFw0v
-        JwF5DigYgBSQlTnA9OkMu+UsoHVN5IxdAiQjBHd72yi/lhiAV2YHYPQP4ZEnAy30D275aBVxFxBopVWBKE63jUzOqekSfrQKld6b
-        OWo9zys7YYp2fxNMNmxAuGEXt8RKbSq0Tg8wH7F+3y1xelmiJ0Kh8HL3SvGC7kXHUKnRw7yeesb4L0steoYua5QGdSUchxH1iQbH
-        RrbUm+bXyM2fIRWePOMU6XbZcFE5AZ+n/WbLazUUTllrbtJ4pZ22lnGurzzoJzPrTOauKj9EcK1Adywmf23FosotPf7D/dLYvtCo
-        74SiFGGaA4dWTbGMU/Lft/fYietVqrDH48wO71avHv96u0Js32dqo9m5tWnizQqphnd/WJ/tw97RG+PvF1SDM5u8NKbSPA0HP68c
-        D9ufnnR1kmsmqJu72Oytpug5QedvmVZwt6AXnXjGSWBEbQhZ4OtEJPg4tdTwBe6eBUiKzy1RdN6lm7lPN13t1+zIHlt13+vrEffj
-        NW2D4jNTp0ot873EAz2LT25LYks3JlT0tyXqyX7+G1BLAwQUAAAACABiQFhdF8gx40IFAAD7BQAADAAAAGZyYW1lXzI2LmpwZ5WU
-        fTRUaRzHn3uv8bKr495RCp12TEx5n0ETpm2GMjWIEWustzWVckqsqAZrx4gwaGkLW4eGDoXCmLLWsp281piKqFBZJm+1tXaLTSmz
-        d9rK1tl/9nn+uff5/c7vfu73+71X1a8aBqg7m8MGEAQAhG+gmgeoJ//AdjrNhuZkQ6PSgOou2ABMDY1JxktNSStI5qtMLelBDLqd
-        HT3a2881KDVOnCGKEyblne6R5p1oL0oS1j9vaO8fevT4UU6NSjX/QNUz9mhEPQRaZW5Op9L3MBh7RvKF+SP/e6laAKYNBECCQGQA
-        YxCCQao2sAyHh9T8CwuCEQ28suSjY3VFNQh0EQjAKILid38kv6+UOgc50bPNw/DLxfD1LMVU0Yjg3MaKMACFw2e9qhOlvdkBZIIH
-        CRhEHLmnuL/7+h7ZiU/XaF+M1QZaXonOLx2Hp1+Me7Nt7asQ3+LOUOpEzjA+6qLn/VbrVnsBSf0ICcyFAWDiZGYogGEI1oSRBWSA
-        EU1YCKpPIttRaRu4YTipNs4PEeB5fUPXJRWBkUbmKW172Zd/qm5PnYHC+/tH+WtfolbTgwRTZTQCZKJxiJLUsvr5mZ+POp7KFS9f
-        OXraIMSPVF2o2F5MFgx8EpK2Ysxh4Hz6Mz2vpJOZu897FIteHevVSktV7Oy4O2IkH9ta5s6kdt+TB8uDGw4KccylGASQD/UDLO4b
-        MASCmFDtpq/wrsXYxyr/ww6rW0zwBlMUnwLBBMJCH4SZwCiNFcaPIZLIVBfu25fVZMKToYxQN0PGslFeTvPalcFixvHC+QuUHr36
-        2V+ZrgOC5cr4Nfa+dhVM7cP9xd+v40yV/WBp7kM0Ws/JX7yfLyYXSNT6UlDcYlxhBCG8B8dMaC4+fCpLipJKuGExorx3AjNNXmfY
-        RKQ+GT1o/dhbDOUsW1JvvvtyZ50o0rUGDM489kFjNFovKb88euSBwO/VHLbFfq7U6pJEomXfJpRBuxREmf230qbO8VVBXb8FDpId
-        fidUNczsnfx2R4sBJaJu6vitrNaNN37U9fMOZtlcszEgtN9znpU3xlZwL2bu6p2SBLvtC6gvMCKbBW6j+RZ6ZoX3OSVzRH36VItd
-        rVyaG4WYHLU6tiLOaTqtMihbBYinaC7WPuwJ0UwxJ4HtG3+sUlHGI14iXkhrj67KzMz8rpxCWa8C73L+xj/UERx2VKYAkmaiVaJc
-        mWw8WVTktHW2rJIrjLdJqw4sKYv6i5UgKT157pfNO5JJGnVX+aVq0Uil2vgfoQ0YYwBP6r+TAGHAhEpzWcgCOpBhm81x16RJkalr
-        /xkdjPo2OupcoIVNSuGbDwFnxG3SQKAPjWLxY1ASVZQn7Sl57xP6MLpEkXArRXQ1csOW4rYrs5q5O88yk/QedmydeKIr3RIyoSx9
-        ccP7ZgawmHRf43CHr9TObtZxMIsrKGc0CaVaeRJfqEomWZmfnhHFy7O9k/A5oavAdvS2B0wJyQvoPYK9PlSDJhQckNSGY92CzzyO
-        W8yw+Yc8+c6VFOuozhaedbkN1PiFQm/fujZ2z3zLk86OWoMkrxp9y6K9i2D5YcNFVo0NkWPDuo21t4fqas4tSvG7ljUU6BNqJrti
-        b2eJbAvmP/Xv7msfzk3dbyWKmO4ZXN9atj9G3JbcpRPAK9Gt3NTE8JUr6kq7eQK6e9ArDudsrkVTB1bpzBJTZDpnrP2fpYftdL+q
-        pDv0//n0pnXZyctu2wVISqBMrPSPkntsrqyKDB3XG9Vp9E9X+nwt7Roq/6ZZL3bKTt53q9m7ac6TFz9648JcYnSvauBvUEsDBBQA
-        AAAIAGJAWF0pYbY9MAUAAPYFAAAMAAAAZnJhbWVfMjcuanBn+3/j/wMGAS83TzcGRkYGBkYgZPj/j0HAJ7Es2cxQz9BSz9DAkOH/
-        bQZnBhVJaQVpcRUFOQVNdRVts2hrMyMjs3z/EKfolpKujsaS+tqJiy9unDjr6Nza+m3fdxy9ce/Vm1e96/////f4/8Wnrx6CDGFU
-        19Q0MzDLtrbOfjitftpDksH/QwyCHAwVDAuYGZUYmAQZmQUZ/x9hkAA6nhHkfgRgZGJmAcqIogmDZP7fYuBhZmRgEmAWAPI+NMBl
-        gqyiLc0MViYAmSKsm7PPvJ/7sGKNC5DPmMo0xW9d9cbLPRFKrN4KDGIZfXfO3M06l715Frcpx9ZiDgZ2v2qrXxYPvvx85u+mb7ya
-        OXje8TiD570PgEZt9bl7WPewcaURyAoNhikMDQz8QJepCjAwMTEyM7MwI5zMICikqOTALCCsYGBo5ByQAHQpB9D9jKxM/4QlnURX
-        RhVIaTYdyXVn3L2eteVXw6Y3BUUt9184bH6cITK5cw8P0zn2HWLpZ5T619q983hV56RR0vdUYtOrhawVx5JlPgrnTlh6I/Cr5rKz
-        OXYfvjx5l7d01Va9KvY7y2bY6Kglm5ndOzH11lKvKbUPF+6cAoQFn/4zAJ0pLsjIwIwafgwOAWCHMTMy2jNucI8HqhIRRA9liNuZ
-        QEoUgQpUBICmMDKxsiLUMQoqMgkYOiQkFgopKBk4BkA9y2bP9CLOOs5V0lriSXjvXnPlmC7rqTP+bVG7yL/tx317p5sVMo8qTY2D
-        jVbac7TdmDfZxvP90pnamoFCUnae00RKE7uUpi+wB4cvyOHIAczIIKho6BiYaOCwUUChcGFAwkRY+Nor/uvQZ1HPV96zv/nGnwCe
-        BwfWbvQOk7Wdwn1IMbwht7paxEVWYcbnv94mi/d4R82fn6R5WP9nx/YfIgyvbdx/G+h+Zllz8/yx4o2/jrzds299iJLGga3l/eH6
-        zt/VFJNyxeJqp17tPtyUv7NNS327B+tt79bGoney+4zWza2Yyh0xrXZ+LdNL0UtHt+wqcPHacuDU95YT22KdN3AalDXlcK3cJ9U4
-        JSgpgPco36tYvn0Tti3dlf8o+JmG6iqNZxXykS/1PU4Vb5oarRl6KfxR2IQda78WpZyc7zPT+D0skYMjT8CCgc3iQRODAlv1msrT
-        jxqkX8ycaxn0Y+mqIPtKvdZ1UQuX5n1LqFqwaPaafR4pDQosm04mLAKFmMIiDgZQIpASZGBiRslIjIIMirA4A6UDgZsd+kJBjT05
-        Dr+f4Ug3ggbQdANKFAIz9jyqh8YSJBcwosaSQ2KhgIJB48SNFxfCY0ngZf7CHV9Xszqei2ibs1tipjzDJY4P1ttf1PsZTLcxOmpa
-        Pr+r+7mtvZcS0/VMt2Wz3tg4Ck5fqMaybtKX4+X93xQ+mTAvMC0rsQyxcS7b01lXfjFmZ9E/35QNSqk3Rc9aPJS/YfWRfWV5Fjdb
-        oCx749fVYa851/QatrxaMWPrbnnOmG0zdrC9DBea96RYR9r9N/9meakDkV+t9visK91iwq0lb3AiM/Xq4XR9htSprWZfp9Ym5Agt
-        O7H36VLRR9E2zUZKa6SFHvNP2tayTLzJSfDqJtbFl90zfvNNvXpMW4gtwuvQXo7UINuHt+aFpU4Va9p9YFPQ/UfOvDEeouEVh0zd
-        PQRdrgtzLtcN+9yekOZ18pGZyd0/W7oz0z4ERtxjeDBtzaMdU2dvmnRJa9Vt8Z3NP5nypi78MSVGp+j7yvkWtuf3nNYODvtq9/mt
-        YezzW7XLb9+um///JgBQSwMEFAAAAAgAYkBYXWokCSAoCAAA2wgAAAgAAABtZW51LmpwZ5WUeTiUexvHn2fGZJTlGWOZDDIj+zZj
-        l4qxG4Omxh7ZBinLDGWckxhJ2Y4jmqTlhCKnoiGM5aI0uIiTeU0LlcLBSSVL0sa8k/ets7x/vffvr+e6r+/3ur+/+/N7RI9FLwCI
-        7OLuAoAgAIDiA4ieAI7A1s1YDazyVg11DT2drQaWQbaWpqaWCd40h6Cs5NyT7OT0tKJKAbeorPtCWnrTCq/78djs69mCOpFobVIk
-        mJod/2oC6ujpWRIsD9jaHhjnpHPG/+8SdQEoJMACLsFBPABDgXAUKOIDGACAfx32LwXC4BLijhII/qMh7ohGAWk4CMAgOCT+nECE
-        StvzpWk+lFfu7P2RkbjyDIBvyjk7UoudsJzu9ylXWGzAT27bgIw13N0UeLVKy5mzl19mQ718r+njMtKcOR2D0Y56ED2ENw8Ilmh/
-        wDs/42lCFFZKVlkwq7prVfxLyMirN+bb4tz2ZB9ghVjURsrSXuHJtx08zhgw5Sh3/QpKNt74fbJajVmWNRNQM2yu424WpgvwHZkK
-        x31SJeOPfNI/d67M6YEj3r7kPwEwChmQ/+06cTpNCIDBQDjiz4wgShxLXoMAx+GJpiT7XeKoSHETRMDWHkC51zhXz7GpGYxQJ2Dj
-        aUavd22VDFLlSDJqW2egEYLS6Ml6uczSn5L99djM4QThygNC1rYLPd3qDyuJI7ICT1+z/hSzPlhiczaF6qxA9TSjDCvR1Dn9P3Aj
-        aQW5uhWjv2EzcbIGb3pVEzGTZZW9c72nDWzfMBxkpQrZLwI8HWILBqk5QbpxRkXsAXrDx/7JwlvWXxJFQDbhvQgQh1ERj/6PLaJA
-        eYIGtJ5B3LEDpybaA41jaTX+OhxiobaXd4JYhv0qA+D/I8PZr+tgX3UT3Igt7HxuOD8lU1PBhdosluEgAITDJf6qA1FECGcPI5BC
-        NUyp/724DXawwfMbwg0QeT9dqT6k+16Nz97ANepodfIuISEZVtbWSqe0dLSOnKv4YcLESWyLh8SjwMQFB/+0xREhEjVMg8BgF3G/
-        LcQORy4e/STfr3JfsKP8qkk5ne8wFgKdHV4roL3BJ3BrFtP1pNGHE54rqyt/wucxitWNTDDFr/Hh0ZoBJS08dIxjoqCjJm7nCfln
-        WYtjPZvfziAdpHLipRM2NVHtHJS9V/O8ggVnA7JMYkQAm4+z9nPuQ7qE5KjsCxuyavNH8+a6s7CxcZHM+0VOOAXGmnvXJoMT3UnR
-        DPb9Y6sioCLwpgi4/CF9eP53V+SxuyVvc/HC6OspHiM70AKUKsQkjUv7xDCdcz4TII5Mfh471DPPoM/99b2D0c45PZPMfL/8xePI
-        uA4sy9ZLYZVRyx8jp0kl+2Zj/RbuyJQq/ogdqhCccIyqrlesP9nItHlKMBPuK+eWWS2GxLMeFylfVBLUrm42TZ1wVVGCRgPHj+hU
-        ltuMsHZ5EczT/zj4JGv0yTGfrn3YJa8Yr7pi9PHl90QXPe+h+99e9ToLUMrFH4vmiA933yHUJE/YS2Iog5HJRBZei603H69zk20t
-        /77lVdNF3ep32Pl7S5X99bvdUt5Vb88AAJZJqHiPaiixDYgA/4YHpIEjEKmk7zxCQyMv2iH+KfSOsZOk66R9vFKKUV8IrTojRzEN
-        7ean0KpL0cfOH2xNsUJrVm9Um15Y51z1qzX8b7+ldWsiifCdWEhgGPVz5ooiOcI7C7eRqoq1ptlUl+kUlM5u6xF2ebyE/qWCbPb6
-        +dAfvAOxVO3ocY9CsbEOBK6jB0p8ow8ExOyRwqiMIkiDzSWUC8bnF74DCHFRX+CXnxlSIyTnYUr4a6/r2o0lJA1VrC/kR6THacZu
-        Ag933byb7xqc+vn0I2eHwbRLEmNFLjtVA3/VCN5CwEv2L2GKZUfo3CGnhrDMuZOZA7HNSRoyxo0U8oE3cU9rdl8hc+Q6hTGu5KNX
-        NmYEP7snxXC+v0zAevo0dVhI6uAvUip1D9IrGXTAY6y1jFame1Q9NLO2y/YTTSw9ZPZpv2pUb+ewtUXdghlxNEtRqMrTfhveu72z
-        JQDIRwo7Kh7t3euh2BYnx3f2CSxbXrtEalC7u8B553yrIqYxyczY2BZ3uP6NB918p6Ez/lJPQ/Fq11IfuFrfrvRTmgjIYXrZ3Fjg
-        XTMYCXNdlsq2opTFN/NjEMBKQGmi/k2eRbsaTa+epsy/nRBJiSxVNEiMcNsh5CttPphhE+tj2Lc5bY1uo0CzKUcAA0pTS3Z2pfSB
-        lzltzD7hYCdqd4inY7HenkA2b1eVplH759MucaSnyWRrryHkNHkOKyd8ftJqe4yw9WOh9pg+InzMbeBMVCg7f//H3E0RWrXvH04o
-        mQffIkPXl+Sb9W19o2kLPP+4ORMmPEqu7UP2VL5lz/yXgQ9uo3v8c4O0K3y3MMbwksSV55mVTTfDZIjnKXewtsdmTD/sRKvLK3JQ
-        HrFt2acyOY1QoGBO6tok8bF+KmcrZa6SlTOtPgwbYRkb+J/hx483IOa7YYWdKD5qBVEuj2lMtk+su0BZfNSSHGCJ06uvuHEbjzVW
-        TODEyU3S9k6itfYKsHQrqkppeNUITWpAILRPOMGXCOiIWqi9tHaDXJU9y7BinXDnYGYlijHThoqYOZnGqexKhhHPqR0NL0G03GpP
-        5TBJ871rmBlto/Z2UvaySQvz6W0aPVXbNE/JfoTueceWYu8qUb/U1d89KLDY4YEKGzac9mP+YrbE8PVR9RkI0ooKQb+sV0vKifCj
-        k331PoaFJCFaw/32oCXtgo52tjhSLSKStHFJZtpSIuBqXW63t2jk31BLAQIUAxQAAAAIAGJAWF075ZZscAEAAKQCAAAMAAAAAAAA
-        AAAAAACAAQAAAABmcmFtZV8wMC5qcGdQSwECFAMUAAAACABiQFhd4BmHYqwBAADTAgAADAAAAAAAAAAAAAAAgAGaAQAAZnJhbWVf
-        MDEuanBnUEsBAhQDFAAAAAgAYkBYXUHGTz/bAQAA8QIAAAwAAAAAAAAAAAAAAIABcAMAAGZyYW1lXzAyLmpwZ1BLAQIUAxQAAAAI
-        AGJAWF3v/AxbAwIAABwDAAAMAAAAAAAAAAAAAACAAXUFAABmcmFtZV8wMy5qcGdQSwECFAMUAAAACABiQFhd0htPdYgCAACXAwAA
-        DAAAAAAAAAAAAAAAgAGiBwAAZnJhbWVfMDQuanBnUEsBAhQDFAAAAAgAYkBYXZZylH/FAgAAyQMAAAwAAAAAAAAAAAAAAIABVAoA
-        AGZyYW1lXzA1LmpwZ1BLAQIUAxQAAAAIAGJAWF18ipMu7wIAAOQDAAAMAAAAAAAAAAAAAACAAUMNAABmcmFtZV8wNi5qcGdQSwEC
-        FAMUAAAACABiQFhdpRn3BwsDAAD8AwAADAAAAAAAAAAAAAAAgAFcEAAAZnJhbWVfMDcuanBnUEsBAhQDFAAAAAgAYkBYXfe/sCP5
-        AgAA+AMAAAwAAAAAAAAAAAAAAIABkRMAAGZyYW1lXzA4LmpwZ1BLAQIUAxQAAAAIAGJAWF1vs3d00wIAANMDAAAMAAAAAAAAAAAA
-        AACAAbQWAABmcmFtZV8wOS5qcGdQSwECFAMUAAAACABiQFhd3i5WL3sCAACAAwAADAAAAAAAAAAAAAAAgAGxGQAAZnJhbWVfMTAu
-        anBnUEsBAhQDFAAAAAgAYkBYXYSz1BD1AQAAAAMAAAwAAAAAAAAAAAAAAIABVhwAAGZyYW1lXzExLmpwZ1BLAQIUAxQAAAAIAGJA
-        WF2PiWClDQMAAPoDAAAMAAAAAAAAAAAAAACAAXUeAABmcmFtZV8xMi5qcGdQSwECFAMUAAAACABiQFhdvcwaljcEAAD/BAAADAAA
-        AAAAAAAAAAAAgAGsIQAAZnJhbWVfMTMuanBnUEsBAhQDFAAAAAgAYkBYXUSGwZASBQAA1gUAAAwAAAAAAAAAAAAAAIABDSYAAGZy
-        YW1lXzE0LmpwZ1BLAQIUAxQAAAAIAGJAWF1huaQGGgUAAOcFAAAMAAAAAAAAAAAAAACAAUkrAABmcmFtZV8xNS5qcGdQSwECFAMU
-        AAAACABiQFhdLPUDahQFAADgBQAADAAAAAAAAAAAAAAAgAGNMAAAZnJhbWVfMTYuanBnUEsBAhQDFAAAAAgAYkBYXSC6NlsoBQAA
-        6gUAAAwAAAAAAAAAAAAAAIAByzUAAGZyYW1lXzE3LmpwZ1BLAQIUAxQAAAAIAGJAWF0fuY/sNQUAAPQFAAAMAAAAAAAAAAAAAACA
-        AR07AABmcmFtZV8xOC5qcGdQSwECFAMUAAAACABiQFhdJcvF7zkFAAD6BQAADAAAAAAAAAAAAAAAgAF8QAAAZnJhbWVfMTkuanBn
-        UEsBAhQDFAAAAAgAYkBYXR/tXjI+BQAA/AUAAAwAAAAAAAAAAAAAAIAB30UAAGZyYW1lXzIwLmpwZ1BLAQIUAxQAAAAIAGJAWF2Y
-        H4owRgUAAPwFAAAMAAAAAAAAAAAAAACAAUdLAABmcmFtZV8yMS5qcGdQSwECFAMUAAAACABiQFhd5YGsRzsFAAD7BQAADAAAAAAA
-        AAAAAAAAgAG3UAAAZnJhbWVfMjIuanBnUEsBAhQDFAAAAAgAYkBYXUAltzRFBQAAAAYAAAwAAAAAAAAAAAAAAIABHFYAAGZyYW1l
-        XzIzLmpwZ1BLAQIUAxQAAAAIAGJAWF1TvkCDQAUAAPwFAAAMAAAAAAAAAAAAAACAAYtbAABmcmFtZV8yNC5qcGdQSwECFAMUAAAA
-        CABiQFhd6vasRD8FAAD+BQAADAAAAAAAAAAAAAAAgAH1YAAAZnJhbWVfMjUuanBnUEsBAhQDFAAAAAgAYkBYXRfIMeNCBQAA+wUA
-        AAwAAAAAAAAAAAAAAIABXmYAAGZyYW1lXzI2LmpwZ1BLAQIUAxQAAAAIAGJAWF0pYbY9MAUAAPYFAAAMAAAAAAAAAAAAAACAAcpr
-        AABmcmFtZV8yNy5qcGdQSwECFAMUAAAACABiQFhdaiQJICgIAADbCAAACAAAAAAAAAAAAAAAgAEkcQAAbWVudS5qcGdQSwUGAAAA
-        AB0AHQCOBgAAcnkAAAAA
-        LYDRA_V318_ASSETS
-        unzip -o -q "$RUNNER_TEMP/lydra_v318_video/intro_frames.zip" -d "$RUNNER_TEMP/lydra_v318_video"
-        for i in $(seq -w 0 27); do test -s "$RUNNER_TEMP/lydra_v318_video/frame_${i}.jpg"; done
-        test -s "$RUNNER_TEMP/lydra_v318_video/menu.jpg"
-        # Provide 8 representative frames for the stable V31.6 menu preparation.
-        mkdir -p "$RUNNER_TEMP/lydra_new_menu"
-        for i in $(seq 0 6); do
-          cp "$RUNNER_TEMP/lydra_v318_video/frame_$(printf '%02d' "$i").jpg" "$RUNNER_TEMP/lydra_new_menu/frame_${i}.jpg"
-        done
-        cp "$RUNNER_TEMP/lydra_v318_video/menu.jpg" "$RUNNER_TEMP/lydra_new_menu/frame_7.jpg"
-        echo '28 genuine video frames plus user-supplied title artwork prepared.'
-    - name: Video-Szenen als voll deckende PS1-Bilder umwandeln
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V31.2 Korrigiert - Kamera Bewegung Performance''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V31.3 Kamerakonflikt und langsame Bewegung reparieren
       shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/make_intro_frames.py" <<'LYDRA_GEN_PY'
-        #!/usr/bin/env python3
-        import os,base64,struct
-        from pathlib import Path
-        from PIL import Image
-        home=Path(os.environ['RUNNER_TEMP'])/'lydra_new_menu'
-        images=[]
-        for i in range(8):
-            p=home/f'frame_{i}.jpg'
-            if not p.exists():raise RuntimeError('Frame missing: '+str(p))
-            with Image.open(p) as img:
-                img=img.convert('RGB')
-                if img.size!=(160,120):raise RuntimeError('Frame size mismatch '+str(img.size))
-                # PS1 treats RGB555 color 0x0000 as transparent, even for opaque polygons.
-                # 0x8000 represents truly opaque black when setSemiTrans(q,0).
-                # Change ONLY zero pixels: preserve all other source-video colors.
-                colors=[]
-                for r,g,b in img.getdata():
-                    value=((b>>3)<<10)|((g>>3)<<5)|(r>>3)
-                    colors.append(value if value else 0x8000)
-                assert 0 not in colors, 'Transparent pixel left in title texture'
-            images.append(colors)
-        lines=['/* Frames captured from user-provided 38942.mp4, resized for PS1. */',
-               '#ifndef LYDRA_V314_FRAMES_H','#define LYDRA_V314_FRAMES_H']
-        for i,colors in enumerate(images):
-            lines.append('static const unsigned short vt_v314_image_%d[19200] __attribute__((aligned(4))) = {'%i)
-            for j in range(0,len(colors),16):
-                lines.append(' '+','.join('0x%04x'%v for v in colors[j:j+16])+',')
-            lines.append('};')
-        lines.append('static const unsigned short *const vt_v314_images[8] = {')
-        lines.append(','.join('vt_v314_image_%d'%i for i in range(8))+'};')
-        lines.append('#endif')
-        src=Path(os.environ['PROJECT_DIR'])/'src'
-        assert (src/'main.c').exists()
-        p=src/'lydra_v314_frames.h'
-        p.write_text('\n'.join(lines)+'\n',encoding='utf-8')
-        if p.stat().st_size<750_000:raise RuntimeError('Generated header truncated')
-        print('User video frames installed:',p,p.stat().st_size)
-        LYDRA_GEN_PY
-        python3 "$RUNNER_TEMP/make_intro_frames.py"
-    - name: V31.6 Basis | V31.6 Hauptmenue in V31.3 einbauen und vorbereiten
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V31.3 Kamerakonflikt und langsame Bewegung reparieren''
+
+        '
+    - name: V31.8.1 Basis | V31.8.1 7 Sekunden Originalvideo und Hauptmenuebild einspielen
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V31.6 Hauptmenue in V31.3 einbauen und vorbereiten'
-    - name: Video-Uebergaenge und interaktive Menueauswahl aktivieren
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.8.1 7 Sekunden Originalvideo und Hauptmenuebild einspielen''
+
+        '
+    - name: V31.8.1 Basis | Video-Szenen als voll deckende PS1-Bilder umwandeln
       shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/patch_video_menu.py" <<'LYDRA_PATCH_PY'
-        #!/usr/bin/env python3
-        """Replace the static title and duplicate labels with an interactive video-derived menu."""
-        import os,re
-        from pathlib import Path
-        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-        s=p.read_text(encoding='utf-8')
-        def once(old,new):
-            global s
-            n=s.count(old)
-            if n!=1:raise RuntimeError('V31.7 title patch anchor count=%d: %r'%(n,old[:80]))
-            s=s.replace(old,new,1)
+      run: 'set -euo pipefail
 
-        # The logo presentation is automatic: intro frames 0-3, title frames 4-6,
-        # then wait for START while flashing the prompt.
-        # Use whitespace-independent anchors: the base YAML strips eight indentation columns.
-        once('else if(++vt_v314_elapsed>=150)', 'else if(++vt_v314_elapsed>=180)')
-        s,n=re.subn(r'(\} else if\(\+\+vt_v314_elapsed>=180\) \{\s*)vt_v314_phase=1;',
-                    r'\g<1>vt_v314_phase=0;',s,count=1)
-        if n!=1:raise RuntimeError('Intro phase transition not found')
-        start_phase=r'\} else if\(vt_v314_phase==1\) \{\s*if\(pressed&\(PAD_START\|PAD_CROSS\)\)'
-        replacement=('} else if(vt_v314_phase==0) {\n'
-                     '    if((pressed&(PAD_START|PAD_CROSS)) || ++vt_v314_elapsed>=126) {\n'
-                     '        vt_v314_phase=1; vt_v314_elapsed=0;\n'
-                     '    }\n'
-                     '} else if(vt_v314_phase==1) {\n'
-                     '    if(pressed&(PAD_START|PAD_CROSS))')
-        s,n=re.subn(start_phase,lambda _:replacement,s,count=1)
-        if n!=1:raise RuntimeError('Title transition anchor not found')
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''Video-Szenen als voll deckende PS1-Bilder umwandeln''
 
-        # Video has exactly three menu slots, no extra INTRO line.
-        once('vt_v314_cursor=(vt_v314_cursor+3)%4;', 'vt_v314_cursor=(vt_v314_cursor+2)%3;')
-        once('vt_v314_cursor=(vt_v314_cursor+1)%4;', 'vt_v314_cursor=(vt_v314_cursor+1)%3;')
-        choice=r"""static int vt_v314_choice_frame(void) {
-            if(vt_v314_phase==-1){
-                if(vt_v314_elapsed<24)return 0;
-                if(vt_v314_elapsed<64)return 1;
-                if(vt_v314_elapsed<112)return 2;
-                return 3;
-            }
-            if(vt_v314_phase==0){
-                if(vt_v314_elapsed<30)return 4;
-                if(vt_v314_elapsed<75)return 5;
-                return 6;
-            }
-            if(vt_v314_phase==1)return 6;
-            return 7;
-        }
-        """
-        pat=r'static int vt_v314_choice_frame\(void\)\s*\{\s*if\(vt_v314_phase==-1\)return -1;\s*return 7;\s*\}'
-        s,n=re.subn(pat,lambda _:choice.strip(),s,count=1)
-        if n!=1:raise RuntimeError('Title-frame selector missing')
-
-        # Keep artwork supplied by user; no second dark menu and no duplicate words.
-        s,n=re.subn(r'if\(vt_v314_phase>=2\) \{\s*/\* Place an opaque ink-blue submenu tile behind the text\.',
-                    'if(vt_v314_phase==3) {\n    /* Place an opaque ink-blue submenu tile behind the text.',s,count=1)
-        if n!=1:raise RuntimeError('Submenu panel anchor not found')
-        once('setXY0(panel,190,157);','setXY0(panel,94,159);')
-        once('setWH(panel,130,83);','setWH(panel,150,81);')
-        once('FntOpen(196, 162, 124, 76, 0, 512); /* title menu */',
-             'FntOpen(105, 167, 120, 70, 0, 512); /* title menu cursor / options */')
-
-        # The branded intro artwork includes the studio text already.
-        once('if(vt_v314_elapsed>12)FntPrint(6,"DKVierich Produktion");',
-             '/* Logo and DKVierich Produktion come directly from the video frames. */')
-        s,n=re.subn(r'if\(vt_v314_elapsed>40 && \(vt_v314_blink%80u\)<54u\)\s*FntPrint\(4,"   START"\);',
-                    '/* The intro frames contain the production name; START appears only on title. */',s,count=1)
-        if n!=1:raise RuntimeError('Old premature START overlay not found')
-
-        # Show only a moving cursor; names and background are native source-video artwork.
-        menu_pat=r'FntPrint\(5,"%c NEUES SPIEL\\n\\n"[^;]*;[\s\S]*?FntPrint\(5,"%c INTRO\\n"[^;]*;'
-        menu_cursor=('FntPrint(5,"%c\\n\\n%c\\n\\n%c\\n",\n'
-                     '   vt_v314_cursor==0?\'>\':\' \',\n'
-                     '   vt_v314_cursor==1?\'>\':\' \',\n'
-                     '   vt_v314_cursor==2?\'>\':\' \');')
-        s,n=re.subn(menu_pat,lambda _:menu_cursor,s,count=1)
-        if n!=1:raise RuntimeError('Original four-choice menu text not found')
-
-        for tag in ('vt_v314_choice_frame(void)','vt_v314_input(unsigned int pressed)',
-                    'vt_v281_resolve_movement();','vt_save_game(void)','vt_load_game(void)',
-                    'vt_v293_move((unsigned int)pad);'):
-            if tag not in s:raise RuntimeError('Gameplay/title function missing: '+tag)
-        p.write_text(s,encoding='utf-8')
-        print('V31.7 video-derived interactive main menu installed. Saving and gameplay unchanged.')
-        LYDRA_PATCH_PY
-        python3 "$RUNNER_TEMP/patch_video_menu.py"
-    - name: V31.6 Basis | V31.6 FIX2 Schnelle Bewegung und Kamera sicher anwenden
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V31.6 Hauptmenue in V31.3 einbauen und vorbereiten
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V31.6 FIX2 Schnelle Bewegung und Kamera sicher anwenden'
-    - name: V31.7.2 Aktives Video-Menue HUD und Geschwindigkeit reparieren
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V31.6 Hauptmenue in V31.3 einbauen und vorbereiten''
+
+        '
+    - name: V31.8.1 Basis | Video-Uebergaenge und interaktive Menueauswahl aktivieren
       shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lydra_v3172_patch.py" <<'LYDRA_V3172_PATCH'
-        #!/usr/bin/env python3
-        '''V31.7.2: correct font stream numbers, replace artwork's inert slots by real menu,
-        prevent 3D world rendering during the title, tune gameplay response.
-        '''
-        import os,re
-        from pathlib import Path
-        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-        s=p.read_text(encoding='utf-8')
+      run: 'set -euo pipefail
 
-        def once(old,new):
-            global s
-            n=s.count(old)
-            if n!=1:
-                raise RuntimeError('V31.7.2 required source marker count=%d: %r' % (n,old[:90]))
-            s=s.replace(old,new,1)
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''Video-Uebergaenge und interaktive Menueauswahl aktivieren''
 
-        def function_span(name):
-            pattern=r'\bstatic\s+(?:void|int)\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
-            hits=list(re.finditer(pattern,s,re.S))
-            if len(hits)!=1:raise RuntimeError('V31.7.2 function missing or repeated: '+name)
-            pos=hits[0].end(); depth=1; state='code'
-            while pos<len(s) and depth:
-                ch=s[pos]; nx=s[pos+1] if pos+1<len(s) else ''
-                if state=='code':
-                    if ch=='/' and nx=='/':state='line';pos+=1
-                    elif ch=='/' and nx=='*':state='block';pos+=1
-                    elif ch=='"':state='string'
-                    elif ch=="'":state='char'
-                    elif ch=='{':depth+=1
-                    elif ch=='}':depth-=1
-                elif state=='line':
-                    if ch=='\n':state='code'
-                elif state=='block':
-                    if ch=='*' and nx=='/':state='code';pos+=1
-                else:
-                    if ch=='\\':pos+=1
-                    elif (state=='string' and ch=='"') or (state=='char' and ch=="'"):state='code'
-                pos+=1
-            if depth:raise RuntimeError('V31.7.2 unclosed function: '+name)
-            return hits[0].start(),pos
-
-        def edit_function(name,fn):
-            global s
-            a,b=function_span(name)
-            original=s[a:b]
-            revision=fn(original)
-            if revision==original:raise RuntimeError('V31.7.2 no edits made for '+name)
-            s=s[:a]+revision+s[b:]
-
-        # The day/night meter already owns font stream 4. V31.6 incorrectly re-used it.
-        # The title fonts were opened AFTER stream 4, so START=5, MENU=6, SPLASH=7.
-        def fix_title_hud(src):
-            src=src.replace('FntPrint(6,','FntPrint(7,') # production stream
-            src=src.replace('FntPrint(5,','FntPrint(6,') # menu stream
-            src=src.replace('FntPrint(4,','FntPrint(5,') # START stream
-            src=src.replace('FntFlush(4);FntFlush(5);FntFlush(6);',
-                            'FntFlush(5);FntFlush(6);FntFlush(7);')
-            # User video contains old baked-in text. Draw actual interactive labels over it.
-            old='FntPrint(6,"%c\\n\\n%c\\n\\n%c\\n",'
-            new='FntPrint(6,"%c NEUES SPIEL\\n\\n%c SPIEL LADEN\\n\\n%c OPTIONEN\\n",'
-            if old not in src:raise RuntimeError('Title cursor-only text not found')
-            src=src.replace(old,new,1)
-            return src
-        edit_function('vt_v314_hud',fix_title_hud)
-
-        # The menu font was at (105,167) and printed under the painted menu.
-        once('FntOpen(105, 167, 120, 70, 0, 512); /* title menu cursor / options */',
-             'FntOpen(106, 144, 117, 80, 0, 512); /* interactive menu text, stream 6 */')
-
-        # This is a true PS1 menu overlay. Each choice has a separately highlighted row.
-        # The row tiles are queued before the title quad, hence drawn AFTER it in this OT (LIFO).
-        menus=r'''
-        static void vt_v3172_menu_slots(void) {
-            int i, count, selected;
-            TILE *tile;
-            unsigned int aligned;
-            if(vt_v314_phase!=2 && vt_v314_phase!=3)return;
-            count=3;
-            selected=(vt_v314_phase==2)?vt_v314_cursor:vt_v314_opt_cursor;
-            for(i=0;i<count;i++) {
-                aligned=(prim_used+3u)&~3u;
-                if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;
-                tile=(TILE *)(prim_arena[db]+aligned);
-                prim_used=aligned+sizeof(TILE);
-                setTile(tile);
-                setXY0(tile,103,140+17*i);
-                setWH(tile,122,17);
-                if(i==selected)setRGB0(tile,19,61,105);
-                else setRGB0(tile,10,21,40);
-                addPrim(ot[db],tile);
-            }
-            /* Options page receives a plain dark panel below its three rows. */
-            if(vt_v314_phase==3) {
-                aligned=(prim_used+3u)&~3u;
-                if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;
-                tile=(TILE *)(prim_arena[db]+aligned);
-                prim_used=aligned+sizeof(TILE);
-                setTile(tile);
-                setXY0(tile,97,132);
-                setWH(tile,135,80);
-                setRGB0(tile,12,19,37);
-                addPrim(ot[db],tile);
-            }
-        }
-        '''
-        once('static void vt_v314_draw(void) {',menus+'\nstatic void vt_v314_draw(void) {')
-        def fix_title_render(src):
-            # Remove old unused submenu rectangle; the new overlay occupies the correct slot area.
-            target='if(vt_v314_phase==3) {'
-            if src.count(target)!=1:raise RuntimeError('Old options panel unexpected')
-            src=src.replace(target,'if(0) { /* replaced by V31.7.2 menu overlay */',1)
-            anchor='    aligned=(prim_used+3u)&~3u;\n    if(aligned+sizeof(POLY_FT4)'
-            if src.count(anchor)!=1:raise RuntimeError('Title textured quad anchor missing')
-            src=src.replace(anchor,'    vt_v3172_menu_slots();\n'+anchor,1)
-            return src
-        edit_function('vt_v314_draw',fix_title_render)
-
-        # Disable costly 3D scene when title is visible (but do not touch the active save
-        # structure, controls or geometry). Declare active flag before world function.
-        once('static int vt_v314_active=1;', '/* vt_v314_active declared before overworld drawing below. */')
-        once('static void vt_v24_draw_overworld(void) {',
-             'static int vt_v314_active=1;\nstatic void vt_v24_draw_overworld(void) {\n    if(vt_v314_active)return;')
-
-        # NPC roaming does not need to update on the title screen either.
-        if 'vt_v282_update_npcs();' in s:
-            once('vt_v282_update_npcs();','if(!vt_v314_active)vt_v282_update_npcs();')
-
-        # More responsive gameplay only AFTER selecting a new/loaded game.
-        # The existing fractional move accumulator and collision resolution remain intact.
-        once('target=forward*11264;', 'target=forward*14336;')
-        once('if(turn)vt_v292_cam_yaw=(vt_v292_cam_yaw+turn*56+4096)&4095;',
-             'if(turn)vt_v292_cam_yaw=(vt_v292_cam_yaw+turn*64+4096)&4095;')
-
-        # Verify the critical systems and prevent a silently green build with the wrong UI.
-        for func in ('vt_v314_input','vt_v314_draw','vt_v314_hud','vt_v3172_menu_slots',
-                     'vt_v24_draw_overworld'):
-            function_span(func)
-        for marker in ('vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',
-                       'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)',
-                       'vt_v293_move((unsigned int)pad);','vt_v301_sun(void)',
-                       'vt_v314_cursor==0','vt_v314_cursor==1','vt_v314_cursor==2'):
-            if marker not in s:raise RuntimeError('V31.7.2 retained system missing: '+marker)
-        if 'FntFlush(4);FntFlush(5);FntFlush(6);' in s:
-            raise RuntimeError('Old font index collision still exists')
-        p.write_text(s,encoding='utf-8')
-        print('V31.7.2: Title fonts 5/6/7, time display remains font 4.')
-        print('V31.7.2: Menu choices are interactive labels over independently highlighted rows.')
-        print('V31.7.2: World render paused in title, faster movement/camera while playing.')
-
-        LYDRA_V3172_PATCH
-        python3 "$RUNNER_TEMP/lydra_v3172_patch.py"
-    - name: V31.7.3 Echte Schriftkanal IDs Menue und Tag Nacht
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V31.6 FIX2 Schnelle Bewegung und Kamera sicher anwenden
       shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lydra_v3173_patch.py" <<'LYDRA_V3173_SCRIPT'
-        #!/usr/bin/env python3
-        """V31.7.3 fix title font channels and reposition interactive menu."""
-        import os,re
-        from pathlib import Path
-        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-        s=p.read_text(encoding='utf-8')
+      run: 'set -euo pipefail
 
-        def once(old,new):
-            global s
-            count=s.count(old)
-            if count!=1:
-                raise RuntimeError('V31.7.3 required unique anchor %r: %d' % (old[:85],count))
-            s=s.replace(old,new,1)
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V31.6 FIX2 Schnelle Bewegung und Kamera sicher anwenden''
 
-        def fspan(name):
-            pat=r'\bstatic\s+(?:void|int)\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
-            matches=list(re.finditer(pat,s,re.S))
-            if len(matches)!=1:
-                raise RuntimeError('V31.7.3 expected function '+name+': '+str(len(matches)))
-            start=matches[0].start()
-            pos=matches[0].end()
-            depth=1;state='code'
-            while pos<len(s) and depth:
-                ch=s[pos];nx=s[pos+1] if pos+1<len(s) else ''
-                if state=='code':
-                    if ch=='/' and nx=='/':state='line';pos+=1
-                    elif ch=='/' and nx=='*':state='block';pos+=1
-                    elif ch=='"':state='str'
-                    elif ch=="'":state='char'
-                    elif ch=='{':depth+=1
-                    elif ch=='}':depth-=1
-                elif state=='line':
-                    if ch=='\n':state='code'
-                elif state=='block':
-                    if ch=='*' and nx=='/':state='code';pos+=1
-                else:
-                    if ch=='\\':pos+=1
-                    elif (state=='str' and ch=='"') or (state=='char' and ch=="'"):state='code'
-                pos+=1
-            if depth:raise RuntimeError('V31.7.3 unbalanced braces '+name)
-            return start,pos
-
-        def edit(name,func):
-            global s
-            a,b=fspan(name)
-            old=s[a:b]
-            new=func(old)
-            if old==new:raise RuntimeError('V31.7.3 no edit made in '+name)
-            s=s[:a]+new+s[b:]
-
-        # Never assume FntOpen stream numbers: IDs depend on how many earlier calls
-        # succeeded. In the last build, the title stream was accidentally used by
-        # the day/night HUD, explaining the clock printed at screen y=217.
-        once('static void vt_v301_day_night_hud(void) {',
-             'static int vt_v3173_time_font=-1;\n'
-             'static int vt_v3173_start_font=-1;\n'
-             'static int vt_v3173_menu_font=-1;\n'
-             'static void vt_v301_day_night_hud(void) {')
-
-        once('FntOpen(177, 6, 68, 42, 0, 128); /* day-night meter */',
-             'vt_v3173_time_font=FntOpen(177, 6, 68, 42, 0, 128); /* day-night meter */')
-        once('FntOpen(108, 217, 205, 20, 0, 128); /* title START */',
-             'vt_v3173_start_font=FntOpen(110, 207, 120, 24, 0, 128); /* blinking START */')
-        once('FntOpen(106, 144, 117, 80, 0, 512); /* interactive menu text, stream 6 */',
-             'vt_v3173_menu_font=FntOpen(106, 141, 116, 76, 0, 512); /* real menu text */')
-        # The production name is already present in the video artwork; its additional
-        # font stream is unused and would waste one of the eight available streams.
-        once('FntOpen(73, 108, 212, 30, 0, 128); /* centered production splash */',
-             '/* V31.7.3: production text is embedded in the intro artwork. */')
-
-        def clock(c):
-            if c.count('FntPrint(4,')!=1:raise RuntimeError('Unexpected clock font write')
-            return c.replace('FntPrint(4,','FntPrint(vt_v3173_time_font,')
-        edit('vt_v301_day_night_hud',clock)
-
-        # Only change the 4th stream FntFlush in the *exploration* HUD; keep the
-        # original in-game menu and other stream numbers intact.
-        def exploration(c):
-            if c.count('FntFlush(4);')!=1:raise RuntimeError('V31.7.3 time flush missing')
-            return c.replace('FntFlush(4);','FntFlush(vt_v3173_time_font);')
-        edit('vt_v292_draw_exploration_hud',exploration)
-
-        def title_hud(c):
-            if c.count('FntPrint(6,')<1 or c.count('FntPrint(5,')<1:
-                raise RuntimeError('V31.7.3 unexpected title font usage')
-            c=c.replace('FntPrint(6,','FntPrint(vt_v3173_menu_font,')
-            c=c.replace('FntPrint(5,','FntPrint(vt_v3173_start_font,')
-            if 'FntPrint(7,' in c:
-                # The logo is already in the MP4-derived artwork; no duplicate logo.
-                raise RuntimeError('V31.7.3 unexpected production overlay')
-            old='FntFlush(5);FntFlush(6);FntFlush(7);'
-            if c.count(old)!=1:raise RuntimeError('V31.7.3 title flush pattern absent')
-            c=c.replace(old,'FntFlush(vt_v3173_start_font);FntFlush(vt_v3173_menu_font);')
-            return c
-        edit('vt_v314_hud',title_hud)
-
-        # Replace large, touching opaque rectangles with inset rows separated by
-        # visible gaps, within the blue central artwork frame. The actual font
-        # string goes on top through its own stream.
-        def slots(c):
-            c=c.replace('setXY0(tile,103,140+17*i);','setXY0(tile,103,139+18*i);')
-            c=c.replace('setWH(tile,122,17);','setWH(tile,124,16);')
-            if 'setXY0(tile,103,139+18*i);' not in c or 'setWH(tile,124,16);' not in c:
-                raise RuntimeError('V31.7.3 menu layout mismatch')
-            # The options background should sit below all the options rows in draw
-            # order. Existing PS1 OT LIFO order is retained.
-            return c
-        edit('vt_v3172_menu_slots',slots)
-
-        for f in ('vt_v314_hud','vt_v314_draw','vt_v314_input','vt_v292_draw_exploration_hud',
-                  'vt_v301_day_night_hud','vt_v3172_menu_slots'):
-            fspan(f)
-        for token in ('vt_v281_resolve_movement();','vt_v282_draw_house_npcs(',
-                      'vt_opt_draw_page();','vt_save_game(void)','vt_load_game(void)',
-                      'vt_v293_move((unsigned int)pad);','vt_v314_cursor==0',
-                      'vt_v314_cursor==1','vt_v314_cursor==2','vt_v314_active=1'):
-            if token not in s:raise RuntimeError('V31.7.3 missing gameplay system: '+token)
-        if 'FntPrint(4,"TAG' in s or 'FntFlush(5);FntFlush(6);FntFlush(7);' in s:
-            raise RuntimeError('V31.7.3 leftover hardcoded font IDs')
-
-        p.write_text(s,encoding='utf-8')
-        print('V31.7.3 menu text uses FntOpen return IDs, rows are aligned to artwork.')
-        print('V31.7.3 clock uses its own screen-fixed font and stays at top right.')
-        LYDRA_V3173_SCRIPT
-        python3 "$RUNNER_TEMP/lydra_v3173_patch.py"
-    - name: V31.8 Originalvideo 7 Sekunden Hauptmenue und PS1 Grafiken einbauen
+        '
+    - name: V31.8.1 Basis | V31.7.2 Aktives Video-Menue HUD und Geschwindigkeit reparieren
       shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lydra_v318_final_patch.py" <<'LYDRA_V318_FINAL_PY'
-        #!/usr/bin/env python3
-        # V31.8: 7 seconds of moving original footage, then original supplied menu art.
-        import os,re
-        from pathlib import Path
-        from PIL import Image
+      run: 'set -euo pipefail
 
-        home=Path(os.environ['RUNNER_TEMP'])/'lydra_v318_video'
-        source=Path(os.environ['PROJECT_DIR'])/'src'
-        p=source/'main.c'
-        s=p.read_text(encoding='utf-8')
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.7.2 Aktives Video-Menue HUD und Geschwindigkeit reparieren''
 
-        def span(name):
-            rx=r'\bstatic\s+(?:void|int)\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
-            a=list(re.finditer(rx,s,re.S))
-            if len(a)!=1:
-                raise RuntimeError('V31.8 expected function '+name+': '+str(len(a)))
-            start=a[0].start();i=a[0].end();depth=1;state='code'
-            while depth and i<len(s):
-                c=s[i]; nx=s[i+1] if i+1<len(s) else ''
-                if state=='code':
-                    if c=='/' and nx=='/':state='line';i+=1
-                    elif c=='/' and nx=='*':state='block';i+=1
-                    elif c=='"':state='str'
-                    elif c=="'":state='char'
-                    elif c=='{':depth+=1
-                    elif c=='}':depth-=1
-                elif state=='line':
-                    if c=='\n':state='code'
-                elif state=='block':
-                    if c=='*' and nx=='/':state='code';i+=1
-                else:
-                    if c=='\\':i+=1
-                    elif (state=='str' and c=='"') or (state=='char' and c=="'"):state='code'
-                i+=1
-            if depth:raise RuntimeError('V31.8 malformed function: '+name)
-            return start,i
-
-        def replace_fn(name,new):
-            global s
-            start,end=span(name)
-            s=s[:start]+new.strip()+'\n'+s[end:]
-
-        # 7.00 seconds at the game's NTSC target update cadence: 28 distinct video frames,
-        # each held for 15 of 60 VSync cycles (4 fps). This is actual sampled motion from
-        # the user's original seven seconds, not eight unrelated splash still images.
-        replace_fn('vt_v314_input',r'''
-        static void vt_v314_input(unsigned int pressed) {
-            vt_v314_blink++;
-            if(vt_v314_phase==-1) {
-                ++vt_v314_elapsed;
-                if(vt_v314_elapsed>=420) {
-                    vt_v314_phase=2;
-                    vt_v314_elapsed=0;
-                    vt_v314_cursor=0;
-                    vt_v314_message="";
-                }
-            } else if(vt_v314_phase==2) {
-                if(pressed&PAD_UP)vt_v314_cursor=(vt_v314_cursor+2)%3;
-                if(pressed&PAD_DOWN)vt_v314_cursor=(vt_v314_cursor+1)%3;
-                /* Triangle on title replays the seven-second original intro. */
-                if(pressed&PAD_TRIANGLE) {
-                    vt_v314_phase=-1;
-                    vt_v314_elapsed=0;
-                    vt_v314_vram_frame=-1;
-                } else if(pressed&(PAD_CROSS|PAD_START)) {
-                    if(vt_v314_cursor==0) {
-                        vt_v314_active=0;vt_menu_open=0;vt_menu_page=0;
-                        vt_v314_message="";
-                    } else if(vt_v314_cursor==1) {
-                        int result=vt_load_game();
-                        if(result==1) {
-                            vt_v314_active=0;vt_menu_open=0;vt_menu_page=0;
-                            vt_v314_message="";
-                        } else {
-                            vt_v314_message=(result==-1)?"DATEI UNGUELTIG":"KEIN SPIELSTAND";
-                        }
-                    } else {
-                        vt_v314_phase=3;vt_v314_opt_cursor=0;
-                        vt_v314_message="";
-                    }
-                }
-            } else if(vt_v314_phase==3) {
-                if(pressed&PAD_UP)vt_v314_opt_cursor=(vt_v314_opt_cursor+2)%3;
-                if(pressed&PAD_DOWN)vt_v314_opt_cursor=(vt_v314_opt_cursor+1)%3;
-                if(pressed&PAD_TRIANGLE)vt_v314_phase=2;
-                if(vt_v314_opt_cursor==0) {
-                    if((pressed&PAD_LEFT) && vt_opt_volume>0)vt_opt_volume-=10;
-                    if((pressed&PAD_RIGHT) && vt_opt_volume<100)vt_opt_volume+=10;
-                    if(pressed&(PAD_LEFT|PAD_RIGHT))vt_opt_apply_volume();
-                } else if(vt_v314_opt_cursor==1) {
-                    if((pressed&PAD_LEFT) && vt_opt_text_speed>1)vt_opt_text_speed--;
-                    if((pressed&PAD_RIGHT) && vt_opt_text_speed<3)vt_opt_text_speed++;
-                } else if(pressed&(PAD_CROSS|PAD_START))vt_v314_phase=2;
-            }
-            if(vt_v314_active) {
-                vt_menu_open=1;
-                vt_menu_page=0;
-            }
-        }
-        ''')
-        replace_fn('vt_v314_choice_frame',r'''
-        static int vt_v314_choice_frame(void) {
-            if(vt_v314_phase==-1) {
-                int frame=vt_v314_elapsed/15;
-                if(frame<0)frame=0;
-                if(frame>27)frame=27;
-                return frame;
-            }
-            return 28; /* EXACT user-supplied 39017.png: no invented background */
-        }
-        ''')
-
-        # Use the palette-expanded pixels for the GPU upload. The game already draws the
-        # textured full-screen quad and its interactive text. Only swap the source pixels.
-        needle='LoadImage(&texture_rect,(u_long *)(void *)vt_v314_images[current]);'
-        if s.count(needle)!=1:
-            raise RuntimeError('V31.8 expected exactly one original title texture upload')
-        s=s.replace(needle,'LoadImage(&texture_rect,(u_long *)(void *)vt_v318_frame_rgb555(current));',1)
-
-        # Hide any old intro lettering or flashing START. The original video carries
-        # its own imagery; there must be no overlays during its 7 second playback.
-        a,b=span('vt_v314_hud')
-        hud=s[a:b]
-        hud=hud.replace('if(vt_v314_phase==-1) {','if(vt_v314_phase==-1) {\n        /* 7-second intro image has no text overlays. */',1)
-        # If old code displays text in the introductory branch, erase that branch only.
-        i=hud.index('if(vt_v314_phase==-1) {')
-        j=hud.index('} else if(vt_v314_phase==2) {',i)
-        hud=hud[:i]+'if(vt_v314_phase==-1) {\n        /* No in-game text while the original video frames play. */\n    '+hud[j:]
-        s=s[:a]+hud+s[b:]
-
-        # Original uploaded menu image has NO built-in slot graphics, so draw a blue
-        # PS1-style window underneath the existing interactive rows and their labels.
-        a,b=span('vt_v3172_menu_slots');fn=s[a:b]
-        fn=fn.replace('if(vt_v314_phase==3) {\n        aligned=', 'if(vt_v314_phase==3) {\n        aligned=')
-        # Replace old bottom panel with a compact inset, not the huge old options overlay.
-        old='''    /* Options page receives a plain dark panel below its three rows. */
-            if(vt_v314_phase==3) {'''
-        if old not in fn:
-            raise RuntimeError('V31.8 previous main menu slot function changed')
-        fn=fn.replace(old,'''    /* Opaque ornamental panel behind ALL selectable slots. OT draws LIFO,
-               so tiles enqueued here paint BEFORE the individual row tiles. */
-            if(vt_v314_phase==2 || vt_v314_phase==3) {''',1)
-        fn=fn.replace('setXY0(tile,97,132);','setXY0(tile,96,132);')
-        fn=fn.replace('setWH(tile,135,80);','setWH(tile,135,78);')
-        fn=fn.replace('setRGB0(tile,12,19,37);','setRGB0(tile,11,25,58);')
-        s=s[:a]+fn+s[b:]
-
-        # Recreate header with 28 indexed 160x120 video frames + the EXACT supplied
-        # main menu image RGB555. Fixed palette is per-frame and does not use the CD.
-        header=['/* V31.8: frames extracted from user 37568.mp4, menu from 39017.png. */',
-                '#ifndef LYDRA_V318_FRAMES_H','#define LYDRA_V318_FRAMES_H']
-        def rgb555(r,g,b):
-            v=((int(b)>>3)<<10)|((int(g)>>3)<<5)|(int(r)>>3)
-            return v if v else 0x8000
-        n=28
-        for k in range(n):
-            path=home/('frame_%02d.jpg'%k)
-            with Image.open(path) as img:
-                rgb=img.convert('RGB')
-                if rgb.size!=(160,120):raise RuntimeError('Wrong 4fps video frame dimensions')
-                indexed=rgb.quantize(colors=256,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)
-                idx=bytes(indexed.getdata()); raw=(indexed.getpalette() or [])
-                raw=raw+[0]*max(0,768-len(raw))
-            if len(idx)!=19200:raise RuntimeError('Invalid video frame')
-            header.append('static const unsigned char vt_v318_idx_%d[19200] = {'%k)
-            for j in range(0,len(idx),32):
-                header.append(' '+','.join(str(v) for v in idx[j:j+32])+',')
-            header.append('};')
-            palette=[rgb555(*raw[3*j:3*j+3]) for j in range(256)]
-            header.append('static const unsigned short vt_v318_palette_%d[256] = {'%k)
-            for j in range(0,256,16):
-                header.append(' '+','.join('0x%04x'%v for v in palette[j:j+16])+',')
-            header.append('};')
-        header.append('static const unsigned char *const vt_v318_indices[28]={'+','.join('vt_v318_idx_%d'%i for i in range(n))+'};')
-        header.append('static const unsigned short *const vt_v318_palettes[28]={'+','.join('vt_v318_palette_%d'%i for i in range(n))+'};')
-        with Image.open(home/'menu.jpg') as im:
-            colors=[rgb555(*pix) for pix in im.convert('RGB').getdata()]
-        if len(colors)!=19200:raise RuntimeError('Original menu image size mismatched')
-        header.append('static const unsigned short vt_v318_menu_rgb555[19200] __attribute__((aligned(4))) = {')
-        for j in range(0,len(colors),16):
-            header.append(' '+','.join('0x%04x'%v for v in colors[j:j+16])+',')
-        header.append('};')
-        header.append('static unsigned short vt_v318_expanded[19200] __attribute__((aligned(4)));')
-        header.append('''static const unsigned short *vt_v318_frame_rgb555(int frame) {
-            int i;
-            const unsigned char *indices;
-            const unsigned short *palette;
-            if(frame>=28)return vt_v318_menu_rgb555;
-            if(frame<0)frame=0;
-            indices=vt_v318_indices[frame];
-            palette=vt_v318_palettes[frame];
-            for(i=0;i<19200;i++)vt_v318_expanded[i]=palette[indices[i]];
-            return vt_v318_expanded;
-        }''')
-        header.append('#endif')
-        h=source/'lydra_v314_frames.h'
-        h.write_text('\n'.join(header)+'\n',encoding='utf-8')
-        if h.stat().st_size<1_800_000:raise RuntimeError('V31.8 video frames header incomplete')
-        for f in ('vt_v314_input','vt_v314_choice_frame','vt_v314_hud','vt_v314_draw','vt_v3172_menu_slots'):
-            span(f)
-        for token in ('vt_v318_frame_rgb555(current)','vt_v314_active=0','vt_save_game(void)',
-                      'vt_load_game(void)','vt_v281_resolve_movement();',
-                      'vt_v292_draw_exploration_hud();','vt_opt_draw_page();'):
-            if token not in s: raise RuntimeError('V31.8 lost game function '+token)
-        p.write_text(s,encoding='utf-8')
-        print('V31.8: 7.0s original video as 28 playable full screen frames (4fps),')
-        print('then user 39017.png as interactive menu with New/Load/Options.')
-        print('Source size',p.stat().st_size,'Frames header size',h.stat().st_size)
-
-        LYDRA_V318_FINAL_PY
-        python3 "$RUNNER_TEMP/lydra_v318_final_patch.py"
-    - name: V31.7.3 Menu und HUD pruefen
+        '
+    - name: V31.8.1 Basis | V31.7.3 Echte Schriftkanal IDs Menue und Tag Nacht
       shell: bash
-      run: |
-        set -euo pipefail
-        SRC="$PROJECT_DIR/src/main.c"
-        for marker in 'vt_v3173_time_font=FntOpen(177' 'vt_v3173_menu_font=FntOpen(106' 'FntPrint(vt_v3173_menu_font,' 'FntPrint(vt_v3173_time_font,' 'FntFlush(vt_v3173_time_font);' 'vt_v3172_menu_slots' 'if(vt_v314_active)return;' 'vt_load_game(void)' 'vt_save_game(void)'; do
-          grep -Fq "$marker" "$SRC" || { echo "::error::V31.7.3 Spiel-Element fehlt: $marker"; exit 1; }
-        done
-        if grep -Fq 'FntFlush(5);FntFlush(6);FntFlush(7);' "$SRC"; then
-          echo '::error::Alte Schriftfenster-Nummern gefunden'; exit 1
-        fi
-        echo 'V31.7.3 Titelmenue, Tag/Nacht und Speicherfunktionen bereit.'
-    - name: V31.8 28 Video-Frames und Original-Hauptmenue pruefen
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.7.3 Echte Schriftkanal IDs Menue und Tag Nacht''
+
+        '
+    - name: V31.8.2 Schaerferes Originalbild in 320x240 bereitstellen
       shell: bash
-      run: |
-        set -euo pipefail
+      run: "set -euo pipefail\nmkdir -p \"$RUNNER_TEMP/lydra_v318_video\"\nbase64 -d > \"$RUNNER_TEMP/lydra_v318_video/menu_hires.jpg\" <<'LYDRA_V3182_MENU_JPEG'\n\
+        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\n\
+        LYDRA_V3182_MENU_JPEG\npython3 - <<'PYIMG'\nfrom PIL import Image\nfrom pathlib import Path\nimport os\np=Path(os.environ['RUNNER_TEMP'])/'lydra_v318_video/menu_hires.jpg'\n\
+        with Image.open(p) as im:\n    assert im.size == (320,240), ('Falsche Bildgroesse',im.size)\nprint('PS1-Menuebild 320x240 geladen:',p.stat().st_size,'Byte')\n\
+        PYIMG\n"
+    - name: V31.8.1 Basis | V31.8 Originalvideo 7 Sekunden Hauptmenue und PS1 Grafiken einbauen
+      shell: bash
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.8 Originalvideo 7 Sekunden Hauptmenue und PS1 Grafiken einbauen''
+
+        '
+    - name: V31.8.2 320x240 Hauptmenue und 7 Sekunden VSync Intro aktivieren
+      shell: bash
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_v3182_patch.py\" <<'LYDRA_V3182_PATCH'\n#!/usr/bin/env python3\n\"\"\"V31.8.2: 320x240 8bpp\
+        \ menu via two texture pages; 7s intro via VSync(-1).\"\"\"\nfrom pathlib import Path\nimport os,re\nfrom PIL import Image\n\nroot=Path(os.environ['PROJECT_DIR'])/'src'\n\
+        path=root/'main.c'\ns=path.read_text(encoding='utf-8')\n\ndef fspan(name):\n    matches=list(re.finditer(r'\\bstatic\\s+(?:int|void)\\s+'+re.escape(name)+r'\\\
+        s*\\([^;]*?\\)\\s*\\{',s,re.S))\n    if len(matches)!=1:raise RuntimeError('V31.8.2 Funktion erwartet: '+name+' ('+str(len(matches))+')')\n\
+        \    begin=matches[0].start();i=matches[0].end();dep=1;state='code'\n    while dep and i<len(s):\n        ch=s[i];nx=s[i+1] if i+1<len(s) else\
+        \ ''\n        if state=='code':\n            if ch=='/' and nx=='/':state='line';i+=1\n            elif ch=='/' and nx=='*':state='block';i+=1\n\
+        \            elif ch=='\"':state='string'\n            elif ch==\"'\":state='char'\n            elif ch=='{':dep+=1\n            elif ch=='}':dep-=1\n\
+        \        elif state=='line':\n            if ch=='\\n':state='code'\n        elif state=='block':\n            if ch=='*' and nx=='/':state='code';i+=1\n\
+        \        else:\n            if ch=='\\\\':i+=1\n            elif (state=='string' and ch=='\"') or (state=='char' and ch==\"'\"):state='code'\n\
+        \        i+=1\n    if dep:raise RuntimeError('Unbalancierte Funktion: '+name)\n    return begin,i\n\ndef replace(name,body):\n    global s\n\
+        \    a,b=fspan(name);s=s[:a]+body.strip()+\"\\n\"+s[b:]\n\nmenu_img=Path(os.environ['RUNNER_TEMP'])/'lydra_v318_video/menu_hires.jpg'\nwith\
+        \ Image.open(menu_img) as img:\n    img=img.convert('RGB').quantize(colors=256,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)\n\
+        \    if img.size!=(320,240):raise RuntimeError('Menu 320x240 fehlt')\n    ind=bytes(img.getdata());palette=img.getpalette() or []\n    palette=palette+[0]*(768-len(palette))\n\
+        \n# The 8bpp frame spans VRAM x=640..799 (160 16-bit words), y=0..239.\n# Two TPages for 256+64 screen pixels. CLUT at x=640,y=242.\nwords=[ind[i]|(ind[i+1]<<8)\
+        \ for i in range(0,len(ind),2)]\nclut=[]\nfor k in range(256):\n    r,g,b=palette[3*k:3*k+3]\n    color=((b>>3)<<10)|((g>>3)<<5)|(r>>3)\n \
+        \   clut.append(color if color!=0 else 0x8000)\nassert len(words)==38400 and len(clut)==256 and all(clut)\nhead=['/* V31.8.2 - original menu\
+        \ from 39017.png; 320x240 indexed color */',\n      '#ifndef LYDRA_V3182_HIRES_MENU_H','#define LYDRA_V3182_HIRES_MENU_H',\n      'static const\
+        \ unsigned short vt_v3182_menu_8bpp[38400] __attribute__((aligned(4))) = {']\nfor i in range(0,len(words),24):\n    head.append(' '+','.join('0x%04X'%x\
+        \ for x in words[i:i+24])+',')\nhead.append('};')\nhead.append('static const unsigned short vt_v3182_clut[256] __attribute__((aligned(4)))\
+        \ = {')\nfor i in range(0,len(clut),16):\n    head.append(' '+','.join('0x%04X'%x for x in clut[i:i+16])+',')\nhead+=['};','#endif']\n(root/'lydra_v3182_menu.h').write_text('\\\
+        n'.join(head)+'\\n',encoding='utf-8')\n\n# Engine-independent intro duration. 60 vblanks / second for this NTSC title.\n# Camera/render delays\
+        \ must NOT make 7s turn into a minute.\nhelpers=r\"\"\"\n#include \"lydra_v3182_menu.h\"\nstatic unsigned int vt_v3182_intro_vblank=0;\nstatic\
+        \ int vt_v3182_intro_started=0;\nstatic int vt_v3182_menu_uploaded=0;\n\"\"\"\nneedle='static int vt_v314_choice_frame(void) {'\nif s.count(needle)!=1:raise\
+        \ RuntimeError('V31.8.2 Choice anchor missing')\ns=s.replace(needle,helpers+'\\n'+needle,1)\n\nreplace('vt_v314_input',r\"\"\"\nstatic void\
+        \ vt_v314_input(unsigned int pressed) {\n    vt_v314_blink++;\n    if(vt_v314_phase==-1) {\n        unsigned int now=(unsigned int)VSync(-1);\n\
+        \        if(!vt_v3182_intro_started) {\n            vt_v3182_intro_vblank=now;\n            vt_v3182_intro_started=1;\n        }\n        vt_v314_elapsed=(int)(now-vt_v3182_intro_vblank);\n\
+        \        if(vt_v314_elapsed>=420) {\n            vt_v314_phase=2;\n            vt_v314_elapsed=0;\n            vt_v314_cursor=0;\n        \
+        \    vt_v314_message=\"\";\n            vt_v3182_menu_uploaded=0;\n        }\n    } else if(vt_v314_phase==2) {\n        if(pressed&PAD_UP)vt_v314_cursor=(vt_v314_cursor+2)%3;\n\
+        \        if(pressed&PAD_DOWN)vt_v314_cursor=(vt_v314_cursor+1)%3;\n        if(pressed&PAD_TRIANGLE) {\n            vt_v314_phase=-1;\n    \
+        \        vt_v314_elapsed=0;\n            vt_v314_vram_frame=-1;\n            vt_v3182_intro_started=0;\n            vt_v3182_menu_uploaded=0;\n\
+        \        } else if(pressed&(PAD_CROSS|PAD_START)) {\n            if(vt_v314_cursor==0) {\n                vt_v314_active=0;vt_menu_open=0;vt_menu_page=0;\n\
+        \                vt_v314_message=\"\";\n            } else if(vt_v314_cursor==1) {\n                int result=vt_load_game();\n          \
+        \      if(result==1) {\n                    vt_v314_active=0;vt_menu_open=0;vt_menu_page=0;\n                    vt_v314_message=\"\";\n  \
+        \              } else vt_v314_message=(result==-1)?\"DATEI UNGUELTIG\":\"KEIN SPIELSTAND\";\n            } else {\n                vt_v314_phase=3;vt_v314_opt_cursor=0;\n\
+        \                vt_v314_message=\"\";\n            }\n        }\n    } else if(vt_v314_phase==3) {\n        if(pressed&PAD_UP)vt_v314_opt_cursor=(vt_v314_opt_cursor+2)%3;\n\
+        \        if(pressed&PAD_DOWN)vt_v314_opt_cursor=(vt_v314_opt_cursor+1)%3;\n        if(pressed&PAD_TRIANGLE)vt_v314_phase=2;\n        if(vt_v314_opt_cursor==0)\
+        \ {\n            if((pressed&PAD_LEFT) && vt_opt_volume>0)vt_opt_volume-=10;\n            if((pressed&PAD_RIGHT) && vt_opt_volume<100)vt_opt_volume+=10;\n\
+        \            if(pressed&(PAD_LEFT|PAD_RIGHT))vt_opt_apply_volume();\n        } else if(vt_v314_opt_cursor==1) {\n            if((pressed&PAD_LEFT)\
+        \ && vt_opt_text_speed>1)vt_opt_text_speed--;\n            if((pressed&PAD_RIGHT) && vt_opt_text_speed<3)vt_opt_text_speed++;\n        } else\
+        \ if(pressed&(PAD_CROSS|PAD_START))vt_v314_phase=2;\n    }\n    if(vt_v314_active) {vt_menu_open=1;vt_menu_page=0;}\n}\n\"\"\")\n\nreplace('vt_v314_draw',r\"\
+        \"\"\nstatic void vt_v314_draw(void) {\n    RECT texture_rect;\n    unsigned int aligned;\n    POLY_FT4 *q;\n    int current=vt_v314_choice_frame();\n\
+        \    int side;\n    if(current < 0)return;\n\n    if(current < 28) {\n        /* Intro frames retain their small texture page to preserve PS1\
+        \ RAM. */\n        if(current != vt_v314_vram_frame) {\n            DrawSync(0);  /* Do not overwrite texture during previous GPU draw. */\n\
+        \            setRECT(&texture_rect,640,0,160,120);\n            LoadImage(&texture_rect,(u_long *)(void *)vt_v318_frame_rgb555(current));\n\
+        \            DrawSync(0);\n            vt_v314_vram_frame=current;\n            vt_v3182_menu_uploaded=0;\n        }\n        aligned=(prim_used+3u)&~3u;\n\
+        \        if(aligned+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;\n        q=(POLY_FT4 *)(prim_arena[db]+aligned);\n        prim_used=aligned+sizeof(POLY_FT4);\n\
+        \        setPolyFT4(q);\n        setXY4(q,0,0,320,0,0,240,320,240);\n        setUV4(q,0,0,159,0,0,119,159,119);\n        setTPage(q,2,0,640,0);\n\
+        \        setSemiTrans(q,0);setShadeTex(q,0);\n        setRGB0(q,128,128,128);\n        addPrim(ot[db],q);\n        return;\n    }\n    if(!vt_v3182_menu_uploaded)\
+        \ {\n        /* Direct indexed upload: no 19,200-pixel palette expansion per frame. */\n        DrawSync(0);\n        setRECT(&texture_rect,640,0,160,240);\n\
+        \        LoadImage(&texture_rect,(u_long *)(void *)vt_v3182_menu_8bpp);\n        setRECT(&texture_rect,640,242,256,1);\n        LoadImage(&texture_rect,(u_long\
+        \ *)(void *)vt_v3182_clut);\n        DrawSync(0);\n        vt_v3182_menu_uploaded=1;\n        vt_v314_vram_frame=28;\n    }\n\n    /* Opaque\
+        \ selectable rows, painted over BOTH texture quads in OT order. */\n    vt_v3172_menu_slots();\n    for(side=0;side<2;side++) {\n        int\
+        \ left=side?256:0;\n        int w=side?64:256;\n        aligned=(prim_used+3u)&~3u;\n        if(aligned+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;\n\
+        \        q=(POLY_FT4 *)(prim_arena[db]+aligned);\n        prim_used=aligned+sizeof(POLY_FT4);\n        setPolyFT4(q);\n        setXY4(q,left,0,left+w,0,left,240,left+w,240);\n\
+        \        setUV4(q,0,0,w-1,0,0,239,w-1,239);\n        setTPage(q,1,0,side?768:640,0);\n        q->clut=getClut(640,242);\n        setSemiTrans(q,0);setShadeTex(q,0);\n\
+        \        setRGB0(q,128,128,128);\n        addPrim(ot[db],q);\n    }\n}\n\"\"\")\n\nfor fn in ('vt_v314_input','vt_v314_draw','vt_v3172_menu_slots','vt_v314_hud'):\n\
+        \    fspan(fn)\nfor marker in ('vt_v318_frame_rgb555(current)','vt_load_game(void)','vt_save_game(void)',\n               'vt_v3173_menu_font','vt_v3173_time_font','vt_v281_resolve_movement();'):\n\
+        \    if marker not in s:raise RuntimeError('V31.8.2 retained feature missing: '+marker)\npath.write_text(s,encoding='utf-8')\nprint('V31.8.2:\
+        \ new 320x240 indexed background, 7-second VBlank intro and unchanged playable game.')\n\nLYDRA_V3182_PATCH\npython3 \"$RUNNER_TEMP/lydra_v3182_patch.py\"\
+        \n"
+    - name: V31.8.1 Basis | V31.7.3 Menu und HUD pruefen
+      shell: bash
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.7.3 Menu und HUD pruefen''
+
+        '
+    - name: V31.8.1 Basis | V31.8 28 Video-Frames und Original-Hauptmenue pruefen
+      shell: bash
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.8 28 Video-Frames und Original-Hauptmenue pruefen''
+
+        '
+    - name: V31.8.2 Aufloesung und Video-Timing kontrollieren
+      shell: bash
+      run: 'set -euo pipefail
+
         SRC="$PROJECT_DIR/src"
-        test -s "$SRC/main.c"
-        test -s "$SRC/lydra_v314_frames.h"
-        grep -Fq 'vt_v318_idx_27[19200]' "$SRC/lydra_v314_frames.h"
-        grep -Fq 'vt_v318_menu_rgb555[19200]' "$SRC/lydra_v314_frames.h"
-        grep -Fq 'vt_v314_elapsed>=420' "$SRC/main.c"
-        grep -Fq 'vt_v318_frame_rgb555(current)' "$SRC/main.c"
-        grep -Fq 'vt_load_game(void)' "$SRC/main.c"
-        grep -Fq 'vt_save_game(void)' "$SRC/main.c"
-        grep -Fq 'vt_v3173_time_font=FntOpen(177' "$SRC/main.c"
-        echo 'V31.8 geprueft: 28 Originalvideo-Frames, Menuebild, aktive Menuewahl und Save/Load.'
-    - name: V31.6 Basis | PS1 SDK installieren
+
+        test -s "$SRC/lydra_v3182_menu.h" || { echo ''::error::Hochaufgeloestes Menue fehlt'';exit 1; }
+
+        grep -Fq ''vt_v3182_menu_8bpp[38400]'' "$SRC/lydra_v3182_menu.h"
+
+        grep -Fq ''vt_v3182_clut[256]'' "$SRC/lydra_v3182_menu.h"
+
+        grep -Fq ''VSync(-1)'' "$SRC/main.c"
+
+        grep -Fq ''vt_v318_frame_rgb555(current)'' "$SRC/main.c"
+
+        grep -Fq ''vt_load_game(void)'' "$SRC/main.c"
+
+        echo ''OK: 320x240 PS1-Menue, 7 Sekunden Intro, Laden und Speichern.''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | PS1 SDK installieren
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'PS1 SDK installieren'
-    - name: V31.6 Basis | V31.6 FIX2 PS1-Spiel kompilieren
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | PS1 SDK installieren''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V31.6 FIX2 PS1-Spiel kompilieren
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V31.6 FIX2 PS1-Spiel kompilieren'
-    - name: V31.6 Basis | Fertige BIN und CUE einsammeln
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V31.6 FIX2 PS1-Spiel kompilieren''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | Fertige BIN und CUE einsammeln
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'Fertige BIN und CUE einsammeln'
-    - name: V31.6 Basis | V31.6 FIX2 PS1-Dateien vor Upload pruefen
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | Fertige BIN und CUE einsammeln''
+
+        '
+    - name: V31.8.1 Basis | V31.6 Basis | V31.6 FIX2 PS1-Dateien vor Upload pruefen
       shell: bash
-      run: |
-        set -euo pipefail
-        python3 "$RUNNER_TEMP/lydra_run_base_step.py" 'V31.6 FIX2 PS1-Dateien vor Upload pruefen'
-    - name: PS1 Dateien vor Upload pruefen
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''V31.6 Basis | V31.6 FIX2 PS1-Dateien vor Upload pruefen''
+
+        '
+    - name: V31.8.1 Basis | PS1 Dateien vor Upload pruefen
       shell: bash
-      run: |
-        set -euo pipefail
-        for f in VTRAIL.bin VTRAIL.cue VTRAIL.exe VTRAIL.elf; do test -s "artifacts/$f" || { echo "::error::PS1-Datei fehlt: $f"; exit 1; }; done
-        grep -qi 'VTRAIL.bin' artifacts/VTRAIL.cue
-    - name: V31.7.3 PS1 Hauptmenue-Artefakt hochladen
+      run: 'set -euo pipefail
+
+        python3 "$RUNNER_TEMP/lydra_v3182_replay.py" ''PS1 Dateien vor Upload pruefen''
+
+        '
+    - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-World-Of-Dragon-V31-8-1-PS1-Video-Menue
+        name: Lydra-World-Of-Dragon-PS1-V31-8-2
         path: artifacts/VTRAIL.*
         if-no-files-found: error
         retention-days: 14
