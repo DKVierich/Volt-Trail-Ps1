@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.8.12 - FIX menu highlighted rows
+name: Lydra World Of Dragon V31.8.13 - Blinkendes START vor Hauptmenue
 'on':
   workflow_dispatch: {}
 permissions:
@@ -21,16 +21,16 @@ jobs:
     - name: Kompakte V31.8.7 Basis vorbereiten
       shell: bash
       run: "set -euo pipefail\nBASE_URL=\"https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/5c5c556238ce53f50696fd7e3fdc5dcd3493ca8d/.github/workflows/blank-ps1.yml\"\
-        \ncurl --fail --location --silent --show-error --retry 3 \"$BASE_URL\" -o \"$RUNNER_TEMP/lydra_v3185_base.yml\"\n\
-        python3 - <<'PY_REPLAY'\nimport os,json,yaml,hashlib\nfrom pathlib import Path\nroot=Path(os.environ['RUNNER_TEMP'])\n\
+        \ncurl --fail --location --silent --show-error --retry 3 \"$BASE_URL\" -o \"$RUNNER_TEMP/lydra_v3185_base.yml\"\
+        \npython3 - <<'PY_REPLAY'\nimport os,json,yaml,hashlib\nfrom pathlib import Path\nroot=Path(os.environ['RUNNER_TEMP'])\n\
         b=(root/'lydra_v3185_base.yml').read_bytes()\nchecksum=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\\0'+b).hexdigest()\n\
-        if checksum != '5f4aaafe69115d25c482c5a533f972aa8ee16102':\n    raise RuntimeError('Stable source does not match pinned\
-        \ original: '+checksum)\nw=yaml.safe_load(b)\ns=w['jobs']['build']['steps']\nif len(s)!=56 or s[55].get('uses')!='actions/upload-artifact@v4':\n\
+        if checksum != '5f4aaafe69115d25c482c5a533f972aa8ee16102':\n    raise RuntimeError('Stable source does not match\
+        \ pinned original: '+checksum)\nw=yaml.safe_load(b)\ns=w['jobs']['build']['steps']\nif len(s)!=56 or s[55].get('uses')!='actions/upload-artifact@v4':\n\
         \    raise RuntimeError('Unexpected stable step structure')\n(root/'lydra_v3185_replay_steps.json').write_text(json.dumps([x.get('run')\
         \ for x in s],ensure_ascii=False),encoding='utf-8')\n(root/'lydra_v3185_replay.py').write_text('''import sys,os,json,subprocess\n\
         from pathlib import Path\np=Path(os.environ[\"RUNNER_TEMP\"])/\"lydra_v3185_replay_steps.json\"\ns=json.loads(p.read_text(encoding=\"\
-        utf-8\"))\ni=int(sys.argv[1])\nif i<2 or i>54 or not isinstance(s[i],str):\n    raise RuntimeError(\"Invalid base\
-        \ step: \"+str(i))\nsubprocess.run([\"bash\",\"-euo\",\"pipefail\",\"-c\",s[i]],check=True)\n''',encoding='utf-8')\n\
+        utf-8\"))\ni=int(sys.argv[1])\nif i<2 or i>54 or not isinstance(s[i],str):\n    raise RuntimeError(\"Invalid\
+        \ base step: \"+str(i))\nsubprocess.run([\"bash\",\"-euo\",\"pipefail\",\"-c\",s[i]],check=True)\n''',encoding='utf-8')\n\
         print('Pinned successful V31.8.5 base verified: 56 steps')\nPY_REPLAY"
     - name: 'Basis 02: Stabile V31.8.1 Build-Basis laden und pruefen'
       shell: bash
@@ -429,62 +429,64 @@ jobs:
         rTxG/R1K4c+0TyltV88TCBadio1Pbby4lLqS3RoUCMV9Lb22ZKScD4b3/+dPXeEVXQKmM9sPiwffdGmJGs99Lo1KA6z9kQvAXuUriYIl\n5jvk91e4gEaUo0WzBOTcSK9KxD+m2K49Jl+w2gaOAOExy6R+X6DiD3isiLhMhtr+cGioN/3nn8Nrcoelgu++qW2blVyzHZ/StpW+5dzH\n\
         7WXsw7sAF/nEQWtmAxputXblVnX5zS7v7pcEKJ3QwTskO0FTLgl7nPNKBqmKUTOP3sAAxd9FAJqOOrswXxOS50qGhH6hjcjvjAUsfc2n\n0iz3pLpirhOK/JPIMYpT8A2/4pV7IlFjglc+dvqNflNn8I/hedos/+fuywHgfRpnOYLILluswl5yZiyVgK4mA9ez1OEaDOuf1OP/+Ep/\n\
         mY+9943h/OX1R0jSvU5Xa89fK+X8gbkMJi8/YvlNr0Tkk8nqIG7j5CskDoP0fALfKGrIpi/mLt7rbz1sGi5djnHtpsd2hcnf4nC/Pu8Y\nD8hjHMJxFMctmWDxkoF5Fyr+Q75z/99P/wzy6kkpj88vp8QuJH+t5YAQ5RBAAA==\n\
-        LYDRA_V3187_WEBP\ncat > \"$RUNNER_TEMP/lydra_v3187_patch.py\" <<'LYDRA_V3187_PATCH'\n#!/usr/bin/env python3\n# V31.8.7:\
-        \ source frames, 256x192, 256 colors, 8fps GPU crossfade.\n# No final still; keep original game/menu/save/option handling.\n\
-        import os,re\nfrom pathlib import Path\nfrom PIL import Image, ImageSequence\nsource=Path(os.environ['RUNNER_TEMP'])/'lydra_v3187_source.webp'\n\
-        project=Path(os.environ['PROJECT_DIR'])/'src'\nmain=project/'main.c'\ns=main.read_text(encoding='utf-8')\nwith Image.open(source)\
-        \ as im:\n    frames=[fr.convert('RGB').copy() for fr in ImageSequence.Iterator(im)]\nif len(frames)!=28 or any(x.size!=(256,192)\
-        \ for x in frames):\n    raise RuntimeError('Originalvideo: 28 Bilder 256x192 erforderlich')\n\npixels=[]\npalettes=[]\n\
-        for im in frames:\n    # 8bpp, full 256 colors for the entire frame. No 16-color posterization.\n    q=im.quantize(colors=256,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)\n\
-        \    ids=bytes(q.getdata())\n    pal=(q.getpalette() or [])[:768]\n    pal.extend([0]*(768-len(pal)))\n    packed=[ids[i]\
-        \ | ids[i+1]<<8 for i in range(0,49152,2)]\n    clut=[]\n    for i in range(256):\n        r,g,b=pal[3*i:3*i+3]\n\
-        \        # Set STP to let the GPU crossfade images on every alternate 1/8 second.\n        clut.append((r>>3)|((g>>3)<<5)|((b>>3)<<10)|0x8000)\n\
-        \    pixels.append(packed)\n    palettes.append(clut)\n\nh=['/* 28 original MP4 frames, 256x192 PS1 8bpp, GPU crossfade\
-        \ to 8fps. */',\n   '#ifndef LYDRA_V3187_MOVIE_H',\n   '#define LYDRA_V3187_MOVIE_H',\n   'static const unsigned short\
-        \ vt_v3187_pixels[28][24576] __attribute__((aligned(4)))={']\nfor frame in pixels:\n    h.append('{')\n    for a in\
-        \ range(0,len(frame),32):\n        h.append(','.join('0x%04x'%v for v in frame[a:a+32])+',')\n    h.append('},')\n\
-        h.append('};')\nh.append('static const unsigned short vt_v3187_palettes[28][256] __attribute__((aligned(4)))={')\n\
+        LYDRA_V3187_WEBP\ncat > \"$RUNNER_TEMP/lydra_v3187_patch.py\" <<'LYDRA_V3187_PATCH'\n#!/usr/bin/env python3\n\
+        # V31.8.7: source frames, 256x192, 256 colors, 8fps GPU crossfade.\n# No final still; keep original game/menu/save/option\
+        \ handling.\nimport os,re\nfrom pathlib import Path\nfrom PIL import Image, ImageSequence\nsource=Path(os.environ['RUNNER_TEMP'])/'lydra_v3187_source.webp'\n\
+        project=Path(os.environ['PROJECT_DIR'])/'src'\nmain=project/'main.c'\ns=main.read_text(encoding='utf-8')\nwith\
+        \ Image.open(source) as im:\n    frames=[fr.convert('RGB').copy() for fr in ImageSequence.Iterator(im)]\nif len(frames)!=28\
+        \ or any(x.size!=(256,192) for x in frames):\n    raise RuntimeError('Originalvideo: 28 Bilder 256x192 erforderlich')\n\
+        \npixels=[]\npalettes=[]\nfor im in frames:\n    # 8bpp, full 256 colors for the entire frame. No 16-color posterization.\n\
+        \    q=im.quantize(colors=256,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)\n    ids=bytes(q.getdata())\n\
+        \    pal=(q.getpalette() or [])[:768]\n    pal.extend([0]*(768-len(pal)))\n    packed=[ids[i] | ids[i+1]<<8 for\
+        \ i in range(0,49152,2)]\n    clut=[]\n    for i in range(256):\n        r,g,b=pal[3*i:3*i+3]\n        # Set\
+        \ STP to let the GPU crossfade images on every alternate 1/8 second.\n        clut.append((r>>3)|((g>>3)<<5)|((b>>3)<<10)|0x8000)\n\
+        \    pixels.append(packed)\n    palettes.append(clut)\n\nh=['/* 28 original MP4 frames, 256x192 PS1 8bpp, GPU\
+        \ crossfade to 8fps. */',\n   '#ifndef LYDRA_V3187_MOVIE_H',\n   '#define LYDRA_V3187_MOVIE_H',\n   'static const\
+        \ unsigned short vt_v3187_pixels[28][24576] __attribute__((aligned(4)))={']\nfor frame in pixels:\n    h.append('{')\n\
+        \    for a in range(0,len(frame),32):\n        h.append(','.join('0x%04x'%v for v in frame[a:a+32])+',')\n  \
+        \  h.append('},')\nh.append('};')\nh.append('static const unsigned short vt_v3187_palettes[28][256] __attribute__((aligned(4)))={')\n\
         for pal in palettes:\n    h.append('{'+','.join('0x%04x'%v for v in pal)+'},')\nh.extend(['};','#endif'])\n(project/'lydra_v3187_movie.h').write_text('\\\
         n'.join(h)+'\\n',encoding='utf-8')\n\ndef fspan(name):\n    rx=r'\\bstatic\\s+(?:int|void)\\s+'+re.escape(name)+r'\\\
         s*\\([^;]*?\\)\\s*\\{'\n    matches=list(re.finditer(rx,s,re.S))\n    if len(matches)!=1:raise RuntimeError('Function\
-        \ count '+name+': '+str(len(matches)))\n    start=matches[0].start();i=matches[0].end();depth=1;state='code'\n   \
-        \ while i<len(s) and depth:\n        c=s[i];n=s[i+1] if i+1<len(s) else ''\n        if state=='code':\n          \
-        \  if c=='/' and n=='/': state='line';i+=1\n            elif c=='/' and n=='*':state='block';i+=1\n            elif\
-        \ c=='\"':state='string'\n            elif c==\"'\":state='char'\n            elif c=='{':depth+=1\n            elif\
-        \ c=='}':depth-=1\n        elif state=='line':\n            if c=='\\n':state='code'\n        elif state=='block':\n\
-        \            if c=='*' and n=='/':state='code';i+=1\n        elif c=='\\\\':i+=1\n        elif (state=='string' and\
-        \ c=='\"') or (state=='char' and c==\"'\"):state='code'\n        i+=1\n    if depth:raise RuntimeError('Unbalanced\
-        \ braces '+name)\n    return start,i\n\ndef swap(name,body):\n    global s\n    a,b=fspan(name)\n    s=s[:a]+body.strip()+'\\\
-        n'+s[b:]\n\nswap('vt_v314_choice_frame',r'''\nstatic int vt_v314_choice_frame(void) {\n    if(vt_v314_phase==-1) {\n\
-        \        int f=(vt_v314_elapsed*2)/15; /* 8 image changes/sec at NTSC 60Hz */\n        if(f<0)f=0;\n        if(f>55)f=55;\n\
-        \        return f;\n    }\n    return 56; /* interactive menu immediately after original 7 seconds */\n}\n''')\n\n\
-        swap('vt_v314_draw',r'''\nstatic void vt_v314_draw(void) {\n    RECT r;\n    POLY_FT4 *q;\n    unsigned int a;\n \
-        \   int current=vt_v314_choice_frame();\n    int side;\n    if(current<0)return;\n\n    if(current<56) {\n       \
-        \ int frame=current/2;\n        int next=frame<27?frame+1:27;\n        int layer;\n        /* Two full 256-color movie\
-        \ frames are cached in VRAM.\n           Every odd 1/8-second, PS1 GPU blends the frames 50/50,\n           so there\
-        \ are 8 visible steps/s using 4 source images/s. */\n        if(vt_v314_vram_frame/2!=frame || vt_v314_vram_frame<0)\
-        \ {\n            DrawSync(0);\n            setRECT(&r,640,0,128,192);\n            LoadImage(&r,(u_long*)(void*)vt_v3187_pixels[frame]);\n\
-        \            setRECT(&r,768,0,128,192);\n            LoadImage(&r,(u_long*)(void*)vt_v3187_pixels[next]);\n      \
-        \      setRECT(&r,640,242,256,1);\n            LoadImage(&r,(u_long*)(void*)vt_v3187_palettes[frame]);\n         \
-        \   setRECT(&r,640,243,256,1);\n            LoadImage(&r,(u_long*)(void*)vt_v3187_palettes[next]);\n            DrawSync(0);\n\
-        \            vt_v314_vram_frame=current;\n            vt_v3182_menu_uploaded=0;\n        }\n        /* addPrim prepends:\
-        \ enqueue translucent overlay first so that\n           the opaque base is rendered before the 50% overlay. */\n \
-        \       for(layer=(current&1)?1:0;layer>=0;layer--) {\n            a=(prim_used+3u)&~3u;\n            if(a+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;\n\
-        \            q=(POLY_FT4*)(prim_arena[db]+a);\n            prim_used=a+sizeof(POLY_FT4);\n            setPolyFT4(q);\n\
-        \            setXY4(q,0,0,320,0,0,240,320,240);\n            setUV4(q,0,0,255,0,0,191,255,191);\n            setTPage(q,1,0,layer?768:640,0);\n\
-        \            q->clut=getClut(640,layer?243:242);\n            setSemiTrans(q,layer?1:0);\n            setShadeTex(q,0);\n\
-        \            setRGB0(q,128,128,128);\n            addPrim(ot[db],q);\n        }\n        return;\n    }\n\n    if(!vt_v3182_menu_uploaded)\
-        \ {\n        DrawSync(0);\n        setRECT(&r,640,0,160,240);\n        LoadImage(&r,(u_long*)(void*)vt_v3182_menu_8bpp);\n\
-        \        setRECT(&r,640,242,256,1);\n        LoadImage(&r,(u_long*)(void*)vt_v3182_clut);\n        DrawSync(0);\n\
-        \        vt_v3182_menu_uploaded=1;\n        vt_v314_vram_frame=56;\n    }\n    vt_v3172_menu_slots();\n    for(side=0;side<2;side++)\
-        \ {\n        int left=side?256:0;\n        int width=side?64:256;\n        a=(prim_used+3u)&~3u;\n        if(a+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;\n\
-        \        q=(POLY_FT4*)(prim_arena[db]+a);\n        prim_used=a+sizeof(POLY_FT4);\n        setPolyFT4(q);\n       \
-        \ setXY4(q,left,0,left+width,0,left,240,left+width,240);\n        setUV4(q,0,0,width-1,0,0,239,width-1,239);\n   \
-        \     setTPage(q,1,0,side?768:640,0);\n        q->clut=getClut(640,242);\n        setSemiTrans(q,0);setShadeTex(q,0);\n\
-        \        setRGB0(q,128,128,128);\n        addPrim(ot[db],q);\n    }\n}\n''')\nif '#include \"lydra_v3187_movie.h\"\
-        ' not in s:\n    anchor='static void vt_v314_draw(void)'\n    if s.count(anchor)!=1:raise RuntimeError('Draw anchor\
-        \ count: '+str(s.count(anchor)))\n    s=s.replace(anchor,'#include \"lydra_v3187_movie.h\"\\n'+anchor,1)\nfor marker\
-        \ in ('vt_load_game(void)','vt_save_game(void)','vt_v281_resolve_movement();','vt_v3172_menu_slots();','vt_v3182_menu_8bpp'):\n\
+        \ count '+name+': '+str(len(matches)))\n    start=matches[0].start();i=matches[0].end();depth=1;state='code'\n\
+        \    while i<len(s) and depth:\n        c=s[i];n=s[i+1] if i+1<len(s) else ''\n        if state=='code':\n  \
+        \          if c=='/' and n=='/': state='line';i+=1\n            elif c=='/' and n=='*':state='block';i+=1\n \
+        \           elif c=='\"':state='string'\n            elif c==\"'\":state='char'\n            elif c=='{':depth+=1\n\
+        \            elif c=='}':depth-=1\n        elif state=='line':\n            if c=='\\n':state='code'\n      \
+        \  elif state=='block':\n            if c=='*' and n=='/':state='code';i+=1\n        elif c=='\\\\':i+=1\n  \
+        \      elif (state=='string' and c=='\"') or (state=='char' and c==\"'\"):state='code'\n        i+=1\n    if\
+        \ depth:raise RuntimeError('Unbalanced braces '+name)\n    return start,i\n\ndef swap(name,body):\n    global\
+        \ s\n    a,b=fspan(name)\n    s=s[:a]+body.strip()+'\\n'+s[b:]\n\nswap('vt_v314_choice_frame',r'''\nstatic int\
+        \ vt_v314_choice_frame(void) {\n    if(vt_v314_phase==-1) {\n        int f=(vt_v314_elapsed*2)/15; /* 8 image\
+        \ changes/sec at NTSC 60Hz */\n        if(f<0)f=0;\n        if(f>55)f=55;\n        return f;\n    }\n    return\
+        \ 56; /* interactive menu immediately after original 7 seconds */\n}\n''')\n\nswap('vt_v314_draw',r'''\nstatic\
+        \ void vt_v314_draw(void) {\n    RECT r;\n    POLY_FT4 *q;\n    unsigned int a;\n    int current=vt_v314_choice_frame();\n\
+        \    int side;\n    if(current<0)return;\n\n    if(current<56) {\n        int frame=current/2;\n        int next=frame<27?frame+1:27;\n\
+        \        int layer;\n        /* Two full 256-color movie frames are cached in VRAM.\n           Every odd 1/8-second,\
+        \ PS1 GPU blends the frames 50/50,\n           so there are 8 visible steps/s using 4 source images/s. */\n \
+        \       if(vt_v314_vram_frame/2!=frame || vt_v314_vram_frame<0) {\n            DrawSync(0);\n            setRECT(&r,640,0,128,192);\n\
+        \            LoadImage(&r,(u_long*)(void*)vt_v3187_pixels[frame]);\n            setRECT(&r,768,0,128,192);\n\
+        \            LoadImage(&r,(u_long*)(void*)vt_v3187_pixels[next]);\n            setRECT(&r,640,242,256,1);\n \
+        \           LoadImage(&r,(u_long*)(void*)vt_v3187_palettes[frame]);\n            setRECT(&r,640,243,256,1);\n\
+        \            LoadImage(&r,(u_long*)(void*)vt_v3187_palettes[next]);\n            DrawSync(0);\n            vt_v314_vram_frame=current;\n\
+        \            vt_v3182_menu_uploaded=0;\n        }\n        /* addPrim prepends: enqueue translucent overlay first\
+        \ so that\n           the opaque base is rendered before the 50% overlay. */\n        for(layer=(current&1)?1:0;layer>=0;layer--)\
+        \ {\n            a=(prim_used+3u)&~3u;\n            if(a+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;\n  \
+        \          q=(POLY_FT4*)(prim_arena[db]+a);\n            prim_used=a+sizeof(POLY_FT4);\n            setPolyFT4(q);\n\
+        \            setXY4(q,0,0,320,0,0,240,320,240);\n            setUV4(q,0,0,255,0,0,191,255,191);\n           \
+        \ setTPage(q,1,0,layer?768:640,0);\n            q->clut=getClut(640,layer?243:242);\n            setSemiTrans(q,layer?1:0);\n\
+        \            setShadeTex(q,0);\n            setRGB0(q,128,128,128);\n            addPrim(ot[db],q);\n       \
+        \ }\n        return;\n    }\n\n    if(!vt_v3182_menu_uploaded) {\n        DrawSync(0);\n        setRECT(&r,640,0,160,240);\n\
+        \        LoadImage(&r,(u_long*)(void*)vt_v3182_menu_8bpp);\n        setRECT(&r,640,242,256,1);\n        LoadImage(&r,(u_long*)(void*)vt_v3182_clut);\n\
+        \        DrawSync(0);\n        vt_v3182_menu_uploaded=1;\n        vt_v314_vram_frame=56;\n    }\n    vt_v3172_menu_slots();\n\
+        \    for(side=0;side<2;side++) {\n        int left=side?256:0;\n        int width=side?64:256;\n        a=(prim_used+3u)&~3u;\n\
+        \        if(a+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;\n        q=(POLY_FT4*)(prim_arena[db]+a);\n   \
+        \     prim_used=a+sizeof(POLY_FT4);\n        setPolyFT4(q);\n        setXY4(q,left,0,left+width,0,left,240,left+width,240);\n\
+        \        setUV4(q,0,0,width-1,0,0,239,width-1,239);\n        setTPage(q,1,0,side?768:640,0);\n        q->clut=getClut(640,242);\n\
+        \        setSemiTrans(q,0);setShadeTex(q,0);\n        setRGB0(q,128,128,128);\n        addPrim(ot[db],q);\n \
+        \   }\n}\n''')\nif '#include \"lydra_v3187_movie.h\"' not in s:\n    anchor='static void vt_v314_draw(void)'\n\
+        \    if s.count(anchor)!=1:raise RuntimeError('Draw anchor count: '+str(s.count(anchor)))\n    s=s.replace(anchor,'#include\
+        \ \"lydra_v3187_movie.h\"\\n'+anchor,1)\nfor marker in ('vt_load_game(void)','vt_save_game(void)','vt_v281_resolve_movement();','vt_v3172_menu_slots();','vt_v3182_menu_8bpp'):\n\
         \    if marker not in s:raise RuntimeError('Existing game system missing '+marker)\nmain.write_text(s,encoding='utf-8')\n\
         print('V31.8.7 ready: original HD-sourced movie, 256 colors, 8 fps, 7s, no appended still.')\n\nLYDRA_V3187_PATCH\n\
         python3 \"$RUNNER_TEMP/lydra_v3187_patch.py\"\n"
@@ -494,31 +496,32 @@ jobs:
         s=(p/'main.c').read_text()\nh=(p/'lydra_v3187_movie.h').read_text()\nfor marker in ('vt_v3187_pixels[28][24576]','vt_v3187_palettes[28][256]'):\n\
         \    assert marker in h, marker\nfor marker in ('setXY4(q,0,0,320,0,0,240,320,240)','setTPage(q,1,0,layer?768:640,0)',\n\
         \               'getClut(640,layer?243:242)','(vt_v314_elapsed*2)/15',\n               'vt_v3172_menu_slots();','vt_load_game(void)'):\n\
-        \    assert marker in s,marker\nprint('OK: 28 Originalframes 256x192, 256 Farben, GPU 8 FPS, volle Breite, kein extra\
-        \ Schlussbild.')\nPYCHECK\n"
+        \    assert marker in s,marker\nprint('OK: 28 Originalframes 256x192, 256 Farben, GPU 8 FPS, volle Breite, kein\
+        \ extra Schlussbild.')\nPYCHECK\n"
     - name: V31.8.12 PS1 Menueauswahl an echten Textzeilen befestigen
       shell: bash
       run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_v3188_style.py\" <<'LYDRA_V3188_STYLE'\n#!/usr/bin/env python3\n\
-        \"\"\"Lydra V31.8.12: verified 16px text pitch and permanently anchored highlight.\"\"\"\nfrom pathlib import Path\n\
-        import os, re\n\np = Path(os.environ['PROJECT_DIR']) / 'src/main.c'\ns = p.read_text(encoding='utf-8')\n\ndef span(name):\n\
-        \    rx = r'\\bstatic\\s+(?:void|int)\\s+'+re.escape(name)+r'\\s*\\([^;]*?\\)\\s*\\{'\n    ms = list(re.finditer(rx,s,re.S))\n\
-        \    if len(ms) != 1:\n        raise RuntimeError(f'V31.8.8 requires one {name}, found {len(ms)}')\n    a = ms[0].start();\
-        \ i=ms[0].end(); depth=1; mode='code'\n    while depth and i < len(s):\n        c=s[i]; n=s[i+1] if i+1<len(s) else\
-        \ ''\n        if mode=='code':\n            if c=='/' and n=='/':mode='line';i+=1\n            elif c=='/' and n=='*':mode='comment';i+=1\n\
-        \            elif c=='\"':mode='string'\n            elif c==\"'\":mode='char'\n            elif c=='{':depth+=1\n\
-        \            elif c=='}':depth-=1\n        elif mode=='line':\n            if c=='\\n':mode='code'\n        elif mode=='comment':\n\
-        \            if c=='*' and n=='/':mode='code';i+=1\n        else:\n            if c=='\\\\':i+=1\n            elif\
-        \ (mode=='string' and c=='\"') or (mode=='char' and c==\"'\"):mode='code'\n        i+=1\n    if depth:raise RuntimeError('V31.8.8\
+        \"\"\"Lydra V31.8.12: verified 16px text pitch and permanently anchored highlight.\"\"\"\nfrom pathlib import\
+        \ Path\nimport os, re\n\np = Path(os.environ['PROJECT_DIR']) / 'src/main.c'\ns = p.read_text(encoding='utf-8')\n\
+        \ndef span(name):\n    rx = r'\\bstatic\\s+(?:void|int)\\s+'+re.escape(name)+r'\\s*\\([^;]*?\\)\\s*\\{'\n   \
+        \ ms = list(re.finditer(rx,s,re.S))\n    if len(ms) != 1:\n        raise RuntimeError(f'V31.8.8 requires one\
+        \ {name}, found {len(ms)}')\n    a = ms[0].start(); i=ms[0].end(); depth=1; mode='code'\n    while depth and\
+        \ i < len(s):\n        c=s[i]; n=s[i+1] if i+1<len(s) else ''\n        if mode=='code':\n            if c=='/'\
+        \ and n=='/':mode='line';i+=1\n            elif c=='/' and n=='*':mode='comment';i+=1\n            elif c=='\"\
+        ':mode='string'\n            elif c==\"'\":mode='char'\n            elif c=='{':depth+=1\n            elif c=='}':depth-=1\n\
+        \        elif mode=='line':\n            if c=='\\n':mode='code'\n        elif mode=='comment':\n           \
+        \ if c=='*' and n=='/':mode='code';i+=1\n        else:\n            if c=='\\\\':i+=1\n            elif (mode=='string'\
+        \ and c=='\"') or (mode=='char' and c==\"'\"):mode='code'\n        i+=1\n    if depth:raise RuntimeError('V31.8.8\
         \ malformed C block: '+name)\n    return a,i\n\na,b=span('vt_v3172_menu_slots')\nreplacement = r'''\n\n/* V31.8.12:\
-        \ font and selection bar measured in the SAME screen coordinates.\n   Actual text centres: y=144/160/176. Frame centres:\
-        \ same. No 18px pitch.\n   The highlight is drawn IN the selected one of 3 fixed rows, never moved. */\nstatic void\
-        \ vt_v3188_tile(int x,int y,int w,int h,int red,int green,int blue)\n{\n    TILE *tile;\n    unsigned int aligned;\n\
-        \    if(w<=0 || h<=0)return;\n    aligned=(prim_used+3u)&~3u;\n    if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;\n\
+        \ font and selection bar measured in the SAME screen coordinates.\n   Actual text centres: y=144/160/176. Frame\
+        \ centres: same. No 18px pitch.\n   The highlight is drawn IN the selected one of 3 fixed rows, never moved.\
+        \ */\nstatic void vt_v3188_tile(int x,int y,int w,int h,int red,int green,int blue)\n{\n    TILE *tile;\n   \
+        \ unsigned int aligned;\n    if(w<=0 || h<=0)return;\n    aligned=(prim_used+3u)&~3u;\n    if(aligned+sizeof(TILE)>sizeof(prim_arena[db]))return;\n\
         \    tile=(TILE *)(prim_arena[db]+aligned);\n    prim_used=aligned+sizeof(TILE);\n    setTile(tile);\n    setXY0(tile,x,y);\n\
         \    setWH(tile,w,h);\n    setRGB0(tile,red,green,blue);\n    addPrim(ot[db],tile);\n}\n\nstatic int vt_v31812_row_top(int\
         \ index)\n{\n    static const short screen_top[3]={136,152,168};\n    if(index<0)index=0;\n    if(index>2)index=2;\n\
-        \    return (int)screen_top[index];\n}\n\nstatic void vt_v3172_menu_slots(void)\n{\n    int i, selected, top, pulse,\
-        \ glow;\n    if(vt_v314_phase!=2 && vt_v314_phase!=3)return;\n    selected=(vt_v314_phase==2)?vt_v314_cursor:vt_v314_opt_cursor;\n\
+        \    return (int)screen_top[index];\n}\n\nstatic void vt_v3172_menu_slots(void)\n{\n    int i, selected, top,\
+        \ pulse, glow;\n    if(vt_v314_phase!=2 && vt_v314_phase!=3)return;\n    selected=(vt_v314_phase==2)?vt_v314_cursor:vt_v314_opt_cursor;\n\
         \    if(selected<0)selected=0;\n    if(selected>2)selected=2;\n    pulse=(int)(vt_v314_blink%64u);\n    glow=pulse<32?pulse:63-pulse;\n\
         \n    /* Crystalline selected marker has the same top coordinate as its row. */\n    top=vt_v31812_row_top(selected);\n\
         \    vt_v3188_tile(99,top+6,3,3,115,219,255);\n    vt_v3188_tile(100,top+4,1,7,122,225,255);\n    vt_v3188_tile(227,top+4,2,8,87,184+glow,249);\n\
@@ -533,31 +536,97 @@ jobs:
         \n    /* EXACTLY three fixed selections, centred on text y=144,160,176. */\n    for(i=0;i<3;i++) {\n        top=vt_v31812_row_top(i);\n\
         \        if(i==selected) {\n            vt_v3188_tile(104,top,122,15,54,159+glow,218);\n            vt_v3188_tile(105,top+1,120,13,23,77+glow,128+glow);\n\
         \            vt_v3188_tile(107,top+2,116,11,15,43+glow,79+glow);\n        } else {\n            vt_v3188_tile(104,top,122,15,18,51,84);\n\
-        \            vt_v3188_tile(105,top+1,120,13,8,22,47);\n            vt_v3188_tile(107,top+13,116,1,25,68,111);\n  \
-        \      }\n    }\n    /* OT draws in reverse insertion order. Background must be queued LAST. */\n    vt_v3188_tile(95,132,140,78,8,19,42);\n\
+        \            vt_v3188_tile(105,top+1,120,13,8,22,47);\n            vt_v3188_tile(107,top+13,116,1,25,68,111);\n\
+        \        }\n    }\n    /* OT draws in reverse insertion order. Background must be queued LAST. */\n    vt_v3188_tile(95,132,140,78,8,19,42);\n\
         \    vt_v3188_tile(94,131,142,80,17,56,91);\n    vt_v3188_tile(92,129,146,84,7,25,48);\n}\n\n'''\ns=s[:a]+replacement.strip()+'\\\
         n'+s[b:]\n\n# Safety: no title image, input, intro, pause menu or gameplay changes.\nfor func in ('vt_v314_draw','vt_v314_input','vt_v314_hud','vt_v3172_menu_slots'):\n\
         \    span(func)\nassert 'vt_v3172_menu_slots();' in s\nfor marker in ('vt_load_game(void)', 'vt_save_game(void)',\
         \ 'vt_v281_resolve_movement();',\n               'vt_v3187_pixels','vt_v3182_menu_8bpp', 'vt_v314_cursor', 'vt_v314_opt_cursor'):\n\
         \    if marker not in s:\n        raise RuntimeError('Missing retained gameplay/menu system: '+marker)\np.write_text(s,\
-        \ encoding='utf-8')\nprint('V31.8.12: frame y=136/152/168 and visual signature applied.')\nLYDRA_V3188_STYLE\npython3\
-        \ \"$RUNNER_TEMP/lydra_v3188_style.py\"\n"
+        \ encoding='utf-8')\nprint('V31.8.12: frame y=136/152/168 and visual signature applied.')\nLYDRA_V3188_STYLE\n\
+        python3 \"$RUNNER_TEMP/lydra_v3188_style.py\"\n"
+    - name: V31.8.13 Blinkendes START vor dem Menuefenster einbauen
+      shell: bash
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_v31813_patch.py\" <<'LYDRA_V31813_PATCH'\n#!/usr/bin/env python3\n\
+        \"\"\"Lydra V31.8.13: blinking START gate between completed intro and normal menu.\"\"\"\nfrom pathlib import\
+        \ Path\nimport os,re\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\n\ndef\
+        \ function_span(name):\n    rx=r'\\bstatic\\s+(?:void|int)\\s+'+re.escape(name)+r'\\s*\\([^;]*?\\)\\s*\\{'\n\
+        \    matches=list(re.finditer(rx,s,re.S))\n    if len(matches)!=1:raise RuntimeError(f'Expected exactly one {name},\
+        \ got {len(matches)}')\n    begin=matches[0].start()\n    i=matches[0].end()\n    depth=1\n    mode='code'\n\
+        \    while depth and i<len(s):\n        c=s[i]\n        n=s[i+1] if i+1<len(s) else ''\n        if mode=='code':\n\
+        \            if c=='/' and n=='/':mode='line';i+=1\n            elif c=='/' and n=='*':mode='block';i+=1\n  \
+        \          elif c=='\"':mode='string'\n            elif c==\"'\":mode='char'\n            elif c=='{':depth+=1\n\
+        \            elif c=='}':depth-=1\n        elif mode=='line':\n            if c=='\\n':mode='code'\n        elif\
+        \ mode=='block':\n            if c=='*' and n=='/':mode='code';i+=1\n        else:\n            if c=='\\\\':i+=1\n\
+        \            elif (mode=='string' and c=='\"') or (mode=='char' and c==\"'\"):mode='code'\n        i+=1\n   \
+        \ if depth:raise RuntimeError('Unbalanced braces in '+name)\n    return begin,i\n\ndef change_func(name,cb):\n\
+        \    global s\n    a,b=function_span(name)\n    before=s[a:b]\n    after=cb(before)\n    if before==after:raise\
+        \ RuntimeError(f'No actual change to {name}')\n    s=s[:a]+after+s[b:]\n\ndef patch_input(src):\n    # The V31.8.12\
+        \ controller changes from intro (-1) directly to open menu (2).\n    # Insert an explicit title gate (4) instead;\
+        \ all options/game paths are preserved.\n    pat=r'(if\\s*\\(\\s*vt_v314_elapsed\\s*>=\\s*420\\s*\\)\\s*\\{\\\
+        s*)vt_v314_phase\\s*=\\s*2\\s*;'\n    src,n=re.subn(pat,r'\\g<1>vt_v314_phase=4;\\n        vt_v314_blink=0;',src,count=1)\n\
+        \    if n!=1:raise RuntimeError('Could not locate the seven-second intro completion')\n    pat=r'\\}\\s*else\\\
+        s+if\\s*\\(\\s*vt_v314_phase\\s*==\\s*2\\s*\\)\\s*\\{'\n    repl='''} else if(vt_v314_phase==4) {\n        /*\
+        \ Show title art and blinking START; no menu panel before START is pressed. */\n        if(pressed & PAD_START)\
+        \ {\n            vt_v314_phase=2;\n            vt_v314_cursor=0;\n            vt_v314_message=\"\";\n       \
+        \ }\n    } else if(vt_v314_phase==2) {'''\n    src,n=re.subn(pat,lambda _:repl,src,count=1)\n    if n!=1:raise\
+        \ RuntimeError('Could not locate the menu input branch')\n    return src\nchange_func('vt_v314_input',patch_input)\n\
+        \n# Use the existing PS1 GPU TILE utility to draw crisp, blue fantasy-style bitmap\n# lettering: no new JPEG,\
+        \ background change or extra font channel. Deliberately\n# show the START lettering only on title phase 4.\n\
+        helper=r'''\n/* V31.8.13: text is rendered as crisp GPU rectangles, matching cyan menu trim.\n   Five 5x7 letters\
+        \ are centered. On 60 frames, off 30 frames (60-Hz PS1). */\nstatic void vt_v31813_draw_start(void)\n{\n    static\
+        \ const unsigned char glyphs[5][7]={\n        {31,16,16,31,1,1,31},  /* S */\n        {31,4,4,4,4,4,4},     \
+        \ /* T */\n        {14,17,17,31,17,17,17},/* A */\n        {30,17,17,30,20,18,17},/* R */\n        {31,4,4,4,4,4,4}\
+        \       /* T */\n    };\n    int g,row,col,end,run,x,y,glow;\n    if(vt_v314_phase!=4)return;\n    if((vt_v314_blink%90u)>=60u)return;\n\
+        \    glow=(int)(vt_v314_blink%60u);\n    if(glow>30)glow=60-glow;\n\n    /* Small fantasy ornaments; unlike the\
+        \ large menu box these don't hide art. */\n    vt_v3188_tile(110,164,100,1,26,104+glow,178+glow);\n    vt_v3188_tile(110,199,100,1,26,104+glow,178+glow);\n\
+        \    vt_v3188_tile(107,162,3,3,48,193,245);\n    vt_v3188_tile(210,162,3,3,48,193,245);\n    vt_v3188_tile(107,198,3,3,48,193,245);\n\
+        \    vt_v3188_tile(210,198,3,3,48,193,245);\n\n    /* Real horizontal-run pixel glyphs, not a scaled-up video\
+        \ sprite. */\n    for(g=0;g<5;g++)for(row=0;row<7;row++) {\n        col=0;\n        while(col<5) {\n        \
+        \    if(!(glyphs[g][row]&(1u<<(4-col)))) {col++;continue;}\n            run=col;\n            end=col;\n    \
+        \        while(end+1<5 && (glyphs[g][row]&(1u<<(4-(end+1)))))end++;\n            x=116+(g*6+run)*3;\n       \
+        \     y=171+row*3;\n            vt_v3188_tile(x+1,y+1,(end-run+1)*3,3,12,79+glow,151+glow);\n            vt_v3188_tile(x,y,(end-run+1)*3,2,201,230+glow/2,255);\n\
+        \            col=end+1;\n        }\n    }\n}\n'''\nanchor='static void vt_v314_draw(void)'\nif s.count(anchor)!=1:raise\
+        \ RuntimeError('Expected a single PS1 title draw function')\nif 'static void vt_v3188_tile(' not in s:\n    raise\
+        \ RuntimeError('V31.8.12 decorated menu drawing helper is missing')\nif s.index('static void vt_v3188_tile(')>s.index(anchor):\n\
+        \    raise RuntimeError('Tile drawing helper must be declared before title draw')\ns=s.replace(anchor,helper+'\\\
+        n'+anchor,1)\n\ndef patch_draw(src):\n    needle='vt_v3172_menu_slots();'\n    if src.count(needle)!=1:raise\
+        \ RuntimeError('Menu-graphics call not found uniquely')\n    return src.replace(needle,needle+'\\n    vt_v31813_draw_start();',1)\n\
+        change_func('vt_v314_draw',patch_draw)\n\n# Safeguard stable menus, all game mechanics and video.\nfor marker\
+        \ in ('vt_v314_phase==4','vt_v314_blink%90u','PAD_START',\n    'vt_v3172_menu_slots();','vt_v31813_draw_start();',\n\
+        \    'vt_load_game(void)','vt_save_game(void)','vt_v281_resolve_movement();',\n    'vt_v3187_pixels','vt_v3182_menu_8bpp',\n\
+        \    'static int vt_v31812_row_top(int index)'):\n    if marker not in s:raise RuntimeError('Expected source\
+        \ system missing: '+marker)\nfor func in ('vt_v314_input','vt_v314_draw','vt_v314_hud','vt_v3172_menu_slots',\n\
+        \             'vt_v31813_draw_start'):\n    function_span(func)\np.write_text(s,encoding='utf-8')\nprint('V31.8.13:\
+        \ 7s original intro -> blinking START phase 4 -> START button -> original menu phase 2')\nLYDRA_V31813_PATCH\n\
+        python3 \"$RUNNER_TEMP/lydra_v31813_patch.py\"\n"
+    - name: V31.8.13 Starttaste, Titel-Blinken und Spielmechanik pruefen
+      shell: bash
+      run: "set -euo pipefail\npython3 - <<'PY_CHECK_31813'\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
+        s=p.read_text(encoding='utf-8')\nchecks=['vt_v314_phase=4;', 'if(vt_v314_phase==4)return;',\n        'if(pressed\
+        \ & PAD_START)', 'vt_v31813_draw_start();',\n        'vt_v314_blink%90u', 'vt_v31812_row_top',\n        'vt_load_game(void)','vt_save_game(void)',\
+        \ 'vt_v3187_pixels']\n# START-glyph routine guards against wrong mode and blink OFF intervals.\nchecks.remove('if(vt_v314_phase==4)return;')\n\
+        checks.append('if(vt_v314_phase!=4)return;')\nfor check in checks:\n    if check not in s:raise SystemExit('Missing\
+        \ V31.8.13 feature: '+check)\nassert s.count('static void vt_v314_input(')==1\nassert s.count('static void vt_v314_draw(')==1\n\
+        assert s.count('static void vt_v31813_draw_start(')==1\nprint('PASS: Intro -> title with blinking START -> interactive\
+        \ menu; gameplay preserved.')\nPY_CHECK_31813\n"
     - name: V31.8.12 Menue-Geometrie und Build-Fingerprint pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'PY'\nfrom pathlib import Path\nimport os,re\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
         for t in ('static int vt_v31812_row_top(int index)',\n          'screen_top[3]={136,152,168}', 'vt_v31812_row_top(selected)',\n\
-        \          'vt_v31812_row_top(i)', 'vt_v3188_tile(218,207,3,2,74,184,236)',\n          'vt_load_game(void)', 'vt_save_game(void)'):\n\
-        \    if t not in s: raise SystemExit('::error::Menu check failed: '+t)\nassert s.count('static void vt_v3172_menu_slots(')==1\n\
-        assert 'y=139+18*i' not in s\nassert 'y=(vt_v314_phase==2)?(136+16*i):(139+18*i)' not in s\nfor index in range(3):\n\
-        \    box_center=(136+16*index)+7.5\n    text_center=144+16*index\n    assert abs(box_center-text_center)<=0.5\nprint('PASS\
-        \ V31.8.12: all three bars aligned with real text centres.')\nPY\n"
+        \          'vt_v31812_row_top(i)', 'vt_v3188_tile(218,207,3,2,74,184,236)',\n          'vt_load_game(void)',\
+        \ 'vt_save_game(void)'):\n    if t not in s: raise SystemExit('::error::Menu check failed: '+t)\nassert s.count('static\
+        \ void vt_v3172_menu_slots(')==1\nassert 'y=139+18*i' not in s\nassert 'y=(vt_v314_phase==2)?(136+16*i):(139+18*i)'\
+        \ not in s\nfor index in range(3):\n    box_center=(136+16*index)+7.5\n    text_center=144+16*index\n    assert\
+        \ abs(box_center-text_center)<=0.5\nprint('PASS V31.8.12: all three bars aligned with real text centres.')\n\
+        PY\n"
     - name: V31.8.8 Interaktive Menuefunktionen und Spiel pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'PYV3188'\nimport os,re\nfrom pathlib import Path\ns=(Path(os.environ['PROJECT_DIR'])/'src'/'main.c').read_text(encoding='utf-8')\n\
         for x in ('static void vt_v3188_tile(', 'static void vt_v3172_menu_slots(',\n          'vt_v314_blink%64u', 'vt_v314_opt_cursor',\
-        \ 'vt_v3187_pixels',\n          'vt_v3172_menu_slots();', 'vt_load_game(void)', 'vt_save_game(void)'):\n    if x not\
-        \ in s: raise SystemExit('FEHLER: Funktion fehlt: '+x)\nassert s.count('static void vt_v3172_menu_slots(')==1\nprint('V31.8.8:\
-        \ Menue-Overlay und Spielsysteme erhalten.')\nPYV3188\n"
+        \ 'vt_v3187_pixels',\n          'vt_v3172_menu_slots();', 'vt_load_game(void)', 'vt_save_game(void)'):\n    if\
+        \ x not in s: raise SystemExit('FEHLER: Funktion fehlt: '+x)\nassert s.count('static void vt_v3172_menu_slots(')==1\n\
+        print('V31.8.8: Menue-Overlay und Spielsysteme erhalten.')\nPYV3188\n"
     - name: 'Basis 50: V31.8.1 Basis | V31.6 Basis | PS1 SDK installieren'
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
@@ -573,24 +642,22 @@ jobs:
     - name: 'Basis 54: V31.8.1 Basis | PS1 Dateien vor Upload pruefen'
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 54
-    - name: V31.8.12 Artefakt eindeutig kennzeichnen
+    - name: V31.8.13 Artefakt eindeutig kennzeichnen
       shell: bash
       run: 'set -euo pipefail
 
-        printf ''%s
+        printf ''%s\n'' ''LYDRA WORLD OF DRAGON V31.8.13'' ''Nach 7 Sekunden blinkt START; START-Taste oeffnet die drei
+        Menuepunkte.'' > artifacts/VERSION_V31_8_13.txt
 
-        '' ''LYDRA WORLD OF DRAGON V31.8.12'' ''Auswahl-Rahmen: 136 152 168; Glyph-Zentren: 144 160 176'' ''Build: 31.8.12''
-        > artifacts/VERSION_V31_8_12.txt
-
-        cat artifacts/VERSION_V31_8_12.txt
+        cat artifacts/VERSION_V31_8_13.txt
 
         '
     - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-PS1-V31-8-12-MENUE-EXAKT-NEU
+        name: Lydra-PS1-V31-8-13-BLINKENDES-START
         path: 'artifacts/VTRAIL.*
 
-          artifacts/VERSION_V31_8_12.txt'
+          artifacts/VERSION_V31_8_13.txt'
         if-no-files-found: error
         retention-days: 14
