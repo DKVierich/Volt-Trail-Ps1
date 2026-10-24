@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.4.2 - PROJECT_DIR und Build repariert
+name: Lydra World Of Dragon V31.9.4.3 - Schnelleres Laufen und Kameradrehen
 'on':
   workflow_dispatch: {}
 permissions:
@@ -1133,6 +1133,55 @@ jobs:
         assert s.count('static void vt_v300_extend_ground(')==1
         print('V31.9.4: FPS diagnostic present and gameplay preserved.')
         LYDRA_V3194_CHECK
+    - name: V31.9.4.3 Laufen und Kamera 25 Prozent schneller
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'LYDRA_V31943_SPEED'
+        import os
+        from pathlib import Path
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text(encoding='utf-8')
+        if s.count('static void vt_v293_move(unsigned int pad)')!=1:
+            raise RuntimeError('V31.9.2 movement function missing or duplicated')
+        if s.count('V31.9.2: movement and camera use elapsed video refreshes')!=1:
+            raise RuntimeError('Expected tested V31.9.2 frame time movement missing')
+        # Local-only values: geometry, collision, clock and rendering stay intact.
+        changes=(
+            ('target=forward*14336;', 'target=forward*17920;'),
+            ('desired_turn=turn*36*256;', 'desired_turn=turn*45*256;'),
+            ('speed_q10+=3072*dt;', 'speed_q10+=3840*dt;'),
+            ('speed_q10-=3072*dt;', 'speed_q10-=3840*dt;'),
+            ('36 angle units / vblank', '45 angle units / vblank'),
+        )
+        for old,new in changes:
+            if s.count(old)!=1:
+                raise RuntimeError('Unsafe speed patch: expected exactly one: '+old)
+            s=s.replace(old,new,1)
+        for old,new in changes:
+            if s.count(new)!=1:raise RuntimeError('Missing speed result: '+new)
+        p.write_text(s,encoding='utf-8')
+        print('V31.9.4.3: run speed, camera speed, acceleration +25%; rendering unchanged')
+        LYDRA_V31943_SPEED
+    - name: V31.9.4.3 Steuerung und Spielsysteme absichern
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'LYDRA_V31943_CHECK'
+        import os
+        from pathlib import Path
+        s=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')
+        required=(
+            'target=forward*17920;', 'desired_turn=turn*45*256;',
+            'speed_q10+=3840*dt;', 'speed_q10-=3840*dt;',
+            'vt_v281_resolve_movement();', 'vt_v31813_draw_start(',
+            'vt_v3172_menu_slots(', 'vt_save_game(void)', 'vt_load_game(void)',
+            'vt_v3194_perf_hud(', 'const int near_step=180,near_cells=10;',
+        )
+        for marker in required:
+            if marker not in s:raise RuntimeError('Feature missing: '+marker)
+        print('V31.9.4.3 movement, FPS display, intro/menu and save/load intact')
+        LYDRA_V31943_CHECK
     - name: Basis 50
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
@@ -1202,16 +1251,16 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p artifacts
-        printf '%s\n'   'LYDRA WORLD OF DRAGON V31.9.4.2'   'RUNTIME: FPS-Anzeige unten rechts (F + zwei Ziffern)'   'Nahlandschaft 14x14 -> 10x10, Fernlandschaft unveraendert'   'FPS-Zaehler misst neue Weltbilder anhand PS1-VBlanks, nicht Bildschirmaufnahme-FPS.'   > artifacts/VERSION_V31_9_4.txt
-        for f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe VERSION_V31_9_4.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do
+        printf '%s\n'   'LYDRA WORLD OF DRAGON V31.9.4.3 (TEMPO +25%)'   'RUNTIME: FPS-Anzeige unten rechts (F + zwei Ziffern)'   'Nahlandschaft 14x14 -> 10x10, Fernlandschaft unveraendert'   'FPS-Zaehler misst neue Weltbilder anhand PS1-VBlanks, nicht Bildschirmaufnahme-FPS.'   'Tempo V31.9.4.3: Bewegung +25 Prozent, Kameraschwenk +25 Prozent'   > artifacts/VERSION_V31_9_4_3.txt
+        for f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe VERSION_V31_9_4_3.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do
             test -s "artifacts/$f" || { echo "::error::Fehlende Datei: artifacts/$f"; exit 1; }
         done
-        cat artifacts/VERSION_V31_9_4.txt
+        cat artifacts/VERSION_V31_9_4_3.txt
         cat artifacts/RENDERER_PRUEFUNG_V31_9_3_1.txt
     - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-PS1-V31-9-4-2-FPS-PROJEKTPFAD-FIX
+        name: Lydra-PS1-V31-9-4-3-TEMPO-PLUS-25
         path: artifacts/
         if-no-files-found: error
         retention-days: 14
