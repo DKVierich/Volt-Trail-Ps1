@@ -1058,6 +1058,235 @@ jobs:
         \          'vt_v3184_studio_8bpp','vt_v3182_menu_8bpp','vt_load_game(void)'):\n    if check not in s:raise\
         \ SystemExit('::error::8FPS video program missing: '+check)\nprint('OK: 40 compressed-color frames at 8fps,\
         \ 2-second 320x240 studio still.')\nPY\n"
+    - name: V31.8.6 Hochaufloesendes 7-Sekunden-Intro ohne Endbild einbauen
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > "$RUNNER_TEMP/lydra_v3186_patch.py" <<'LYDRA_3186_PY'
+        #!/usr/bin/env python3
+        from pathlib import Path
+        import os,re
+        from PIL import Image,ImageEnhance,ImageFilter
+
+        source=Path(os.environ['RUNNER_TEMP'])/'lydra_v318_video'
+        root=Path(os.environ['PROJECT_DIR'])/'src'
+        p=root/'main.c'
+        s=p.read_text(encoding='utf-8')
+
+        # Build a sharper 7-second animation with no static end screen.
+        # Keep 8 fps but increase spatial resolution to reduce visible pixelation.
+        base_frames=[]
+        for i in range(28):
+            f=source/('frame_%02d.jpg'%i)
+            if not f.is_file():
+                raise RuntimeError('Intro frame missing: '+str(f))
+            with Image.open(f) as im:
+                fr=im.convert('RGB').resize((256,192), Image.Resampling.LANCZOS)
+                fr=ImageEnhance.Brightness(fr).enhance(1.06)
+                fr=ImageEnhance.Contrast(fr).enhance(1.10)
+                fr=fr.filter(ImageFilter.UnsharpMask(radius=0.7, percent=135, threshold=2))
+                base_frames.append(fr.copy())
+        if len(base_frames)!=28:
+            raise RuntimeError('Expected 28 source frames')
+
+        frames=[]
+        for i in range(56):
+            j=i//2
+            if i % 2 == 0 or j >= 27:
+                picture=base_frames[min(j,27)].copy()
+            else:
+                picture=Image.blend(base_frames[j], base_frames[j+1], 0.5)
+            pal=picture.quantize(colors=16, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+            ids=list(pal.getdata())
+            rgb=(pal.getpalette() or [])[:48]
+            rgb.extend([0]*(48-len(rgb)))
+            packed=[]
+            for a in range(0,len(ids),4):
+                p0=ids[a] & 0x0F
+                p1=ids[a+1] & 0x0F
+                p2=ids[a+2] & 0x0F
+                p3=ids[a+3] & 0x0F
+                packed.append(p0 | (p1<<4) | (p2<<8) | (p3<<12))
+            colors=[]
+            for k in range(16):
+                r,g,b=rgb[k*3:k*3+3]
+                v=(r>>3)|((g>>3)<<5)|((b>>3)<<10)
+                colors.append(v if v else 0x8000)
+            frames.append((packed,colors))
+
+        if len(frames)!=56 or len(frames[0][0])!=12288:
+            raise RuntimeError('Unexpected packed frame size')
+
+        h=[
+            '/* V31.8.6 video: 56 frames, 256x192, 4bpp, 8fps, no still end screen. */',
+            '#ifndef LYDRA_V3186_ANIMATION_H',
+            '#define LYDRA_V3186_ANIMATION_H',
+            'static const unsigned short vt_v3186_pixels[56][12288] __attribute__((aligned(4))) = {'
+        ]
+        for pix,_ in frames:
+            h.append('{')
+            for a in range(0,len(pix),32):
+                h.append(','.join('0x%04x'%v for v in pix[a:a+32])+',')
+            h.append('},')
+        h.append('};')
+        h.append('static const unsigned short vt_v3186_palettes[56][16] __attribute__((aligned(4))) = {')
+        for _,pal in frames:
+            h.append('{'+','.join('0x%04x'%v for v in pal)+'},')
+        h += ['};','#endif']
+        (root/'lydra_v3186_animation.h').write_text('\n'.join(h)+'\n', encoding='utf-8')
+
+        def span(name):
+            rx=r'\bstatic\s+(?:void|int)\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
+            matches=list(re.finditer(rx,s,re.S))
+            if len(matches)!=1:
+                raise RuntimeError(f'Expected one C function {name}, got {len(matches)}')
+            i=matches[0].end(); depth=1; state='code'; begin=matches[0].start()
+            while depth and i < len(s):
+                ch=s[i]; nxt=s[i+1] if i+1 < len(s) else ''
+                if state=='code':
+                    if ch=='/' and nxt=='/': state='line'; i+=1
+                    elif ch=='/' and nxt=='*': state='block'; i+=1
+                    elif ch=='"': state='str'
+                    elif ch=="'": state='chr'
+                    elif ch=='{': depth += 1
+                    elif ch=='}': depth -= 1
+                elif state=='line':
+                    if ch=='\n': state='code'
+                elif state=='block':
+                    if ch=='*' and nxt=='/': state='code'; i+=1
+                else:
+                    if ch=='\\': i+=1
+                    elif (state=='str' and ch=='"') or (state=='chr' and ch=="'"): state='code'
+                i += 1
+            if depth != 0:
+                raise RuntimeError('Unclosed function '+name)
+            return begin,i
+
+        def swap(name,new):
+            global s
+            a,b=span(name)
+            s=s[:a]+new.strip()+'\n'+s[b:]
+
+        swap('vt_v314_choice_frame', r'''
+        static int vt_v314_choice_frame(void)
+        {
+            if(vt_v314_phase==-1) {
+                int f=(vt_v314_elapsed*8)/60;
+                if(f<0)f=0;
+                if(f>56)f=56;
+                return f;
+            }
+            return 57;
+        }
+        ''')
+
+        swap('vt_v314_draw', r'''
+        static void vt_v314_draw(void)
+        {
+            RECT r;
+            POLY_FT4 *q;
+            unsigned int a;
+            int current=vt_v314_choice_frame();
+            int side;
+            if(current<0)return;
+
+            if(current<56) {
+                if(vt_v314_vram_frame!=current) {
+                    DrawSync(0);
+                    setRECT(&r,640,0,64,192);
+                    LoadImage(&r,(u_long*)(void*)vt_v3186_pixels[current]);
+                    setRECT(&r,640,242,16,1);
+                    LoadImage(&r,(u_long*)(void*)vt_v3186_palettes[current]);
+                    DrawSync(0);
+                    vt_v314_vram_frame=current;
+                    vt_v3182_menu_uploaded=0;
+                    vt_v3184_studio_uploaded=0;
+                }
+                a=(prim_used+3u)&~3u;
+                if(a+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;
+                q=(POLY_FT4*)(prim_arena[db]+a);
+                prim_used=a+sizeof(POLY_FT4);
+                setPolyFT4(q);
+                setXY4(q,32,24,288,24,32,216,288,216);
+                setUV4(q,0,0,255,0,0,191,255,191);
+                setTPage(q,0,0,640,0);
+                q->clut=getClut(640,242);
+                setSemiTrans(q,0); setShadeTex(q,0);
+                setRGB0(q,128,128,128);
+                addPrim(ot[db],q);
+                return;
+            }
+
+            if(!vt_v3182_menu_uploaded) {
+                DrawSync(0);
+                setRECT(&r,640,0,160,240);
+                LoadImage(&r,(u_long*)(void*)vt_v3182_menu_8bpp);
+                setRECT(&r,640,242,256,1);
+                LoadImage(&r,(u_long*)(void*)vt_v3182_clut);
+                DrawSync(0);
+                vt_v3182_menu_uploaded=1;
+                vt_v3184_studio_uploaded=0;
+                vt_v314_vram_frame=57;
+            }
+            vt_v3172_menu_slots();
+
+            for(side=0;side<2;side++) {
+                int left=side?256:0;
+                int width=side?64:256;
+                a=(prim_used+3u)&~3u;
+                if(a+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;
+                q=(POLY_FT4*)(prim_arena[db]+a);
+                prim_used=a+sizeof(POLY_FT4);
+                setPolyFT4(q);
+                setXY4(q,left,0,left+width,0,left,240,left+width,240);
+                setUV4(q,0,0,width-1,0,0,239,width-1,239);
+                setTPage(q,1,0,side?768:640,0);
+                q->clut=getClut(640,242);
+                setSemiTrans(q,0); setShadeTex(q,0);
+                setRGB0(q,128,128,128);
+                addPrim(ot[db],q);
+            }
+        }
+        ''')
+
+        anchor='static void vt_v314_draw(void)'
+        if '#include "lydra_v3186_animation.h"' not in s:
+            idx=s.find(anchor)
+            if idx<0:
+                raise RuntimeError('Could not locate title draw anchor')
+            s=s[:idx] + '#include "lydra_v3186_animation.h"\n' + s[idx:]
+
+        for key in (
+            'vt_v3172_menu_slots();',
+            'vt_load_game(void)',
+            'vt_save_game(void)',
+            'vt_v281_resolve_movement();',
+            'vt_v3182_menu_8bpp'
+        ):
+            if key not in s:
+                raise RuntimeError('Missing existing system: '+key)
+        p.write_text(s, encoding='utf-8')
+        print('V31.8.6: 7-second sharper intro, 8fps, no end still, menu unchanged')
+        LYDRA_3186_PY
+        python3 "$RUNNER_TEMP/lydra_v3186_patch.py"
+    - name: V31.8.6 Intro ohne Endbild pruefen
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import os
+        from pathlib import Path
+        root=Path(os.environ['PROJECT_DIR'])/'src'
+        s=(root/'main.c').read_text(encoding='utf-8')
+        h=(root/'lydra_v3186_animation.h').read_text(encoding='utf-8')
+        for check in ('vt_v3186_pixels[56][12288]','vt_v3186_palettes[56][16]'):
+            if check not in h:
+                raise SystemExit('::error::V31.8.6 asset missing: '+check)
+        for check in ('(vt_v314_elapsed*8)/60','setRECT(&r,640,0,64,192)','setXY4(q,32,24,288,24,32,216,288,216)','return 57;','vt_v3172_menu_slots();'):
+            if check not in s:
+                raise SystemExit('::error::V31.8.6 code missing: '+check)
+        print('OK: V31.8.6 sharper 256x192 4bpp intro at 8fps, no final still image.')
+        PY
     - name: V31.8.1 Basis | V31.6 Basis | PS1 SDK installieren
       shell: bash
       run: 'set -euo pipefail
