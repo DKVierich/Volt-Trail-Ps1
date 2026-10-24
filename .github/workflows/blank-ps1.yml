@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.2 - Kamera und Bewegung fluessiger
+name: Lydra World Of Dragon V31.9.2.1 - Timing Pruefung repariert
 'on':
   workflow_dispatch: {}
 permissions:
@@ -1885,29 +1885,48 @@ jobs:
         print('V31.9.2: camera turn eased, motion frame-time compensated and collision preserved.')
         LYDRA_V3192_PATCH
         python3 "$RUNNER_TEMP/lydra_v3192_patch.py"
-    - name: V31.9.2 Timing-Fix und Spielsysteme sicher pruefen
+    - name: V31.9.2.1 Timing-Pruefung korrigiert – kein falscher Build-Abbruch
       shell: bash
       run: |
         set -euo pipefail
-        python3 - <<'LYDRA_V3192_CHECK'
+        python3 - <<'LYDRA_V31921_CHECK'
         import os,re
         from pathlib import Path
         source=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')
-        start=source.find('static void vt_v293_move(unsigned int pad)')
-        stop=source.find('static void vt_v292_',start)
-        if start<0:raise SystemExit('::error::V31.9.2 movement function missing')
-        block=source[start:stop if stop>start else start+4500]
-        for x in ('V31.9.2: movement and camera use elapsed video refreshes',
-                  'VSync(-1)','turn*36*256','target=forward*14336;',
+
+        # The descriptive comment is ABOVE the C function. V31.9.2 incorrectly
+        # searched for it inside the function, causing a false failure on step 65.
+        marker='V31.9.2: movement and camera use elapsed video refreshes'
+        if source.count(marker)!=1:
+            raise SystemExit('::error::V31.9.2 timing patch marker missing or duplicated')
+
+        # Extract the real function with balanced braces; do not use the next
+        # unrelated function name to guess where the code ends.
+        header=re.search(r'\bstatic\s+void\s+vt_v293_move\s*\(\s*unsigned\s+int\s+pad\s*\)\s*\{',source)
+        if not header:
+            raise SystemExit('::error::V31.9.2 movement function missing')
+        level=1
+        pos=header.end()
+        while pos<len(source) and level>0:
+            if source[pos]=='{':level+=1
+            elif source[pos]=='}':level-=1
+            pos+=1
+        if level!=0:
+            raise SystemExit('::error::V31.9.2 movement function has unbalanced braces')
+        block=source[header.start():pos]
+
+        for x in ('VSync(-1)','turn*36*256','target=forward*14336;',
                   'frac_x+=vx*dt;','vt_v292_yaw_target=vt_v292_cam_yaw;'):
-            if x not in block:raise SystemExit('::error::V31.9.2 missing feature: '+x)
+            if x not in block:
+                raise SystemExit('::error::V31.9.2 missing movement feature: '+x)
         for x in ('V31.9.1: lighter far-terrain LOD','V31.9.0: sparse distant objects',
                   'vt_v281_resolve_movement();','vt_v31813_draw_start(',
                   'vt_v3172_menu_slots(', 'vt_save_game(void)', 'vt_load_game(void)'):
-            if x not in source:raise SystemExit('::error::Retained gameplay feature missing: '+x)
-        print('V31.9.2 movement/camera: VBlank-time compensation and immediate camera stop on release.')
-        print('V31.9.1 landscape LOD, collision, saved game, intro, and title/menu retained.')
-        LYDRA_V3192_CHECK
+            if x not in source:
+                raise SystemExit('::error::Retained gameplay feature missing: '+x)
+        print('V31.9.2.1: timing code present; incorrect comment-boundary test repaired.')
+        print('Existing collision, menu, saves, and optimized landscape found.')
+        LYDRA_V31921_CHECK
     - name: 'Basis 50: V31.8.1 Basis | V31.6 Basis | PS1 SDK installieren'
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
@@ -1944,20 +1963,13 @@ jobs:
         printf '%s
         ' 'LYDRA WORLD OF DRAGON V31.9.1' 'Leichtere Fernlandschaft; Startmenue V31.8.14 beibehalten.' > artifacts/VERSION_V31_9_1.txt
         cat artifacts/VERSION_V31_9_1.txt
-    - name: V31.9.2 Eindeutige Build-Version fuer RetroArch
+    - name: V31.9.2.1 Neues Artefakt eindeutig kennzeichnen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p artifacts
-        printf '%s
-        ' 'LYDRA WORLD OF DRAGON V31.9.2' 'Zeitbasierte Bewegung / gedämpfte Kameradrehung / Fernlandschaft V31.9.1' > artifacts/VERSION_V31_9_2.txt
-        cat artifacts/VERSION_V31_9_2.txt
+        printf '%s\n' 'LYDRA WORLD OF DRAGON V31.9.2.1' 'Timing-Pruefung repariert; Bewegungs- und Kameracode V31.9.2 unveraendert' > artifacts/VERSION_V31_9_2_1.txt
+        cat artifacts/VERSION_V31_9_2_1.txt
     - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
-      with:
-        name: Lydra-PS1-V31-9-2-KAMERA-FLUSS
-        path: |-
-          artifacts/VTRAIL.*
-          artifacts/VERSION_V31_9_2.txt
-        if-no-files-found: error
-        retention-days: 14
+   
