@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.0 - Landschaft und Horizont
+name: Lydra World Of Dragon V31.9.1 - Performance und flüssigere Landschaft
 'on':
   workflow_dispatch: {}
 permissions:
@@ -1570,6 +1570,169 @@ jobs:
             if code not in s:raise SystemExit('Missing expected V31.9.0 component: '+code)
         print('OK: expanded visual terrain with original flat player ground and existing controls.')
         LYDRA_V3190_CHECK
+    - name: V31.9.1 PS1 Gelaende-LOD und Sichtbereich optimieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > "$RUNNER_TEMP/lydra_v3191_patch.py" <<'LYDRA_V3191_PATCH'
+        #!/usr/bin/env python3
+        """V31.9.1 PS1 world rendering optimization, no gameplay or save changes.
+        Reduce off-screen render work and far LOD while preserving near ground and 360-degree map.
+        """
+        from pathlib import Path
+        import os, re
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text(encoding='utf-8')
+
+        def replace_function(name, new):
+            global s
+            matches=list(re.finditer(r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{',s,re.S))
+            if len(matches)!=1:
+                raise RuntimeError(f'Expected one definition {name}, found {len(matches)}')
+            start=matches[0].start();i=matches[0].end();depth=1;mode='code'
+            while i<len(s) and depth:
+                ch=s[i];n=s[i+1] if i+1<len(s) else ''
+                if mode=='code':
+                    if ch=='/' and n=='/':mode='line';i+=1
+                    elif ch=='/' and n=='*':mode='block';i+=1
+                    elif ch=='"':mode='str'
+                    elif ch=="'":mode='chr'
+                    elif ch=='{':depth+=1
+                    elif ch=='}':depth-=1
+                elif mode=='line':
+                    if ch=='\n':mode='code'
+                elif mode=='block':
+                    if ch=='*' and n=='/':mode='code';i+=1
+                else:
+                    if ch=='\\':i+=1
+                    elif (mode=='str' and ch=='"') or (mode=='chr' and ch=="'"):mode='code'
+                i+=1
+            if depth:raise RuntimeError('Unbalanced braces '+name)
+            s=s[:start]+new.strip()+"\n"+s[i:]
+
+        replace_function('vt_v300_extend_ground',r'''
+        /* V31.9.1: lighter far-terrain LOD; near terrain/collision exactly V31.9.0. */
+        static void vt_v300_extend_ground(void) {
+            int ix,iz,gx,gz,r1,g1,b1,r2,g2,b2;
+            const int near_step=180,near_cells=14;
+            const int far_step=560,far_cells=12;
+            if(region==1){r1=84;g1=134;b1=128;r2=62;g2=108;b2=112;}
+            else if(region==2){r1=116;g1=143;b1=87;r2=78;g2=111;b2=77;}
+            else {r1=85;g1=162;b1=90;r2=54;g2=132;b2=75;}
+            /* Same 360-degree coverage: 6720 world units versus 6580 in V31.9.0.
+               12x12 instead of 14x14 far tiles: 52 fewer base polygons/tiles. */
+            gx=(px/far_step)*far_step-(far_cells/2)*far_step;
+            gz=(pz/far_step)*far_step-(far_cells/2)*far_step;
+            for(iz=0;iz<far_cells;iz++)for(ix=0;ix<far_cells;ix++) {
+                int x=gx+ix*far_step,z=gz+iz*far_step;
+                int dx=x+far_step/2-px,dz=z+far_step/2-pz;
+                int h,shade,warm;
+                /* Keep the inner region drawn by the existing high-detail ground. */
+                if(vt_v300_abs(dx)+far_step/2<850 &&
+                   vt_v300_abs(dz)+far_step/2<850)continue;
+                /* Skip far tiles well BEHIND the current view, not alongside it.
+                   The 900-unit safety margin covers camera turns and wide quads. */
+                if(vt_v300_forward(dx,dz)<-900)continue;
+                h=vt_v300_hash(x,z);
+                shade=(h>>4)&3;
+                warm=(h>>7)&1;
+                vt_v241_flat(x,z,x+far_step,z+far_step,44,
+                    r1-shade*2+warm*2,g1-shade*2+warm,b1-shade+warm);
+            }
+            /* Identical near geometry and original player collision floor. */
+            gx=(px/near_step)*near_step-(near_cells/2)*near_step;
+            gz=(pz/near_step)*near_step-(near_cells/2)*near_step;
+            vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,
+                                r1,g1,b1,r2,g2,b2);
+        }
+        ''')
+        replace_function('vt_v300_horizon',r'''
+        /* V31.9.1: lower-cost distant LOD, still a 360-degree world skyline. */
+        static void vt_v300_horizon(void) {
+            int i;
+            for(i=0;i<16;i++) {
+                int angle=(i*4096)/16;
+                int x=px+(vt_v293_sin(angle)*2750)/1024;
+                int z=pz+(vt_v293_cos(angle)*2750)/1024;
+                int height=235+((i*11+region*7)%7)*31;
+                int red=90,green=138,blue=174;
+                if(vt_v300_forward(x-px,z-pz)<-260)continue;
+                if(region==1){red=100;green=154;blue=191;height+=85;}
+                else if(region==2){red=111;green=139;blue=160;height+=43;}
+                vt_v24_peak(x,z,1000,height,red,green,blue);
+                if((i&1)==0) {
+                    int fx=px+(vt_v293_sin(angle)*2060)/1024;
+                    int fz=pz+(vt_v293_cos(angle)*2060)/1024;
+                    vt_v24_peak(fx,fz,610,90+(i%4)*19,
+                        red>18?red-18:red,green>15?green-15:green,
+                        blue>15?blue-15:blue);
+                }
+            }
+        }
+        ''')
+        replace_function('vt_v300_mid_detail',r'''
+        /* V31.9.1: fewer distant trees, player-adjacent NPCs and houses unchanged. */
+        static void vt_v300_mid_detail(void) {
+            int ix,iz,amount=0;
+            int x0=(px/300)*300-1500;
+            int z0=(pz/300)*300-1500;
+            for(iz=0;iz<11;iz++)for(ix=0;ix<11;ix++) {
+                int x=x0+ix*300,z=z0+iz*300;
+                int dx=x-px,dz=z-pz;
+                int h=vt_v300_hash(x,z);
+                if(vt_v300_abs(dx)<500 && vt_v300_abs(dz)<500)continue;
+                if(vt_v300_abs(dx)>1450 || vt_v300_abs(dz)>1450)continue;
+                if(!vt_v300_in_view(dx,dz,230))continue;
+                if((h&7)>2 || amount>=12)continue;
+                if(vt_v300_abs(x)<155)continue;
+                if(region==0 && vt_v300_abs(x)<720 && vt_v300_abs(z)<720)continue;
+                if(region==1) {
+                    draw_box(x,16,z,10+(h&3),72,150,181);
+                    vt_pyramid(x,-14,z,13+(h&3),27+(h&7),125,207,232);
+                } else {
+                    vt_v24_tree(x,z,10+((h>>3)&7),((h>>5)%3));
+                }
+                amount++;
+            }
+        }
+        ''')
+        for marker in ('vt_v281_resolve_movement();','vt_v293_move((unsigned int)pad);',
+                       'vt_v31813_draw_start(','vt_v3172_menu_slots',
+                       'vt_save_game(void)','vt_load_game(void)','V31.9.1: lighter far-terrain LOD'):
+            if marker not in s:raise RuntimeError('Missing retained feature '+marker)
+        p.write_text(s,encoding='utf-8')
+        print('V31.9.1: 12x12 far tiles (was 14x14), rear culling, 16/8 peaks, 12 distant objects.')
+        print('Near-player ground, movement, collision, intro, menus and memory card unchanged.')
+        LYDRA_V3191_PATCH
+        python3 "$RUNNER_TEMP/lydra_v3191_patch.py"
+    - name: V31.9.1 Performance-Geometrie und Spielfunktionen pruefen
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'LYDRA_V3191_CHECK'
+        from pathlib import Path
+        import os
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text(encoding='utf-8')
+        checks=[
+        'V31.9.1: lighter far-terrain LOD',
+        'far_step=560,far_cells=12',
+        'near_step=180,near_cells=14',
+        'vt_v300_forward(dx,dz)<-900',
+        'for(i=0;i<16;i++)',
+        'amount>=12',
+        'vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,',
+        'vt_v293_move((unsigned int)pad);',
+        'vt_v281_resolve_movement();',
+        'vt_v31813_draw_start(',
+        'vt_v3172_menu_slots',
+        'vt_load_game(void)',
+        'vt_save_game(void)'
+        ]
+        for c in checks:
+            if c not in s:raise SystemExit('V31.9.1 expected code missing: '+c)
+        print('V31.9.1: LOD lower complexity, all gameplay and UI retained.')
+        LYDRA_V3191_CHECK
     - name: 'Basis 50: V31.8.1 Basis | V31.6 Basis | PS1 SDK installieren'
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
@@ -1598,13 +1761,20 @@ jobs:
         mkdir -p artifacts
         printf '%s\n' 'LYDRA WORLD OF DRAGON V31.9.0' 'Gelände und Horizont überarbeitet; Titelmenü V31.8.14 erhalten.' > artifacts/VERSION_V31_9_0.txt
         cat artifacts/VERSION_V31_9_0.txt
+    - name: V31.9.1 Neues Artefakt eindeutig kennzeichnen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p artifacts
+        printf '%s
+        ' 'LYDRA WORLD OF DRAGON V31.9.1' 'Leichtere Fernlandschaft; Startmenue V31.8.14 beibehalten.' > artifacts/VERSION_V31_9_1.txt
+        cat artifacts/VERSION_V31_9_1.txt
     - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-World-Of-Dragon-PS1-V31-9-0-LANDSCHAFT
+        name: Lydra-PS1-V31-9-1-PERFORMANCE-LOD
         path: |-
           artifacts/VTRAIL.*
-          artifacts/VERSION_V31_9_0.txt
-          artifacts/VERSION_V31_8_14.txt
+          artifacts/VERSION_V31_9_1.txt
         if-no-files-found: error
         retention-days: 14
