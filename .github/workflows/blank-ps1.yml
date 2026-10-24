@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.5 - Bessere 3D-Landschaft mit stabilem Tempo
+name: Lydra World Of Dragon V31.9.6 - Weite Welt und Landschaften
 'on':
   workflow_dispatch: {}
 permissions:
@@ -1298,6 +1298,36 @@ jobs:
         if s.count('for(i=0;i<14;i++)')<1:raise RuntimeError('Wrong horizon budget')
         print('V31.9.5 graphics present; no new ground cells or extra vegetation')
         LYDRA_V3195_VERIFY
+    - name: V31.9.6 Mehr Landschaftstiefe und regionale Natur
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'LYDRA_3196'
+        import os,re
+        from pathlib import Path
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text()
+        def swap(a,b):
+            global s
+            if s.count(a)!=1:raise RuntimeError('V31.9.6 source mismatch: '+a[:65])
+            s=s.replace(a,b,1)
+        # More varied silhouettes at the same 14+7 peak budget.
+        swap('int height=215+((seed>>3)&3)*29;', 'int height=185+((seed>>3)&7)*24;')
+        swap('int fh=75+((seed>>7)&3)*23;', 'int fh=64+((seed>>7)&7)*14;')
+        # Increase the distance of the far ring, not its polygon count.
+        swap('2800+(i%3)*110', '3060+(i%4)*130')
+        swap('vt_v293_sin(angle)*2100', 'vt_v293_sin(angle)*2350')
+        swap('vt_v293_cos(angle)*2100', 'vt_v293_cos(angle)*2350')
+        # Different natural tree silhouettes without adding draw calls.
+        swap('vt_v24_tree(x,z,10+((h>>3)&11),((h>>6)%3));',
+             'vt_v24_tree(x,z,11+((h>>3)&15),((h>>6)%3));')
+        for marker in ('near_cells=10','far_cells=12','amount>=8',
+                       'target=forward*17920;','desired_turn=turn*45*256;',
+                       'vt_v3194_perf_hud(','vt_save_game(void)'):
+            if marker not in s:raise RuntimeError('Lost stable feature '+marker)
+        p.write_text(s)
+        print('V31.9.6: deeper mountain horizon, varied ridges and trees; same geometry budget')
+        LYDRA_3196
     - name: Basis 50
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
@@ -1367,16 +1397,16 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p artifacts
-        printf '%s\n'   'LYDRA WORLD OF DRAGON V31.9.5 (GRAFIK + TEMPO)'   'RUNTIME: FPS-Anzeige unten rechts (F + zwei Ziffern)'   'Nahlandschaft 14x14 -> 10x10, Fernlandschaft unveraendert'   'FPS-Zaehler misst neue Weltbilder anhand PS1-VBlanks, nicht Bildschirmaufnahme-FPS.'   'Tempo V31.9.4.3: +25 Prozent beibehalten' 'V31.9.5: sanftere Farbkontraste, breite Berge und variable Baumgroessen'   > artifacts/VERSION_V31_9_5.txt
-        for f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe VERSION_V31_9_5.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do
+        printf '%s\n'   'LYDRA WORLD OF DRAGON V31.9.6 (WEITE WELT)'   'RUNTIME: FPS-Anzeige unten rechts (F + zwei Ziffern)'   'Nahlandschaft 14x14 -> 10x10, Fernlandschaft unveraendert'   'FPS-Zaehler misst neue Weltbilder anhand PS1-VBlanks, nicht Bildschirmaufnahme-FPS.'   'Tempo V31.9.4.3: +25 Prozent beibehalten' 'V31.9.5: sanftere Farbkontraste, breite Berge und variable Baumgroessen'   > artifacts/VERSION_V31_9_6.txt
+        for f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe VERSION_V31_9_6.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do
             test -s "artifacts/$f" || { echo "::error::Fehlende Datei: artifacts/$f"; exit 1; }
         done
-        cat artifacts/VERSION_V31_9_5.txt
+        cat artifacts/VERSION_V31_9_6.txt
         cat artifacts/RENDERER_PRUEFUNG_V31_9_3_1.txt
     - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-PS1-V31-9-5-GRAFIK-LOD
+        name: Lydra-PS1-V31-9-6-WEITE-WELT
         path: artifacts/
         if-no-files-found: error
         retention-days: 14
