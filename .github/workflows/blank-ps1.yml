@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.6.1 - Bergkoordinaten Fix
+name: Lydra World Of Dragon V31.9.7 - Wiesen und Waldlandschaften
 'on':
   workflow_dispatch: {}
 permissions:
@@ -24,14 +24,15 @@ jobs:
         \ncurl --fail --location --silent --show-error --retry 3 \"$BASE_URL\" -o \"$RUNNER_TEMP/lydra_v3185_base.yml\"\
         \npython3 - <<'PY_REPLAY'\nimport os,json,yaml,hashlib\nfrom pathlib import Path\nroot=Path(os.environ['RUNNER_TEMP'])\n\
         b=(root/'lydra_v3185_base.yml').read_bytes()\nchecksum=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\\0'+b).hexdigest()\n\
-        if checksum != '5f4aaafe69115d25c482c5a533f972aa8ee16102':\n    raise RuntimeError('Stable source does not match\
-        \ pinned original: '+checksum)\nw=yaml.safe_load(b)\ns=w['jobs']['build']['steps']\nif len(s)!=56 or s[55].get('uses')!='actions/upload-artifact@v4':\n\
-        \    raise RuntimeError('Unexpected stable step structure')\n(root/'lydra_v3185_replay_steps.json').write_text(json.dumps([x.get('run')\
-        \ for x in s],ensure_ascii=False),encoding='utf-8')\n(root/'lydra_v3185_replay.py').write_text('''import sys,os,json,subprocess\n\
-        from pathlib import Path\np=Path(os.environ[\"RUNNER_TEMP\"])/\"lydra_v3185_replay_steps.json\"\ns=json.loads(p.read_text(encoding=\"\
-        utf-8\"))\ni=int(sys.argv[1])\nif i<2 or i>54 or not isinstance(s[i],str):\n    raise RuntimeError(\"Invalid\
-        \ base step: \"+str(i))\nsubprocess.run([\"bash\",\"-euo\",\"pipefail\",\"-c\",s[i]],check=True)\n''',encoding='utf-8')\n\
-        print('Pinned successful V31.8.5 base verified: 56 steps')\nPY_REPLAY"
+        if checksum != '5f4aaafe69115d25c482c5a533f972aa8ee16102':\n    raise RuntimeError('Stable source does not\
+        \ match pinned original: '+checksum)\nw=yaml.safe_load(b)\ns=w['jobs']['build']['steps']\nif len(s)!=56\
+        \ or s[55].get('uses')!='actions/upload-artifact@v4':\n    raise RuntimeError('Unexpected stable step structure')\n\
+        (root/'lydra_v3185_replay_steps.json').write_text(json.dumps([x.get('run') for x in s],ensure_ascii=False),encoding='utf-8')\n\
+        (root/'lydra_v3185_replay.py').write_text('''import sys,os,json,subprocess\nfrom pathlib import Path\np=Path(os.environ[\"\
+        RUNNER_TEMP\"])/\"lydra_v3185_replay_steps.json\"\ns=json.loads(p.read_text(encoding=\"utf-8\"))\ni=int(sys.argv[1])\n\
+        if i<2 or i>54 or not isinstance(s[i],str):\n    raise RuntimeError(\"Invalid base step: \"+str(i))\nsubprocess.run([\"\
+        bash\",\"-euo\",\"pipefail\",\"-c\",s[i]],check=True)\n''',encoding='utf-8')\nprint('Pinned successful V31.8.5\
+        \ base verified: 56 steps')\nPY_REPLAY"
     - name: Basis 02
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 2
@@ -232,61 +233,64 @@ jobs:
         LYDRA_V3187_WEBP\ncat > \"$RUNNER_TEMP/lydra_v3187_patch.py\" <<'LYDRA_V3187_PATCH'\n#!/usr/bin/env python3\n\
         # V31.8.7: source frames, 256x192, 256 colors, 8fps GPU crossfade.\n# No final still; keep original game/menu/save/option\
         \ handling.\nimport os,re\nfrom pathlib import Path\nfrom PIL import Image, ImageSequence\nsource=Path(os.environ['RUNNER_TEMP'])/'lydra_v3187_source.webp'\n\
-        project=Path(os.environ['PROJECT_DIR'])/'src'\nmain=project/'main.c'\ns=main.read_text(encoding='utf-8')\nwith\
-        \ Image.open(source) as im:\n    frames=[fr.convert('RGB').copy() for fr in ImageSequence.Iterator(im)]\nif len(frames)!=28\
-        \ or any(x.size!=(256,192) for x in frames):\n    raise RuntimeError('Originalvideo: 28 Bilder 256x192 erforderlich')\n\
-        \npixels=[]\npalettes=[]\nfor im in frames:\n    # 8bpp, full 256 colors for the entire frame. No 16-color posterization.\n\
-        \    q=im.quantize(colors=256,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)\n    ids=bytes(q.getdata())\n\
-        \    pal=(q.getpalette() or [])[:768]\n    pal.extend([0]*(768-len(pal)))\n    packed=[ids[i] | ids[i+1]<<8 for\
-        \ i in range(0,49152,2)]\n    clut=[]\n    for i in range(256):\n        r,g,b=pal[3*i:3*i+3]\n        # Set\
-        \ STP to let the GPU crossfade images on every alternate 1/8 second.\n        clut.append((r>>3)|((g>>3)<<5)|((b>>3)<<10)|0x8000)\n\
-        \    pixels.append(packed)\n    palettes.append(clut)\n\nh=['/* 28 original MP4 frames, 256x192 PS1 8bpp, GPU\
-        \ crossfade to 8fps. */',\n   '#ifndef LYDRA_V3187_MOVIE_H',\n   '#define LYDRA_V3187_MOVIE_H',\n   'static const\
-        \ unsigned short vt_v3187_pixels[28][24576] __attribute__((aligned(4)))={']\nfor frame in pixels:\n    h.append('{')\n\
-        \    for a in range(0,len(frame),32):\n        h.append(','.join('0x%04x'%v for v in frame[a:a+32])+',')\n  \
-        \  h.append('},')\nh.append('};')\nh.append('static const unsigned short vt_v3187_palettes[28][256] __attribute__((aligned(4)))={')\n\
-        for pal in palettes:\n    h.append('{'+','.join('0x%04x'%v for v in pal)+'},')\nh.extend(['};','#endif'])\n(project/'lydra_v3187_movie.h').write_text('\\\
-        n'.join(h)+'\\n',encoding='utf-8')\n\ndef fspan(name):\n    rx=r'\\bstatic\\s+(?:int|void)\\s+'+re.escape(name)+r'\\\
-        s*\\([^;]*?\\)\\s*\\{'\n    matches=list(re.finditer(rx,s,re.S))\n    if len(matches)!=1:raise RuntimeError('Function\
+        project=Path(os.environ['PROJECT_DIR'])/'src'\nmain=project/'main.c'\ns=main.read_text(encoding='utf-8')\n\
+        with Image.open(source) as im:\n    frames=[fr.convert('RGB').copy() for fr in ImageSequence.Iterator(im)]\n\
+        if len(frames)!=28 or any(x.size!=(256,192) for x in frames):\n    raise RuntimeError('Originalvideo: 28\
+        \ Bilder 256x192 erforderlich')\n\npixels=[]\npalettes=[]\nfor im in frames:\n    # 8bpp, full 256 colors\
+        \ for the entire frame. No 16-color posterization.\n    q=im.quantize(colors=256,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)\n\
+        \    ids=bytes(q.getdata())\n    pal=(q.getpalette() or [])[:768]\n    pal.extend([0]*(768-len(pal)))\n\
+        \    packed=[ids[i] | ids[i+1]<<8 for i in range(0,49152,2)]\n    clut=[]\n    for i in range(256):\n  \
+        \      r,g,b=pal[3*i:3*i+3]\n        # Set STP to let the GPU crossfade images on every alternate 1/8 second.\n\
+        \        clut.append((r>>3)|((g>>3)<<5)|((b>>3)<<10)|0x8000)\n    pixels.append(packed)\n    palettes.append(clut)\n\
+        \nh=['/* 28 original MP4 frames, 256x192 PS1 8bpp, GPU crossfade to 8fps. */',\n   '#ifndef LYDRA_V3187_MOVIE_H',\n\
+        \   '#define LYDRA_V3187_MOVIE_H',\n   'static const unsigned short vt_v3187_pixels[28][24576] __attribute__((aligned(4)))={']\n\
+        for frame in pixels:\n    h.append('{')\n    for a in range(0,len(frame),32):\n        h.append(','.join('0x%04x'%v\
+        \ for v in frame[a:a+32])+',')\n    h.append('},')\nh.append('};')\nh.append('static const unsigned short\
+        \ vt_v3187_palettes[28][256] __attribute__((aligned(4)))={')\nfor pal in palettes:\n    h.append('{'+','.join('0x%04x'%v\
+        \ for v in pal)+'},')\nh.extend(['};','#endif'])\n(project/'lydra_v3187_movie.h').write_text('\\n'.join(h)+'\\\
+        n',encoding='utf-8')\n\ndef fspan(name):\n    rx=r'\\bstatic\\s+(?:int|void)\\s+'+re.escape(name)+r'\\s*\\\
+        ([^;]*?\\)\\s*\\{'\n    matches=list(re.finditer(rx,s,re.S))\n    if len(matches)!=1:raise RuntimeError('Function\
         \ count '+name+': '+str(len(matches)))\n    start=matches[0].start();i=matches[0].end();depth=1;state='code'\n\
-        \    while i<len(s) and depth:\n        c=s[i];n=s[i+1] if i+1<len(s) else ''\n        if state=='code':\n  \
-        \          if c=='/' and n=='/': state='line';i+=1\n            elif c=='/' and n=='*':state='block';i+=1\n \
-        \           elif c=='\"':state='string'\n            elif c==\"'\":state='char'\n            elif c=='{':depth+=1\n\
-        \            elif c=='}':depth-=1\n        elif state=='line':\n            if c=='\\n':state='code'\n      \
-        \  elif state=='block':\n            if c=='*' and n=='/':state='code';i+=1\n        elif c=='\\\\':i+=1\n  \
-        \      elif (state=='string' and c=='\"') or (state=='char' and c==\"'\"):state='code'\n        i+=1\n    if\
-        \ depth:raise RuntimeError('Unbalanced braces '+name)\n    return start,i\n\ndef swap(name,body):\n    global\
-        \ s\n    a,b=fspan(name)\n    s=s[:a]+body.strip()+'\\n'+s[b:]\n\nswap('vt_v314_choice_frame',r'''\nstatic int\
-        \ vt_v314_choice_frame(void) {\n    if(vt_v314_phase==-1) {\n        int f=(vt_v314_elapsed*2)/15; /* 8 image\
-        \ changes/sec at NTSC 60Hz */\n        if(f<0)f=0;\n        if(f>55)f=55;\n        return f;\n    }\n    return\
-        \ 56; /* interactive menu immediately after original 7 seconds */\n}\n''')\n\nswap('vt_v314_draw',r'''\nstatic\
-        \ void vt_v314_draw(void) {\n    RECT r;\n    POLY_FT4 *q;\n    unsigned int a;\n    int current=vt_v314_choice_frame();\n\
-        \    int side;\n    if(current<0)return;\n\n    if(current<56) {\n        int frame=current/2;\n        int next=frame<27?frame+1:27;\n\
-        \        int layer;\n        /* Two full 256-color movie frames are cached in VRAM.\n           Every odd 1/8-second,\
-        \ PS1 GPU blends the frames 50/50,\n           so there are 8 visible steps/s using 4 source images/s. */\n \
-        \       if(vt_v314_vram_frame/2!=frame || vt_v314_vram_frame<0) {\n            DrawSync(0);\n            setRECT(&r,640,0,128,192);\n\
-        \            LoadImage(&r,(u_long*)(void*)vt_v3187_pixels[frame]);\n            setRECT(&r,768,0,128,192);\n\
-        \            LoadImage(&r,(u_long*)(void*)vt_v3187_pixels[next]);\n            setRECT(&r,640,242,256,1);\n \
-        \           LoadImage(&r,(u_long*)(void*)vt_v3187_palettes[frame]);\n            setRECT(&r,640,243,256,1);\n\
-        \            LoadImage(&r,(u_long*)(void*)vt_v3187_palettes[next]);\n            DrawSync(0);\n            vt_v314_vram_frame=current;\n\
-        \            vt_v3182_menu_uploaded=0;\n        }\n        /* addPrim prepends: enqueue translucent overlay first\
-        \ so that\n           the opaque base is rendered before the 50% overlay. */\n        for(layer=(current&1)?1:0;layer>=0;layer--)\
-        \ {\n            a=(prim_used+3u)&~3u;\n            if(a+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;\n  \
+        \    while i<len(s) and depth:\n        c=s[i];n=s[i+1] if i+1<len(s) else ''\n        if state=='code':\n\
+        \            if c=='/' and n=='/': state='line';i+=1\n            elif c=='/' and n=='*':state='block';i+=1\n\
+        \            elif c=='\"':state='string'\n            elif c==\"'\":state='char'\n            elif c=='{':depth+=1\n\
+        \            elif c=='}':depth-=1\n        elif state=='line':\n            if c=='\\n':state='code'\n \
+        \       elif state=='block':\n            if c=='*' and n=='/':state='code';i+=1\n        elif c=='\\\\\
+        ':i+=1\n        elif (state=='string' and c=='\"') or (state=='char' and c==\"'\"):state='code'\n      \
+        \  i+=1\n    if depth:raise RuntimeError('Unbalanced braces '+name)\n    return start,i\n\ndef swap(name,body):\n\
+        \    global s\n    a,b=fspan(name)\n    s=s[:a]+body.strip()+'\\n'+s[b:]\n\nswap('vt_v314_choice_frame',r'''\n\
+        static int vt_v314_choice_frame(void) {\n    if(vt_v314_phase==-1) {\n        int f=(vt_v314_elapsed*2)/15;\
+        \ /* 8 image changes/sec at NTSC 60Hz */\n        if(f<0)f=0;\n        if(f>55)f=55;\n        return f;\n\
+        \    }\n    return 56; /* interactive menu immediately after original 7 seconds */\n}\n''')\n\nswap('vt_v314_draw',r'''\n\
+        static void vt_v314_draw(void) {\n    RECT r;\n    POLY_FT4 *q;\n    unsigned int a;\n    int current=vt_v314_choice_frame();\n\
+        \    int side;\n    if(current<0)return;\n\n    if(current<56) {\n        int frame=current/2;\n       \
+        \ int next=frame<27?frame+1:27;\n        int layer;\n        /* Two full 256-color movie frames are cached\
+        \ in VRAM.\n           Every odd 1/8-second, PS1 GPU blends the frames 50/50,\n           so there are 8\
+        \ visible steps/s using 4 source images/s. */\n        if(vt_v314_vram_frame/2!=frame || vt_v314_vram_frame<0)\
+        \ {\n            DrawSync(0);\n            setRECT(&r,640,0,128,192);\n            LoadImage(&r,(u_long*)(void*)vt_v3187_pixels[frame]);\n\
+        \            setRECT(&r,768,0,128,192);\n            LoadImage(&r,(u_long*)(void*)vt_v3187_pixels[next]);\n\
+        \            setRECT(&r,640,242,256,1);\n            LoadImage(&r,(u_long*)(void*)vt_v3187_palettes[frame]);\n\
+        \            setRECT(&r,640,243,256,1);\n            LoadImage(&r,(u_long*)(void*)vt_v3187_palettes[next]);\n\
+        \            DrawSync(0);\n            vt_v314_vram_frame=current;\n            vt_v3182_menu_uploaded=0;\n\
+        \        }\n        /* addPrim prepends: enqueue translucent overlay first so that\n           the opaque\
+        \ base is rendered before the 50% overlay. */\n        for(layer=(current&1)?1:0;layer>=0;layer--) {\n \
+        \           a=(prim_used+3u)&~3u;\n            if(a+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;\n  \
         \          q=(POLY_FT4*)(prim_arena[db]+a);\n            prim_used=a+sizeof(POLY_FT4);\n            setPolyFT4(q);\n\
-        \            setXY4(q,0,0,320,0,0,240,320,240);\n            setUV4(q,0,0,255,0,0,191,255,191);\n           \
-        \ setTPage(q,1,0,layer?768:640,0);\n            q->clut=getClut(640,layer?243:242);\n            setSemiTrans(q,layer?1:0);\n\
-        \            setShadeTex(q,0);\n            setRGB0(q,128,128,128);\n            addPrim(ot[db],q);\n       \
-        \ }\n        return;\n    }\n\n    if(!vt_v3182_menu_uploaded) {\n        DrawSync(0);\n        setRECT(&r,640,0,160,240);\n\
-        \        LoadImage(&r,(u_long*)(void*)vt_v3182_menu_8bpp);\n        setRECT(&r,640,242,256,1);\n        LoadImage(&r,(u_long*)(void*)vt_v3182_clut);\n\
-        \        DrawSync(0);\n        vt_v3182_menu_uploaded=1;\n        vt_v314_vram_frame=56;\n    }\n    vt_v3172_menu_slots();\n\
-        \    for(side=0;side<2;side++) {\n        int left=side?256:0;\n        int width=side?64:256;\n        a=(prim_used+3u)&~3u;\n\
-        \        if(a+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;\n        q=(POLY_FT4*)(prim_arena[db]+a);\n   \
-        \     prim_used=a+sizeof(POLY_FT4);\n        setPolyFT4(q);\n        setXY4(q,left,0,left+width,0,left,240,left+width,240);\n\
-        \        setUV4(q,0,0,width-1,0,0,239,width-1,239);\n        setTPage(q,1,0,side?768:640,0);\n        q->clut=getClut(640,242);\n\
-        \        setSemiTrans(q,0);setShadeTex(q,0);\n        setRGB0(q,128,128,128);\n        addPrim(ot[db],q);\n \
-        \   }\n}\n''')\nif '#include \"lydra_v3187_movie.h\"' not in s:\n    anchor='static void vt_v314_draw(void)'\n\
-        \    if s.count(anchor)!=1:raise RuntimeError('Draw anchor count: '+str(s.count(anchor)))\n    s=s.replace(anchor,'#include\
-        \ \"lydra_v3187_movie.h\"\\n'+anchor,1)\nfor marker in ('vt_load_game(void)','vt_save_game(void)','vt_v281_resolve_movement();','vt_v3172_menu_slots();','vt_v3182_menu_8bpp'):\n\
+        \            setXY4(q,0,0,320,0,0,240,320,240);\n            setUV4(q,0,0,255,0,0,191,255,191);\n      \
+        \      setTPage(q,1,0,layer?768:640,0);\n            q->clut=getClut(640,layer?243:242);\n            setSemiTrans(q,layer?1:0);\n\
+        \            setShadeTex(q,0);\n            setRGB0(q,128,128,128);\n            addPrim(ot[db],q);\n  \
+        \      }\n        return;\n    }\n\n    if(!vt_v3182_menu_uploaded) {\n        DrawSync(0);\n        setRECT(&r,640,0,160,240);\n\
+        \        LoadImage(&r,(u_long*)(void*)vt_v3182_menu_8bpp);\n        setRECT(&r,640,242,256,1);\n       \
+        \ LoadImage(&r,(u_long*)(void*)vt_v3182_clut);\n        DrawSync(0);\n        vt_v3182_menu_uploaded=1;\n\
+        \        vt_v314_vram_frame=56;\n    }\n    vt_v3172_menu_slots();\n    for(side=0;side<2;side++) {\n  \
+        \      int left=side?256:0;\n        int width=side?64:256;\n        a=(prim_used+3u)&~3u;\n        if(a+sizeof(POLY_FT4)>sizeof(prim_arena[db]))return;\n\
+        \        q=(POLY_FT4*)(prim_arena[db]+a);\n        prim_used=a+sizeof(POLY_FT4);\n        setPolyFT4(q);\n\
+        \        setXY4(q,left,0,left+width,0,left,240,left+width,240);\n        setUV4(q,0,0,width-1,0,0,239,width-1,239);\n\
+        \        setTPage(q,1,0,side?768:640,0);\n        q->clut=getClut(640,242);\n        setSemiTrans(q,0);setShadeTex(q,0);\n\
+        \        setRGB0(q,128,128,128);\n        addPrim(ot[db],q);\n    }\n}\n''')\nif '#include \"lydra_v3187_movie.h\"\
+        ' not in s:\n    anchor='static void vt_v314_draw(void)'\n    if s.count(anchor)!=1:raise RuntimeError('Draw\
+        \ anchor count: '+str(s.count(anchor)))\n    s=s.replace(anchor,'#include \"lydra_v3187_movie.h\"\\n'+anchor,1)\n\
+        for marker in ('vt_load_game(void)','vt_save_game(void)','vt_v281_resolve_movement();','vt_v3172_menu_slots();','vt_v3182_menu_8bpp'):\n\
         \    if marker not in s:raise RuntimeError('Existing game system missing '+marker)\nmain.write_text(s,encoding='utf-8')\n\
         print('V31.8.7 ready: original HD-sourced movie, 256 colors, 8 fps, 7s, no appended still.')\n\nLYDRA_V3187_PATCH\n\
         python3 \"$RUNNER_TEMP/lydra_v3187_patch.py\"\n"
@@ -296,165 +300,211 @@ jobs:
         s=(p/'main.c').read_text()\nh=(p/'lydra_v3187_movie.h').read_text()\nfor marker in ('vt_v3187_pixels[28][24576]','vt_v3187_palettes[28][256]'):\n\
         \    assert marker in h, marker\nfor marker in ('setXY4(q,0,0,320,0,0,240,320,240)','setTPage(q,1,0,layer?768:640,0)',\n\
         \               'getClut(640,layer?243:242)','(vt_v314_elapsed*2)/15',\n               'vt_v3172_menu_slots();','vt_load_game(void)'):\n\
-        \    assert marker in s,marker\nprint('OK: 28 Originalframes 256x192, 256 Farben, GPU 8 FPS, volle Breite, kein\
-        \ extra Schlussbild.')\nPYCHECK\n"
+        \    assert marker in s,marker\nprint('OK: 28 Originalframes 256x192, 256 Farben, GPU 8 FPS, volle Breite,\
+        \ kein extra Schlussbild.')\nPYCHECK\n"
     - name: V31.8.12 PS1 Menueauswahl an echten Textzeilen befestigen
       shell: bash
-      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\nimport\
-        \ base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqVWG1z2zYS/s5fgbh3IWkhkvgiiZLNZNzEvcuNk2Zs310ztk9DUZCFCUWwAClb57i/vbvgi2RbatVkLBHAYvHsYvfh\"\
-        \n  \"rhTLyRtWCJLxjM0inhhxlJO35OBv5//+/Pn0fHx5+ulLJ1lNZTReek4QjFW+Slg7Wx2Q42Pz7OuH85Pxf/TCxeXXs1PT\"\n  \"+OFVp1CyM+Fph6VLkq3yuUg94+Dg4Ay1EBBuB23HHZElk3zG2ZQ4/eye5Ow+BxR5PCdROiUZk4soZWmerGAcz4UEwTm/\"\
-        \n  \"nSfwl7dBnTGTYkGyKIepCeGLTMicfIGhUT0LRYlkhpGRUM9bQrUBEpcivTK/nP/8r9P3l+MPH8/NG5t0iKlk3FlEPG3H\"\n  \"pqFgS9aWLJqOEZfF0lhMeXobmkU+exOYtmFM2YyoLEqtNFowe2QQ+CfvYZ80rycqj3IeX6uW9W60FHz6nae5DUOzJVmb\"\
-        \n  \"qTjKWLmvBdLq8Nq6+t/RzeG7axsHD6ZWtkAQCVe5BXtmPJ3ynElL3lNFYeLCtrUUn5GEpdZC2eRVSJwSh8YSccXIeZHm\"\n  \"fMFOpRTSmpml8wNwy68Fl0wRkTLygEgeKZmJAhz/UKl7NMsDIkCxUFfdmzYYJXPLPiI8LCdYOsXhlGX5PHSOyEJMWWiC\"\
-        \n  \"p1hpwd2cJ6xc1nfKybEGq+w1zDhUV/zmiKT43XJu0CD4Pi7lCEvACNNsxGFVn1Ids9ZTLcaw0jH1aal+HJWgEp4y84i3\"\n  \"QufJDpa83HNY74nFYgEB+EfbDmpZlUsID3Or1IF5UGucR3K7jPlgjrSjdh71WAm82RDQi5U/tIVb/XGdri2qr+b57trW\"\
-        \n  \"rQoOtzhUq3rqGbyr7QCuzdF2H1rV8ZX79DGlX20iZLOs/VYvgjvtrfY0R4Bi7arRlhxoUmARJTMhF8Aq78kkEfG3ETFb\"\n  \"OifLVGZ5IVMSUW4YEZ2EOtXNZY4sOHDH4KxirBKRK0gTybIkihk6UOc/xKvROdxgupmAFYSvWMLinIuUTCJJFixSBfIa\"\
-        \n  \"T0k+Z+Ti5NMpUbFkLCWxEBIYJ8qZaiOgkzgvoqRkyRgOguQdkVXo+H7H6Xc7zqDfJj9JgL9eVTBqk8+COAHwq6ZWreoS\"\n  \"jmqYlHBFgJbvUvLxswZRQgRQSA1iRjwy4/cwlOIO+DRlwNoQNEs2bZPDjlESHUGOI6Vz4E2QQ9pbwHjknuLnSn/e6c+5\"\
-        \n  \"/gSb9fctmqqfJkkBjn/Qrr/8eHZKDlHJkR4XqeK3qXYTeDHRz0fVRVt3x2GXfP9O5vBtl5dWrlWCoZVJvhgXik1bXmG/\"\n  \"/s0rmr2VSEvx/zMxs/Bc+2010LsiydLoajq5sZ+oRmihVcK0n0m2KqV2KdocHm47rJRRLL9Ej6Ha9dQvX7t6ht7T1Xr2\"\
-        \n  \"v/8sJ+/ofD15/o8fK1l0bOlU7dDKE9PpF4BhiRwB0uqYR6O+PHRrdXeOO4Z7Huci0/cHLx12X19LJR2LVOVEzfENW8Yq\"\n  \"il95N+GD4/Wp03Op0w8eGydrHcddW3+H3afzb91q3j3azDo83N5QrmVuNjFvBNyTbLRwoUasTaBNRFMCuijJCuApSm4T\"\
-        \n  \"cdeAKTX542weKfYqdMnr1+TZnPckBGqd4dOtYeja7+qZuJBKyFE9FFleTTXH1lrAPY3C7otVcFKzWvlJ2xBqNzUAJvAG\"\n  \"+Pb3vl9U144Ghlrw2HPf6YdR33ujH44MLQIk9V6uwKUJvj3Wqb+I5DdIc7CopASkFfDdBikRWOK5QlbQPKDTQmThyziq\"\
-        \n  \"lVaonpLEcEhBptWnHvx3nB51nSF1e72twk63q6V96tABdVyXum5vp7TrDipplwY0gA2B30KfUNcf2msHfGCxkBBTS6bN\"\n  \"VkAcShA+BRbls5W2vyZyMil4gsRYBX5j+bOTnYC63QFY5NKBj+dS1+vvAOltF63RaUofYe5NIL2rc99UXEJ1gmZQhuGb\"\
-        \n  \"B7g6irUdZZTtQDcER7sBRbf4Q0xV8KK//XIc6nhdlPszSdfbW6nrDfbVOkTfDPdE6nb7+yLdUyki3VOr00f7+yhI+13q\"\n  \"DCEsfW+HKFwzhCYEL8Vn1wt2BzyodR1nX7Wu4+6ldljegGZr6gGcbgB7vF2yrrOvLCxjINBBj3o9eIa/4Y641+v7yQ7h\"\
-        \n  \"RDwZ/yjgDhBOd5coZtNL0TqdTn85eX959hWyGvKoKmyamgzKm7J20imuKy1dYIHBoAcLrCqhoG60OBA1P/agAm7Z5KGp\"\n  \"QbdzIK/Q1q++MGxYcWPvNsbzkcM01wE59gBKb1iRmBNsKN22tafpD3LYRS9ARNDBoNwLqaof/kRByZ9wsgOX7yAA3ysV\"\
-        \n  \"DIbP9z+WndpfMAZIsufQwP9rVmAOUn+wF3LHK6FDIlBIXsdxNgEb608IjJ8vdRWssBSXWOOCMTxVTOpiHd56DPj0xyj+\"\n  \"dit1l7wooAiaMPJrwQqIl7OTi8tdfIvRDRb7XTqA9xCEOfXd3fkDlvquDtwB7fXp0NkuCgpd4CS/Dx6ElyFY6AdlUYfd\"\
-        \n  \"h4JmehTdtDYakza2WJllt7AdbKmryejGMH4gF9GM5asRSQVUtTl063wR3TJ8sWRFjl+5FFAyRVDCEqyysCu7hVcS6F0R\"\n  \"aMvSW+xPICHIrEixlCR1k+SP0aEmbYZa5cZ4Xkyb0bOOquwidcuFam0jUngVZJu0ZR+ZeK7SKKrKpcaRiGg6RrxlXWhS\"\
-        \n  \"rUJFS/ZydukGzhgaJ5HAKnY46DbUTp/EGvyrYASDcQYMkqjGjKACFkyyrNa6rgQ3Z9bFYG0t9uIl+FTk2qA//C3H/MSV\"\n  \"gp4ZS+aIY3dUX0tH35OCso4tsKcttdpG1r6TPGflD1rAdS9/04JmBSw2N/pW3VACCXr9DhT20GkGuo1dcoXNKLZlEdTE\"\
-        \n  \"UA1mWcKhJQQlL34SNKqfAPf5TdH4HV5R4Cg=\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
+      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\n\
+        import base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqVWG1z2zYS/s5fgbh3IWkhkvgiiZLNZNzEvcuNk2Zs310ztk9DUZCFCUWwAClb57i/vbvgi2RbatVkLBHAYvHsYvfh\"\
+        \n  \"rhTLyRtWCJLxjM0inhhxlJO35OBv5//+/Pn0fHx5+ulLJ1lNZTReek4QjFW+Slg7Wx2Q42Pz7OuH85Pxf/TCxeXXs1PT\"\n \
+        \ \"+OFVp1CyM+Fph6VLkq3yuUg94+Dg4Ay1EBBuB23HHZElk3zG2ZQ4/eye5Ow+BxR5PCdROiUZk4soZWmerGAcz4UEwTm/\"\n  \"\
+        nSfwl7dBnTGTYkGyKIepCeGLTMicfIGhUT0LRYlkhpGRUM9bQrUBEpcivTK/nP/8r9P3l+MPH8/NG5t0iKlk3FlEPG3H\"\n  \"pqFgS9aWLJqOEZfF0lhMeXobmkU+exOYtmFM2YyoLEqtNFowe2QQ+CfvYZ80rycqj3IeX6uW9W60FHz6nae5DUOzJVmb\"\
+        \n  \"qTjKWLmvBdLq8Nq6+t/RzeG7axsHD6ZWtkAQCVe5BXtmPJ3ynElL3lNFYeLCtrUUn5GEpdZC2eRVSJwSh8YSccXIeZHm\"\n \
+        \ \"fMFOpRTSmpml8wNwy68Fl0wRkTLygEgeKZmJAhz/UKl7NMsDIkCxUFfdmzYYJXPLPiI8LCdYOsXhlGX5PHSOyEJMWWiC\"\n  \"\
+        p1hpwd2cJ6xc1nfKybEGq+w1zDhUV/zmiKT43XJu0CD4Pi7lCEvACNNsxGFVn1Ids9ZTLcaw0jH1aal+HJWgEp4y84i3\"\n  \"QufJDpa83HNY74nFYgEB+EfbDmpZlUsID3Or1IF5UGucR3K7jPlgjrSjdh71WAm82RDQi5U/tIVb/XGdri2qr+b57trW\"\
+        \n  \"rQoOtzhUq3rqGbyr7QCuzdF2H1rV8ZX79DGlX20iZLOs/VYvgjvtrfY0R4Bi7arRlhxoUmARJTMhF8Aq78kkEfG3ETFb\"\n \
+        \ \"OifLVGZ5IVMSUW4YEZ2EOtXNZY4sOHDH4KxirBKRK0gTybIkihk6UOc/xKvROdxgupmAFYSvWMLinIuUTCJJFixSBfIa\"\n  \"\
+        T0k+Z+Ti5NMpUbFkLCWxEBIYJ8qZaiOgkzgvoqRkyRgOguQdkVXo+H7H6Xc7zqDfJj9JgL9eVTBqk8+COAHwq6ZWreoS\"\n  \"jmqYlHBFgJbvUvLxswZRQgRQSA1iRjwy4/cwlOIO+DRlwNoQNEs2bZPDjlESHUGOI6Vz4E2QQ9pbwHjknuLnSn/e6c+5\"\
+        \n  \"/gSb9fctmqqfJkkBjn/Qrr/8eHZKDlHJkR4XqeK3qXYTeDHRz0fVRVt3x2GXfP9O5vBtl5dWrlWCoZVJvhgXik1bXmG/\"\n \
+        \ \"/s0rmr2VSEvx/zMxs/Bc+2010LsiydLoajq5sZ+oRmihVcK0n0m2KqV2KdocHm47rJRRLL9Ej6Ha9dQvX7t6ht7T1Xr2\"\n  \"\
+        v/8sJ+/ofD15/o8fK1l0bOlU7dDKE9PpF4BhiRwB0uqYR6O+PHRrdXeOO4Z7Huci0/cHLx12X19LJR2LVOVEzfENW8Yq\"\n  \"il95N+GD4/Wp03Op0w8eGydrHcddW3+H3afzb91q3j3azDo83N5QrmVuNjFvBNyTbLRwoUasTaBNRFMCuijJCuApSm4T\"\
+        \n  \"cdeAKTX542weKfYqdMnr1+TZnPckBGqd4dOtYeja7+qZuJBKyFE9FFleTTXH1lrAPY3C7otVcFKzWvlJ2xBqNzUAJvAG\"\n \
+        \ \"+Pb3vl9U144Ghlrw2HPf6YdR33ujH44MLQIk9V6uwKUJvj3Wqb+I5DdIc7CopASkFfDdBikRWOK5QlbQPKDTQmThyziq\"\n  \"\
+        lVaonpLEcEhBptWnHvx3nB51nSF1e72twk63q6V96tABdVyXum5vp7TrDipplwY0gA2B30KfUNcf2msHfGCxkBBTS6bN\"\n  \"VkAcShA+BRbls5W2vyZyMil4gsRYBX5j+bOTnYC63QFY5NKBj+dS1+vvAOltF63RaUofYe5NIL2rc99UXEJ1gmZQhuGb\"\
+        \n  \"B7g6irUdZZTtQDcER7sBRbf4Q0xV8KK//XIc6nhdlPszSdfbW6nrDfbVOkTfDPdE6nb7+yLdUyki3VOr00f7+yhI+13q\"\n \
+        \ \"DCEsfW+HKFwzhCYEL8Vn1wt2BzyodR1nX7Wu4+6ldljegGZr6gGcbgB7vF2yrrOvLCxjINBBj3o9eIa/4Y641+v7yQ7h\"\n  \"\
+        RDwZ/yjgDhBOd5coZtNL0TqdTn85eX959hWyGvKoKmyamgzKm7J20imuKy1dYIHBoAcLrCqhoG60OBA1P/agAm7Z5KGp\"\n  \"QbdzIK/Q1q++MGxYcWPvNsbzkcM01wE59gBKb1iRmBNsKN22tafpD3LYRS9ARNDBoNwLqaof/kRByZ9wsgOX7yAA3ysV\"\
+        \n  \"DIbP9z+WndpfMAZIsufQwP9rVmAOUn+wF3LHK6FDIlBIXsdxNgEb608IjJ8vdRWssBSXWOOCMTxVTOpiHd56DPj0xyj+\"\n \
+        \ \"dit1l7wooAiaMPJrwQqIl7OTi8tdfIvRDRb7XTqA9xCEOfXd3fkDlvquDtwB7fXp0NkuCgpd4CS/Dx6ElyFY6AdlUYfd\"\n  \"\
+        h4JmehTdtDYakza2WJllt7AdbKmryejGMH4gF9GM5asRSQVUtTl063wR3TJ8sWRFjl+5FFAyRVDCEqyysCu7hVcS6F0R\"\n  \"aMvSW+xPICHIrEixlCR1k+SP0aEmbYZa5cZ4Xkyb0bOOquwidcuFam0jUngVZJu0ZR+ZeK7SKKrKpcaRiGg6RrxlXWhS\"\
+        \n  \"rUJFS/ZydukGzhgaJ5HAKnY46DbUTp/EGvyrYASDcQYMkqjGjKACFkyyrNa6rgQ3Z9bFYG0t9uIl+FTk2qA//C3H/MSV\"\n \
+        \ \"gp4ZS+aIY3dUX0tH35OCso4tsKcttdpG1r6TPGflD1rAdS9/04JmBSw2N/pW3VACCXr9DhT20GkGuo1dcoXNKLZlEdTE\"\n  \"\
+        UA1mWcKhJQQlL34SNKqfAPf5TdH4HV5R4Cg=\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
         PY_PATCH\n"
     - name: V31.8.13 Blinkendes START vor dem Menuefenster einbauen
       shell: bash
-      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\nimport\
-        \ base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqtWGtT20gW/e5f0SG7kYRlY9nmZSOmUgk7k6lMhiJkq7aAdclS2+6K3NJ0t8Aelv++px/yA0xqtmoNGEl9+77vubcl\"\
-        \n  \"qSItWhWkZCWdJCxvpIki52Tvb1ffvny5uBpdX/x2eZAvM5GM7nvRSdQblYlKZ+1yuUfOzrzP//p49X70T7ty+f76wy9e\"\n  \"4+2bg0qKgzHjB5Tfk3KpZgXvNfb29j5rPgTU7ZN21BuQcc74d8an5Ov1+6trMk0UJWOqHijlJC3mZU4VzQjjShQk4Rnh\"\
-        \n  \"hZgnOZlTXrXBrjERxZxAn1nOxoTNy0IoconbhrsuZChoo4z1M7+QbajDRMFvvMur33+9+HA9+vjpyrsLDjwp0oN5wng7\"\n  \"9RoyLtuCJtlI0YXyKU+LDCrGXqUmrRMvaDQyOiGTiqeKFXwky4T7PJnTYNAg+IhFLLzbsVSJYumtbPo/De4Llv0HRgS4\"\
-        \n  \"9ZqCtqlMk5LaXU1Qy/1b/+bfw7v9n24DffPoGVZz7Wgq45xJ5WPbhPGMKSp8sQi1Ye2vQWAI2YTklPuOPngTRwORMEnJ\"\n  \"VcUVm9MLIQrhT7yLRUlT7VG6SFKVL0nBKXnUajyFZFoo8rjJ5smz3Md0ynjsnt507tqwTSjfid5coDxzjzNaqlkcWTOK\"\
-        \n  \"jMYevEitWQ8zllNLYYLKzrRU6fynP2ksb9jd6pbr22Z0p+3Ef0dOaA4LPW9FhlUjyslas3OLKVYOPJtH5nJgNUMOUm/I\"\n  \"mk7d+kPzl3v26z3jvEi//2jTXk0plUD2eDup9rw9R5XOErGbxnv0BsZXr4p6cgStDQKz6Lxh7NvpjVtea7mOzvPd1tKd\"\
-        \n  \"2/d3ONMw2vaLjtNu8bfeYLcHfSfcOc+IsV4NSCFWy8Zr9SKcGey0ZiUCjI2jdhWH942PkzzhKapjLJKUSsAO8ZqmRm1h\"\n  \"U1UJbqshZBYFoACf0pEGA1PNYTp2aTzNC/Aj0twk4TjeARiuuiaFoMjwZDC2KZ9MUONxOvbt0qrEHWVs1ncX+BfAZKoq\"\
-        \n  \"CLaaEVW4+na1LCFokNw1DY+mvBkP7qwlBtRHjJeV8gGGzoq35HpGa7zuApI1Euc5FY6/JAaBLUD7rSggGRPUQAskFyVg\"\n  \"XGM18btB2zH8xCUFMiccIFTmLGWKKKYACAb8/X4AblIBfockyXPw0E6TB1MYYZBekkTgSlCwuaeZZYsFoK7PJgZK8XWv\"\
-        \n  \"dLfqj2ielJJmeHIe46vf7WgKC7L4Cmq6cpZIigeaqIu/oU0feCLkMZBWVmPuQ0oItJ6eRedb++L+8JbX2VavmNYWd4Ze\"\n  \"qJmkBQIVR6tY8lcw2vtQVLnuc4qg7rRHFAIg6T3lLUnh/7obuu4I37jIWhfcPkF5XXBoNS+9sbKyNnOr3Qha5rHneU8W\"\
-        \n  \"WdnE37YyRmweV1V1sE++zooHF7zEhDR71tCHMMQmAHKe5i6DXbNn0kQR0WmT/YMNFPfdY/KOXL7/ODLUm5I3vWw16w53\"\n  \"LqaVkIVADHauziEkmdJ4b2+9/mSuXnVAF2p43mupkSfzcZaQ0UA78v8QdeM4U5EakXg687aACAIam/jj1cqaLV64UdGY\"\
-        \n  \"Wd6Sb9KypQuMEzpEl18j8vPlN3L96fMFqRTLmTJlixHtgaSCyTJEPCtKJglXiVy2pFoi1GOm5kkJhkg/gAg4DXSYOX0g\"\n  \"v15e/Iw9Sfp9KmB6VqMQIBujFCa/CQDEPEQ2tMlHYP2YCtibL8FPmnSa1fmxYo8pxYwqLtVMLEi/3ZjRvARQCh0RZON6\"\
-        \n  \"qtRzm04vgXmECiRSIq09xlyNT9AqpzK0E5YWkS4TB1XoOHMDKv9g95QcLo6dIhZ3UsqVZtkmv3Ny1AH8AZfAqJhMSK++\"\n  \"Jf5Rp/XLn9rBgcltOwwSPQe69NPTsvbzyM5SeiVo2BR3xKh1qUjFJZtyajwp0FSW5UzeHN7dHN/F64J47EVhdKR/9QV+\"\
-        \n  \"ehHmOVOhm5WlyfrrH03iCvl6iyzqh9Gx/tXcju3vUwiy99vcOjVZJ+zi+qQmu/qRUPJS6JOtP+AamYaieEDZ5CFCF4qK\"\n  \"h4twGaKXPjiaZyX5Bphky2G17m8B8N9PO1VwHh/he5NOc4x9PZI/I9eEK1aa6rzXCQw1Qmr1aNToN9f9ydUGUly3Wa7k\"\
-        \n  \"EDHL2Xdba3kipq6Qx8VCP0LqZsBsRWYsM7C5Aj+XGCcjVCL1owguPUIkOvgfdhHdTr+pFYCXT8yF03PHttPT/3lbB5E8\"\n  \"6oY9/PQRyNNe2O0f7iTtGsX+Eqnhenryl7nuIq29fUUx1MwKwf4EhCR5C7mBI+sCTcUWRWjQMyE4WeU0a1UluYeDCyJL\"\
-        \n  \"gSPTysnoP/4UHWF6djicNpuBvkfK4Qm+z471N55uNBvk4mYDMWcXHw/PDp+3JCTMG99V6PTuBpzu3vlRdXbm91vYEOBD\"\n  \"HnHRbA71HMV4RYdPWxxgUwyC7XaFQnj50KqBJZyGDsm7d+Q1wZZGyw70VXObzSKOoqOmP90/akJ2sN/bXl7G0XHUBL/n\"\
-        \n  \"C9uxWzSjcIk/LUvHBfL2dRyjbnh86pLvMNpMvlf4oNS3eXQBLMjiXsdsPsDt4eEzFjo+xsYXTbzx1NCdQTdODAHeSwzu\"\n  \"GwS22Os10J5l2zRs32557Ri9PkUj25huJKaT2uZkemc96qNfg+sOybXFnklanDOke3ewQ9pq+M4w/ulemVk80ZJ057Jd\"\
-        \n  \"ULe7OZNaHytVthma38L/kfTgvKZyFr+uxTVzxm2InFdoUGN9kk+Bc/rcZMe7tSegCg4cbT0P4UTlpIR2e1OfPpvuURRs\"\n  \"nkJMWNaHEE5pluNUZ7U/7o60/SOZF0r6gRvUtcUidfGzG16N32/Y3pqKpJyxFIOBRnEdhomZWCrO/qgwj7yYtVZWWO6h\"\
-        \n  \"/aet2Mjk7a4O5bRlO4c0455wba8Z0b4mEzqtEpHpIWCc284BaNMqmgPQnGpmWm09bBuEazfgdAwy4rvOAk7WIuqp3Qu9\"\n  \"Fz0Rz1aztRcaU1/zb717h3GrfXmRZCOtoasms0cm9/TFw/vuSTTCfF/kWJwX91Q3zW1mWtbxyIC7XEt3ap2My7Kmdamt\"\
-        \n  \"B4daxe4IcDVSRambOzHJHXguj/Q7DeumVdX9sLxlUYkUh68ljqPzuroGxGtaLoFxvI7qttvd+P0s0qvbWZWt7rZ87axa\"\n  \"fXa6vbZl+22CvgsaZftB9zr72lKGL19cohXC1956UD6WmFvYlHH0VnusbJ0/fyfrxm29Yh+MK6UwjON+tdce8QxhF3Je\"\
-        \n  \"vhNuuHfAf+m1cuO/NrnC1g==\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
+      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\n\
+        import base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqtWGtT20gW/e5f0SG7kYRlY9nmZSOmUgk7k6lMhiJkq7aAdclS2+6K3NJ0t8Aelv++px/yA0xqtmoNGEl9+77vubcl\"\
+        \n  \"qSItWhWkZCWdJCxvpIki52Tvb1ffvny5uBpdX/x2eZAvM5GM7nvRSdQblYlKZ+1yuUfOzrzP//p49X70T7ty+f76wy9e\"\n \
+        \ \"4+2bg0qKgzHjB5Tfk3KpZgXvNfb29j5rPgTU7ZN21BuQcc74d8an5Ov1+6trMk0UJWOqHijlJC3mZU4VzQjjShQk4Rnh\"\n  \"\
+        hZgnOZlTXrXBrjERxZxAn1nOxoTNy0IoconbhrsuZChoo4z1M7+QbajDRMFvvMur33+9+HA9+vjpyrsLDjwp0oN5wng7\"\n  \"9RoyLtuCJtlI0YXyKU+LDCrGXqUmrRMvaDQyOiGTiqeKFXwky4T7PJnTYNAg+IhFLLzbsVSJYumtbPo/De4Llv0HRgS4\"\
+        \n  \"9ZqCtqlMk5LaXU1Qy/1b/+bfw7v9n24DffPoGVZz7Wgq45xJ5WPbhPGMKSp8sQi1Ye2vQWAI2YTklPuOPngTRwORMEnJ\"\n \
+        \ \"VcUVm9MLIQrhT7yLRUlT7VG6SFKVL0nBKXnUajyFZFoo8rjJ5smz3Md0ynjsnt507tqwTSjfid5coDxzjzNaqlkcWTOK\"\n  \"\
+        jMYevEitWQ8zllNLYYLKzrRU6fynP2ksb9jd6pbr22Z0p+3Ef0dOaA4LPW9FhlUjyslas3OLKVYOPJtH5nJgNUMOUm/I\"\n  \"mk7d+kPzl3v26z3jvEi//2jTXk0plUD2eDup9rw9R5XOErGbxnv0BsZXr4p6cgStDQKz6Lxh7NvpjVtea7mOzvPd1tKd\"\
+        \n  \"2/d3ONMw2vaLjtNu8bfeYLcHfSfcOc+IsV4NSCFWy8Zr9SKcGey0ZiUCjI2jdhWH942PkzzhKapjLJKUSsAO8ZqmRm1h\"\n \
+        \ \"U1UJbqshZBYFoACf0pEGA1PNYTp2aTzNC/Aj0twk4TjeARiuuiaFoMjwZDC2KZ9MUONxOvbt0qrEHWVs1ncX+BfAZKoq\"\n  \"\
+        CLaaEVW4+na1LCFokNw1DY+mvBkP7qwlBtRHjJeV8gGGzoq35HpGa7zuApI1Euc5FY6/JAaBLUD7rSggGRPUQAskFyVg\"\n  \"XGM18btB2zH8xCUFMiccIFTmLGWKKKYACAb8/X4AblIBfockyXPw0E6TB1MYYZBekkTgSlCwuaeZZYsFoK7PJgZK8XWv\"\
+        \n  \"dLfqj2ielJJmeHIe46vf7WgKC7L4Cmq6cpZIigeaqIu/oU0feCLkMZBWVmPuQ0oItJ6eRedb++L+8JbX2VavmNYWd4Ze\"\n \
+        \ \"qJmkBQIVR6tY8lcw2vtQVLnuc4qg7rRHFAIg6T3lLUnh/7obuu4I37jIWhfcPkF5XXBoNS+9sbKyNnOr3Qha5rHneU8W\"\n  \"\
+        WdnE37YyRmweV1V1sE++zooHF7zEhDR71tCHMMQmAHKe5i6DXbNn0kQR0WmT/YMNFPfdY/KOXL7/ODLUm5I3vWw16w53\"\n  \"LqaVkIVADHauziEkmdJ4b2+9/mSuXnVAF2p43mupkSfzcZaQ0UA78v8QdeM4U5EakXg687aACAIam/jj1cqaLV64UdGY\"\
+        \n  \"Wd6Sb9KypQuMEzpEl18j8vPlN3L96fMFqRTLmTJlixHtgaSCyTJEPCtKJglXiVy2pFoi1GOm5kkJhkg/gAg4DXSYOX0g\"\n \
+        \ \"v15e/Iw9Sfp9KmB6VqMQIBujFCa/CQDEPEQ2tMlHYP2YCtibL8FPmnSa1fmxYo8pxYwqLtVMLEi/3ZjRvARQCh0RZON6\"\n  \"\
+        qtRzm04vgXmECiRSIq09xlyNT9AqpzK0E5YWkS4TB1XoOHMDKv9g95QcLo6dIhZ3UsqVZtkmv3Ny1AH8AZfAqJhMSK++\"\n  \"Jf5Rp/XLn9rBgcltOwwSPQe69NPTsvbzyM5SeiVo2BR3xKh1qUjFJZtyajwp0FSW5UzeHN7dHN/F64J47EVhdKR/9QV+\"\
+        \n  \"ehHmOVOhm5WlyfrrH03iCvl6iyzqh9Gx/tXcju3vUwiy99vcOjVZJ+zi+qQmu/qRUPJS6JOtP+AamYaieEDZ5CFCF4qK\"\n \
+        \ \"h4twGaKXPjiaZyX5Bphky2G17m8B8N9PO1VwHh/he5NOc4x9PZI/I9eEK1aa6rzXCQw1Qmr1aNToN9f9ydUGUly3Wa7k\"\n  \"\
+        EDHL2Xdba3kipq6Qx8VCP0LqZsBsRWYsM7C5Aj+XGCcjVCL1owguPUIkOvgfdhHdTr+pFYCXT8yF03PHttPT/3lbB5E8\"\n  \"6oY9/PQRyNNe2O0f7iTtGsX+Eqnhenryl7nuIq29fUUx1MwKwf4EhCR5C7mBI+sCTcUWRWjQMyE4WeU0a1UluYeDCyJL\"\
+        \n  \"gSPTysnoP/4UHWF6djicNpuBvkfK4Qm+z471N55uNBvk4mYDMWcXHw/PDp+3JCTMG99V6PTuBpzu3vlRdXbm91vYEOBD\"\n \
+        \ \"HnHRbA71HMV4RYdPWxxgUwyC7XaFQnj50KqBJZyGDsm7d+Q1wZZGyw70VXObzSKOoqOmP90/akJ2sN/bXl7G0XHUBL/n\"\n  \"\
+        C9uxWzSjcIk/LUvHBfL2dRyjbnh86pLvMNpMvlf4oNS3eXQBLMjiXsdsPsDt4eEzFjo+xsYXTbzx1NCdQTdODAHeSwzu\"\n  \"GwS22Os10J5l2zRs32557Ri9PkUj25huJKaT2uZkemc96qNfg+sOybXFnklanDOke3ewQ9pq+M4w/ulemVk80ZJ057Jd\"\
+        \n  \"ULe7OZNaHytVthma38L/kfTgvKZyFr+uxTVzxm2InFdoUGN9kk+Bc/rcZMe7tSegCg4cbT0P4UTlpIR2e1OfPpvuURRs\"\n \
+        \ \"nkJMWNaHEE5pluNUZ7U/7o60/SOZF0r6gRvUtcUidfGzG16N32/Y3pqKpJyxFIOBRnEdhomZWCrO/qgwj7yYtVZWWO6h\"\n  \"\
+        /aet2Mjk7a4O5bRlO4c0455wba8Z0b4mEzqtEpHpIWCc284BaNMqmgPQnGpmWm09bBuEazfgdAwy4rvOAk7WIuqp3Qu9\"\n  \"Fz0Rz1aztRcaU1/zb717h3GrfXmRZCOtoasms0cm9/TFw/vuSTTCfF/kWJwX91Q3zW1mWtbxyIC7XEt3ap2My7Kmdamt\"\
+        \n  \"B4daxe4IcDVSRambOzHJHXguj/Q7DeumVdX9sLxlUYkUh68ljqPzuroGxGtaLoFxvI7qttvd+P0s0qvbWZWt7rZ87axa\"\n \
+        \ \"fXa6vbZl+22CvgsaZftB9zr72lKGL19cohXC1956UD6WmFvYlHH0VnusbJ0/fyfrxm29Yh+MK6UwjON+tdce8QxhF3Je\"\n  \"\
+        vhNuuHfAf+m1cuO/NrnC1g==\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
         PY_PATCH\n"
     - name: V31.8.14 START kleiner und im Lydra-Serifenstil zeichnen
       shell: bash
-      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\nimport\
-        \ base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqtWG1z27gR/s5fgSR1SdoUJUp24sRROrlzcpdOmvM4znU6jqqhSEjCmQJZALTFevzf+yxAyVIiJ+m0nkQEgcW+49kF\"\
-        \n  \"NTesw+uSVaLi01QUXpYa9oo9/tP5pw8f3pyPL9787axbNLlKx9eD5Dg5HFepyeZx1TxmL1/67/9xev56/LtbOXt98fOv\"\n  \"vvfkUbfWqjsRssvlNasaMy/lwHvCQBYfx8nhC6Z4WrCzjwkzwhScVapcVIYJyVKmF2lRMF7wWSoN01yJacRkyfjSqJSJ\"\
-        \n  \"RTrjsTfFBgZF5oWYYK4qlWFnePXacakjyHBkZ+/er0je0e7IPU5VetMO35bSeF7FhpZHUOoYegtVykv/7Py3v775+WJ8\"\n  \"+u7cH4Wsy3ytMp+ei1TIOPM9jW1VDIPysYGOAZdZmQs5G/q1mXaO/dCD5X/nrJRFA52qIs04M3NMFDn7ePH6/ILNiqaa\"\
-        \n  \"Y03mXHEVwR0cdl+DCcugmiqLgitWlDORxZ5MFxwi/WvjAjIYIzY3Y21SZXxPLbGm/M8TvBuRfdYH16XI8fDZAbNbD2hZ\"\n  \"738OLv95Mtr/y+eQXm59b0Fh5WRNIbQJFI+nQubCcBWoZcSsQ+OPYeiJKSu4DFr6kD0asuSFx/CnUqE5O6+lEQv+RqlS\"\
-        \n  \"BVP/A+c5gpdmBvaXctNuUpxNa5kZUcqITcta5ux2k/kd3JdCpfb9sjeKraFB6E22p+E8TOa8MnMsJB7Zb/2EaHDfu5kL\"\n  \"5NmEvbS6Q+sUoiy1Uz0Dqb6cjOyLdC9wVTJiMNeO7rfyAlb6viXFaitpJcrxa9cyO9/1rTjZvtxT0N9a0UJI7p+QMNJ/\"\
-        \n  \"tcyL3Wz2H2IzKcrs6pt8Hj+0VRvl79jw2H/8wIZsnu7c4d9+IcLF5SGF7nZSd1bUlvLey9ZPO7z8WT5kl0uBHaycr3bw\"\n  \"2v+hiFm+W57e4A8wC6xHo9ZP4S6dP3/Be1fUgnuFiZ/VbBXJkJVqk8BKuqdA6MLvOqWVCUkbB2LHWfZ/W5/c1aFl81Sz\"\
-        \n  \"Wk7SIpUZzvlEAd20w7yfalGYDtzwaQIuNY63NPqE6XRRFSAV0pSAGuALSoEDfSoIv5x9AtBkJpWzguuYXcyFBrO8BDTJ\"\n  \"0qyQHFbnQgNMGyoZvEoVmVWJzNSKu8O92mHKOptbxAWClgzogfoBXcYZyESOfQR6l9Zq31YuDSfyrtW3a1TNTVPxLioN\"\
-        \n  \"VCWj+9336/FHqk+dcz6ri1TFxkz96McZ/W98cv5Hel13T/H4vbb77T5v5KybEuANmaSaFEzhfcWmlJRfmo6w26o3DWOh\"\n  \"7a4gDCP2AVBtsf6emdB29uH8+FCyi4u3rmbbfZCHfCso3MgVCsEvwvxaT1YpoWopOU6G1RjKrqtxvLIyWIuPWD8B6k9K\"\
-        \n  \"qnA0G8+4odfAtzkJLjciN/OIzbmYzYkdrV72R6zjRr1R5AaD9VQyIhMpS4567OWQWQ40OO5RitFCYhdanhj1e98odp/g\"\n  \"7grZy9clDotSI8Ca3Vrmd8tbx4tKG8JwneqV4bHkN4H/HoARbFmCaPRQ2qhYDu97l5h+AsfBrca2/wg6a2M7rY1g0Poo\"\
-        \n  \"sp4b0g+GoiiG/aMje1phiGbllJVV+q+aTtISZY41guPMZwpHLUIvsqhQxtmMlwtuVANvobOrDUPKzlBcCUxdZLx2+5A5\"\n  \"/eKiTKk8KxKCs0YpqlhD6ahw0HnQGuo8SwHu2ZGr2kuUXuuQLQB1Ii7RmjQjECS93jbQLbeR1BZ56CZkzb0NMFSUKMv1\"\
-        \n  \"zBcSLZJsSXo1/K4osjJOq4paksCKwM4IVB0n0PVQlFuDXttV0JYQ4/7Rt7Or1jWh5f0BU6kGgrqmyTK5s+IdArdYLYxG\"\n  \"eneQ0gSwzpoTajKvRVlrF7eGUfKwG2Tj897BKvzwAZrtJwBhzjIuSRJuB8nTnvXLJNWcijEg1XZuzTA5fup6MtfgKjET\"\
-        \n  \"Evq6Jl9ninMZe8sePB4M+j34wzoZbXWX9b2G5pNnz7xUKcA6SlSEkh7/UQoZ+OST2708sv/ufLZHZlpQoyflERnv4QSN\"\n  \"17UJHHy/u79x7WgzGB12WvCOyJrWlc5RVnNqukn593TlYVPcQVLd2MoRU2B+gsFXmgQ+73WmihrqCizKHB7FJQWHvYZR\"\
-        \n  \"Mi9vGMWusLwgksLmpFBzj7q23/Vci86oQWe7uvmAVkLv1lvVbRAjhbUBay1mEiBD5R4JZBCZMXngckTgNmS33p622+5O\"\n  \"XJuKVLmC2TVaV2Qi8rGdnwZOMq51KOX80fAwVBw1VK7X1wQTMn1v73mvDl8Nn+J3k9ByprhCUri9he3tIdHrcM3R0b5i\"\
-        \n  \"yVG43jegbLAvJ56lQ9zeUm5lTSqRSXR1QfVjnQ65ec7T64ZNSpXTdQkT5TVXWvx7BbvWvcSldevx2FBdQ/Ikx0f4HyXR\"\n  \"YT9KkuMD5xHkrRu1Sv7/tg2ifjSIkl4/6vcOo/7h0/+eFEkeXBEknrArQITzMBlbToON0Ifdr+dQBcIQ2w4OQnbr3cPV\"\
-        \n  \"kO3luNNYVpvkVyPsOFkTNt8iTDYIEayPhS2Q6FSQ+1RmiqK8oY6wIUw1vDMpqKyUuFzOMe3OnWOJI7cO2Ne+WdLlK2rs\"\n  \"7xcq9EeISIKgJNHxIDx5iEHU7N74vI1jFx7vJ+0YUUBFdLzuvDsPEAKwCSwm4eT0Ov0BPQ4sch0cuamnG1P9Q3rBCUPN\"\
-        \n  \"th8H9OWLdES3701sOqAL5osRoTS6pkWZi6nIbCeIftWVibpi9kzi5s2XuJITMi3Ka8GZxR1MW7QBBvP2Ag001Cl9Noht\"\n  \"fV2k6gqITRcR10tuHfXh8JCuJnQeCZEQkz+zs9enY3uAwlX7uROXwhPauVrqj1V5MzZltbGH6v14Bi0dhrXkUI5vzW7J\"\
-        \n  \"eDZ2VWeDd39MJo6PJ1Xle213gLRpDbPXAcn0fTHe1ZS+WflONyiVC0C5Ni8YfQ5xbGwx1nGGEmbowvYdTPa/88HDP62r\"\n  \"gkLJW7xffdZBSa7iG4Wj4L4TUVi/+lRU4TBAxn3FEvT5B3gPoEeflLPOK3dXgvl7+XIv3ypgFm7JVFCtU2bQ0QUcRY70\"\
+      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\n\
+        import base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqtWG1z27gR/s5fgSR1SdoUJUp24sRROrlzcpdOmvM4znU6jqqhSEjCmQJZALTFevzf+yxAyVIiJ+m0nkQEgcW+49kF\"\
+        \n  \"NTesw+uSVaLi01QUXpYa9oo9/tP5pw8f3pyPL9787axbNLlKx9eD5Dg5HFepyeZx1TxmL1/67/9xev56/LtbOXt98fOv\"\n \
+        \ \"vvfkUbfWqjsRssvlNasaMy/lwHvCQBYfx8nhC6Z4WrCzjwkzwhScVapcVIYJyVKmF2lRMF7wWSoN01yJacRkyfjSqJSJ\"\n  \"\
+        RTrjsTfFBgZF5oWYYK4qlWFnePXacakjyHBkZ+/er0je0e7IPU5VetMO35bSeF7FhpZHUOoYegtVykv/7Py3v775+WJ8\"\n  \"+u7cH4Wsy3ytMp+ei1TIOPM9jW1VDIPysYGOAZdZmQs5G/q1mXaO/dCD5X/nrJRFA52qIs04M3NMFDn7ePH6/ILNiqaa\"\
+        \n  \"Y03mXHEVwR0cdl+DCcugmiqLgitWlDORxZ5MFxwi/WvjAjIYIzY3Y21SZXxPLbGm/M8TvBuRfdYH16XI8fDZAbNbD2hZ\"\n \
+        \ \"738OLv95Mtr/y+eQXm59b0Fh5WRNIbQJFI+nQubCcBWoZcSsQ+OPYeiJKSu4DFr6kD0asuSFx/CnUqE5O6+lEQv+RqlS\"\n  \"\
+        BVP/A+c5gpdmBvaXctNuUpxNa5kZUcqITcta5ux2k/kd3JdCpfb9sjeKraFB6E22p+E8TOa8MnMsJB7Zb/2EaHDfu5kL\"\n  \"5NmEvbS6Q+sUoiy1Uz0Dqb6cjOyLdC9wVTJiMNeO7rfyAlb6viXFaitpJcrxa9cyO9/1rTjZvtxT0N9a0UJI7p+QMNJ/\"\
+        \n  \"tcyL3Wz2H2IzKcrs6pt8Hj+0VRvl79jw2H/8wIZsnu7c4d9+IcLF5SGF7nZSd1bUlvLey9ZPO7z8WT5kl0uBHaycr3bw\"\n \
+        \ \"2v+hiFm+W57e4A8wC6xHo9ZP4S6dP3/Be1fUgnuFiZ/VbBXJkJVqk8BKuqdA6MLvOqWVCUkbB2LHWfZ/W5/c1aFl81Sz\"\n  \"\
+        Wk7SIpUZzvlEAd20w7yfalGYDtzwaQIuNY63NPqE6XRRFSAV0pSAGuALSoEDfSoIv5x9AtBkJpWzguuYXcyFBrO8BDTJ\"\n  \"0qyQHFbnQgNMGyoZvEoVmVWJzNSKu8O92mHKOptbxAWClgzogfoBXcYZyESOfQR6l9Zq31YuDSfyrtW3a1TNTVPxLioN\"\
+        \n  \"VCWj+9336/FHqk+dcz6ri1TFxkz96McZ/W98cv5Hel13T/H4vbb77T5v5KybEuANmaSaFEzhfcWmlJRfmo6w26o3DWOh\"\n \
+        \ \"7a4gDCP2AVBtsf6emdB29uH8+FCyi4u3rmbbfZCHfCso3MgVCsEvwvxaT1YpoWopOU6G1RjKrqtxvLIyWIuPWD8B6k9K\"\n  \"\
+        qnA0G8+4odfAtzkJLjciN/OIzbmYzYkdrV72R6zjRr1R5AaD9VQyIhMpS4567OWQWQ40OO5RitFCYhdanhj1e98odp/g\"\n  \"7grZy9clDotSI8Ca3Vrmd8tbx4tKG8JwneqV4bHkN4H/HoARbFmCaPRQ2qhYDu97l5h+AsfBrca2/wg6a2M7rY1g0Poo\"\
+        \n  \"sp4b0g+GoiiG/aMje1phiGbllJVV+q+aTtISZY41guPMZwpHLUIvsqhQxtmMlwtuVANvobOrDUPKzlBcCUxdZLx2+5A5\"\n \
+        \ \"/eKiTKk8KxKCs0YpqlhD6ahw0HnQGuo8SwHu2ZGr2kuUXuuQLQB1Ii7RmjQjECS93jbQLbeR1BZ56CZkzb0NMFSUKMv1\"\n  \"\
+        zBcSLZJsSXo1/K4osjJOq4paksCKwM4IVB0n0PVQlFuDXttV0JYQ4/7Rt7Or1jWh5f0BU6kGgrqmyTK5s+IdArdYLYxG\"\n  \"eneQ0gSwzpoTajKvRVlrF7eGUfKwG2Tj897BKvzwAZrtJwBhzjIuSRJuB8nTnvXLJNWcijEg1XZuzTA5fup6MtfgKjET\"\
+        \n  \"Evq6Jl9ninMZe8sePB4M+j34wzoZbXWX9b2G5pNnz7xUKcA6SlSEkh7/UQoZ+OST2708sv/ufLZHZlpQoyflERnv4QSN\"\n \
+        \ \"17UJHHy/u79x7WgzGB12WvCOyJrWlc5RVnNqukn593TlYVPcQVLd2MoRU2B+gsFXmgQ+73WmihrqCizKHB7FJQWHvYZR\"\n  \"\
+        Mi9vGMWusLwgksLmpFBzj7q23/Vci86oQWe7uvmAVkLv1lvVbRAjhbUBay1mEiBD5R4JZBCZMXngckTgNmS33p622+5O\"\n  \"XJuKVLmC2TVaV2Qi8rGdnwZOMq51KOX80fAwVBw1VK7X1wQTMn1v73mvDl8Nn+J3k9ByprhCUri9he3tIdHrcM3R0b5i\"\
+        \n  \"yVG43jegbLAvJ56lQ9zeUm5lTSqRSXR1QfVjnQ65ec7T64ZNSpXTdQkT5TVXWvx7BbvWvcSldevx2FBdQ/Ikx0f4HyXR\"\n \
+        \ \"YT9KkuMD5xHkrRu1Sv7/tg2ifjSIkl4/6vcOo/7h0/+eFEkeXBEknrArQITzMBlbToON0Ifdr+dQBcIQ2w4OQnbr3cPV\"\n  \"\
+        kO3luNNYVpvkVyPsOFkTNt8iTDYIEayPhS2Q6FSQ+1RmiqK8oY6wIUw1vDMpqKyUuFzOMe3OnWOJI7cO2Ne+WdLlK2rs\"\n  \"7xcq9EeISIKgJNHxIDx5iEHU7N74vI1jFx7vJ+0YUUBFdLzuvDsPEAKwCSwm4eT0Ov0BPQ4sch0cuamnG1P9Q3rBCUPN\"\
+        \n  \"th8H9OWLdES3701sOqAL5osRoTS6pkWZi6nIbCeIftWVibpi9kzi5s2XuJITMi3Ka8GZxR1MW7QBBvP2Ag001Cl9Noht\"\n \
+        \ \"fV2k6gqITRcR10tuHfXh8JCuJnQeCZEQkz+zs9enY3uAwlX7uROXwhPauVrqj1V5MzZltbGH6v14Bi0dhrXkUI5vzW7J\"\n  \"\
+        eDZ2VWeDd39MJo6PJ1Xle213gLRpDbPXAcn0fTHe1ZS+WflONyiVC0C5Ni8YfQ5xbGwx1nGGEmbowvYdTPa/88HDP62r\"\n  \"gkLJW7xffdZBSa7iG4Wj4L4TUVi/+lRU4TBAxn3FEvT5B3gPoEeflLPOK3dXgvl7+XIv3ypgFm7JVFCtU2bQ0QUcRY70\"\
         \n  \"91adZdtvIUO//oDntR/sfugboPcf/CMZlA==\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
         PY_PATCH\n"
     - name: V31.8.14 Titeltext und Steuerung pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'PY_V31814_CHECK'\nfrom pathlib import Path\nimport os\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
         for marker in ('V31.8.14: compact, pale-icy serif START',\n               'vt_v314_phase!=4', 'letter_runs[][3]',\n\
-        \               'vt_v31813_draw_start();', 'if(pressed & PAD_START)',\n               'vt_v31812_row_top', 'vt_load_game(void)',\n\
-        \               'vt_save_game(void)'):\n    if marker not in s:raise SystemExit('Missing expected code: '+marker)\n\
-        assert s.count('static void vt_v31813_draw_start(')==1\nprint('PASS: START is now smaller serif text; blink/menu/gameplay\
-        \ kept.')\nPY_V31814_CHECK\n"
+        \               'vt_v31813_draw_start();', 'if(pressed & PAD_START)',\n               'vt_v31812_row_top',\
+        \ 'vt_load_game(void)',\n               'vt_save_game(void)'):\n    if marker not in s:raise SystemExit('Missing\
+        \ expected code: '+marker)\nassert s.count('static void vt_v31813_draw_start(')==1\nprint('PASS: START is\
+        \ now smaller serif text; blink/menu/gameplay kept.')\nPY_V31814_CHECK\n"
     - name: V31.8.13 Starttaste, Titel-Blinken und Spielmechanik pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'PY_CHECK_31813'\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
         s=p.read_text(encoding='utf-8')\nchecks=['vt_v314_phase=4;', 'if(vt_v314_phase==4)return;',\n        'if(pressed\
-        \ & PAD_START)', 'vt_v31813_draw_start();',\n        'vt_v314_blink%90u', 'vt_v31812_row_top',\n        'vt_load_game(void)','vt_save_game(void)',\
-        \ 'vt_v3187_pixels']\n# START-glyph routine guards against wrong mode and blink OFF intervals.\nchecks.remove('if(vt_v314_phase==4)return;')\n\
-        checks.append('if(vt_v314_phase!=4)return;')\nfor check in checks:\n    if check not in s:raise SystemExit('Missing\
-        \ V31.8.13 feature: '+check)\nassert s.count('static void vt_v314_input(')==1\nassert s.count('static void vt_v314_draw(')==1\n\
-        assert s.count('static void vt_v31813_draw_start(')==1\nprint('PASS: Intro -> title with blinking START -> interactive\
-        \ menu; gameplay preserved.')\nPY_CHECK_31813\n"
+        \ & PAD_START)', 'vt_v31813_draw_start();',\n        'vt_v314_blink%90u', 'vt_v31812_row_top',\n       \
+        \ 'vt_load_game(void)','vt_save_game(void)', 'vt_v3187_pixels']\n# START-glyph routine guards against wrong\
+        \ mode and blink OFF intervals.\nchecks.remove('if(vt_v314_phase==4)return;')\nchecks.append('if(vt_v314_phase!=4)return;')\n\
+        for check in checks:\n    if check not in s:raise SystemExit('Missing V31.8.13 feature: '+check)\nassert\
+        \ s.count('static void vt_v314_input(')==1\nassert s.count('static void vt_v314_draw(')==1\nassert s.count('static\
+        \ void vt_v31813_draw_start(')==1\nprint('PASS: Intro -> title with blinking START -> interactive menu;\
+        \ gameplay preserved.')\nPY_CHECK_31813\n"
     - name: V31.8.12 Menue-Geometrie und Build-Fingerprint pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'PY'\nfrom pathlib import Path\nimport os,re\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
         for t in ('static int vt_v31812_row_top(int index)',\n          'screen_top[3]={136,152,168}', 'vt_v31812_row_top(selected)',\n\
         \          'vt_v31812_row_top(i)', 'vt_v3188_tile(218,207,3,2,74,184,236)',\n          'vt_load_game(void)',\
-        \ 'vt_save_game(void)'):\n    if t not in s: raise SystemExit('::error::Menu check failed: '+t)\nassert s.count('static\
-        \ void vt_v3172_menu_slots(')==1\nassert 'y=139+18*i' not in s\nassert 'y=(vt_v314_phase==2)?(136+16*i):(139+18*i)'\
-        \ not in s\nfor index in range(3):\n    box_center=(136+16*index)+7.5\n    text_center=144+16*index\n    assert\
-        \ abs(box_center-text_center)<=0.5\nprint('PASS V31.8.12: all three bars aligned with real text centres.')\n\
-        PY\n"
+        \ 'vt_save_game(void)'):\n    if t not in s: raise SystemExit('::error::Menu check failed: '+t)\nassert\
+        \ s.count('static void vt_v3172_menu_slots(')==1\nassert 'y=139+18*i' not in s\nassert 'y=(vt_v314_phase==2)?(136+16*i):(139+18*i)'\
+        \ not in s\nfor index in range(3):\n    box_center=(136+16*index)+7.5\n    text_center=144+16*index\n  \
+        \  assert abs(box_center-text_center)<=0.5\nprint('PASS V31.8.12: all three bars aligned with real text\
+        \ centres.')\nPY\n"
     - name: V31.8.8 Interaktive Menuefunktionen und Spiel pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'PYV3188'\nimport os,re\nfrom pathlib import Path\ns=(Path(os.environ['PROJECT_DIR'])/'src'/'main.c').read_text(encoding='utf-8')\n\
-        for x in ('static void vt_v3188_tile(', 'static void vt_v3172_menu_slots(',\n          'vt_v314_blink%64u', 'vt_v314_opt_cursor',\
-        \ 'vt_v3187_pixels',\n          'vt_v3172_menu_slots();', 'vt_load_game(void)', 'vt_save_game(void)'):\n    if\
-        \ x not in s: raise SystemExit('FEHLER: Funktion fehlt: '+x)\nassert s.count('static void vt_v3172_menu_slots(')==1\n\
+        for x in ('static void vt_v3188_tile(', 'static void vt_v3172_menu_slots(',\n          'vt_v314_blink%64u',\
+        \ 'vt_v314_opt_cursor', 'vt_v3187_pixels',\n          'vt_v3172_menu_slots();', 'vt_load_game(void)', 'vt_save_game(void)'):\n\
+        \    if x not in s: raise SystemExit('FEHLER: Funktion fehlt: '+x)\nassert s.count('static void vt_v3172_menu_slots(')==1\n\
         print('V31.8.8: Menue-Overlay und Spielsysteme erhalten.')\nPYV3188\n"
     - name: V31.9.0 Verbesserte 360-Grad-Landschaft und Gebirgshorizont
       shell: bash
-      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\nimport\
-        \ base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqdWW1z4zYO/u5fwabXSLJlW5Kd2LGjdDrbnXuZa7uTbtu52d3zyBZtsytLOlJOFKf57/eAlPyea3v5EEkkAAIg8ACk\"\
-        \n  \"FS9Ym68zlouczyORNGZRwe7YxV/uf/r++7f3k/dvv3vXTZ5iGU0eev6NN8mjYrbs5E8X7PbW+ue/vr3/ZvKznnj3zfs3\"\n  \"f7MaX37RXSvZnYq0y9MHlj8VyyztNS4uLkDWuel4bC6kKpiK5pzly0jxEVtlkrOHSAoes9611475QnLOHjOZxCxKYxYL\"\
-        \n  \"VURpwQouZSTSTuP9EsxJ9MSlpepRGki5y2ZZkgglshSv0YrLCCNpITHKpZYWJQmWf+AsjoqISb4i5nU6W0bpgscd0rUx\"\n  \"l9mKwdZlIqZMrPJMFuwdPhvVe6ZccDbykAbtTHVgrJBZ+sF6d//DP96+eT/59u/31ienayk569IKnZnVUGHekTyKJwUv\"\
-        \n  \"C5unsywW6SK01sW8PbScRuNLdo9praXksGfGofwqT3jB2Rs2h5IFDFNMYlVYU0BlaK59uUiyaQTDCgmRjMeiUJ1GzOdM\"\n  \"5VFqp/CEM2ow/K1oB7kK4aTClrwzFymIubSl9XEKPxdi9lG1HjIR42G1QMHVLMq5kdEClWp+tD/8e/yp+fVHhz6eLVe5\"\
-        \n  \"oPvRcfQKYs4SntrVQs4XoT/CBinO7tdpIVb8rZSZtOfW2zLnswKbnqWcPZP4lzGbZ2tY/7wv4MUycqOwGvngfepAU1nY\"\n  \"zljsD/I0xlDM82IZ+uNVFvPQgpO5pfkflyLhTNySbOWYyCJS4xf6m4Xqg/g0Zik9W/4nMgXPmoMnMMKytuSY1WtUi+zk\"\
-        \n  \"VJMzzHQtvVCqX0dGpUSk3BqLVugfcPDklKdZ8yAOVjwt/hfbRU1rgsA6S3VhXdQSl5E8T2M9WyPtmVeXeqkI2nsEerLy\"\n  \"h7bwrD8+pjuL6o055q5tPSugecahWtShZ2ivzivw0Rqd96FdLV+5Ty9j/OqwTG6ntd/qSbjTOWvPdgkINlF2Jgesn1Ik\"\
-        \n  \"bZTOkARTiXRXDFhktXSqaW7Ji7VMWeSKhs7mChZ0Mropf6ySus5+kyfuNNxlvR5SCOhR9KkFjg6Zl9tOi7aipT5MR58I\"\n  \"eP4qdeLNeJIoJGGSZI/AF86iB6AkgNNM08h8DQAlWIqU6jCCYpGmQKOFJoEoQVYU2EBgFcD2iYmYPmZQENYtuVgsiy6G\"\
-        \n  \"lCieWJEBs6IpEpMKxLDj90csxZhIP2MTOhD3QwoReuGoXgTLP3CpTOWIAKl6O9YK/lPraQF6CExjeDXJaFm1jGIOPKy9\"\n  \"Zz0UqGeeNwEOg25ipFqutJDd3SaratVovxwZUog0xO6uZLDeVbffb69TUbB5ggK6LUGmJnVYs9swyMoIV9nZ1W2actiz\"\
-        \n  \"CRpUO1G6YuMuSnexcaXvLnx36rsycBeBOw3GmgyVDbWUiFMeyYkqeB76Q8/VX3orQ79/TDqvKfsDz52fEIo5qsICyoeh\"\n  \"7zxLPxz2xws/9Hv98RSPYDiWQXgdjBdB6HvD8RQPPxi/NOqk2xcQaAG+f60l9HskYTggAYOhFuD7JGAw2OfXa15pDiwD\"\
-        \n  \"jhuPOK76mqMXaI6rigOb9Qv1Ce0oEYsUe1EA45UOIVP921P0GLqFiPIcbqFkY1O+FFU0mzaiU+et3y/9/q7hIGEu4/9Z\"\n  \"I4jevPtJpwdcuaa5zPBL/iCytULMVXG8inK94zovy9DOy27tcqdZv7Xtree7wW7YbMFiA67Nn+WaA1DEJvTGYnO7JcNH\"\
-        \n  \"q+XoqZKmyv2pElPPO8SCUWW4KFui3Ep2N+Fi0xKbo6Vq8rgMy1Y91Q3aeenGm3BzMLQ5ZFmGdfSj+VvapbtxDgl0rob2\"\n  \"8u6u71z2DuceI7nSUwPn0t+bmtu10Giq7Lh09jS4HV557PJyH+4PiDfHxA71iyJd890CxBD0/QllN6ns7qx2d9a6/b57\"\
-        \n  \"UFWk39bWNIMWad5E7h6OIKPNt/6qHLEN7DdSaNQcAXuiWYFQA+qlOtXbFQ4ueLbihXwiYKW+NhaSmx5xG9E/Ig0ASxkq\"\n  \"mIHeGstrZMfrMiPsRN+TYZbFTygcwCpDfiact2DjNLevbXsHOhSb24mDkP4/OI3vK5A05w/bgOKWcA/v9l8P9uJwX47Q\"\
-        \n  \"FJ5/aQD70YKflIhlJsUmS88UB6pBCVCFGm6tHXBGfX6i3kd7dZ5lBVpOaKL3piqZcGtEbb/ZoZ+FAra0M6pxNeoApj4r\"\n  \"NA04ewDACk5TGfv+h/fMFJy9+mK26NUCU+l+Wlr2EINQ4TbAP4ABO0QDLJYgFUWz791cO10QHYFFXrZ05gU3vQkqtq0Z\"\
-        \n  \"nGYwQBZ1fS/oHzJswnyzY5hl6vcYjHlh0Ltq2VDD91umsjQHzlcDp9nzD8klj1EsXCrXKSrF0J0max76gz2plFbmVDiX\"\n  \"a1WsVziPJjj90B5G5CY4XkaP9LkimMfJTe2XiweBDqpOhyPsgTuRxrFdEg5ugHzOLWsH1+cA5ajIQm/f88aV4qh0RvEb\"\
-        \n  \"f2w80KKC+HLQ2x6XWRKBalrbflOJuPa2IlB+X44QbUKhpgFtCL8ZQpzkYuNC7T7nQGlbXPpOGHr7kVJ7f/56PHjXJ9u7\"\n  \"5Xo9KF7h2ld9XrrzjXvV89wbr2WLr/pO0785TXyYdOcPv8aj7Q9HZCDTFt75V1/rl7Z/NTI2n/CSE4iOnkR25JSXCrNr\"\
-        \n  \"/KAjfKGvIyRv8xIpTbFkANZFHmcSjwegQrSgAfTpj6DN4Arg7yEMyCxXkLfgKIoJbQ0md3cl6J0JZHg5S9YxAMdcqVSS\"\n  \"0aikBY7kp3C2EvEkJg2TM4gGbSRCq9Ygm/6KaqKgFsTPRQl8M5cyCyniV0Fnt8IrLW2kMyus0EQjiafrCriR1J4HN3t7\"\
-        \n  \"sxtP144zs/stD4L/pNehsfIU19C1eNTlQBganI1HDU7P8057m7qh+ZNdzEk7cguN0YMcNx40fB4cjvjv/D6amN9+Oxag\"\n  \"x89L+KImFemEQAtiYIob9DznPIO9vBw4dwGtYjboDgD0+9rBOP/qakdHCPtOcsXlA9eIiRK0EDgHokRGsTrGzhrCTtwD\"\
-        \n  \"uYPgZHSjR38PUI/AiQB9Ms1KbJN/DazzARXLy57jDgIXseT6Q985gZj8SaIJApi7bb9PTL2KKRi0tKtcP7hyA28Alwb7\"\n  \"eFAdYs5BFjKSa7QlDaiN7TkkSL9eOV/1nBNc0cd5vRut1vgIaRDo7DPXrZ9J72DoT+D5LHngkxWaE7pDsZ2x5VazwUR7\"\
-        \n  \"QmPRJM1nyrYO4c6qUZi4bXuNE7o+UyHinTyKa1EJNnKyQBU1+X1GCF2vHlAY+IGje0YHc3t3bnkiCiYye5wUWQ6K7ehg\"\n  \"kgOBEvUKUzCBuevJcJrnVnUpIubaP9TUwkfq7AXM2xqhSVvdomUp3MZWQqGALUbMakGGo51N1yk7b5+5PjjtGc/BbqXd\"\
-        \n  \"3g0NFFUdfaq0rT9w9WDpK1VzPXTGpF9kBnu0HGiLRKTzgDm0ImzyziOOFdxcQSv39BI6Ry+0rwcvoWh8eDWPMwF7FAUi\"\n  \"qTA9qWmf9Hli15zqQ0fnjEh95IZEVBFdBHVRS6NiLQETdMtD5259EIRct65Kj1lGatB1jzqSStdGegfpNA+GddpdZbtf\"\
-        \n  \"AFwILBLeFfQ7QJfiRJfO7zgWfkI/KOm6nYo2j0nwyc8ajepnjD/yu0jjvxm3nzI=\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
+      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\n\
+        import base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqdWW1z4zYO/u5fwabXSLJlW5Kd2LGjdDrbnXuZa7uTbtu52d3zyBZtsytLOlJOFKf57/eAlPyea3v5EEkkAAIg8ACk\"\
+        \n  \"FS9Ym68zlouczyORNGZRwe7YxV/uf/r++7f3k/dvv3vXTZ5iGU0eev6NN8mjYrbs5E8X7PbW+ue/vr3/ZvKznnj3zfs3\"\n \
+        \ \"f7MaX37RXSvZnYq0y9MHlj8VyyztNS4uLkDWuel4bC6kKpiK5pzly0jxEVtlkrOHSAoes9611475QnLOHjOZxCxKYxYL\"\n  \"\
+        VURpwQouZSTSTuP9EsxJ9MSlpepRGki5y2ZZkgglshSv0YrLCCNpITHKpZYWJQmWf+AsjoqISb4i5nU6W0bpgscd0rUx\"\n  \"l9mKwdZlIqZMrPJMFuwdPhvVe6ZccDbykAbtTHVgrJBZ+sF6d//DP96+eT/59u/31ienayk569IKnZnVUGHekTyKJwUv\"\
+        \n  \"C5unsywW6SK01sW8PbScRuNLdo9praXksGfGofwqT3jB2Rs2h5IFDFNMYlVYU0BlaK59uUiyaQTDCgmRjMeiUJ1GzOdM\"\n \
+        \ \"5VFqp/CEM2ow/K1oB7kK4aTClrwzFymIubSl9XEKPxdi9lG1HjIR42G1QMHVLMq5kdEClWp+tD/8e/yp+fVHhz6eLVe5\"\n  \"\
+        oPvRcfQKYs4SntrVQs4XoT/CBinO7tdpIVb8rZSZtOfW2zLnswKbnqWcPZP4lzGbZ2tY/7wv4MUycqOwGvngfepAU1nY\"\n  \"zljsD/I0xlDM82IZ+uNVFvPQgpO5pfkflyLhTNySbOWYyCJS4xf6m4Xqg/g0Zik9W/4nMgXPmoMnMMKytuSY1WtUi+zk\"\
+        \n  \"VJMzzHQtvVCqX0dGpUSk3BqLVugfcPDklKdZ8yAOVjwt/hfbRU1rgsA6S3VhXdQSl5E8T2M9WyPtmVeXeqkI2nsEerLy\"\n \
+        \ \"h7bwrD8+pjuL6o055q5tPSugecahWtShZ2ivzivw0Rqd96FdLV+5Ty9j/OqwTG6ntd/qSbjTOWvPdgkINlF2Jgesn1Ik\"\n  \"\
+        bZTOkARTiXRXDFhktXSqaW7Ji7VMWeSKhs7mChZ0Mropf6ySus5+kyfuNNxlvR5SCOhR9KkFjg6Zl9tOi7aipT5MR58I\"\n  \"eP4qdeLNeJIoJGGSZI/AF86iB6AkgNNM08h8DQAlWIqU6jCCYpGmQKOFJoEoQVYU2EBgFcD2iYmYPmZQENYtuVgsiy6G\"\
+        \n  \"lCieWJEBs6IpEpMKxLDj90csxZhIP2MTOhD3QwoReuGoXgTLP3CpTOWIAKl6O9YK/lPraQF6CExjeDXJaFm1jGIOPKy9\"\n \
+        \ \"Zz0UqGeeNwEOg25ipFqutJDd3SaratVovxwZUog0xO6uZLDeVbffb69TUbB5ggK6LUGmJnVYs9swyMoIV9nZ1W2actiz\"\n  \"\
+        CRpUO1G6YuMuSnexcaXvLnx36rsycBeBOw3GmgyVDbWUiFMeyYkqeB76Q8/VX3orQ79/TDqvKfsDz52fEIo5qsICyoeh\"\n  \"7zxLPxz2xws/9Hv98RSPYDiWQXgdjBdB6HvD8RQPPxi/NOqk2xcQaAG+f60l9HskYTggAYOhFuD7JGAw2OfXa15pDiwD\"\
+        \n  \"jhuPOK76mqMXaI6rigOb9Qv1Ce0oEYsUe1EA45UOIVP921P0GLqFiPIcbqFkY1O+FFU0mzaiU+et3y/9/q7hIGEu4/9Z\"\n \
+        \ \"I4jevPtJpwdcuaa5zPBL/iCytULMVXG8inK94zovy9DOy27tcqdZv7Xtree7wW7YbMFiA67Nn+WaA1DEJvTGYnO7JcNH\"\n  \"\
+        q+XoqZKmyv2pElPPO8SCUWW4KFui3Ep2N+Fi0xKbo6Vq8rgMy1Y91Q3aeenGm3BzMLQ5ZFmGdfSj+VvapbtxDgl0rob2\"\n  \"8u6u71z2DuceI7nSUwPn0t+bmtu10Giq7Lh09jS4HV557PJyH+4PiDfHxA71iyJd890CxBD0/QllN6ns7qx2d9a6/b57\"\
+        \n  \"UFWk39bWNIMWad5E7h6OIKPNt/6qHLEN7DdSaNQcAXuiWYFQA+qlOtXbFQ4ueLbihXwiYKW+NhaSmx5xG9E/Ig0ASxkq\"\n \
+        \ \"mIHeGstrZMfrMiPsRN+TYZbFTygcwCpDfiact2DjNLevbXsHOhSb24mDkP4/OI3vK5A05w/bgOKWcA/v9l8P9uJwX47Q\"\n  \"\
+        FJ5/aQD70YKflIhlJsUmS88UB6pBCVCFGm6tHXBGfX6i3kd7dZ5lBVpOaKL3piqZcGtEbb/ZoZ+FAra0M6pxNeoApj4r\"\n  \"NA04ewDACk5TGfv+h/fMFJy9+mK26NUCU+l+Wlr2EINQ4TbAP4ABO0QDLJYgFUWz791cO10QHYFFXrZ05gU3vQkqtq0Z\"\
+        \n  \"nGYwQBZ1fS/oHzJswnyzY5hl6vcYjHlh0Ltq2VDD91umsjQHzlcDp9nzD8klj1EsXCrXKSrF0J0max76gz2plFbmVDiX\"\n \
+        \ \"a1WsVziPJjj90B5G5CY4XkaP9LkimMfJTe2XiweBDqpOhyPsgTuRxrFdEg5ugHzOLWsH1+cA5ajIQm/f88aV4qh0RvEb\"\n  \"\
+        f2w80KKC+HLQ2x6XWRKBalrbflOJuPa2IlB+X44QbUKhpgFtCL8ZQpzkYuNC7T7nQGlbXPpOGHr7kVJ7f/56PHjXJ9u7\"\n  \"5Xo9KF7h2ld9XrrzjXvV89wbr2WLr/pO0785TXyYdOcPv8aj7Q9HZCDTFt75V1/rl7Z/NTI2n/CSE4iOnkR25JSXCrNr\"\
+        \n  \"/KAjfKGvIyRv8xIpTbFkANZFHmcSjwegQrSgAfTpj6DN4Arg7yEMyCxXkLfgKIoJbQ0md3cl6J0JZHg5S9YxAMdcqVSS\"\n \
+        \ \"0aikBY7kp3C2EvEkJg2TM4gGbSRCq9Ygm/6KaqKgFsTPRQl8M5cyCyniV0Fnt8IrLW2kMyus0EQjiafrCriR1J4HN3t7\"\n  \"\
+        sxtP144zs/stD4L/pNehsfIU19C1eNTlQBganI1HDU7P8057m7qh+ZNdzEk7cguN0YMcNx40fB4cjvjv/D6amN9+Oxag\"\n  \"x89L+KImFemEQAtiYIob9DznPIO9vBw4dwGtYjboDgD0+9rBOP/qakdHCPtOcsXlA9eIiRK0EDgHokRGsTrGzhrCTtwD\"\
+        \n  \"uYPgZHSjR38PUI/AiQB9Ms1KbJN/DazzARXLy57jDgIXseT6Q985gZj8SaIJApi7bb9PTL2KKRi0tKtcP7hyA28Alwb7\"\n \
+        \ \"eFAdYs5BFjKSa7QlDaiN7TkkSL9eOV/1nBNc0cd5vRut1vgIaRDo7DPXrZ9J72DoT+D5LHngkxWaE7pDsZ2x5VazwUR7\"\n  \"\
+        QmPRJM1nyrYO4c6qUZi4bXuNE7o+UyHinTyKa1EJNnKyQBU1+X1GCF2vHlAY+IGje0YHc3t3bnkiCiYye5wUWQ6K7ehg\"\n  \"kgOBEvUKUzCBuevJcJrnVnUpIubaP9TUwkfq7AXM2xqhSVvdomUp3MZWQqGALUbMakGGo51N1yk7b5+5PjjtGc/BbqXd\"\
+        \n  \"3g0NFFUdfaq0rT9w9WDpK1VzPXTGpF9kBnu0HGiLRKTzgDm0ImzyziOOFdxcQSv39BI6Ry+0rwcvoWh8eDWPMwF7FAUi\"\n \
+        \ \"qTA9qWmf9Hli15zqQ0fnjEh95IZEVBFdBHVRS6NiLQETdMtD5259EIRct65Kj1lGatB1jzqSStdGegfpNA+GddpdZbtf\"\n  \"\
+        AFwILBLeFfQ7QJfiRJfO7zgWfkI/KOm6nYo2j0nwyc8ajepnjD/yu0jjvxm3nzI=\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
         PY_PATCH\n"
     - name: V31.9.0 Welt, Kamera und Spielsysteme pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_V3190_CHECK'\nfrom pathlib import Path\nimport os\ns=(Path(os.environ['PROJECT_DIR'])/'src'/'main.c').read_text(encoding='utf-8')\n\
-        for code in ('V31.9.0: 360-degree extended ground',\n             'V31.9.0: overlapping rounded skyline',\n \
-        \            'V31.9.0: sparse distant objects',\n             'near_step=180,near_cells=14',\n             'far_step=470,far_cells=14',\n\
-        \             'vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,',\n             'vt_v281_resolve_movement();','vt_v293_move((unsigned\
-        \ int)pad);',\n             'vt_v31813_draw_start();','vt_v3172_menu_slots();',\n             'vt_load_game(void)','vt_save_game(void)'):\n\
-        \    if code not in s:raise SystemExit('Missing expected V31.9.0 component: '+code)\nprint('OK: expanded visual\
-        \ terrain with original flat player ground and existing controls.')\nLYDRA_V3190_CHECK\n"
+        for code in ('V31.9.0: 360-degree extended ground',\n             'V31.9.0: overlapping rounded skyline',\n\
+        \             'V31.9.0: sparse distant objects',\n             'near_step=180,near_cells=14',\n        \
+        \     'far_step=470,far_cells=14',\n             'vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,',\n\
+        \             'vt_v281_resolve_movement();','vt_v293_move((unsigned int)pad);',\n             'vt_v31813_draw_start();','vt_v3172_menu_slots();',\n\
+        \             'vt_load_game(void)','vt_save_game(void)'):\n    if code not in s:raise SystemExit('Missing\
+        \ expected V31.9.0 component: '+code)\nprint('OK: expanded visual terrain with original flat player ground\
+        \ and existing controls.')\nLYDRA_V3190_CHECK\n"
     - name: V31.9.1 PS1 Gelaende-LOD und Sichtbereich optimieren
       shell: bash
-      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\nimport\
-        \ base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqdWG1zozgS/u5focndBDCyjfBr4pCp3ZlU7dzuzqYys1d1Ncm5MAisDQZOwjEmm/++LQE2fsnM3fkLRv2mbnU/3ULQ\"\
-        \n  \"DHXoKkEpS2ngsqjluRm6Rmd/v/v906ebu9mXm19ve9HG5+7sqU8uyCx1M2/RTTdn6OpK++VfH+5+mP1TEW5/+PL+J631\"\n  \"tze9leC9OYt7NH5C6SZbJHG/dXZ2Bmzdiy5Bt58JWic88hGnsU85i0OUpBlbssLNWBJjFCcodJc0jdwNSjgS7hNF3sKN\"\
-        \n  \"Qyq6rTvqrzyKkiDoCI9TGldqpM5H5MY+ClyOfvntA1ovWERRyqmg/ElaiSlQQp6sgEky9kdWx6chKEFLN+3KTbYCniwR\"\n  \"OLmI2ByxZZrwDN3Ca6v6nwgMBlupIxf1RHTBS8aT+Kt2e/fbP27ef5l9+HinPRg9TXCvt3RZ3PW0lnDSLqeuP8tonuk0\"\
-        \n  \"9hIfNuRoqyzoTDSj1fJpAGrBY4/OglXsyUDoMQQBokHXxmULwS+MkrkbIaFelvIgqHAiJjKd027AYp9llOtcu5+LDELp\"\n  \"3QvzKWE+PDQTOKjw3JQqrYYJXKJ9r3/99/Sh/e7ekC/PGhYY+D4bhrLAAhTRWK8MGW8cUm5D/rjLBEV3qxjOjd5wnnA9\"\
-        \n  \"0G7ylHoZ9VESUwQesZhJP9CzNPmCUaAi/9xU+qKVtmDDPHOq1a/WQ1ct6MaUNRfhoGHJp2m2cMh0mfjU0SCUVFM6yvNm\"\n  \"V1K/MNQJK9bdrr2FI76yh2ksHyZ5kC7Cs5agEfikaVt2oCoblZGdnooI6hytpylLsfp7We4pYjHVpsx0yJ4IjU4ItWuh\"\
-        \n  \"eZR4j9+UOqtZRca10zxn2lnF4y1e49GetUsVmNctvVQcnQaHolbxUA6ejsd9XO9ydzKH4qWrp+XbJ+KpNO1HRp7VKxu4\"\n  \"1y5PB1GvzMvwKSNVVA2JMjVRxm1LhHAaJ73ZGgC1ZZKdqAjt9xjq1Y09KIk5h9IWSDNV+ZU5D1l4qfL8wYQih5TnLNUN\"\
-        \n  \"8+w+PjMhQS8fWq0jTNCeMkBiy5oBkEA5zEo40zDXIHF7bVSh7CWKWLgAOJBo2IEnbC+WqDgtUbBa6XlJBAAii5TmrpdF\"\n  \"m0qB1UXtXquEESRBBJ20q0uSgZ7LUMQZYjlmBQ5zHBaYExwSPCeY2zi08dyeKjYviUWmmOVOZiKjqUMmFlZvHo0i4ZDB\"\
-        \n  \"IWtQcw5HFg52jJVOFgAEhuCG4xDjmRNnMpiGxCH9wXQOD3sy5bYzsqeh7RBrMp3DA0RfWnUmNRXYSgEhI6Vh0JcaJmOp\"\n  \"YDxRCgiRCsbjpryyOVQSYAYkLiwpMRwoib6tJIaVBBzTZ8iCZv/xkifK3ZBeotHYtqr+uAL8FAgIYiXQaDixIBTb86lT\"\
-        \n  \"kdg5sYEA0XEBeQNEBjkZqCaYAR6KSzS0UUDXkApzF3aaJtEmhLj2FFUds+otuaOnea+Os9Gu/3X0bbh79m65jHtYgFTx\"\n  \"v0oFUBuscKwpK662bPBimoYi5ZKUN0k5kKosqzMtd8LcZPlWNS6csDBZcWCrZvdzJzdrUs/upDn2C6fYWyr2RRZYLFyf\"\
-        \n  \"4rXLlzsKHN7PlKYoW0DWxDGEtUwcBDPSOkbzjaLQHNqynDkWUIZwyBnMVtXosQ15lbh1Yblzofu50djR1WRoofPzJpDt\"\n  \"MReHzAYUDFhd0b3tfn5k6S4f0BpCin68+enjpw9qq96KwwSVoSdG13L2ypAbJXEomA8OZt2m9S/AfmFZHZmYMJYFNNvA\"\
-        \n  \"HMJDSEuVwAJ5kNfcRdmKx0Kh6Fqq+c/K9cVrfsORQ4R98B1OxLjqgIETfiycmn/hioWe48LYEdU5Ofri+npgnPd36/Lk\"\n  \"1PLYOCe7ZanJHpBZELmZ1IR3mYF3GYEHA7zXQzjpKENt25SK24Bq+yuAdeW7eqv2ty35jz5EmXkwwJVzKE2WNOMbFaWE\"\
-        \n  \"MwgikOTMCym1g+UgShJ+WKVb4DTa278dfQegsuS2hL1K/T8ky2hVgF/O/3oJ8FvGBnY3/+5Fbz+SB50BYvXSgg5mfKPh\"\n  \"LSBIRRKfanUJoFvHS6BX+FB2LiQzdDoMQyWDVHebOFsCq3jcyAnm1R5XmTrubg38khh1BU2CHUMT3FQiSEfWHlgXI6MH\"\
-        \n  \"TAfIleamSn/7oj8TLNaVgNG2x1DCPWLZg32BwkmLnQD4+T2BBZXN37H7Q1OHbRBilhjVHhtvx0a7T/bZOfWhX2EZoBia\"\n  \"1QTPoxV1yLip9bhec4mhBaAm1Kw9OlWzB10ZrBDLmlZmoDWWZi7ItNyvKTvoy96Ed9iXpQpov/VOLyoVI2urAvr1y0Gh\"\
-        \n  \"z1LqPqo6B/MWLjnhouOXHitvjb1d6+ycGI5jNQ+2Dlbw+vFZo6PT2Eq9foavSDX3HuQ4KPCIWPjCMnX2dmC0ycVxeYFL\"\n  \"12TyDh4dMrncOnhNhu/Unw4ZXpYuH4nKGEg++ZRsBzF5qaDsu0W6ZP6s7HYn6rScQuoSzWAncJkuEa/j+n+ARlj+dPu+\"\
-        \n  \"7ByLZCWgXYEJdfX3X63Wnc1XxlF3CdCVQcFu13NL4ShIQzVAQyNDq0EtLIWVJ6jNyQXy8GhkkWsnZ5XckrMKKIMxpbDk\"\n  \"mNKvdTYnlHosOZ5FvtX+joeIK9gxTA6H44JcPl2nB/LXZACjx59/HipQ66c1vKlZWTyTo0TZz7Hdt4zTAvrifGxc29JK\"\
-        \n  \"eUDXMKh/f3fgHBkOv402R76DkByrD1YLtfo94DrAADnmzeZJDmdARgpTTPCkb+CxjSFRMJkQ46iS0w13IU1BpkMGUqhf\"\n  \"CdljU8UBE3uIbWsM8bKbdVfdLk4hg6yfCtUA5WHI6RtSkfo7NN72jaP6lb8y1KY53a9oSGI5yT1CfcIwV9azPSEzTkUS\"\
-        \n  \"PdHZEsa7JZSnbkw1rNUwJld1fRULFsZwx4VENVLXlyyHAFMCBMSmP1MBLD/vVKr6ZGzPQPtqJqIkE6el5VfAmfwsWBZ5\"\n  \"KRolrr+/+L37r1Z9S5MfI0p/5cQLNHHyBv8rE0KO8Vzii/QxoC4MtxQu8qW40Uq7a84yWn7aE/j4417KITD6bmfljW03\"\
-        \n  \"kOtrV5S3NkN+W4R1bwXjXxxiREa9CZItAIASZGroTOZ/UC8T3Z3yTyDWqYbHclLDqD4zvBsnsTwjngANol3C7JIuE5hC\"\n  \"PWjpDawFzUcfd1vVx9z/5utw6y9Bjo7v\"\
-        \n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\nPY_PATCH\n"
+      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\n\
+        import base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqdWG1zozgS/u5focndBDCyjfBr4pCp3ZlU7dzuzqYys1d1Ncm5MAisDQZOwjEmm/++LQE2fsnM3fkLRv2mbnU/3ULQ\"\
+        \n  \"DHXoKkEpS2ngsqjluRm6Rmd/v/v906ebu9mXm19ve9HG5+7sqU8uyCx1M2/RTTdn6OpK++VfH+5+mP1TEW5/+PL+J631\"\n \
+        \ \"tze9leC9OYt7NH5C6SZbJHG/dXZ2Bmzdiy5Bt58JWic88hGnsU85i0OUpBlbssLNWBJjFCcodJc0jdwNSjgS7hNF3sKN\"\n  \"\
+        Qyq6rTvqrzyKkiDoCI9TGldqpM5H5MY+ClyOfvntA1ovWERRyqmg/ElaiSlQQp6sgEky9kdWx6chKEFLN+3KTbYCniwR\"\n  \"OLmI2ByxZZrwDN3Ca6v6nwgMBlupIxf1RHTBS8aT+Kt2e/fbP27ef5l9+HinPRg9TXCvt3RZ3PW0lnDSLqeuP8tonuk0\"\
+        \n  \"9hIfNuRoqyzoTDSj1fJpAGrBY4/OglXsyUDoMQQBokHXxmULwS+MkrkbIaFelvIgqHAiJjKd027AYp9llOtcu5+LDELp\"\n \
+        \ \"3QvzKWE+PDQTOKjw3JQqrYYJXKJ9r3/99/Sh/e7ekC/PGhYY+D4bhrLAAhTRWK8MGW8cUm5D/rjLBEV3qxjOjd5wnnA9\"\n  \"\
+        0G7ylHoZ9VESUwQesZhJP9CzNPmCUaAi/9xU+qKVtmDDPHOq1a/WQ1ct6MaUNRfhoGHJp2m2cMh0mfjU0SCUVFM6yvNm\"\n  \"V1K/MNQJK9bdrr2FI76yh2ksHyZ5kC7Cs5agEfikaVt2oCoblZGdnooI6hytpylLsfp7We4pYjHVpsx0yJ4IjU4ItWuh\"\
+        \n  \"eZR4j9+UOqtZRca10zxn2lnF4y1e49GetUsVmNctvVQcnQaHolbxUA6ejsd9XO9ydzKH4qWrp+XbJ+KpNO1HRp7VKxu4\"\n \
+        \ \"1y5PB1GvzMvwKSNVVA2JMjVRxm1LhHAaJ73ZGgC1ZZKdqAjt9xjq1Y09KIk5h9IWSDNV+ZU5D1l4qfL8wYQih5TnLNUN\"\n  \"\
+        8+w+PjMhQS8fWq0jTNCeMkBiy5oBkEA5zEo40zDXIHF7bVSh7CWKWLgAOJBo2IEnbC+WqDgtUbBa6XlJBAAii5TmrpdF\"\n  \"m0qB1UXtXquEESRBBJ20q0uSgZ7LUMQZYjlmBQ5zHBaYExwSPCeY2zi08dyeKjYviUWmmOVOZiKjqUMmFlZvHo0i4ZDB\"\
+        \n  \"IWtQcw5HFg52jJVOFgAEhuCG4xDjmRNnMpiGxCH9wXQOD3sy5bYzsqeh7RBrMp3DA0RfWnUmNRXYSgEhI6Vh0JcaJmOp\"\n \
+        \ \"YDxRCgiRCsbjpryyOVQSYAYkLiwpMRwoib6tJIaVBBzTZ8iCZv/xkifK3ZBeotHYtqr+uAL8FAgIYiXQaDixIBTb86lT\"\n  \"\
+        kdg5sYEA0XEBeQNEBjkZqCaYAR6KSzS0UUDXkApzF3aaJtEmhLj2FFUds+otuaOnea+Os9Gu/3X0bbh79m65jHtYgFTx\"\n  \"v0oFUBuscKwpK662bPBimoYi5ZKUN0k5kKosqzMtd8LcZPlWNS6csDBZcWCrZvdzJzdrUs/upDn2C6fYWyr2RRZYLFyf\"\
+        \n  \"4rXLlzsKHN7PlKYoW0DWxDGEtUwcBDPSOkbzjaLQHNqynDkWUIZwyBnMVtXosQ15lbh1Yblzofu50djR1WRoofPzJpDt\"\n \
+        \ \"MReHzAYUDFhd0b3tfn5k6S4f0BpCin68+enjpw9qq96KwwSVoSdG13L2ypAbJXEomA8OZt2m9S/AfmFZHZmYMJYFNNvA\"\n  \"\
+        HMJDSEuVwAJ5kNfcRdmKx0Kh6Fqq+c/K9cVrfsORQ4R98B1OxLjqgIETfiycmn/hioWe48LYEdU5Ofri+npgnPd36/Lk\"\n  \"1PLYOCe7ZanJHpBZELmZ1IR3mYF3GYEHA7zXQzjpKENt25SK24Bq+yuAdeW7eqv2ty35jz5EmXkwwJVzKE2WNOMbFaWE\"\
+        \n  \"MwgikOTMCym1g+UgShJ+WKVb4DTa278dfQegsuS2hL1K/T8ky2hVgF/O/3oJ8FvGBnY3/+5Fbz+SB50BYvXSgg5mfKPh\"\n \
+        \ \"LSBIRRKfanUJoFvHS6BX+FB2LiQzdDoMQyWDVHebOFsCq3jcyAnm1R5XmTrubg38khh1BU2CHUMT3FQiSEfWHlgXI6MH\"\n  \"\
+        TAfIleamSn/7oj8TLNaVgNG2x1DCPWLZg32BwkmLnQD4+T2BBZXN37H7Q1OHbRBilhjVHhtvx0a7T/bZOfWhX2EZoBia\"\n  \"1QTPoxV1yLip9bhec4mhBaAm1Kw9OlWzB10ZrBDLmlZmoDWWZi7ItNyvKTvoy96Ed9iXpQpov/VOLyoVI2urAvr1y0Gh\"\
+        \n  \"z1LqPqo6B/MWLjnhouOXHitvjb1d6+ycGI5jNQ+2Dlbw+vFZo6PT2Eq9foavSDX3HuQ4KPCIWPjCMnX2dmC0ycVxeYFL\"\n \
+        \ \"12TyDh4dMrncOnhNhu/Unw4ZXpYuH4nKGEg++ZRsBzF5qaDsu0W6ZP6s7HYn6rScQuoSzWAncJkuEa/j+n+ARlj+dPu+\"\n  \"\
+        7ByLZCWgXYEJdfX3X63Wnc1XxlF3CdCVQcFu13NL4ShIQzVAQyNDq0EtLIWVJ6jNyQXy8GhkkWsnZ5XckrMKKIMxpbDk\"\n  \"mNKvdTYnlHosOZ5FvtX+joeIK9gxTA6H44JcPl2nB/LXZACjx59/HipQ66c1vKlZWTyTo0TZz7Hdt4zTAvrifGxc29JK\"\
+        \n  \"eUDXMKh/f3fgHBkOv402R76DkByrD1YLtfo94DrAADnmzeZJDmdARgpTTPCkb+CxjSFRMJkQ46iS0w13IU1BpkMGUqhf\"\n \
+        \ \"CdljU8UBE3uIbWsM8bKbdVfdLk4hg6yfCtUA5WHI6RtSkfo7NN72jaP6lb8y1KY53a9oSGI5yT1CfcIwV9azPSEzTkUS\"\n  \"\
+        PdHZEsa7JZSnbkw1rNUwJld1fRULFsZwx4VENVLXlyyHAFMCBMSmP1MBLD/vVKr6ZGzPQPtqJqIkE6el5VfAmfwsWBZ5\"\n  \"KRolrr+/+L37r1Z9S5MfI0p/5cQLNHHyBv8rE0KO8Vzii/QxoC4MtxQu8qW40Uq7a84yWn7aE/j4417KITD6bmfljW03\"\
+        \n  \"kOtrV5S3NkN+W4R1bwXjXxxiREa9CZItAIASZGroTOZ/UC8T3Z3yTyDWqYbHclLDqD4zvBsnsTwjngANol3C7JIuE5hC\"\n \
+        \ \"PWjpDawFzUcfd1vVx9z/5utw6y9Bjo7v\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
+        PY_PATCH\n"
     - name: V31.9.1 Performance-Geometrie und Spielfunktionen pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_V3191_CHECK'\nfrom pathlib import Path\nimport os\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
@@ -465,76 +515,87 @@ jobs:
         \ expected code missing: '+c)\nprint('V31.9.1: LOD lower complexity, all gameplay and UI retained.')\nLYDRA_V3191_CHECK\n"
     - name: V31.9.2 Gleichmaessige Kamera und Bewegung mit VBlank-Zeitbasis
       shell: bash
-      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\nimport\
-        \ base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqtWOtz27gR/66/AvF1QlLvh+M4kulMevH10ubhc5y76cQuByYgCw0FMgAoS3L8v3cBkBRJ0UmvU36QSGBfWPx2sQtJ\"\
-        \n  \"FerRNEYJS+gcs6gVYoVO0cFfLj69f392EVyevTsfRBsicLCajF6MgwSrcNFPNgfo5MR5+8/XF6+C383E+avLn391Wj89\"\n  \"GaRSDG4YH1C+QslGLWI+aR0cHABZ/0V/PEWKLpNY4AiFMZdMKsrDDWIcnX8coRAvqcCog5IIb6hAURzGy1ixmPdb/6A0\"\
-        \n  \"kcAURUzCQBfd0nhJldjAG7Bpji6SeEVlFymmItpFmBN0K3CyYKFEKQ8XmN9S0tfmtOYiXiJYziJiN4hpkxQ6h89W9h7L\"\n  \"rqCtxNdjbiz7sBwmYv7ZOb/48Pezny+D128unGtv4EgRDpaY8X7otKSf9AXFJFB0rVxYWUwYv/WdVM17x47XahE6R3Mu\"\
-        \n  \"E8xdDkZ70xaCZ6m96sO6lCtof844YYoKVzhXN1JhxcIr2XFfTlcxI98YVx58Oh2gpDLECbWSOkAt21fu53/Nrtsvrzz9\"\n  \"ce909Sr6Hz3P6GFzFFHuGnXeE380FZhJii5SrtiSngkRC3fuvKeUILrGoYo2KOYU3WsFD+DmWKH7nYAHx0oFE4Xyzdjn\"\
-        \n  \"4XXffLrejO2GKCcwQGiiFv5oppdEfQd8Qx0j4G7BIorYiRYtPbNrhtY6Rz+hLz+z6xnXf53RtV4I/OcMNIJFOE5BDbNW\"\n  \"R6ZkJyebDWFm4BhF3LxOM5sixqkzYx1/VGGh0T5Tu2C6AZR++R7XQUEqlXAaaQ6cg5wmXDxC49w7U+OXRxU9ZAS9EoGZ\"\
-        \n  \"zN1h1tfojiteGLnbmD1+u9RGAe0mfxpRVc/ozWq24MqZNvvQzdVr9xkt1qseisVuUvstnwR3es3LKTSAXAuyhhhwPvEb\"\n  \"HGEeQiDcCBxSiZyOiTLDKqhKBbe477JWy74AyP0stJ2VClbjF5NgGa8oREkcEUCuIZsC2XULlMNYP4xBq+vA+C1V/jwW\"\
-        \n  \"d1iQ9uhwMjmaOSZArb4GC8/WCQ0V2BemQlCuQxWWE8UbGLKpdoS09iXMIVePPO+P0YrCBjK1AT+Fi1h4YFvNFFhY++iw\"\n  \"83/QnuVy4yqrTidATu984UCwDtqoOBIKQ832Wb4UlNIIJxJErhihMbh9Lqhc6PzOIROBXkIFzM4FcMi+NvZywSRMkFRv\"\
-        \n  \"mTlokE36EpIM5ZDVEgqHzoqiu1hEOStaMikRRr//Ffb8ixGkDxv06Xzw+sMf7415kAgjOF/env1yObh487dfL+3CMmP1\"\n  \"5AxxuoIzCxNi54hgc9VH7UHLJnGk8zcqQ8NNwZhbDmuArA6HEfHQfZ5SNYMeBRPDYO0Pu+Zl6w9ndYoIS2UozAtQdA3S\"\
-        \n  \"KGmglQkk9+DraNgwp40Ovh4Dv3nT+vTJa4YqxFWrBV2xOJXB6kZ7Lyet0PD4zq+s1fv944aHbm/kNVBnu25n9ABR/qib\"\n  \"RUdmnf4zUdMleuWk8IumX627q22XUMkACoEmh49I4S7j4axlyAB9r2MDI2CgUCMoCgCIYn4LQIZKAuE5nMCwJQBDKCcE\"\
-        \n  \"BgO1M6ROOUu6jMWmF4I56M3gQz9PLq/QuGe9ALhIENb7LWF7wM5d3dIDBELVAo4EXQXw/50uE2mwYnOTW3NrDgybE41/\"\n  \"fPBqr0Y2K52BbkZ36o9T9PRpznbiP0s98OjY0j6Y3/omguidoz4AuME5UNdEEFMRNeWRXMQpBBAEJNSQMr1J2JpGyNZq\"\
-        \n  \"JoxxGAKtXicUb6WFPcnAib59Q8m6Z8F7ejysfJ+gnhnJl5Ns7cQ2J8y/DWHZOVm4VIPFYLeOfP3kkH8M8EV5A+4e5Q7L\"\n  \"V+JCwD49f/U6MPnA0z5+UozpROF5Bqq9jNOUKWU+Q1Nls6IsX8YGHPqzvEjYlN+OUW4vbAukuBRwVuT3LqJYJ847BvV3\"\
-        \n  \"qmBfNMrSJSQq2LJIT/bL5+zkSIuAIizlTEk0QBmMIZ/JFDLpgupDAuEbkSYKHR2iBIJDV902gxb7q59y3BnHtidH7fGz\"\n  \"o1mJAoLRL9P1so3Y25mO7xrqNlHeYFKbLm1Yx88YgLAUBDzc29pBxZT6bM8Hnqq1NmGPA0j1wQZDIqsNdICjczh8ceQ9\"\
-        \n  \"hd9nGUrsbt/vIW34uO58zoZkrgU0BFmBUFM820fip/ManvT55Xl57nwMiIaqygiSCrbeDolPsrEyGhsjqzEO97wCQD77\"\n  \"mrIVjnQStGeyhaAGmKTQIhJ7ctvTXudM6FCPhjoNT4ZonsgKjj/aU+S30dBahb6YppEwfGvipMi3pvsTUPPo/gxUwskN\"\
-        \n  \"Wa6C48aqrJxfi3WfWNKyTyp+6fiT4fNxBZl1EaeZiJ0v7cCO46HYtj2mx/T2fqz35Md6d4Gw9t1eXr5IxuuB4LULKd5g\"\n  \"NBwflmJo67tF5RPG8k+wWiB1/NW6shALLBjeVoZJBrl1TQoUCJajUXrPJ+t2w8QWJra1iQRsIevSNxhBthVgJPr8+uPD\"\
-        \n  \"xVtI8W/evbn07pO1Xx6Y5UXdrBw7D1UZp6guAv1JEds9M7YNZmy/L6NuxrbBjO+KIOtv38h2D6SKJoFpOjqdKjxzmOAV\"\n  \"BizalFvC/PDleHh4PB16vXoerufgig2nQ53fyBqd+sgl25Phyx7ZTsEub45DfUczntUaTxtsZH1iOHvfYR01sGZTQH/q\"\
-        \n  \"D72Xk+mwHlL2NyvekwxRWQmfAKAeWrpNktA4Tk0Jct2B3qkPLTBLXK+jG/aO/AxZcXrd+gmdrZk0FWVRZ1Z6qYToAhfy\"\n  \"HdBAv/Pu08dLff0GXykMp5xr1hj6XZN3S71RvwX5D+nWV1/R1RrbrpNvgVUQWHXZ+GQ4DOhagYXBrcm0TnbbVb7/MuKh\"\
-        \n  \"0l6WxB+PAigr42hFgzxfu97M6aJsehwQAYciFDaSBjwJpet0KxtgCSej5+MAmNNARrHSRPn48WhiRdirqiZufY8Y6ALH\"\n  \"1UW8l/FGMSaV0Ua1Lxx9ufALjkwHq6+mcncsGQkIVZhFbu4MoDTLt60Iko3XEe+gP9U7RPNdhoJbbiCEllPkdDS/6eNl\"\
-        \n  \"3sX/r431D7r+y/zmthBrroON7ThJIla5Nwz1zUfSvxMMkGHuQ2V3/0Y0gTO9bHH51sDUsN28qTB47GlzALpL3cdj3UaY\"\n  \"lRWgT3RDIlaU9EH23v10K7uP/m8uuFv/ASYb/ww=\"\
-        \n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\nPY_PATCH\n"
+      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\n\
+        import base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqtWOtz27gR/66/AvF1QlLvh+M4kulMevH10ubhc5y76cQuByYgCw0FMgAoS3L8v3cBkBRJ0UmvU36QSGBfWPx2sQtJ\"\
+        \n  \"FerRNEYJS+gcs6gVYoVO0cFfLj69f392EVyevTsfRBsicLCajF6MgwSrcNFPNgfo5MR5+8/XF6+C383E+avLn391Wj89\"\n \
+        \ \"GaRSDG4YH1C+QslGLWI+aR0cHABZ/0V/PEWKLpNY4AiFMZdMKsrDDWIcnX8coRAvqcCog5IIb6hAURzGy1ixmPdb/6A0\"\n  \"\
+        kcAURUzCQBfd0nhJldjAG7Bpji6SeEVlFymmItpFmBN0K3CyYKFEKQ8XmN9S0tfmtOYiXiJYziJiN4hpkxQ6h89W9h7L\"\n  \"rqCtxNdjbiz7sBwmYv7ZOb/48Pezny+D128unGtv4EgRDpaY8X7otKSf9AXFJFB0rVxYWUwYv/WdVM17x47XahE6R3Mu\"\
+        \n  \"E8xdDkZ70xaCZ6m96sO6lCtof844YYoKVzhXN1JhxcIr2XFfTlcxI98YVx58Oh2gpDLECbWSOkAt21fu53/Nrtsvrzz9\"\n \
+        \ \"ce909Sr6Hz3P6GFzFFHuGnXeE380FZhJii5SrtiSngkRC3fuvKeUILrGoYo2KOYU3WsFD+DmWKH7nYAHx0oFE4Xyzdjn\"\n  \"\
+        4XXffLrejO2GKCcwQGiiFv5oppdEfQd8Qx0j4G7BIorYiRYtPbNrhtY6Rz+hLz+z6xnXf53RtV4I/OcMNIJFOE5BDbNW\"\n  \"R6ZkJyebDWFm4BhF3LxOM5sixqkzYx1/VGGh0T5Tu2C6AZR++R7XQUEqlXAaaQ6cg5wmXDxC49w7U+OXRxU9ZAS9EoGZ\"\
+        \n  \"zN1h1tfojiteGLnbmD1+u9RGAe0mfxpRVc/ozWq24MqZNvvQzdVr9xkt1qseisVuUvstnwR3es3LKTSAXAuyhhhwPvEb\"\n \
+        \ \"HGEeQiDcCBxSiZyOiTLDKqhKBbe477JWy74AyP0stJ2VClbjF5NgGa8oREkcEUCuIZsC2XULlMNYP4xBq+vA+C1V/jwW\"\n  \"\
+        d1iQ9uhwMjmaOSZArb4GC8/WCQ0V2BemQlCuQxWWE8UbGLKpdoS09iXMIVePPO+P0YrCBjK1AT+Fi1h4YFvNFFhY++iw\"\n  \"83/QnuVy4yqrTidATu984UCwDtqoOBIKQ832Wb4UlNIIJxJErhihMbh9Lqhc6PzOIROBXkIFzM4FcMi+NvZywSRMkFRv\"\
+        \n  \"mTlokE36EpIM5ZDVEgqHzoqiu1hEOStaMikRRr//Ffb8ixGkDxv06Xzw+sMf7415kAgjOF/env1yObh487dfL+3CMmP1\"\n \
+        \ \"5AxxuoIzCxNi54hgc9VH7UHLJnGk8zcqQ8NNwZhbDmuArA6HEfHQfZ5SNYMeBRPDYO0Pu+Zl6w9ndYoIS2UozAtQdA3S\"\n  \"\
+        KGmglQkk9+DraNgwp40Ovh4Dv3nT+vTJa4YqxFWrBV2xOJXB6kZ7Lyet0PD4zq+s1fv944aHbm/kNVBnu25n9ABR/qib\"\n  \"RUdmnf4zUdMleuWk8IumX627q22XUMkACoEmh49I4S7j4axlyAB9r2MDI2CgUCMoCgCIYn4LQIZKAuE5nMCwJQBDKCcE\"\
+        \n  \"BgO1M6ROOUu6jMWmF4I56M3gQz9PLq/QuGe9ALhIENb7LWF7wM5d3dIDBELVAo4EXQXw/50uE2mwYnOTW3NrDgybE41/\"\n \
+        \ \"fPBqr0Y2K52BbkZ36o9T9PRpznbiP0s98OjY0j6Y3/omguidoz4AuME5UNdEEFMRNeWRXMQpBBAEJNSQMr1J2JpGyNZq\"\n  \"\
+        JoxxGAKtXicUb6WFPcnAib59Q8m6Z8F7ejysfJ+gnhnJl5Ns7cQ2J8y/DWHZOVm4VIPFYLeOfP3kkH8M8EV5A+4e5Q7L\"\n  \"V+JCwD49f/U6MPnA0z5+UozpROF5Bqq9jNOUKWU+Q1Nls6IsX8YGHPqzvEjYlN+OUW4vbAukuBRwVuT3LqJYJ847BvV3\"\
+        \n  \"qmBfNMrSJSQq2LJIT/bL5+zkSIuAIizlTEk0QBmMIZ/JFDLpgupDAuEbkSYKHR2iBIJDV902gxb7q59y3BnHtidH7fGz\"\n \
+        \ \"o1mJAoLRL9P1so3Y25mO7xrqNlHeYFKbLm1Yx88YgLAUBDzc29pBxZT6bM8Hnqq1NmGPA0j1wQZDIqsNdICjczh8ceQ9\"\n  \"\
+        hd9nGUrsbt/vIW34uO58zoZkrgU0BFmBUFM820fip/ManvT55Xl57nwMiIaqygiSCrbeDolPsrEyGhsjqzEO97wCQD77\"\n  \"mrIVjnQStGeyhaAGmKTQIhJ7ctvTXudM6FCPhjoNT4ZonsgKjj/aU+S30dBahb6YppEwfGvipMi3pvsTUPPo/gxUwskN\"\
+        \n  \"Wa6C48aqrJxfi3WfWNKyTyp+6fiT4fNxBZl1EaeZiJ0v7cCO46HYtj2mx/T2fqz35Md6d4Gw9t1eXr5IxuuB4LULKd5g\"\n \
+        \ \"NBwflmJo67tF5RPG8k+wWiB1/NW6shALLBjeVoZJBrl1TQoUCJajUXrPJ+t2w8QWJra1iQRsIevSNxhBthVgJPr8+uPD\"\n  \"\
+        xVtI8W/evbn07pO1Xx6Y5UXdrBw7D1UZp6guAv1JEds9M7YNZmy/L6NuxrbBjO+KIOtv38h2D6SKJoFpOjqdKjxzmOAV\"\n  \"BizalFvC/PDleHh4PB16vXoerufgig2nQ53fyBqd+sgl25Phyx7ZTsEub45DfUczntUaTxtsZH1iOHvfYR01sGZTQH/q\"\
+        \n  \"D72Xk+mwHlL2NyvekwxRWQmfAKAeWrpNktA4Tk0Jct2B3qkPLTBLXK+jG/aO/AxZcXrd+gmdrZk0FWVRZ1Z6qYToAhfy\"\n \
+        \ \"HdBAv/Pu08dLff0GXykMp5xr1hj6XZN3S71RvwX5D+nWV1/R1RrbrpNvgVUQWHXZ+GQ4DOhagYXBrcm0TnbbVb7/MuKh\"\n  \"\
+        0l6WxB+PAigr42hFgzxfu97M6aJsehwQAYciFDaSBjwJpet0KxtgCSej5+MAmNNARrHSRPn48WhiRdirqiZufY8Y6ALH\"\n  \"1UW8l/FGMSaV0Ua1Lxx9ufALjkwHq6+mcncsGQkIVZhFbu4MoDTLt60Iko3XEe+gP9U7RPNdhoJbbiCEllPkdDS/6eNl\"\
+        \n  \"3sX/r431D7r+y/zmthBrroON7ThJIla5Nwz1zUfSvxMMkGHuQ2V3/0Y0gTO9bHH51sDUsN28qTB47GlzALpL3cdj3UaY\"\n \
+        \ \"lRWgT3RDIlaU9EH23v10K7uP/m8uuFv/ASYb/ww=\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
+        PY_PATCH\n"
     - name: V31.9.2.1 Timing-Pruefung korrigiert – kein falscher Build-Abbruch
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_V31921_CHECK'\nimport os,re\nfrom pathlib import Path\nsource=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
         \n# The descriptive comment is ABOVE the C function. V31.9.2 incorrectly\n# searched for it inside the function,\
-        \ causing a false failure on step 65.\nmarker='V31.9.2: movement and camera use elapsed video refreshes'\nif\
-        \ source.count(marker)!=1:\n    raise SystemExit('::error::V31.9.2 timing patch marker missing or duplicated')\n\
-        \n# Extract the real function with balanced braces; do not use the next\n# unrelated function name to guess where\
-        \ the code ends.\nheader=re.search(r'\\bstatic\\s+void\\s+vt_v293_move\\s*\\(\\s*unsigned\\s+int\\s+pad\\s*\\\
-        )\\s*\\{',source)\nif not header:\n    raise SystemExit('::error::V31.9.2 movement function missing')\nlevel=1\n\
-        pos=header.end()\nwhile pos<len(source) and level>0:\n    if source[pos]=='{':level+=1\n    elif source[pos]=='}':level-=1\n\
-        \    pos+=1\nif level!=0:\n    raise SystemExit('::error::V31.9.2 movement function has unbalanced braces')\n\
-        block=source[header.start():pos]\n\nfor x in ('VSync(-1)','turn*36*256','target=forward*14336;',\n          'frac_x+=vx*dt;','vt_v292_yaw_target=vt_v292_cam_yaw;'):\n\
-        \    if x not in block:\n        raise SystemExit('::error::V31.9.2 missing movement feature: '+x)\nfor x in\
-        \ ('V31.9.1: lighter far-terrain LOD','V31.9.0: sparse distant objects',\n          'vt_v281_resolve_movement();','vt_v31813_draw_start(',\n\
-        \          'vt_v3172_menu_slots(', 'vt_save_game(void)', 'vt_load_game(void)'):\n    if x not in source:\n  \
-        \      raise SystemExit('::error::Retained gameplay feature missing: '+x)\nprint('V31.9.2.1: timing code present;\
+        \ causing a false failure on step 65.\nmarker='V31.9.2: movement and camera use elapsed video refreshes'\n\
+        if source.count(marker)!=1:\n    raise SystemExit('::error::V31.9.2 timing patch marker missing or duplicated')\n\
+        \n# Extract the real function with balanced braces; do not use the next\n# unrelated function name to guess\
+        \ where the code ends.\nheader=re.search(r'\\bstatic\\s+void\\s+vt_v293_move\\s*\\(\\s*unsigned\\s+int\\\
+        s+pad\\s*\\)\\s*\\{',source)\nif not header:\n    raise SystemExit('::error::V31.9.2 movement function missing')\n\
+        level=1\npos=header.end()\nwhile pos<len(source) and level>0:\n    if source[pos]=='{':level+=1\n    elif\
+        \ source[pos]=='}':level-=1\n    pos+=1\nif level!=0:\n    raise SystemExit('::error::V31.9.2 movement function\
+        \ has unbalanced braces')\nblock=source[header.start():pos]\n\nfor x in ('VSync(-1)','turn*36*256','target=forward*14336;',\n\
+        \          'frac_x+=vx*dt;','vt_v292_yaw_target=vt_v292_cam_yaw;'):\n    if x not in block:\n        raise\
+        \ SystemExit('::error::V31.9.2 missing movement feature: '+x)\nfor x in ('V31.9.1: lighter far-terrain LOD','V31.9.0:\
+        \ sparse distant objects',\n          'vt_v281_resolve_movement();','vt_v31813_draw_start(',\n         \
+        \ 'vt_v3172_menu_slots(', 'vt_save_game(void)', 'vt_load_game(void)'):\n    if x not in source:\n      \
+        \  raise SystemExit('::error::Retained gameplay feature missing: '+x)\nprint('V31.9.2.1: timing code present;\
         \ incorrect comment-boundary test repaired.')\nprint('Existing collision, menu, saves, and optimized landscape\
         \ found.')\nLYDRA_V31921_CHECK\n"
     - name: V31.9.3.1 Renderer an tatsächlichen Boden-Code anpassen
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_v31931_patch.py\" <<'LYDRA_V31931_PATCH'\n#!/usr/bin/env python3\n\
-        \"\"\"V31.9.3.1: conservative legacy-ground de-duplication.\nKeep gameplay safe when older code differs; never\
-        \ fail on an unsupported routine.\n\"\"\"\nfrom pathlib import Path\nimport os, re\np=Path(os.environ['PROJECT_DIR'])/'src'/'main.c'\n\
-        s=p.read_text(encoding='utf-8')\n\ndef span(name):\n    pat=r'\\bstatic\\s+void\\s+'+re.escape(name)+r'\\s*\\\
-        ([^;]*?\\)\\s*\\{'\n    hits=list(re.finditer(pat,s,re.S))\n    if len(hits)!=1: raise RuntimeError('Definition\
-        \ missing or duplicate: '+name)\n    a=hits[0].start(); start=hits[0].end(); i=start;depth=1;mode='code'\n  \
-        \  while i<len(s) and depth:\n        c=s[i]; n=s[i+1] if i+1<len(s) else ''\n        if mode=='code':\n    \
-        \        if c=='/' and n=='/':mode='line';i+=1\n            elif c=='/' and n=='*':mode='comment';i+=1\n    \
-        \        elif c=='\"':mode='string'\n            elif c==\"'\":mode='char'\n            elif c=='{':depth+=1\n\
-        \            elif c=='}':depth-=1\n        elif mode=='line':\n            if c=='\\n': mode='code'\n       \
-        \ elif mode=='comment':\n            if c=='*' and n=='/':mode='code';i+=1\n        else:\n            if c=='\\\
-        \\':i+=1\n            elif (mode=='string' and c=='\"') or (mode=='char' and c==\"'\"):mode='code'\n        i+=1\n\
-        \    if depth:raise RuntimeError('Unbalanced function: '+name)\n    return a,i,start\n\nlegacy_a,legacy_b,body_a=span('vt_v241_ground')\n\
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_v31931_patch.py\" <<'LYDRA_V31931_PATCH'\n#!/usr/bin/env\
+        \ python3\n\"\"\"V31.9.3.1: conservative legacy-ground de-duplication.\nKeep gameplay safe when older code\
+        \ differs; never fail on an unsupported routine.\n\"\"\"\nfrom pathlib import Path\nimport os, re\np=Path(os.environ['PROJECT_DIR'])/'src'/'main.c'\n\
+        s=p.read_text(encoding='utf-8')\n\ndef span(name):\n    pat=r'\\bstatic\\s+void\\s+'+re.escape(name)+r'\\\
+        s*\\([^;]*?\\)\\s*\\{'\n    hits=list(re.finditer(pat,s,re.S))\n    if len(hits)!=1: raise RuntimeError('Definition\
+        \ missing or duplicate: '+name)\n    a=hits[0].start(); start=hits[0].end(); i=start;depth=1;mode='code'\n\
+        \    while i<len(s) and depth:\n        c=s[i]; n=s[i+1] if i+1<len(s) else ''\n        if mode=='code':\n\
+        \            if c=='/' and n=='/':mode='line';i+=1\n            elif c=='/' and n=='*':mode='comment';i+=1\n\
+        \            elif c=='\"':mode='string'\n            elif c==\"'\":mode='char'\n            elif c=='{':depth+=1\n\
+        \            elif c=='}':depth-=1\n        elif mode=='line':\n            if c=='\\n': mode='code'\n  \
+        \      elif mode=='comment':\n            if c=='*' and n=='/':mode='code';i+=1\n        else:\n       \
+        \     if c=='\\\\':i+=1\n            elif (mode=='string' and c=='\"') or (mode=='char' and c==\"'\"):mode='code'\n\
+        \        i+=1\n    if depth:raise RuntimeError('Unbalanced function: '+name)\n    return a,i,start\n\nlegacy_a,legacy_b,body_a=span('vt_v241_ground')\n\
         near_a,near_b,_=span('vt_v300_extend_ground')\nnear=s[near_a:near_b]\nfor needle in ('const int near_step=180,near_cells=14;',\n\
-        \               'vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,',\n               'const int far_step=560,far_cells=12;'):\n\
-        \    if needle not in near:raise RuntimeError('Unable to verify safe primary ground: '+needle)\n\noriginal=s[legacy_a:legacy_b]\n\
-        # The exact legacy V25 routine emitted two triangles per 110-unit grid cell\n# at height 35. The real current\
-        \ build may have rewritten that routine.\n# Only disable the recognized ground-only implementation, never unrecognized\
-        \ code.\nrecognized=(re.search(r'\\bdraw_triangle3\\s*\\(',original) is not None\n            and re.search(r'\\\
-        b35\\b',original) is not None\n            and re.search(r'\\bstep\\s*=\\s*110\\b',original) is not None\n  \
-        \          and re.search(r'\\bfor\\s*\\(',original) is not None\n            and not any(token in original for\
-        \ token in ('draw_box(', 'vt_v24_tree(', 'vt_v28_house(', 'vt_v282_')))\nif recognized:\n    replacement='''/*\
-        \ V31.9.3.1: proven V25 duplicate 110-unit ground mesh disabled.\n   V31.9.1 near and far ground continue to\
-        \ render, with existing collision. */\nstatic void vt_v241_ground(void) {\n    /* Legacy ground intentionally\
-        \ empty; current ground covers this area. */\n}'''\n    s=s[:legacy_a]+replacement+s[legacy_b:]\n    result='REMOVED_VERIFIED_V25_DUPLICATE'\n\
+        \               'vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,',\n               'const int\
+        \ far_step=560,far_cells=12;'):\n    if needle not in near:raise RuntimeError('Unable to verify safe primary\
+        \ ground: '+needle)\n\noriginal=s[legacy_a:legacy_b]\n# The exact legacy V25 routine emitted two triangles\
+        \ per 110-unit grid cell\n# at height 35. The real current build may have rewritten that routine.\n# Only\
+        \ disable the recognized ground-only implementation, never unrecognized code.\nrecognized=(re.search(r'\\\
+        bdraw_triangle3\\s*\\(',original) is not None\n            and re.search(r'\\b35\\b',original) is not None\n\
+        \            and re.search(r'\\bstep\\s*=\\s*110\\b',original) is not None\n            and re.search(r'\\\
+        bfor\\s*\\(',original) is not None\n            and not any(token in original for token in ('draw_box(',\
+        \ 'vt_v24_tree(', 'vt_v28_house(', 'vt_v282_')))\nif recognized:\n    replacement='''/* V31.9.3.1: proven\
+        \ V25 duplicate 110-unit ground mesh disabled.\n   V31.9.1 near and far ground continue to render, with\
+        \ existing collision. */\nstatic void vt_v241_ground(void) {\n    /* Legacy ground intentionally empty;\
+        \ current ground covers this area. */\n}'''\n    s=s[:legacy_a]+replacement+s[legacy_b:]\n    result='REMOVED_VERIFIED_V25_DUPLICATE'\n\
         else:\n    # Never silently rip out unknown game code. Record this case in artifact.\n    result='PRESERVED_UNRECOGNIZED_LEGACY_GROUND'\n\
         \nfor token in ('vt_v281_resolve_movement();','vt_v31813_draw_start(',\n              'vt_v3172_menu_slots(',\
         \ 'vt_save_game(void)', 'vt_load_game(void)',\n              'V31.9.2: movement and camera use elapsed video\
-        \ refreshes'):\n    if token not in s:raise RuntimeError('Expected gameplay component missing: '+token)\n\np.write_text(s,encoding='utf-8')\n\
-        art=Path('artifacts');art.mkdir(exist_ok=True)\n(art/'RENDERER_PRUEFUNG_V31_9_3_1.txt').write_text('V31.9.3.1:\
+        \ refreshes'):\n    if token not in s:raise RuntimeError('Expected gameplay component missing: '+token)\n\
+        \np.write_text(s,encoding='utf-8')\nart=Path('artifacts');art.mkdir(exist_ok=True)\n(art/'RENDERER_PRUEFUNG_V31_9_3_1.txt').write_text('V31.9.3.1:\
         \ '+result+'\\n',encoding='utf-8')\nprint('V31.9.3.1 result:',result)\nprint('Legacy function snippet:',repr(original[:260]))\n\
         print('Player collision, menu, save and camera paths retained.')\nLYDRA_V31931_PATCH\npython3 \"$RUNNER_TEMP/lydra_v31931_patch.py\"\
         \n"
@@ -545,132 +606,108 @@ jobs:
         \ 'Renderer report was not created'\nmode=report.read_text(encoding='utf-8').strip()\nassert mode.endswith(('REMOVED_VERIFIED_V25_DUPLICATE','PRESERVED_UNRECOGNIZED_LEGACY_GROUND')),mode\n\
         for term in ('const int near_step=180,near_cells=14;',\n             'const int far_step=560,far_cells=12;',\n\
         \             'V31.9.2: movement and camera use elapsed video refreshes',\n             'vt_v31813_draw_start(',\
-        \ 'vt_v3172_menu_slots(',\n             'vt_save_game(void)', 'vt_load_game(void)'):\n    assert term in s, 'Missing\
-        \ game feature: '+term\nprint('Renderer verification:',mode)\nLYDRA_V31931_CHECK\n"
+        \ 'vt_v3172_menu_slots(',\n             'vt_save_game(void)', 'vt_load_game(void)'):\n    assert term in\
+        \ s, 'Missing game feature: '+term\nprint('Renderer verification:',mode)\nLYDRA_V31931_CHECK\n"
     - name: V31.9.4 FPS Diagnose und sichtbaren 3D-Aufwand reduzieren
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_v3194_patch.py\" <<'LYDRA_V3194_PATCH'\n#!/usr/bin/env python3\n\
-        \"\"\"V31.9.4: conservative rendering LOD reduction + visible true game-frame FPS.\n\nThe overlay counts actual\
-        \ overworld frames against VSync blank counter.\nNo changes to movement, physics, 7-second intro, menu, or save\
-        \ data.\n\"\"\"\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\n\
-        \ndef span(name):\n    hits=list(re.finditer(r'\\bstatic\\s+void\\s+'+re.escape(name)+r'\\s*\\([^;]*?\\)\\s*\\\
-        {',s,re.S))\n    if len(hits)!=1: raise RuntimeError(f'Expected one {name}, found {len(hits)}')\n    a=hits[0].start();\
-        \ i=hits[0].end(); depth=1; state='code'\n    while i<len(s) and depth:\n        c=s[i]; nxt=s[i+1] if i+1<len(s)\
-        \ else ''\n        if state=='code':\n            if c=='/' and nxt=='/':state='line';i+=1\n            elif\
-        \ c=='/' and nxt=='*':state='comment';i+=1\n            elif c=='\"':state='string'\n            elif c==\"'\"\
-        :state='char'\n            elif c=='{':depth+=1\n            elif c=='}':depth-=1\n        elif state=='line':\n\
-        \            if c=='\\n':state='code'\n        elif state=='comment':\n            if c=='*' and nxt=='/':state='code';i+=1\n\
-        \        else:\n            if c=='\\\\':i+=1\n            elif (state=='string' and c=='\"') or (state=='char'\
-        \ and c==\"'\"):state='code'\n        i+=1\n    if depth:raise RuntimeError('Unbalanced function: '+name)\n \
-        \   return a,i\n\na,b=span('vt_v300_extend_ground'); body=s[a:b]\nold='const int near_step=180,near_cells=14;'\n\
-        if body.count(old)!=1 or body.count('const int far_step=560,far_cells=12;')!=1:\n    raise RuntimeError('Unexpected\
-        \ V31.9.3.1 terrain layout; refusing unsafe edit')\nif 'vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,'\
-        \ not in body:\n    raise RuntimeError('Critical near terrain draw function not found')\nbody=body.replace(old,'const\
-        \ int near_step=180,near_cells=10; /* V31.9.4: 100 near squares instead of 196 */')\ns=s[:a]+body+s[b:]\na,b=span('vt_v300_mid_detail');\
-        \ body=s[a:b]\nif body.count('amount>=12')!=1:raise RuntimeError('Unexpected mid detail density')\ns=s[:a]+body.replace('amount>=12','amount>=8\
-        \ /* V31.9.4 distant vegetation budget */')+s[b:]\n\na,b=span('vt_v292_draw_exploration_hud')\nfn=s[a:b]\nif\
-        \ 'vt_v3194_perf_hud(' in s:raise RuntimeError('FPS hook already inserted')\nfn=fn[:-1]+'    vt_v3194_perf_hud();\\\
-        n}'\ns=s[:a]+fn+s[b:]\n\na,b=span('vt_v292_draw_exploration_hud')\nhelper=r'''\n/* V31.9.4: draw FPS in the bottom-right,\
-        \ without touching title/menu.\n * Measured over >=60 vertical retraces (about one second NTSC).\n * This value\
-        \ counts actual game frames, not Android screen recordings.\n * F + two digits, fixed world-HUD coordinates.\
-        \ Debug build only. */\nstatic void vt_v3188_tile(int x,int y,int w,int h,int red,int green,int blue);\nstatic\
-        \ void vt_v3194_glyph(int x,int y,const unsigned char *rows)\n{\n    int yy,xx;\n    for(yy=0;yy<5;yy++)for(xx=0;xx<3;xx++)\
-        \ {\n        if(rows[yy]&(1<<(2-xx)))\n            vt_v3188_tile(x+2*xx,y+2*yy,2,2,214,241,255);\n    }\n}\n\
-        static void vt_v3194_perf_hud(void)\n{\n    static const unsigned char glyphs[11][5]={\n        {7,5,5,5,7},\
-        \ /* 0 */\n        {2,6,2,2,7}, /* 1 */\n        {7,1,7,4,7}, /* 2 */\n        {7,1,7,1,7}, /* 3 */\n       \
-        \ {5,5,7,1,1}, /* 4 */\n        {7,4,7,1,7}, /* 5 */\n        {7,4,7,5,7}, /* 6 */\n        {7,1,1,1,1}, /* 7\
-        \ */\n        {7,5,7,5,7}, /* 8 */\n        {7,5,7,1,7}, /* 9 */\n        {7,4,6,4,4}  /* F */\n    };\n    static\
-        \ unsigned int start_vblank=0,frames=0;\n    static int fps=0;\n    unsigned int now=(unsigned int)VSync(-1);\n\
-        \    if(!start_vblank)start_vblank=now;\n    frames++;\n    if(now-start_vblank>=60u) {\n        unsigned int\
-        \ elapsed=now-start_vblank;\n        fps=(int)((frames*60u+elapsed/2u)/elapsed);\n        if(fps>99)fps=99;\n\
-        \        frames=0;\n        start_vblank=now;\n    }\n    vt_v3188_tile(270,215,38,16,8,18,42);\n    vt_v3188_tile(270,215,38,1,48,137,204);\n\
-        \    vt_v3194_glyph(274,218,glyphs[10]);\n    vt_v3194_glyph(286,218,glyphs[fps/10]);\n    vt_v3194_glyph(296,218,glyphs[fps%10]);\n\
-        }\n'''\ns=s[:a]+helper+'\\n'+s[a:]\nfor feature in ('vt_v281_resolve_movement();','vt_v31813_draw_start(',\n\
-        \                'vt_v3172_menu_slots(', 'vt_save_game(void)','vt_load_game(void)',\n                'V31.9.2:\
-        \ movement and camera use elapsed video refreshes'):\n    if feature not in s:raise RuntimeError('Missing preserved\
-        \ feature: '+feature)\nif s.count('V31.9.4: draw FPS in the bottom-right')!=1 or s.count('vt_v3194_perf_hud();')!=1:\n\
-        \    raise RuntimeError('FPS insertion count invalid')\np.write_text(s,encoding='utf-8')\nprint('V31.9.4: near\
-        \ terrain 14x14 -> 10x10; far 12x12 unchanged')\nprint('V31.9.4: distant scenery budget 12 -> 8, game FPS HUD\
-        \ inserted')\nprint('V31.9.4: title, input, memory card, physics, dragon systems retained')\nLYDRA_V3194_PATCH\n\
-        python3 \"$RUNNER_TEMP/lydra_v3194_patch.py\"\n"
+      run: "set -euo pipefail\npython3 - <<'LYDRA_LOSSLESS'\nimport base64,zlib,subprocess\nsource=zlib.decompress(base64.b64decode(\n\
+        \  \"eNqVWHtv2zgS/1+fgs09JNnyQ46TOHacQ9Gk2Ftsu0GaLnBIfAYtUTaxMqUjKcfawN/9ZqhH5US97TmIHpwHZ4bDmR+lmCY9liUk5SmL\"\
+        \n  \"KI+tgGpyTU7+ev/18+fb++XD7ae7QZyHki53p/7leJlSHWz6aX5Crq7sX/51c/9++Zsh3L1/+PCTbf3l3SBTcrDiYsDEjqS53iTi1Do5\"\
+        \n  \"OQG2/mV/PCVBIhSTO6r5jhHJRMgkF2vyy6838BZmgeaJIF2y44qvYka0zBhZ0y3rRRKu5OPdl75lPWwYSXZMxjQHhZnQitBAZzQ2o8+J\"\
+        \n  \"jENi+GF8TblQmvz2JRcBWcVU/F6IMNm3Pick2FCxBj6dkC0Ib5nQHkk3ueKB8shFTzGwOCRcaJl4BMiZRxJJFAXzQ6ppH72z+DZNpCaJ\"\
+        \n  \"8iSzIplsCYRqE/MVKSl38Gqlc7w5iepDdLhMxKN9d//rz7cfHpY3/7y3F+7AVjIYbMHifmBbap72JaPhUrO9dpgIkhBCNbczHfUmtmtZ\"\
+        \n  \"IYuISqlwBLjqTi0Cvw3Xah5zpR3J+hEXIQdPHWk/rZSGoAdPqrtLeAg3uwscTAU0ZYWCLnCpzpPz+O/ZovOPJxdfXmwPfep/cV2jnkck\"\
+        \n  \"ZsLBWdx3c39KJOWKkXsIKN+yWykT6UT27T5lgWYhSQQjL6j84JEIoh6Sl1r8YBcq6RxfH4eLPlgotePOCK+HIEFwIGSp3sz9GUEn2NyG\"\
+        \n  \"UDDbSD9vOKQJv0K1yiUUpjDMRTTwF8zVI1/MiNhrfOr6C/QC7pUMi8ED264FgFpMU87zTVVJDYAysM1cqBRfpqVhMRfMnvHu3D8SYnGb\"\
+        \n  \"WKcWC5ItZt7/kjypmZXGLWO3sp3YJ7XODZXtTPaLPTVB+u5kh5Kh12AwxCowxs/WwDyJhlfVKr2RrxxuVdFpj61RdxwhXLp2K57saXss\"\
+        \n  \"ncqEMoxmqiLALu7smm7iV1Ehrm67W/UsoLvIvJYtYX8VKwq1J4A9EWXCVLkpsbtm3xlpyXQmBaEetyzqreZmX9s7DZV3OFxCAYCdsFxL\"\
+        \n  \"3EM2bIhVEuaQzXS6WlhJHKJRWOWgTBHBqFwqzdK5Pxl65i1gcazm/nhmW2AlyvZNDXRAFLcx+t0YbSiLKl1n50Mv+qZqNLPN/i9sb3WY\"\
+        \n  \"VUWgqP2nfZ9AKQJeQaBuJ5megdNRprD8Z0LRiBEG1QqqAthoPB+NS4+LxuOs9976D6/2r+Fb89EmIkHjjUffN/CD5FAOoWWgaG0Z9Lrn\"\
+        \n  \"eoWMoqgIuWUiboIkWRrTgGHwvB+K+3BGBh1St0B/OCwmVf/JqITegw0K6jxJIuJfnpPOAKZTsLpTuujijF31uJouWtJiy8NlyDS07tc5\"\
+        \n  \"cbzMNt3i/RrWrVi2P1kx0EsKvXATiuv8lUV1DJqavfpl0vCXhNCMKMRnx9YMWxDEdZWF8GwcLX175dzocrTEpYDET+NEGqnlJsN1iETD\"\
+        \n  \"xyISBpowGSGHY+PSq1YPATyQTZL8TmiMfTXHwDMJDhdqI/E47fmLro0p81axO3sSB7sOQyT+b9M3LAZtc2lDs2kmhEk6NA4s1wBtVonW\"\
+        \n  \"ybYn+XoDYOSZA4rKNCCULNjgZtFcx2yAUKRvkQ75xKjKJDZbwD7ken4+hFDLIrehqkhYJkUcukId2I9LRPP54csH1yh42HBFdjQGpHUM\"\
+        \n  \"phB3lTjKM3vhvQglgAeiAsmYAO1BIhGTKKPnI+A2/ZzAgq+he0PD53uwyqCx3k9fb0C54YYaqvrkhq2yNSQCjxElxHkfssEqIApBgFIu\"\
+        \n  \"wGSy1NDgHdxgew+vubk+m+vGXMF3c1+jUeZpBb64sxZ1sJ7rOE83R/qKLQwliK8FGIx1n3Rk8qxc66Wo7MiWe/v9zLxGkEt5Ph/O8vzq\"\
+        \n  \"DC7drotD+z0M7fdXp3CBIfLSABQOqnvM88XfHf/qyhn19nu3RFTV79jffXfU2e+9HG4w8wj//LE3Gvve6OzMLew4WId2F+uUxeHKiZKz\"\
+        \n  \"zVkTEvXo+4vHs8X8m90vF96Z+bsA+AYJO8Q1qokj79wYVhL9I+KF53sX3rgijlqIfkU8PSKa+YDoF8TxK8lxU/KshVhbe/5mTv+b2otX\"\
+        \n  \"xLOm5KSFWM95+WbOc/gfHwgSP1bEw6wZ9DrcmEkG5S535igyh6Zq9hekTlPAtN60Hj2SF8nz3GmOuOZs4/T8Mi8g3d41J3GPZgTxMo3N\"\
+        \n  \"xN1uLQSUXpMVS0nWzOMjM1hMU8XC+WupWc2ODuBGcx2nmKsD+rql3GCUuYPy2Z01twqIXV9euih9ednQdhSnMlYtbh2st7tpdDGE/XPm\"\
+        \n  \"nU48/9yDy8Qbj8pZv8/pjeFyeuGNhuMj3rqIjC5gS4Kuav8MF9/hm5w3+cCzwfd5L1/z/q3gPVjYNqruU7SSLqLtLrbDhQUliESMAopk\"\
+        \n  \"2EfKZjTxl4AwknjHltXxFhoZtOrSbf+0aFbF0cv2jkoS/krGi9ESG85SxYlWwGfG8RC8xCZRFJpCa5zAibU5+FZl0fhG0/rEXaBskJGU\"\
+        \n  \"ZNC2y7wgOx6yBFEi+LBhyi7PuND4K09LqNfe7z9xZdBlCuJM7hB7F2IIvctHgzZVhZN+qCXbFWSuxdrAwp/g40I3wg8EREYPvEMX5ogU\"\
+        \n  \"0v4zwFNWnPyV9/bsn8LZpWnvEYj1x3t/THrXgDT3CD4BtxN/tPdHsIOL7x1hi4oKp6mACSbzCqSBFGiaeAUaQLOxlzeQ02s9Bp54wJFm\"\
+        \n  \"Gr+YbBNQFlAZNr6rQHjX4LbKAfhuFcIUsNtoe/NVySq/Iv3IZynrvywmuFo=\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',source],check=True)\n\
+        LYDRA_LOSSLESS\n"
     - name: V31.9.4 FPS-HUD und Erhalt der Spielelemente pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_V3194_CHECK'\nimport os,re\nfrom pathlib import Path\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
-        checks=[\n    'const int near_step=180,near_cells=10;',\n    'const int far_step=560,far_cells=12;',\n    'amount>=8\
-        \ /* V31.9.4 distant vegetation budget */',\n    'V31.9.4: draw FPS in the bottom-right',\n    'vt_v3194_perf_hud();',\n\
-        \    'V31.9.2: movement and camera use elapsed video refreshes',\n    'vt_v281_resolve_movement();',\n    'vt_v31813_draw_start(',\n\
-        \    'vt_v3172_menu_slots(',\n    'vt_save_game(void)', 'vt_load_game(void)']\nfor key in checks:\n    if key\
-        \ not in s:\n        raise RuntimeError('V31.9.4 game-source check failed: '+key)\nassert s.count('static void\
-        \ vt_v3194_perf_hud(void)')==1\nassert s.count('vt_v3194_perf_hud();')==1\nassert s.count('static void vt_v292_draw_exploration_hud(')==1\n\
-        assert s.count('static void vt_v300_extend_ground(')==1\nprint('V31.9.4: FPS diagnostic present and gameplay\
-        \ preserved.')\nLYDRA_V3194_CHECK\n"
+        checks=[\n    'const int near_step=180,near_cells=10;',\n    'const int far_step=560,far_cells=12;',\n \
+        \   'amount>=8 /* V31.9.4 distant vegetation budget */',\n    'V31.9.4: draw FPS in the bottom-right',\n\
+        \    'vt_v3194_perf_hud();',\n    'V31.9.2: movement and camera use elapsed video refreshes',\n    'vt_v281_resolve_movement();',\n\
+        \    'vt_v31813_draw_start(',\n    'vt_v3172_menu_slots(',\n    'vt_save_game(void)', 'vt_load_game(void)']\n\
+        for key in checks:\n    if key not in s:\n        raise RuntimeError('V31.9.4 game-source check failed:\
+        \ '+key)\nassert s.count('static void vt_v3194_perf_hud(void)')==1\nassert s.count('vt_v3194_perf_hud();')==1\n\
+        assert s.count('static void vt_v292_draw_exploration_hud(')==1\nassert s.count('static void vt_v300_extend_ground(')==1\n\
+        print('V31.9.4: FPS diagnostic present and gameplay preserved.')\nLYDRA_V3194_CHECK\n"
     - name: V31.9.4.3 Laufen und Kamera 25 Prozent schneller
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_V31943_SPEED'\nimport os\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
-        s=p.read_text(encoding='utf-8')\nif s.count('static void vt_v293_move(unsigned int pad)')!=1:\n    raise RuntimeError('V31.9.2\
-        \ movement function missing or duplicated')\nif s.count('V31.9.2: movement and camera use elapsed video refreshes')!=1:\n\
-        \    raise RuntimeError('Expected tested V31.9.2 frame time movement missing')\n# Local-only values: geometry,\
-        \ collision, clock and rendering stay intact.\nchanges=(\n    ('target=forward*14336;', 'target=forward*17920;'),\n\
-        \    ('desired_turn=turn*36*256;', 'desired_turn=turn*45*256;'),\n    ('speed_q10+=3072*dt;', 'speed_q10+=3840*dt;'),\n\
-        \    ('speed_q10-=3072*dt;', 'speed_q10-=3840*dt;'),\n    ('36 angle units / vblank', '45 angle units / vblank'),\n\
-        )\nfor old,new in changes:\n    if s.count(old)!=1:\n        raise RuntimeError('Unsafe speed patch: expected\
-        \ exactly one: '+old)\n    s=s.replace(old,new,1)\nfor old,new in changes:\n    if s.count(new)!=1:raise RuntimeError('Missing\
-        \ speed result: '+new)\np.write_text(s,encoding='utf-8')\nprint('V31.9.4.3: run speed, camera speed, acceleration\
-        \ +25%; rendering unchanged')\nLYDRA_V31943_SPEED\n"
+        s=p.read_text(encoding='utf-8')\nif s.count('static void vt_v293_move(unsigned int pad)')!=1:\n    raise\
+        \ RuntimeError('V31.9.2 movement function missing or duplicated')\nif s.count('V31.9.2: movement and camera\
+        \ use elapsed video refreshes')!=1:\n    raise RuntimeError('Expected tested V31.9.2 frame time movement\
+        \ missing')\n# Local-only values: geometry, collision, clock and rendering stay intact.\nchanges=(\n   \
+        \ ('target=forward*14336;', 'target=forward*17920;'),\n    ('desired_turn=turn*36*256;', 'desired_turn=turn*45*256;'),\n\
+        \    ('speed_q10+=3072*dt;', 'speed_q10+=3840*dt;'),\n    ('speed_q10-=3072*dt;', 'speed_q10-=3840*dt;'),\n\
+        \    ('36 angle units / vblank', '45 angle units / vblank'),\n)\nfor old,new in changes:\n    if s.count(old)!=1:\n\
+        \        raise RuntimeError('Unsafe speed patch: expected exactly one: '+old)\n    s=s.replace(old,new,1)\n\
+        for old,new in changes:\n    if s.count(new)!=1:raise RuntimeError('Missing speed result: '+new)\np.write_text(s,encoding='utf-8')\n\
+        print('V31.9.4.3: run speed, camera speed, acceleration +25%; rendering unchanged')\nLYDRA_V31943_SPEED\n"
     - name: V31.9.4.3 Steuerung und Spielsysteme absichern
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_V31943_CHECK'\nimport os\nfrom pathlib import Path\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
         required=(\n    'target=forward*17920;', 'desired_turn=turn*45*256;',\n    'speed_q10+=3840*dt;', 'speed_q10-=3840*dt;',\n\
         \    'vt_v281_resolve_movement();', 'vt_v31813_draw_start(',\n    'vt_v3172_menu_slots(', 'vt_save_game(void)',\
-        \ 'vt_load_game(void)',\n    'vt_v3194_perf_hud(', 'const int near_step=180,near_cells=10;',\n)\nfor marker in\
-        \ required:\n    if marker not in s:raise RuntimeError('Feature missing: '+marker)\nprint('V31.9.4.3 movement,\
-        \ FPS display, intro/menu and save/load intact')\nLYDRA_V31943_CHECK\n"
+        \ 'vt_load_game(void)',\n    'vt_v3194_perf_hud(', 'const int near_step=180,near_cells=10;',\n)\nfor marker\
+        \ in required:\n    if marker not in s:raise RuntimeError('Feature missing: '+marker)\nprint('V31.9.4.3\
+        \ movement, FPS display, intro/menu and save/load intact')\nLYDRA_V31943_CHECK\n"
     - name: V31.9.5 Ruhigere Landschaftsfarben Berge und Baume
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LYDRA_V3195_TERRAIN'\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
-        s=p.read_text(encoding='utf-8')\ndef one(old,new):\n    global s\n    if s.count(old)!=1:raise RuntimeError('V31.9.5\
-        \ unexpected source: '+old[:75])\n    s=s.replace(old,new,1)\ndef span(name):\n    matches=list(re.finditer(r'\\\
-        bstatic\\s+void\\s+'+re.escape(name)+r'\\s*\\([^;]*?\\)\\s*\\{',s,re.S))\n    if len(matches)!=1:raise RuntimeError('Missing\
-        \ function '+name)\n    a=matches[0].start();i=matches[0].end();depth=1;state='code'\n    while i<len(s) and\
-        \ depth:\n        c=s[i];n=s[i+1] if i+1<len(s) else ''\n        if state=='code':\n            if c=='/' and\
-        \ n=='/':state='line';i+=1\n            elif c=='/' and n=='*':state='comment';i+=1\n            elif c=='\"\
-        ':state='string'\n            elif c==\"'\":state='char'\n            elif c=='{':depth+=1\n            elif\
-        \ c=='}':depth-=1\n        elif state=='line':\n            if c=='\\n':state='code'\n        elif state=='comment':\n\
-        \            if c=='*' and n=='/':state='code';i+=1\n        else:\n            if c=='\\\\':i+=1\n         \
-        \   elif (state=='string' and c=='\"') or (state=='char' and c==\"'\"):state='code'\n        i+=1\n    if depth:raise\
-        \ RuntimeError('Unbalanced '+name)\n    return a,i\na,b=span('vt_v300_extend_ground')\nground=s[a:b]\nif 'near_cells=10'\
-        \ not in ground or 'far_cells=12' not in ground:\n    raise RuntimeError('Expected V31.9.4.3 10x10 terrain not\
-        \ found')\n# Reduce the harsh alternating light/dark green stripes without\n# adding a single triangle or affecting\
-        \ the player collision plane.\nshades=(\n    ('r1=84;g1=134;b1=128;r2=62;g2=108;b2=112;',\n     'r1=84;g1=134;b1=128;r2=76;g2=124;b2=122;'),\n\
-        \    ('r1=116;g1=143;b1=87;r2=78;g2=111;b2=77;',\n     'r1=116;g1=143;b1=87;r2=102;g2=132;b2=83;'),\n    ('r1=85;g1=162;b1=90;r2=54;g2=132;b2=75;',\n\
-        \     'r1=85;g1=162;b1=90;r2=74;g2=149;b2=84;'),\n)\nfor before,after in shades:\n    if ground.count(before)!=1:raise\
-        \ RuntimeError('Terrain palette layout changed')\n    ground=ground.replace(before,after,1)\ns=s[:a]+ground+s[b:]\n\
-        # Same calls, less jagged mountains, 14+7 peaks instead of 16+8.\na,b=span('vt_v300_horizon')\nif 'vt_v24_peak('\
-        \ not in s[a:b]:raise RuntimeError('Expected distant mountains')\nmountains=\"\"\"/* V31.9.5: broad staggered\
-        \ peaks and lower rolling foothills.\n   Only distant visual geometry; player physics remains flat. */\nstatic\
-        \ void vt_v300_horizon(void) {\n    int i;\n    for(i=0;i<14;i++) {\n        int angle=(i*4096)/14;\n       \
-        \ int x=px+(vt_v293_sin(angle)*(2800+(i%3)*110))/1024;\n        int z=pz+(vt_v293_cos(angle)*(2800+(i%3)*110))/1024;\n\
-        \        int seed=vt_v300_hash(i*427,region*311+i*89);\n        int height=215+((seed>>3)&3)*29;\n        int\
-        \ r=95,g=140,b=174;\n        if(vt_v300_forward(x-px,z-pz)<-400)continue;\n        if(region==1){r=104;g=157;b=194;height+=82;}\n\
-        \        else if(region==2){r=113;g=147;b=161;height+=34;}\n        vt_v24_peak(x,z,1120,height,r,g,b);\n   \
-        \     if((i&1)==0) {\n            int fx=px+(vt_v293_sin(angle)*2100)/1024;\n            int fz=pz+(vt_v293_cos(angle)*2100)/1024;\n\
-        \            int fh=75+((seed>>7)&3)*23;\n            vt_v24_peak(fx,fz,720,fh,r-13,g-12,b-13);\n        }\n\
-        \    }\n}\"\"\"\ns=s[:a]+mountains+s[b:]\n# Variation in existing distant tree model only: object count unchanged.\n\
-        a,b=span('vt_v300_mid_detail')\ntrees=s[a:b]\nold='vt_v24_tree(x,z,10+((h>>3)&7),((h>>5)%3));'\nif trees.count(old)!=1\
-        \ or 'amount>=8' not in trees:\n    raise RuntimeError('V31.9.4.3 distant tree budget changed')\ntrees=trees.replace(old,'vt_v24_tree(x,z,10+((h>>3)&11),((h>>6)%3));')\n\
-        s=s[:a]+trees+s[b:]\nfor feature in ('target=forward*17920;', 'desired_turn=turn*45*256;',\n                'vt_v3194_perf_hud(',\
-        \ 'vt_v31813_draw_start(',\n                'vt_v3172_menu_slots(', 'vt_save_game(void)',\n                'vt_load_game(void)',\
-        \ 'vt_v281_resolve_movement();'):\n    if feature not in s:raise RuntimeError('Preserved gameplay missing: '+feature)\n\
-        p.write_text(s,encoding='utf-8')\nprint('V31.9.5: palette blended; 14+7 broad mountains; distant trees diversified')\n\
-        print('V31.9.4.3: 10x10 near mesh, frame timing, speed +25%, menus and saves intact')\nLYDRA_V3195_TERRAIN\n"
+      run: "set -euo pipefail\npython3 - <<'LYDRA_LOSSLESS'\nimport base64,zlib,subprocess\nsource=zlib.decompress(base64.b64decode(\n\
+        \  \"eNqVV22P2zYS/u5fwe6hlWTLXlG21y9apSiu+dBDewk2uQKHXVegJcpiKlMCSXu9G+S/35CUZDuxA9x+WMniPPPGmWdISRUa0l2FalbT\"\
+        \n  \"nLCyV7+oouJjNET3987v//314ZfkzzFeTJOPbx8efvnt306PbetKKFRJX9BeLqotqokqSrZGzcp7+NmrY/1wKzmifM9ExR+d9w/v/vX2\"\
+        \n  \"nx+TX397cFberSNFersljI9SpyfjeiQoyRJFD8qlPK0yxjexs1P5cO54vYzmqOLUrcrM5/TZW/YQ/G3Kak1KJM0PliM5SqsdV1rK+yHG\"\
+        \n  \"S0GYpOgBPrEtfStEJVwHohktRlO04/RQ01TRDMlqJ1K6RM4AgI/L2XTlGY0yluBUXZK0M+xj64usCXc52dLGky1RaUFlXDKpXEFHOeMZ\"\
+        \n  \"U1S4wnlaS0UUS5/kYF+xDB7OACSoTElNrY4BSMn+k/v4V7Tq//zk6R+fHV9nePTB89rwSsrdxtDV8P5gUkLmUL7jqWIVh6CMCaODxA38\"\
+        \n  \"MViNwCuhXC9ipx8pz+BTRmtVxDjSjtPYgc2gjlHwXLCSInavPZEeIjxDRtYmQf+lsXxkq4jrxwCvtNvwbAG0BIcdp5PWe2ZsNEaOeprV\"\
+        \n  \"FFZuHWOIm9dl41PJOHUiNojxGYSW34L6HSittlvK1fdwN52wVAIS6VwUu3FuOp0FEZeFnM/O0mTnqrEvjcDwRMAstkkxUV5MyhM/iard\"\
+        \n  \"nm/wbcAXVfQv5dUoO8+P3rTLPjw5y8uZdFsHmiQaQza9HqrEcd1kr12FrHqXg+qsgG5bcJdq/z8c2IDwFFr6tOoFVTvBEfFZj/jr2LSu\"\
+        \n  \"s1fJfhwECdAN1HyyEUAcGRCNfYHqJcv1qgfmHE6JSFJaljLGgYN4pRDjyMrpWJz8uB5+tW7TdsnXty35WD6ajMYIBwccICANkOdGT944\"\
+        \n  \"9Q/0QLNdSpEqKIKMyQKREgQ58Ar0esk2hbrNiPgbzFLKkc56TSV6ZkDmOwV4kmk+RQRpcoAWBgFiXiAAkufgil7W6oHuXqhAaVUCl2kC\"\
+        \n  \"gQ+cjnqyIBkQnGsich2B4/kk2uAYjyfRGh7hPBJhfBdGmxDyNI/W8MBh5Ph2E68BZncGEE4MIASA5x9NYHxnIJOxhsxnBjE3CIw1YjY7\"\
+        \n  \"s3BJHgfWp3GoAfPxuYX51ADAbwAsAg2YTk7kZ9PzEL4Vn1nxycKonxj1Xi+HxK4p/Kc+yWGrdE3YFC7bQrYl0owsK3uV1j82VVGTkipF\"\
+        \n  \"EWwSbCyC9uEbqkvEjENbu43ednKdeqHHF0y1xyVZDazYQD6ulyuokA/QLyglUMY+DBop0SeyAdVoq90D0/AZTwYzVFPyt4RopIJxjaoc\"\
+        \n  \"4bvBfHShs4pKsNeKg2+6i/TXcJJotNs1ie2y5Xf7I4OJSrg6+gEKu/f45ubmtt/00HSJ1qICpwAArgsAW2c1vZTVM2yC0FWtp2NVKRhl\"\
+        \n  \"pRzpxL3j5UtnZ8/kDs4UG1ptqRIvUdsQdfEiWSqBTfSZRaK8JGqE+rc9O92Rnu3oq9hd/dFDn+2Og3IWmVfYEJfFQcTu8QS4dtCKtGKm\"\
+        \n  \"NWOX9SfB4s67BaGz5UNcHwauyehinEBHuwbg9d1wHgQDl/049voYBx5Ag/Ar8Gtcvx7BaSX/H7CkNIu7IIkstI/hDM4pG6CK/hjjAevP\"\
+        \n  \"F945qqCaoOIQTweuq1W8eTP2fgIz4eJcUMSLqb+BXgqgmvDs1HjutmYhec9EZO5hWB/812H96t0PJ0HgpRXUD9/RM5B1LI6x91kAE0Cr\"\
+        \n  \"xng6i0D7YhJZvwbxPIy+nE27U2RokHiskRODvMMdEqjsiDwtcfDMB/oLfCvpC3/jr70z11z2E/biODjd/DYR+dUtDjGE+tXOdKire/td\"\
+        \n  \"VAEk123MzG7M+FzuNLT84Oev/gxiywtfDPHY3wxx6K/h7SRAm5YvvS/QoR3ldH3bsc6fBAaROacCHdAD9KBuz7YXFUwzaPyMlnD4L1+W\"\
+        \n  \"qFp/AlZAhjLhBN/Q3yX22bIsySgYK4EvtB7ZznQ4ycctHekFu1dQ+W5h6nLm+eZ16kEneJGj6csoOL9cmNFPTERv4nlHaUby+tg/Tvuz\"\
+        \n  \"GNe7bENP6dx6bM2eXkG+5zjGjed3jedHrjeKmqTryZRTAmciqh12HbgHgPG46as+ni3CAIYecmBYMWDRRB+fYv2vP5n2w+ldNxFP/mzi\"\
+        \n  \"oaugSESeFLvM1Srs1zkeJ5kgz4m9c1yHz8IEzqu7RJaVkq0CSfY02cB4snR6BV0C859JNTNnjhNBZVWCjm21p/o47OrcdGO4zUU7ky6O\"\
+        \n  \"o/egg4o9jBRtQo8EtLU3LX1tbFR4vXr0LODaZ2+x0v/2HlvDcVh1l9BlN8/XcEHKaBbZGWvHWNct0VmxSPi1p0KynJlSOVMJlbVsDpL6\"\
+        \n  \"3Iq2VBY+yoUe7hAO+OLD3RU6HQ3C6Y8+0tm2A1JnWc91RVIFWi9c/Xv/A9Tix0k=\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',source],check=True)\n\
+        LYDRA_LOSSLESS\n"
     - name: V31.9.5 Neue Grafik und Performance-Budget pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_V3195_VERIFY'\nimport os,re\nfrom pathlib import Path\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
         checks=('for(i=0;i<14;i++)', 'vt_v24_peak(x,z,1120,height,r,g,b);',\n        'near_cells=10', 'far_cells=12',\
         \ 'amount>=8',\n        'target=forward*17920;', 'desired_turn=turn*45*256;',\n        'vt_v3194_perf_hud(',\
-        \ 'vt_v31813_draw_start(',\n        'vt_save_game(void)', 'vt_load_game(void)')\nfor c in checks:\n    if c not\
-        \ in s:raise RuntimeError('V31.9.5 missing component: '+c)\nif s.count('for(i=0;i<14;i++)')<1:raise RuntimeError('Wrong\
-        \ horizon budget')\nprint('V31.9.5 graphics present; no new ground cells or extra vegetation')\nLYDRA_V3195_VERIFY\n"
+        \ 'vt_v31813_draw_start(',\n        'vt_save_game(void)', 'vt_load_game(void)')\nfor c in checks:\n    if\
+        \ c not in s:raise RuntimeError('V31.9.5 missing component: '+c)\nif s.count('for(i=0;i<14;i++)')<1:raise\
+        \ RuntimeError('Wrong horizon budget')\nprint('V31.9.5 graphics present; no new ground cells or extra vegetation')\n\
+        LYDRA_V3195_VERIFY\n"
     - name: V31.9.6.1 Bergkoordinaten Fehler beheben
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_3196'\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
@@ -678,10 +715,48 @@ jobs:
         \ mismatch: '+a[:65])\n    s=s.replace(a,b,n)\nswap('int height=215+((seed>>3)&3)*29;', 'int height=185+((seed>>3)&7)*24;')\n\
         swap('int fh=75+((seed>>7)&3)*23;', 'int fh=64+((seed>>7)&7)*14;')\nswap('2800+(i%3)*110', '3060+(i%4)*130',2)\n\
         swap('vt_v293_sin(angle)*2100', 'vt_v293_sin(angle)*2350')\nswap('vt_v293_cos(angle)*2100', 'vt_v293_cos(angle)*2350')\n\
-        swap('vt_v24_tree(x,z,10+((h>>3)&11),((h>>6)%3));',\n     'vt_v24_tree(x,z,11+((h>>3)&15),((h>>6)%3));')\nfor\
-        \ marker in ('near_cells=10','far_cells=12','amount>=8',\n               'target=forward*17920;','desired_turn=turn*45*256;',\n\
+        swap('vt_v24_tree(x,z,10+((h>>3)&11),((h>>6)%3));',\n     'vt_v24_tree(x,z,11+((h>>3)&15),((h>>6)%3));')\n\
+        for marker in ('near_cells=10','far_cells=12','amount>=8',\n               'target=forward*17920;','desired_turn=turn*45*256;',\n\
         \               'vt_v3194_perf_hud(','vt_save_game(void)'):\n    if marker not in s:raise RuntimeError('Lost\
         \ stable feature '+marker)\np.write_text(s)\nprint('V31.9.6.1: mountain and tree variants updated')\nLYDRA_3196\n"
+    - name: V31.9.7 Naturregionen und Waldgruppen bauen
+      shell: bash
+      run: "set -euo pipefail\npython3 - <<'LYDRA_V3197_PATCH'\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
+        s=p.read_text(encoding='utf-8')\ndef change(name, pairs):\n    global s\n    m=list(re.finditer(r'\\bstatic\\\
+        s+void\\s+'+re.escape(name)+r'\\s*\\([^;]*?\\)\\s*\\{',s,re.S))\n    if len(m)!=1:raise RuntimeError('V31.9.7\
+        \ missing function '+name)\n    a=m[0].start(); i=m[0].end(); depth=1; state='code'\n    while i<len(s)\
+        \ and depth:\n        c=s[i]; n=s[i+1] if i+1<len(s) else ''\n        if state=='code':\n            if\
+        \ c=='/' and n=='/':state='line';i+=1\n            elif c=='/' and n=='*':state='comment';i+=1\n       \
+        \     elif c=='\"':state='string'\n            elif c==\"'\":state='char'\n            elif c=='{':depth+=1\n\
+        \            elif c=='}':depth-=1\n        elif state=='line':\n            if c=='\\n':state='code'\n \
+        \       elif state=='comment':\n            if c=='*' and n=='/':state='code';i+=1\n        else:\n    \
+        \        if c=='\\\\':i+=1\n            elif (state=='string' and c=='\"') or (state=='char' and c==\"'\"\
+        ):state='code'\n        i+=1\n    if depth:raise RuntimeError('V31.9.7 unbalanced '+name)\n    body=s[a:i]\n\
+        \    for old,new in pairs:\n        if body.count(old)!=1:raise RuntimeError('V31.9.7 source mismatch '+name+':\
+        \ '+old[:90])\n        body=body.replace(old,new,1)\n    s=s[:a]+body+s[i:]\n# Weathered meadows: fixed\
+        \ geographic patches instead of repeated flat tint.\n# No new surfaces; far ground remains 12x12 and near\
+        \ ground 10x10.\nchange('vt_v300_extend_ground',[\n ('int h,shade,warm;', 'int h,shade,warm,meadow;'),\n\
+        \ ('warm=(h>>7)&1;',\n  'warm=(h>>7)&1;\\n        meadow=((vt_v300_hash(x/1440,z/1440)>>5)&7)-3;'),\n ('r1-shade*2+warm*2,g1-shade*2+warm,b1-shade+warm);',\n\
+        \  'r1-shade*2+warm*2+meadow*2,g1-shade*2+warm+meadow*3,b1-shade+warm+meadow);'),\n ('vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,\\\
+        n                        r1,g1,b1,r2,g2,b2);',\n  '/* Slow colour transitions while crossing the meadow,\
+        \ no new polygons. */\\n'\n  '    { int tone=(vt_v293_sin(px/3)+vt_v293_cos(pz/3))/256;\\n'\n  '      vt_v24_ground_patch(gx,gz,near_step,near_cells,near_cells,\\\
+        n'\n  '                         r1+tone,g1+tone*2,b1+tone/2,\\n'\n  '                         r2+tone,g2+tone*2,b2+tone/2);\
+        \ }'),\n])\n# Trees form small groves rather than even random scatter; 8-object hard limit unchanged.\n\
+        change('vt_v300_mid_detail',[\n ('if((h&7)>2 || amount>=8)continue;',\n  'if(((h&7)>2 && ((vt_v300_hash(x/900,z/900)>>4)&3)!=0)\
+        \ || amount>=8)continue;'),\n ('vt_v24_tree(x,z,11+((h>>3)&15),((h>>6)%3));',\n  'vt_v24_tree(x,z,11+((h>>3)&15),((vt_v300_hash(x/900,z/900)>>6)%3));'),\n\
+        ])\nfor needle in ('near_step=180,near_cells=10','far_step=560,far_cells=12',\n 'amount>=8','for(i=0;i<14;i++)','3060+(i%4)*130',\n\
+        \ 'target=forward*17920;','desired_turn=turn*45*256;',\n 'vt_v3194_perf_hud(', 'vt_v31813_draw_start(',\n\
+        \ 'vt_save_game(void)', 'vt_load_game(void)'):\n    if needle not in s:raise RuntimeError('V31.9.7 missing\
+        \ inherited part: '+needle)\np.write_text(s,encoding='utf-8')\nprint('V31.9.7: regional green meadows and\
+        \ small forest groves; PS1 geometry budget unchanged')\nLYDRA_V3197_PATCH\n"
+    - name: V31.9.7 Landschaft und Performance-Limits pruefen
+      shell: bash
+      run: "set -euo pipefail\npython3 - <<'LYDRA_V3197_CHECK'\nimport os\nfrom pathlib import Path\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
+        for x in ('meadow=((vt_v300_hash(x/1440,z/1440)>>5)&7)-3;',\n          'vt_v293_sin(px/3)+vt_v293_cos(pz/3)',\n\
+        \          'vt_v300_hash(x/900,z/900)','amount>=8',\n          'near_cells=10','far_cells=12','for(i=0;i<14;i++)',\n\
+        \          'target=forward*17920;', 'desired_turn=turn*45*256;',\n          'vt_save_game(void)','vt_load_game(void)'):\n\
+        \    if x not in s:raise RuntimeError('Missing V31.9.7 feature '+x)\nprint('V31.9.7: world patches, forest\
+        \ groves, camera and save verified')\nLYDRA_V3197_CHECK\n"
     - name: Basis 50
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
@@ -701,8 +776,8 @@ jobs:
       shell: bash
       run: 'set -euo pipefail
 
-        printf ''%s\n'' ''LYDRA WORLD OF DRAGON V31.8.14'' ''Nach 7 Sekunden blinkt START; START-Taste oeffnet die drei
-        Menuepunkte.'' > artifacts/VERSION_V31_8_14.txt
+        printf ''%s\n'' ''LYDRA WORLD OF DRAGON V31.8.14'' ''Nach 7 Sekunden blinkt START; START-Taste oeffnet die
+        drei Menuepunkte.'' > artifacts/VERSION_V31_8_14.txt
 
         cat artifacts/VERSION_V31_8_14.txt
 
@@ -713,8 +788,8 @@ jobs:
 
         mkdir -p artifacts
 
-        printf ''%s\n'' ''LYDRA WORLD OF DRAGON V31.9.0'' ''Gelände und Horizont überarbeitet; Titelmenü V31.8.14 erhalten.''
-        > artifacts/VERSION_V31_9_0.txt
+        printf ''%s\n'' ''LYDRA WORLD OF DRAGON V31.9.0'' ''Gelände und Horizont überarbeitet; Titelmenü V31.8.14
+        erhalten.'' > artifacts/VERSION_V31_9_0.txt
 
         cat artifacts/VERSION_V31_9_0.txt
 
@@ -737,8 +812,8 @@ jobs:
 
         mkdir -p artifacts
 
-        printf ''%s\n'' ''LYDRA WORLD OF DRAGON V31.9.2.3'' ''Timing-Pruefung repariert; Bewegungs- und Kameracode V31.9.2
-        unveraendert'' > artifacts/VERSION_V31_9_2_3.txt
+        printf ''%s\n'' ''LYDRA WORLD OF DRAGON V31.9.2.3'' ''Timing-Pruefung repariert; Bewegungs- und Kameracode
+        V31.9.2 unveraendert'' > artifacts/VERSION_V31_9_2_3.txt
 
         cat artifacts/VERSION_V31_9_2_3.txt
 
@@ -746,27 +821,27 @@ jobs:
     - name: V31.9.2.3 Ausgabedateien vor Upload kontrollieren
       shell: bash
       run: "set -euo pipefail\nfor file in artifacts/VTRAIL.bin artifacts/VTRAIL.cue artifacts/VTRAIL.elf artifacts/VTRAIL.exe\
-        \ artifacts/VERSION_V31_9_2_3.txt; do\n  if [ ! -s \"$file\" ]; then\n    echo \"::error::Spielartefakt fehlt\
-        \ oder ist leer: $file\"\n    exit 1\n  fi\ndone\nls -lh artifacts/VTRAIL.* artifacts/VERSION_V31_9_2_3.txt\n"
+        \ artifacts/VERSION_V31_9_2_3.txt; do\n  if [ ! -s \"$file\" ]; then\n    echo \"::error::Spielartefakt\
+        \ fehlt oder ist leer: $file\"\n    exit 1\n  fi\ndone\nls -lh artifacts/VTRAIL.* artifacts/VERSION_V31_9_2_3.txt\n"
     - name: V31.9.3.1 eindeutige Version und Spieldateien kontrollieren
       shell: bash
-      run: "set -euo pipefail\nmkdir -p artifacts\nprintf '%s\n' 'LYDRA WORLD OF DRAGON V31.9.3.1' 'Renderer-Fix mit\
-        \ sicherer Erkennung alter Bodenroutine' > artifacts/VERSION_V31_9_3_1.txt\nfor f in VTRAIL.bin VTRAIL.cue VTRAIL.elf\
-        \ VTRAIL.exe VERSION_V31_9_3_1.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do\n    test -s \"artifacts/$f\" || { echo\
-        \ \"::error::Datei fehlt: artifacts/$f\"; exit 1; }\ndone\ncat artifacts/RENDERER_PRUEFUNG_V31_9_3_1.txt\n"
+      run: "set -euo pipefail\nmkdir -p artifacts\nprintf '%s\n' 'LYDRA WORLD OF DRAGON V31.9.3.1' 'Renderer-Fix\
+        \ mit sicherer Erkennung alter Bodenroutine' > artifacts/VERSION_V31_9_3_1.txt\nfor f in VTRAIL.bin VTRAIL.cue\
+        \ VTRAIL.elf VTRAIL.exe VERSION_V31_9_3_1.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do\n    test -s \"artifacts/$f\"\
+        \ || { echo \"::error::Datei fehlt: artifacts/$f\"; exit 1; }\ndone\ncat artifacts/RENDERER_PRUEFUNG_V31_9_3_1.txt\n"
     - name: V31.9.4 Bericht und eindeutige PS1-Dateien hinterlegen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p artifacts\nprintf '%s\\n'   'LYDRA WORLD OF DRAGON V31.9.6.1 (WEITE WELT FIX)'\
-        \   'RUNTIME: FPS-Anzeige unten rechts (F + zwei Ziffern)'   'Nahlandschaft 14x14 -> 10x10, Fernlandschaft unveraendert'\
-        \   'FPS-Zaehler misst neue Weltbilder anhand PS1-VBlanks, nicht Bildschirmaufnahme-FPS.'   'Tempo V31.9.4.3:\
-        \ +25 Prozent beibehalten' 'V31.9.5: sanftere Farbkontraste, breite Berge und variable Baumgroessen'   > artifacts/VERSION_V31_9_6_1.txt\n\
-        for f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe VERSION_V31_9_6_1.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do\n\
-        \    test -s \"artifacts/$f\" || { echo \"::error::Fehlende Datei: artifacts/$f\"; exit 1; }\ndone\ncat artifacts/VERSION_V31_9_6_1.txt\n\
-        cat artifacts/RENDERER_PRUEFUNG_V31_9_3_1.txt\n"
+      run: "set -euo pipefail\nmkdir -p artifacts\nprintf '%s\\n'   'LYDRA WORLD OF DRAGON V31.9.7 (WIESEN UND WALD)'\
+        \   'RUNTIME: FPS-Anzeige unten rechts (F + zwei Ziffern)'   'Nahlandschaft 14x14 -> 10x10, Fernlandschaft\
+        \ unveraendert'   'FPS-Zaehler misst neue Weltbilder anhand PS1-VBlanks, nicht Bildschirmaufnahme-FPS.'\
+        \   'Tempo V31.9.4.3: +25 Prozent beibehalten' 'V31.9.5: sanftere Farbkontraste, breite Berge und variable\
+        \ Baumgroessen'   > artifacts/VERSION_V31_9_7.txt\nfor f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe\
+        \ VERSION_V31_9_7.txt RENDERER_PRUEFUNG_V31_9_3_1.txt; do\n    test -s \"artifacts/$f\" || { echo \"::error::Fehlende\
+        \ Datei: artifacts/$f\"; exit 1; }\ndone\ncat artifacts/VERSION_V31_9_7.txt\ncat artifacts/RENDERER_PRUEFUNG_V31_9_3_1.txt\n"
     - name: PS1 Artefakt mit BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: Lydra-PS1-V31-9-6-1-HORIZONT-FIX
+        name: Lydra-PS1-V31-9-7-WIESEN-WALD-WELT
         path: artifacts/
         if-no-files-found: error
         retention-days: 14
