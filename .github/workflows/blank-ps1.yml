@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.9.6 FIX21 - Ruhige Hauskamera
+name: Lydra World Of Dragon V31.9.9.6 FIX21.1 - Hauskamera Quellcode-Fix
 'on':
   workflow_dispatch: {}
 permissions:
@@ -591,9 +591,9 @@ jobs:
         \ k not in s:raise RuntimeError('FIX20 verify missing '+k)\nif re.search(r'if\\s*\\(\\s*region\\s*==\\s*[01]\\s*&&\\s*step_count\\s*>',s):\n raise\
         \ RuntimeError('FIX20 stale time-based region switch')\nif Path('artifacts/STAEDTE_FIX20_DIAGNOSE.txt').stat().st_size<160:\n raise RuntimeError('FIX20\
         \ city report missing')\nprint('FIX20: town visibility, safe area borders, preserved 75% movement verified')\nPY_FIX20_VERIFY\n"
-    - name: FIX21 Kamera an Hauswaenden stabilisieren
+    - name: FIX21.1 Hauskamera mit V29-Hoehenformel korrigieren
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_fix21_camera.py\" <<'LYDRA_FIX21_PATCH'\n#!/usr/bin/env python3\n\"\"\"FIX21: stabilize near-house\
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_fix21_camera.py\" <<'LYDRA_FIX21_PATCH'\n#!/usr/bin/env python3\n\"\"\"FIX21.1: stabilize near-house\
         \ camera without touching movement or map state.\"\"\"\nfrom pathlib import Path\nimport os, re\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
         s=p.read_text(encoding='utf-8')\n\ndef func_span(src,name):\n    rx=r'\\bstatic\\s+int\\s+'+re.escape(name)+r'\\s*\\(\\s*void\\s*\\)\\s*\\{'\n \
         \   hits=list(re.finditer(rx,src))\n    if len(hits)!=1:raise RuntimeError('FIX21 missing/duplicate camera function '+name)\n    a=hits[0].start();i=hits[0].end();depth=1;mode='code'\n\
@@ -613,25 +613,26 @@ jobs:
         \ hold_frames>0;\n}\"\"\"\ns=s[:a]+new+s[b:]\n\n# House proximity uses the SAME 75% turning and movement controls as FIX12.\n# Raise/shorten camera\
         \ slightly ONLY when the existing house detector is active.\nwanted_pat=r'int\\s+wanted\\s*=\\s*vt_v281_camera_obstructed\\s*\\(\\s*\\)\\s*\\?\\\
         s*35\\s*:\\s*0\\s*;'\ns,n=re.subn(wanted_pat,'int wanted = vt_v281_camera_obstructed() ? 52 : 0;',s)\nif n!=1:raise RuntimeError('FIX21 camera house\
-        \ target changed; nothing written')\nheight_pat=r'camera_pos\\.vy\\s*=\\s*62\\s*\\+\\s*vt_v28_camera_blend\\s*/\\s*2\\s*;'\ns,n=re.subn(height_pat,'camera_pos.vy\
-        \ = 62 + (vt_v28_camera_blend * 3) / 4;',s)\nif n!=1:raise RuntimeError('FIX21 house camera height changed; nothing written')\n\n# Preserve older\
-        \ stable source and 75-percent gameplay, including all region portals.\nrequired=('LYDRA_FIX12_GLOBAL_PERCENT 75','vt_v281_resolve_movement();',\n\
-        \          'vt_v281_is_blocked(nx,nz)','vt_v282_house_wall(',\n          'vt_v241_building(-175,125,52,1,1);',\n          'no automatic region 0->1\
-        \ from step count',\n          'no automatic region 1->2 from step count',\n          'vt_save_game(void)','vt_load_game(void)',\n          'vt_v31987_ground_rect(','vt_v3194_perf_hud(')\n\
-        for token in required:\n    if token not in s:raise RuntimeError('FIX21 inherited feature missing '+token)\nif s.count('static int vt_v281_camera_obstructed(void)')!=1:\n\
-        \    raise RuntimeError('FIX21 duplicate camera routine')\np.write_text(s,encoding='utf-8')\nPath('artifacts').mkdir(exist_ok=True)\nPath('artifacts/KAMERA_FIX21_DIAGNOSE.txt').write_text(\n\
-        \  'FIX21: near-house camera retains obstruction 9 frames, zooms inward and rises smoothly.\\n'\n  'City/region boundaries, relocated central building,\
-        \ collision, saves, FIX12 75% movement unchanged.\\n'\n  'Only viewing angle/height near houses was modified. Runtime emulator test required.\\\
-        n',encoding='utf-8')\nprint('FIX21: house camera stable, 75-percent movement and FIX20 cities preserved')\nLYDRA_FIX21_PATCH\npython3 \"$RUNNER_TEMP/lydra_fix21_camera.py\"\
-        \n"
-    - name: FIX21 Kamera Staedte und Tempo kontrollieren
+        \ target changed; nothing written')\nheight_pat=r'camera_pos\\.vy\\s*=\\s*62\\s*\\+\\s*(?:\\(\\s*)?vt_v28_camera_blend\\s*/\\s*(?:2|3)\\s*(?:\\\
+        )\\s*)?;'\ns,n=re.subn(height_pat,'camera_pos.vy = 62 + (vt_v28_camera_blend * 3) / 4;',s)\nif n!=1:\n    current=re.findall(r'camera_pos\\.vy\\\
+        s*=\\s*[^;]+;',s)\n    raise RuntimeError('FIX21.1 camera-height expression not recognized: '+repr(current[:5]))\n\n# Preserve older stable source\
+        \ and 75-percent gameplay, including all region portals.\nrequired=('LYDRA_FIX12_GLOBAL_PERCENT 75','vt_v281_resolve_movement();',\n          'vt_v281_is_blocked(nx,nz)','vt_v282_house_wall(',\n\
+        \          'vt_v241_building(-175,125,52,1,1);',\n          'no automatic region 0->1 from step count',\n          'no automatic region 1->2 from\
+        \ step count',\n          'vt_save_game(void)','vt_load_game(void)',\n          'vt_v31987_ground_rect(','vt_v3194_perf_hud(')\nfor token in required:\n\
+        \    if token not in s:raise RuntimeError('FIX21 inherited feature missing '+token)\nif s.count('static int vt_v281_camera_obstructed(void)')!=1:\n\
+        \    raise RuntimeError('FIX21 duplicate camera routine')\np.write_text(s,encoding='utf-8')\nPath('artifacts').mkdir(exist_ok=True)\nPath('artifacts/KAMERA_FIX21_1_DIAGNOSE.txt').write_text(\n\
+        \  'FIX21.1: near-house camera retains obstruction 9 frames, zooms inward and rises smoothly.\\n'\n  'City/region boundaries, relocated central\
+        \ building, collision, saves, FIX12 75% movement unchanged.\\n'\n  'Only viewing angle/height near houses was modified. Runtime emulator test required.\\\
+        n',encoding='utf-8')\nprint('FIX21.1: camera height matched V29 (/3) and V28.2 (/2); 75-percent movement and FIX20 cities preserved')\nLYDRA_FIX21_PATCH\n\
+        python3 \"$RUNNER_TEMP/lydra_fix21_camera.py\"\n"
+    - name: FIX21.1 Kamera Staedte und Tempo verifizieren
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_FIX21_VERIFY'\nfrom pathlib import Path\nimport os\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
         for token in ('static int vt_v281_camera_obstructed(void)',\n              'hold_frames=9;',\n              'int wanted = vt_v281_camera_obstructed()\
         \ ? 52 : 0;',\n              'camera_pos.vy = 62 + (vt_v28_camera_blend * 3) / 4;',\n              'LYDRA_FIX12_GLOBAL_PERCENT 75',\n          \
         \    'valid geographic transition keeps its new location',\n              'vt_v241_building(-175,125,52,1,1);'):\n    if token not in s:raise RuntimeError('FIX21\
-        \ source verify '+token)\nif Path('artifacts/KAMERA_FIX21_DIAGNOSE.txt').stat().st_size<180:\n    raise RuntimeError('FIX21 missing camera report')\n\
-        print('FIX21 camera validated without changes to movement or region state')\nLYDRA_FIX21_VERIFY\n"
+        \ source verify '+token)\nif Path('artifacts/KAMERA_FIX21_1_DIAGNOSE.txt').stat().st_size<180:\n    raise RuntimeError('FIX21 missing camera report')\n\
+        print('FIX21.1 camera validated without changes to movement or region state')\nLYDRA_FIX21_VERIFY\n"
     - name: Basis 50
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
@@ -647,7 +648,7 @@ jobs:
     - name: Basis 54
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 54
-    - name: FIX21 PS1 Dateien und Hauskamera kontrollieren
+    - name: FIX21.1 PS1-Build und Kamera-Diagnose absichern
       shell: bash
       run: "set -euo pipefail\nfor f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe TEMPO_FIX12_DIAGNOSE.txt FLUSS_FIX13_1_DIAGNOSE.txt BERGE_FIX14_DIAGNOSE.txt\
         \ BERGE_FIX15_DIAGNOSE.txt BAUM_FIX16_DIAGNOSE.txt FELS_FIX17_DIAGNOSE.txt FERNBERGE_FIX18_DIAGNOSE.txt KOLLISION_FIX19_DIAGNOSE.txt STAEDTE_FIX20_DIAGNOSE.txt;\
@@ -655,13 +656,13 @@ jobs:
         \ 'Fernberge kleiner, Crystal Pass erhalten, 75-Prozent-Tempo beibehalten.' > artifacts/VERSION_V31_9_9_3_FIX18.txt\n\nprintf \"%s\\n\" \"Lydra\
         \ World Of Dragon V31.9.9.4 FIX19: Kollisionen/Haustuer, keine Wander-Teleports, Stadtweg frei und Bewegung 75 Prozent\" > artifacts/VERSION_V31_9_9_4_FIX19.txt\n\
         \nprintf '%s\\n' 'LYDRA WORLD OF DRAGON V31.9.9.5 FIX20: all cities present; region travel by coordinates; fixed 75 percent tempo.' > artifacts/VERSION_V31_9_9_5_FIX20.txt\n\
-        \ntest -s artifacts/KAMERA_FIX21_DIAGNOSE.txt || { echo '::error::FIX21 Kamera-Diagnose fehlt'; exit 1; }\nprintf '%s\\n' 'LYDRA WORLD OF DRAGON\
-        \ V31.9.9.6 FIX21: near-house camera steadier; FIX20 cities and FIX12 75 percent speed retained.' > artifacts/VERSION_V31_9_9_6_FIX21.txt\n"
-    - name: FIX21 PS1 BIN CUE EXE ELF hochladen
+        \ntest -s artifacts/KAMERA_FIX21_1_DIAGNOSE.txt || { echo '::error::FIX21 Kamera-Diagnose fehlt'; exit 1; }\nprintf '%s\\n' 'LYDRA WORLD OF DRAGON\
+        \ V31.9.9.6 FIX21.1: near-house camera steadier; FIX20 cities and FIX12 75 percent speed retained.' > artifacts/VERSION_V31_9_9_6_FIX21_1.txt\n"
+    - name: FIX21.1 PS1 BIN CUE EXE ELF hochladen
       uses: actions/upload-artifact@v4
       id: lydra_ps1_artifact
       with:
-        name: Lydra-PS1-V31-9-9-6-FIX21-HAUSKAMERA
+        name: Lydra-PS1-V31-9-9-6-FIX21-1-HAUSKAMERA
         path: artifacts/
         if-no-files-found: error
         retention-days: 14
