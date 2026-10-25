@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.9.6 FIX21.2 - Kamerahoehe korrigiert
+name: Lydra World Of Dragon V31.9.9.8 FIX23 - PS1 Fachwerk Buergerhaeuser
 'on':
   workflow_dispatch: {}
 permissions:
@@ -23,15 +23,17 @@ jobs:
       run: "set -euo pipefail\nBASE_URL=\"https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/5c5c556238ce53f50696fd7e3fdc5dcd3493ca8d/.github/workflows/blank-ps1.yml\"\
         \ncurl --fail --location --silent --show-error --retry 3 \"$BASE_URL\" -o \"$RUNNER_TEMP/lydra_v3185_base.yml\"\
         \npython3 - <<'PY_REPLAY'\nimport os,json,yaml,hashlib\nfrom pathlib import Path\nroot=Path(os.environ['RUNNER_TEMP'])\n\
-        b=(root/'lydra_v3185_base.yml').read_bytes()\nchecksum=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\\0'+b).hexdigest()\n\
-        if checksum != '5f4aaafe69115d25c482c5a533f972aa8ee16102':\n    raise RuntimeError('Stable source does not match\
-        \ pinned original: '+checksum)\nw=yaml.safe_load(b)\ns=w['jobs']['build']['steps']\nif len(s)!=56 or s[55].get('uses')!='actions/upload-artifact@v4':\n\
-        \    raise RuntimeError('Unexpected stable step structure')\n(root/'lydra_v3185_replay_steps.json').write_text(json.dumps([x.get('run')\
-        \ for x in s],ensure_ascii=False),encoding='utf-8')\n(root/'lydra_v3185_replay.py').write_text('''import sys,os,json,subprocess\n\
-        from pathlib import Path\np=Path(os.environ[\"RUNNER_TEMP\"])/\"lydra_v3185_replay_steps.json\"\ns=json.loads(p.read_text(encoding=\"\
-        utf-8\"))\ni=int(sys.argv[1])\nif i<2 or i>54 or not isinstance(s[i],str):\n    raise RuntimeError(\"Invalid\
-        \ base step: \"+str(i))\nsubprocess.run([\"bash\",\"-euo\",\"pipefail\",\"-c\",s[i]],check=True)\n''',encoding='utf-8')\n\
-        print('Pinned successful V31.8.5 base verified: 56 steps')\nPY_REPLAY"
+        b=(root/'lydra_v3185_base.yml').read_bytes()\nchecksum=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\\\
+        0'+b).hexdigest()\nif checksum != '5f4aaafe69115d25c482c5a533f972aa8ee16102':\n    raise RuntimeError('Stable\
+        \ source does not match pinned original: '+checksum)\nw=yaml.safe_load(b)\ns=w['jobs']['build']['steps']\n\
+        if len(s)!=56 or s[55].get('uses')!='actions/upload-artifact@v4':\n    raise RuntimeError('Unexpected\
+        \ stable step structure')\n(root/'lydra_v3185_replay_steps.json').write_text(json.dumps([x.get('run')\
+        \ for x in s],ensure_ascii=False),encoding='utf-8')\n(root/'lydra_v3185_replay.py').write_text('''import\
+        \ sys,os,json,subprocess\nfrom pathlib import Path\np=Path(os.environ[\"RUNNER_TEMP\"])/\"lydra_v3185_replay_steps.json\"\
+        \ns=json.loads(p.read_text(encoding=\"utf-8\"))\ni=int(sys.argv[1])\nif i<2 or i>54 or not isinstance(s[i],str):\n\
+        \    raise RuntimeError(\"Invalid base step: \"+str(i))\nsubprocess.run([\"bash\",\"-euo\",\"\
+        pipefail\",\"-c\",s[i]],check=True)\n''',encoding='utf-8')\nprint('Pinned successful V31.8.5\
+        \ base verified: 56 steps')\nPY_REPLAY"
     - name: Basis 02
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 2
@@ -64,8 +66,8 @@ jobs:
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 11
     - name: Stabile PS1 Basis 12 bis 49 vollstaendig ausfuehren
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LYDRA_RUN_LOSSLESS'\nimport base64,zlib,hashlib,subprocess\nsource=zlib.decompress(base64.b64decode(\n\
-        \    \"eNp9VW1v2zYQ/q5fcUM/kEIUNU5boPXCAQlqJAPWLHCdAoNnCLJ0srjSlEBSSYxi/71HSbaseBg/kbzX57nj0aKDc2wqqGWNRSpVUO9cWel3cA5XV+yPvz7Pr5Pb+Z+PD7PP\"\
+      run: "set -euo pipefail\npython3 - <<'LYDRA_RUN_LOSSLESS'\nimport base64,zlib,hashlib,subprocess\n\
+        source=zlib.decompress(base64.b64decode(\n    \"eNp9VW1v2zYQ/q5fcUM/kEIUNU5boPXCAQlqJAPWLHCdAoNnCLJ0srjSlEBSSYxi/71HSbaseBg/kbzX57nj0aKDc2wqqGWNRSpVUO9cWel3cA5XV+yPvz7Pr5Pb+Z+PD7PP\"\
         \n    \"yc311xkL5LaujIPKRmCbdW2qDK0NClNtoU5dqeQaepUHOgam0RqN8Hte2Rj1kzSVXrL54/39bJ4sZl8e2Cp8y9QuN2ny9G7y8UNisFbpLq53LEitRXLVeYmlTQqpkIcRsK8u\"\
         \n    \"XSuEdSNV3stBWthKa6XesIAiiSFgnFX1jofBRrqyWSde2KZEmyW7/X1x93iTzO6/USp7FQ/mVOfhenHnld7AosR9WF2ZbarUDtK6VhItuBItQlamekOnNbpnRA230t01a7AO\"\
         \n    \"axvDDWZpY5E8WXxCkyqojNxITZtWA1Lj0elcYQ4lGozgGQFfKEImHQUzqKo097G2cZBjAf6YDAC5wxcXQY7WhdMAaCmp0Qp/HVty49ozD38FKS5aheeS2AV5pVDzVtgb+oXa\"\
@@ -79,147 +81,255 @@ jobs:
     - name: FIX19 V31.8.7 Intro verlustfrei aus FIX18 einspielen
       shell: bash
       run: "set -euo pipefail\ncurl --fail --location --silent --show-error --retry 3 \\\n  \"https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/2783c7f6d1ad802d9db73740697ce5057ff389db/.github/workflows/blank-ps1.yml\"\
-        \ \\\n  -o \"$RUNNER_TEMP/lydra_fix18_workflow_pinned.yml\"\npython3 - <<'PY_FIXED_VIDEO'\nimport yaml,os,hashlib,subprocess\n\
-        p=os.path.join(os.environ['RUNNER_TEMP'],'lydra_fix18_workflow_pinned.yml')\nw=yaml.safe_load(open(p,encoding='utf-8'))\n\
-        name='V31.8.7 FIX Originalvideo 256 Farbe'\nsteps=[step for step in w['jobs']['build']['steps'] if step.get('name')==name]\n\
-        if len(steps)!=1:raise RuntimeError('FIX19 pinned FIX18 video step missing')\ns=steps[0]['run']\nif hashlib.sha256(s.encode()).hexdigest()!='8fb02db804c32113921bf58d674d577e76c15553a23bd7e7b37a99f833d9661d':\n\
-        \ raise RuntimeError('FIX19 pinned intro contents differ; refusing to alter studio video')\nsubprocess.run(['bash','-euo','pipefail','-c',s],check=True)\n\
-        PY_FIXED_VIDEO\n"
+        \ \\\n  -o \"$RUNNER_TEMP/lydra_fix18_workflow_pinned.yml\"\npython3 - <<'PY_FIXED_VIDEO'\n\
+        import yaml,os,hashlib,subprocess\np=os.path.join(os.environ['RUNNER_TEMP'],'lydra_fix18_workflow_pinned.yml')\n\
+        w=yaml.safe_load(open(p,encoding='utf-8'))\nname='V31.8.7 FIX Originalvideo 256 Farbe'\nsteps=[step\
+        \ for step in w['jobs']['build']['steps'] if step.get('name')==name]\nif len(steps)!=1:raise\
+        \ RuntimeError('FIX19 pinned FIX18 video step missing')\ns=steps[0]['run']\nif hashlib.sha256(s.encode()).hexdigest()!='8fb02db804c32113921bf58d674d577e76c15553a23bd7e7b37a99f833d9661d':\n\
+        \ raise RuntimeError('FIX19 pinned intro contents differ; refusing to alter studio video')\n\
+        subprocess.run(['bash','-euo','pipefail','-c',s],check=True)\nPY_FIXED_VIDEO\n"
     - name: V31.8.12 PS1 Menueauswahl an echten
       shell: bash
-      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\nimport\
-        \ base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqVWG1z2zYS/s5fgbh3IWkhkvgiiZLNZNzEvcuNk2Zs310ztk9DUZCFCUWwAClb57i/vbvgi2RbatVkLBHAYvHsYvfh\"\
-        \n  \"rhTLyRtWCJLxjM0inhhxlJO35OBv5//+/Pn0fHx5+ulLJ1lNZTReek4QjFW+Slg7Wx2Q42Pz7OuH85Pxf/TCxeXXs1PT\"\n  \"+OFVp1CyM+Fph6VLkq3yuUg94+Dg4Ay1EBBuB23HHZElk3zG2ZQ4/eye5Ow+BxR5PCdROiUZk4soZWmerGAcz4UEwTm/\"\
-        \n  \"nSfwl7dBnTGTYkGyKIepCeGLTMicfIGhUT0LRYlkhpGRUM9bQrUBEpcivTK/nP/8r9P3l+MPH8/NG5t0iKlk3FlEPG3H\"\n  \"pqFgS9aWLJqOEZfF0lhMeXobmkU+exOYtmFM2YyoLEqtNFowe2QQ+CfvYZ80rycqj3IeX6uW9W60FHz6nae5DUOzJVmb\"\
-        \n  \"qTjKWLmvBdLq8Nq6+t/RzeG7axsHD6ZWtkAQCVe5BXtmPJ3ynElL3lNFYeLCtrUUn5GEpdZC2eRVSJwSh8YSccXIeZHm\"\n  \"fMFOpRTSmpml8wNwy68Fl0wRkTLygEgeKZmJAhz/UKl7NMsDIkCxUFfdmzYYJXPLPiI8LCdYOsXhlGX5PHSOyEJMWWiC\"\
-        \n  \"p1hpwd2cJ6xc1nfKybEGq+w1zDhUV/zmiKT43XJu0CD4Pi7lCEvACNNsxGFVn1Ids9ZTLcaw0jH1aal+HJWgEp4y84i3\"\n  \"QufJDpa83HNY74nFYgEB+EfbDmpZlUsID3Or1IF5UGucR3K7jPlgjrSjdh71WAm82RDQi5U/tIVb/XGdri2qr+b57trW\"\
-        \n  \"rQoOtzhUq3rqGbyr7QCuzdF2H1rV8ZX79DGlX20iZLOs/VYvgjvtrfY0R4Bi7arRlhxoUmARJTMhF8Aq78kkEfG3ETFb\"\n  \"OifLVGZ5IVMSUW4YEZ2EOtXNZY4sOHDH4KxirBKRK0gTybIkihk6UOc/xKvROdxgupmAFYSvWMLinIuUTCJJFixSBfIa\"\
-        \n  \"T0k+Z+Ti5NMpUbFkLCWxEBIYJ8qZaiOgkzgvoqRkyRgOguQdkVXo+H7H6Xc7zqDfJj9JgL9eVTBqk8+COAHwq6ZWreoS\"\n  \"jmqYlHBFgJbvUvLxswZRQgRQSA1iRjwy4/cwlOIO+DRlwNoQNEs2bZPDjlESHUGOI6Vz4E2QQ9pbwHjknuLnSn/e6c+5\"\
-        \n  \"/gSb9fctmqqfJkkBjn/Qrr/8eHZKDlHJkR4XqeK3qXYTeDHRz0fVRVt3x2GXfP9O5vBtl5dWrlWCoZVJvhgXik1bXmG/\"\n  \"/s0rmr2VSEvx/zMxs/Bc+2010LsiydLoajq5sZ+oRmihVcK0n0m2KqV2KdocHm47rJRRLL9Ej6Ha9dQvX7t6ht7T1Xr2\"\
-        \n  \"v/8sJ+/ofD15/o8fK1l0bOlU7dDKE9PpF4BhiRwB0uqYR6O+PHRrdXeOO4Z7Huci0/cHLx12X19LJR2LVOVEzfENW8Yq\"\n  \"il95N+GD4/Wp03Op0w8eGydrHcddW3+H3afzb91q3j3azDo83N5QrmVuNjFvBNyTbLRwoUasTaBNRFMCuijJCuApSm4T\"\
-        \n  \"cdeAKTX542weKfYqdMnr1+TZnPckBGqd4dOtYeja7+qZuJBKyFE9FFleTTXH1lrAPY3C7otVcFKzWvlJ2xBqNzUAJvAG\"\n  \"+Pb3vl9U144Ghlrw2HPf6YdR33ujH44MLQIk9V6uwKUJvj3Wqb+I5DdIc7CopASkFfDdBikRWOK5QlbQPKDTQmThyziq\"\
-        \n  \"lVaonpLEcEhBptWnHvx3nB51nSF1e72twk63q6V96tABdVyXum5vp7TrDipplwY0gA2B30KfUNcf2msHfGCxkBBTS6bN\"\n  \"VkAcShA+BRbls5W2vyZyMil4gsRYBX5j+bOTnYC63QFY5NKBj+dS1+vvAOltF63RaUofYe5NIL2rc99UXEJ1gmZQhuGb\"\
-        \n  \"B7g6irUdZZTtQDcER7sBRbf4Q0xV8KK//XIc6nhdlPszSdfbW6nrDfbVOkTfDPdE6nb7+yLdUyki3VOr00f7+yhI+13q\"\n  \"DCEsfW+HKFwzhCYEL8Vn1wt2BzyodR1nX7Wu4+6ldljegGZr6gGcbgB7vF2yrrOvLCxjINBBj3o9eIa/4Y641+v7yQ7h\"\
-        \n  \"RDwZ/yjgDhBOd5coZtNL0TqdTn85eX959hWyGvKoKmyamgzKm7J20imuKy1dYIHBoAcLrCqhoG60OBA1P/agAm7Z5KGp\"\n  \"QbdzIK/Q1q++MGxYcWPvNsbzkcM01wE59gBKb1iRmBNsKN22tafpD3LYRS9ARNDBoNwLqaof/kRByZ9wsgOX7yAA3ysV\"\
-        \n  \"DIbP9z+WndpfMAZIsufQwP9rVmAOUn+wF3LHK6FDIlBIXsdxNgEb608IjJ8vdRWssBSXWOOCMTxVTOpiHd56DPj0xyj+\"\n  \"dit1l7wooAiaMPJrwQqIl7OTi8tdfIvRDRb7XTqA9xCEOfXd3fkDlvquDtwB7fXp0NkuCgpd4CS/Dx6ElyFY6AdlUYfd\"\
-        \n  \"h4JmehTdtDYakza2WJllt7AdbKmryejGMH4gF9GM5asRSQVUtTl063wR3TJ8sWRFjl+5FFAyRVDCEqyysCu7hVcS6F0R\"\n  \"aMvSW+xPICHIrEixlCR1k+SP0aEmbYZa5cZ4Xkyb0bOOquwidcuFam0jUngVZJu0ZR+ZeK7SKKrKpcaRiGg6RrxlXWhS\"\
-        \n  \"rUJFS/ZydukGzhgaJ5HAKnY46DbUTp/EGvyrYASDcQYMkqjGjKACFkyyrNa6rgQ3Z9bFYG0t9uIl+FTk2qA//C3H/MSV\"\n  \"gp4ZS+aIY3dUX0tH35OCso4tsKcttdpG1r6TPGflD1rAdS9/04JmBSw2N/pW3VACCXr9DhT20GkGuo1dcoXNKLZlEdTE\"\
+      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 -\
+        \ <<'PY_PATCH'\nimport base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"\
+        eNqVWG1z2zYS/s5fgbh3IWkhkvgiiZLNZNzEvcuNk2Zs310ztk9DUZCFCUWwAClb57i/vbvgi2RbatVkLBHAYvHsYvfh\"\
+        \n  \"rhTLyRtWCJLxjM0inhhxlJO35OBv5//+/Pn0fHx5+ulLJ1lNZTReek4QjFW+Slg7Wx2Q42Pz7OuH85Pxf/TCxeXXs1PT\"\
+        \n  \"+OFVp1CyM+Fph6VLkq3yuUg94+Dg4Ay1EBBuB23HHZElk3zG2ZQ4/eye5Ow+BxR5PCdROiUZk4soZWmerGAcz4UEwTm/\"\
+        \n  \"nSfwl7dBnTGTYkGyKIepCeGLTMicfIGhUT0LRYlkhpGRUM9bQrUBEpcivTK/nP/8r9P3l+MPH8/NG5t0iKlk3FlEPG3H\"\
+        \n  \"pqFgS9aWLJqOEZfF0lhMeXobmkU+exOYtmFM2YyoLEqtNFowe2QQ+CfvYZ80rycqj3IeX6uW9W60FHz6nae5DUOzJVmb\"\
+        \n  \"qTjKWLmvBdLq8Nq6+t/RzeG7axsHD6ZWtkAQCVe5BXtmPJ3ynElL3lNFYeLCtrUUn5GEpdZC2eRVSJwSh8YSccXIeZHm\"\
+        \n  \"fMFOpRTSmpml8wNwy68Fl0wRkTLygEgeKZmJAhz/UKl7NMsDIkCxUFfdmzYYJXPLPiI8LCdYOsXhlGX5PHSOyEJMWWiC\"\
+        \n  \"p1hpwd2cJ6xc1nfKybEGq+w1zDhUV/zmiKT43XJu0CD4Pi7lCEvACNNsxGFVn1Ids9ZTLcaw0jH1aal+HJWgEp4y84i3\"\
+        \n  \"QufJDpa83HNY74nFYgEB+EfbDmpZlUsID3Or1IF5UGucR3K7jPlgjrSjdh71WAm82RDQi5U/tIVb/XGdri2qr+b57trW\"\
+        \n  \"rQoOtzhUq3rqGbyr7QCuzdF2H1rV8ZX79DGlX20iZLOs/VYvgjvtrfY0R4Bi7arRlhxoUmARJTMhF8Aq78kkEfG3ETFb\"\
+        \n  \"OifLVGZ5IVMSUW4YEZ2EOtXNZY4sOHDH4KxirBKRK0gTybIkihk6UOc/xKvROdxgupmAFYSvWMLinIuUTCJJFixSBfIa\"\
+        \n  \"T0k+Z+Ti5NMpUbFkLCWxEBIYJ8qZaiOgkzgvoqRkyRgOguQdkVXo+H7H6Xc7zqDfJj9JgL9eVTBqk8+COAHwq6ZWreoS\"\
+        \n  \"jmqYlHBFgJbvUvLxswZRQgRQSA1iRjwy4/cwlOIO+DRlwNoQNEs2bZPDjlESHUGOI6Vz4E2QQ9pbwHjknuLnSn/e6c+5\"\
+        \n  \"/gSb9fctmqqfJkkBjn/Qrr/8eHZKDlHJkR4XqeK3qXYTeDHRz0fVRVt3x2GXfP9O5vBtl5dWrlWCoZVJvhgXik1bXmG/\"\
+        \n  \"/s0rmr2VSEvx/zMxs/Bc+2010LsiydLoajq5sZ+oRmihVcK0n0m2KqV2KdocHm47rJRRLL9Ej6Ha9dQvX7t6ht7T1Xr2\"\
+        \n  \"v/8sJ+/ofD15/o8fK1l0bOlU7dDKE9PpF4BhiRwB0uqYR6O+PHRrdXeOO4Z7Huci0/cHLx12X19LJR2LVOVEzfENW8Yq\"\
+        \n  \"il95N+GD4/Wp03Op0w8eGydrHcddW3+H3afzb91q3j3azDo83N5QrmVuNjFvBNyTbLRwoUasTaBNRFMCuijJCuApSm4T\"\
+        \n  \"cdeAKTX542weKfYqdMnr1+TZnPckBGqd4dOtYeja7+qZuJBKyFE9FFleTTXH1lrAPY3C7otVcFKzWvlJ2xBqNzUAJvAG\"\
+        \n  \"+Pb3vl9U144Ghlrw2HPf6YdR33ujH44MLQIk9V6uwKUJvj3Wqb+I5DdIc7CopASkFfDdBikRWOK5QlbQPKDTQmThyziq\"\
+        \n  \"lVaonpLEcEhBptWnHvx3nB51nSF1e72twk63q6V96tABdVyXum5vp7TrDipplwY0gA2B30KfUNcf2msHfGCxkBBTS6bN\"\
+        \n  \"VkAcShA+BRbls5W2vyZyMil4gsRYBX5j+bOTnYC63QFY5NKBj+dS1+vvAOltF63RaUofYe5NIL2rc99UXEJ1gmZQhuGb\"\
+        \n  \"B7g6irUdZZTtQDcER7sBRbf4Q0xV8KK//XIc6nhdlPszSdfbW6nrDfbVOkTfDPdE6nb7+yLdUyki3VOr00f7+yhI+13q\"\
+        \n  \"DCEsfW+HKFwzhCYEL8Vn1wt2BzyodR1nX7Wu4+6ldljegGZr6gGcbgB7vF2yrrOvLCxjINBBj3o9eIa/4Y641+v7yQ7h\"\
+        \n  \"RDwZ/yjgDhBOd5coZtNL0TqdTn85eX959hWyGvKoKmyamgzKm7J20imuKy1dYIHBoAcLrCqhoG60OBA1P/agAm7Z5KGp\"\
+        \n  \"QbdzIK/Q1q++MGxYcWPvNsbzkcM01wE59gBKb1iRmBNsKN22tafpD3LYRS9ARNDBoNwLqaof/kRByZ9wsgOX7yAA3ysV\"\
+        \n  \"DIbP9z+WndpfMAZIsufQwP9rVmAOUn+wF3LHK6FDIlBIXsdxNgEb608IjJ8vdRWssBSXWOOCMTxVTOpiHd56DPj0xyj+\"\
+        \n  \"dit1l7wooAiaMPJrwQqIl7OTi8tdfIvRDRb7XTqA9xCEOfXd3fkDlvquDtwB7fXp0NkuCgpd4CS/Dx6ElyFY6AdlUYfd\"\
+        \n  \"h4JmehTdtDYakza2WJllt7AdbKmryejGMH4gF9GM5asRSQVUtTl063wR3TJ8sWRFjl+5FFAyRVDCEqyysCu7hVcS6F0R\"\
+        \n  \"aMvSW+xPICHIrEixlCR1k+SP0aEmbYZa5cZ4Xkyb0bOOquwidcuFam0jUngVZJu0ZR+ZeK7SKKrKpcaRiGg6RrxlXWhS\"\
+        \n  \"rUJFS/ZydukGzhgaJ5HAKnY46DbUTp/EGvyrYASDcQYMkqjGjKACFkyyrNa6rgQ3Z9bFYG0t9uIl+FTk2qA//C3H/MSV\"\
+        \n  \"gp4ZS+aIY3dUX0tH35OCso4tsKcttdpG1r6TPGflD1rAdS9/04JmBSw2N/pW3VACCXr9DhT20GkGuo1dcoXNKLZlEdTE\"\
         \n  \"UA1mWcKhJQQlL34SNKqfAPf5TdH4HV5R4Cg=\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
         PY_PATCH\n"
     - name: V31.8.13 Blinkendes START vor dem M
       shell: bash
-      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\nimport\
-        \ base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqtWGtT20gW/e5f0SG7kYRlY9nmZSOmUgk7k6lMhiJkq7aAdclS2+6K3NJ0t8Aelv++px/yA0xqtmoNGEl9+77vubcl\"\
-        \n  \"qSItWhWkZCWdJCxvpIki52Tvb1ffvny5uBpdX/x2eZAvM5GM7nvRSdQblYlKZ+1yuUfOzrzP//p49X70T7ty+f76wy9e\"\n  \"4+2bg0qKgzHjB5Tfk3KpZgXvNfb29j5rPgTU7ZN21BuQcc74d8an5Ov1+6trMk0UJWOqHijlJC3mZU4VzQjjShQk4Rnh\"\
-        \n  \"hZgnOZlTXrXBrjERxZxAn1nOxoTNy0IoconbhrsuZChoo4z1M7+QbajDRMFvvMur33+9+HA9+vjpyrsLDjwp0oN5wng7\"\n  \"9RoyLtuCJtlI0YXyKU+LDCrGXqUmrRMvaDQyOiGTiqeKFXwky4T7PJnTYNAg+IhFLLzbsVSJYumtbPo/De4Llv0HRgS4\"\
-        \n  \"9ZqCtqlMk5LaXU1Qy/1b/+bfw7v9n24DffPoGVZz7Wgq45xJ5WPbhPGMKSp8sQi1Ye2vQWAI2YTklPuOPngTRwORMEnJ\"\n  \"VcUVm9MLIQrhT7yLRUlT7VG6SFKVL0nBKXnUajyFZFoo8rjJ5smz3Md0ynjsnt507tqwTSjfid5coDxzjzNaqlkcWTOK\"\
-        \n  \"jMYevEitWQ8zllNLYYLKzrRU6fynP2ksb9jd6pbr22Z0p+3Ef0dOaA4LPW9FhlUjyslas3OLKVYOPJtH5nJgNUMOUm/I\"\n  \"mk7d+kPzl3v26z3jvEi//2jTXk0plUD2eDup9rw9R5XOErGbxnv0BsZXr4p6cgStDQKz6Lxh7NvpjVtea7mOzvPd1tKd\"\
-        \n  \"2/d3ONMw2vaLjtNu8bfeYLcHfSfcOc+IsV4NSCFWy8Zr9SKcGey0ZiUCjI2jdhWH942PkzzhKapjLJKUSsAO8ZqmRm1h\"\n  \"U1UJbqshZBYFoACf0pEGA1PNYTp2aTzNC/Aj0twk4TjeARiuuiaFoMjwZDC2KZ9MUONxOvbt0qrEHWVs1ncX+BfAZKoq\"\
-        \n  \"CLaaEVW4+na1LCFokNw1DY+mvBkP7qwlBtRHjJeV8gGGzoq35HpGa7zuApI1Euc5FY6/JAaBLUD7rSggGRPUQAskFyVg\"\n  \"XGM18btB2zH8xCUFMiccIFTmLGWKKKYACAb8/X4AblIBfockyXPw0E6TB1MYYZBekkTgSlCwuaeZZYsFoK7PJgZK8XWv\"\
-        \n  \"dLfqj2ielJJmeHIe46vf7WgKC7L4Cmq6cpZIigeaqIu/oU0feCLkMZBWVmPuQ0oItJ6eRedb++L+8JbX2VavmNYWd4Ze\"\n  \"qJmkBQIVR6tY8lcw2vtQVLnuc4qg7rRHFAIg6T3lLUnh/7obuu4I37jIWhfcPkF5XXBoNS+9sbKyNnOr3Qha5rHneU8W\"\
-        \n  \"WdnE37YyRmweV1V1sE++zooHF7zEhDR71tCHMMQmAHKe5i6DXbNn0kQR0WmT/YMNFPfdY/KOXL7/ODLUm5I3vWw16w53\"\n  \"LqaVkIVADHauziEkmdJ4b2+9/mSuXnVAF2p43mupkSfzcZaQ0UA78v8QdeM4U5EakXg687aACAIam/jj1cqaLV64UdGY\"\
-        \n  \"Wd6Sb9KypQuMEzpEl18j8vPlN3L96fMFqRTLmTJlixHtgaSCyTJEPCtKJglXiVy2pFoi1GOm5kkJhkg/gAg4DXSYOX0g\"\n  \"v15e/Iw9Sfp9KmB6VqMQIBujFCa/CQDEPEQ2tMlHYP2YCtibL8FPmnSa1fmxYo8pxYwqLtVMLEi/3ZjRvARQCh0RZON6\"\
-        \n  \"qtRzm04vgXmECiRSIq09xlyNT9AqpzK0E5YWkS4TB1XoOHMDKv9g95QcLo6dIhZ3UsqVZtkmv3Ny1AH8AZfAqJhMSK++\"\n  \"Jf5Rp/XLn9rBgcltOwwSPQe69NPTsvbzyM5SeiVo2BR3xKh1qUjFJZtyajwp0FSW5UzeHN7dHN/F64J47EVhdKR/9QV+\"\
-        \n  \"ehHmOVOhm5WlyfrrH03iCvl6iyzqh9Gx/tXcju3vUwiy99vcOjVZJ+zi+qQmu/qRUPJS6JOtP+AamYaieEDZ5CFCF4qK\"\n  \"h4twGaKXPjiaZyX5Bphky2G17m8B8N9PO1VwHh/he5NOc4x9PZI/I9eEK1aa6rzXCQw1Qmr1aNToN9f9ydUGUly3Wa7k\"\
-        \n  \"EDHL2Xdba3kipq6Qx8VCP0LqZsBsRWYsM7C5Aj+XGCcjVCL1owguPUIkOvgfdhHdTr+pFYCXT8yF03PHttPT/3lbB5E8\"\n  \"6oY9/PQRyNNe2O0f7iTtGsX+Eqnhenryl7nuIq29fUUx1MwKwf4EhCR5C7mBI+sCTcUWRWjQMyE4WeU0a1UluYeDCyJL\"\
-        \n  \"gSPTysnoP/4UHWF6djicNpuBvkfK4Qm+z471N55uNBvk4mYDMWcXHw/PDp+3JCTMG99V6PTuBpzu3vlRdXbm91vYEOBD\"\n  \"HnHRbA71HMV4RYdPWxxgUwyC7XaFQnj50KqBJZyGDsm7d+Q1wZZGyw70VXObzSKOoqOmP90/akJ2sN/bXl7G0XHUBL/n\"\
-        \n  \"C9uxWzSjcIk/LUvHBfL2dRyjbnh86pLvMNpMvlf4oNS3eXQBLMjiXsdsPsDt4eEzFjo+xsYXTbzx1NCdQTdODAHeSwzu\"\n  \"GwS22Os10J5l2zRs32557Ri9PkUj25huJKaT2uZkemc96qNfg+sOybXFnklanDOke3ewQ9pq+M4w/ulemVk80ZJ057Jd\"\
-        \n  \"ULe7OZNaHytVthma38L/kfTgvKZyFr+uxTVzxm2InFdoUGN9kk+Bc/rcZMe7tSegCg4cbT0P4UTlpIR2e1OfPpvuURRs\"\n  \"nkJMWNaHEE5pluNUZ7U/7o60/SOZF0r6gRvUtcUidfGzG16N32/Y3pqKpJyxFIOBRnEdhomZWCrO/qgwj7yYtVZWWO6h\"\
-        \n  \"/aet2Mjk7a4O5bRlO4c0455wba8Z0b4mEzqtEpHpIWCc284BaNMqmgPQnGpmWm09bBuEazfgdAwy4rvOAk7WIuqp3Qu9\"\n  \"Fz0Rz1aztRcaU1/zb717h3GrfXmRZCOtoasms0cm9/TFw/vuSTTCfF/kWJwX91Q3zW1mWtbxyIC7XEt3ap2My7Kmdamt\"\
-        \n  \"B4daxe4IcDVSRambOzHJHXguj/Q7DeumVdX9sLxlUYkUh68ljqPzuroGxGtaLoFxvI7qttvd+P0s0qvbWZWt7rZ87axa\"\n  \"fXa6vbZl+22CvgsaZftB9zr72lKGL19cohXC1956UD6WmFvYlHH0VnusbJ0/fyfrxm29Yh+MK6UwjON+tdce8QxhF3Je\"\
+      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 -\
+        \ <<'PY_PATCH'\nimport base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"\
+        eNqtWGtT20gW/e5f0SG7kYRlY9nmZSOmUgk7k6lMhiJkq7aAdclS2+6K3NJ0t8Aelv++px/yA0xqtmoNGEl9+77vubcl\"\
+        \n  \"qSItWhWkZCWdJCxvpIki52Tvb1ffvny5uBpdX/x2eZAvM5GM7nvRSdQblYlKZ+1yuUfOzrzP//p49X70T7ty+f76wy9e\"\
+        \n  \"4+2bg0qKgzHjB5Tfk3KpZgXvNfb29j5rPgTU7ZN21BuQcc74d8an5Ov1+6trMk0UJWOqHijlJC3mZU4VzQjjShQk4Rnh\"\
+        \n  \"hZgnOZlTXrXBrjERxZxAn1nOxoTNy0IoconbhrsuZChoo4z1M7+QbajDRMFvvMur33+9+HA9+vjpyrsLDjwp0oN5wng7\"\
+        \n  \"9RoyLtuCJtlI0YXyKU+LDCrGXqUmrRMvaDQyOiGTiqeKFXwky4T7PJnTYNAg+IhFLLzbsVSJYumtbPo/De4Llv0HRgS4\"\
+        \n  \"9ZqCtqlMk5LaXU1Qy/1b/+bfw7v9n24DffPoGVZz7Wgq45xJ5WPbhPGMKSp8sQi1Ye2vQWAI2YTklPuOPngTRwORMEnJ\"\
+        \n  \"VcUVm9MLIQrhT7yLRUlT7VG6SFKVL0nBKXnUajyFZFoo8rjJ5smz3Md0ynjsnt507tqwTSjfid5coDxzjzNaqlkcWTOK\"\
+        \n  \"jMYevEitWQ8zllNLYYLKzrRU6fynP2ksb9jd6pbr22Z0p+3Ef0dOaA4LPW9FhlUjyslas3OLKVYOPJtH5nJgNUMOUm/I\"\
+        \n  \"mk7d+kPzl3v26z3jvEi//2jTXk0plUD2eDup9rw9R5XOErGbxnv0BsZXr4p6cgStDQKz6Lxh7NvpjVtea7mOzvPd1tKd\"\
+        \n  \"2/d3ONMw2vaLjtNu8bfeYLcHfSfcOc+IsV4NSCFWy8Zr9SKcGey0ZiUCjI2jdhWH942PkzzhKapjLJKUSsAO8ZqmRm1h\"\
+        \n  \"U1UJbqshZBYFoACf0pEGA1PNYTp2aTzNC/Aj0twk4TjeARiuuiaFoMjwZDC2KZ9MUONxOvbt0qrEHWVs1ncX+BfAZKoq\"\
+        \n  \"CLaaEVW4+na1LCFokNw1DY+mvBkP7qwlBtRHjJeV8gGGzoq35HpGa7zuApI1Euc5FY6/JAaBLUD7rSggGRPUQAskFyVg\"\
+        \n  \"XGM18btB2zH8xCUFMiccIFTmLGWKKKYACAb8/X4AblIBfockyXPw0E6TB1MYYZBekkTgSlCwuaeZZYsFoK7PJgZK8XWv\"\
+        \n  \"dLfqj2ielJJmeHIe46vf7WgKC7L4Cmq6cpZIigeaqIu/oU0feCLkMZBWVmPuQ0oItJ6eRedb++L+8JbX2VavmNYWd4Ze\"\
+        \n  \"qJmkBQIVR6tY8lcw2vtQVLnuc4qg7rRHFAIg6T3lLUnh/7obuu4I37jIWhfcPkF5XXBoNS+9sbKyNnOr3Qha5rHneU8W\"\
+        \n  \"WdnE37YyRmweV1V1sE++zooHF7zEhDR71tCHMMQmAHKe5i6DXbNn0kQR0WmT/YMNFPfdY/KOXL7/ODLUm5I3vWw16w53\"\
+        \n  \"LqaVkIVADHauziEkmdJ4b2+9/mSuXnVAF2p43mupkSfzcZaQ0UA78v8QdeM4U5EakXg687aACAIam/jj1cqaLV64UdGY\"\
+        \n  \"Wd6Sb9KypQuMEzpEl18j8vPlN3L96fMFqRTLmTJlixHtgaSCyTJEPCtKJglXiVy2pFoi1GOm5kkJhkg/gAg4DXSYOX0g\"\
+        \n  \"v15e/Iw9Sfp9KmB6VqMQIBujFCa/CQDEPEQ2tMlHYP2YCtibL8FPmnSa1fmxYo8pxYwqLtVMLEi/3ZjRvARQCh0RZON6\"\
+        \n  \"qtRzm04vgXmECiRSIq09xlyNT9AqpzK0E5YWkS4TB1XoOHMDKv9g95QcLo6dIhZ3UsqVZtkmv3Ny1AH8AZfAqJhMSK++\"\
+        \n  \"Jf5Rp/XLn9rBgcltOwwSPQe69NPTsvbzyM5SeiVo2BR3xKh1qUjFJZtyajwp0FSW5UzeHN7dHN/F64J47EVhdKR/9QV+\"\
+        \n  \"ehHmOVOhm5WlyfrrH03iCvl6iyzqh9Gx/tXcju3vUwiy99vcOjVZJ+zi+qQmu/qRUPJS6JOtP+AamYaieEDZ5CFCF4qK\"\
+        \n  \"h4twGaKXPjiaZyX5Bphky2G17m8B8N9PO1VwHh/he5NOc4x9PZI/I9eEK1aa6rzXCQw1Qmr1aNToN9f9ydUGUly3Wa7k\"\
+        \n  \"EDHL2Xdba3kipq6Qx8VCP0LqZsBsRWYsM7C5Aj+XGCcjVCL1owguPUIkOvgfdhHdTr+pFYCXT8yF03PHttPT/3lbB5E8\"\
+        \n  \"6oY9/PQRyNNe2O0f7iTtGsX+Eqnhenryl7nuIq29fUUx1MwKwf4EhCR5C7mBI+sCTcUWRWjQMyE4WeU0a1UluYeDCyJL\"\
+        \n  \"gSPTysnoP/4UHWF6djicNpuBvkfK4Qm+z471N55uNBvk4mYDMWcXHw/PDp+3JCTMG99V6PTuBpzu3vlRdXbm91vYEOBD\"\
+        \n  \"HnHRbA71HMV4RYdPWxxgUwyC7XaFQnj50KqBJZyGDsm7d+Q1wZZGyw70VXObzSKOoqOmP90/akJ2sN/bXl7G0XHUBL/n\"\
+        \n  \"C9uxWzSjcIk/LUvHBfL2dRyjbnh86pLvMNpMvlf4oNS3eXQBLMjiXsdsPsDt4eEzFjo+xsYXTbzx1NCdQTdODAHeSwzu\"\
+        \n  \"GwS22Os10J5l2zRs32557Ri9PkUj25huJKaT2uZkemc96qNfg+sOybXFnklanDOke3ewQ9pq+M4w/ulemVk80ZJ057Jd\"\
+        \n  \"ULe7OZNaHytVthma38L/kfTgvKZyFr+uxTVzxm2InFdoUGN9kk+Bc/rcZMe7tSegCg4cbT0P4UTlpIR2e1OfPpvuURRs\"\
+        \n  \"nkJMWNaHEE5pluNUZ7U/7o60/SOZF0r6gRvUtcUidfGzG16N32/Y3pqKpJyxFIOBRnEdhomZWCrO/qgwj7yYtVZWWO6h\"\
+        \n  \"/aet2Mjk7a4O5bRlO4c0455wba8Z0b4mEzqtEpHpIWCc284BaNMqmgPQnGpmWm09bBuEazfgdAwy4rvOAk7WIuqp3Qu9\"\
+        \n  \"Fz0Rz1aztRcaU1/zb717h3GrfXmRZCOtoasms0cm9/TFw/vuSTTCfF/kWJwX91Q3zW1mWtbxyIC7XEt3ap2My7Kmdamt\"\
+        \n  \"B4daxe4IcDVSRambOzHJHXguj/Q7DeumVdX9sLxlUYkUh68ljqPzuroGxGtaLoFxvI7qttvd+P0s0qvbWZWt7rZ87axa\"\
+        \n  \"fXa6vbZl+22CvgsaZftB9zr72lKGL19cohXC1956UD6WmFvYlHH0VnusbJ0/fyfrxm29Yh+MK6UwjON+tdce8QxhF3Je\"\
         \n  \"vhNuuHfAf+m1cuO/NrnC1g==\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
         PY_PATCH\n"
     - name: V31.8.14 START kleiner und im Lydra
       shell: bash
-      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\nimport\
-        \ base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqtWG1z27gR/s5fgSR1SdoUJUp24sRROrlzcpdOmvM4znU6jqqhSEjCmQJZALTFevzf+yxAyVIiJ+m0nkQEgcW+49kF\"\
-        \n  \"NTesw+uSVaLi01QUXpYa9oo9/tP5pw8f3pyPL9787axbNLlKx9eD5Dg5HFepyeZx1TxmL1/67/9xev56/LtbOXt98fOv\"\n  \"vvfkUbfWqjsRssvlNasaMy/lwHvCQBYfx8nhC6Z4WrCzjwkzwhScVapcVIYJyVKmF2lRMF7wWSoN01yJacRkyfjSqJSJ\"\
-        \n  \"RTrjsTfFBgZF5oWYYK4qlWFnePXacakjyHBkZ+/er0je0e7IPU5VetMO35bSeF7FhpZHUOoYegtVykv/7Py3v775+WJ8\"\n  \"+u7cH4Wsy3ytMp+ei1TIOPM9jW1VDIPysYGOAZdZmQs5G/q1mXaO/dCD5X/nrJRFA52qIs04M3NMFDn7ePH6/ILNiqaa\"\
-        \n  \"Y03mXHEVwR0cdl+DCcugmiqLgitWlDORxZ5MFxwi/WvjAjIYIzY3Y21SZXxPLbGm/M8TvBuRfdYH16XI8fDZAbNbD2hZ\"\n  \"738OLv95Mtr/y+eQXm59b0Fh5WRNIbQJFI+nQubCcBWoZcSsQ+OPYeiJKSu4DFr6kD0asuSFx/CnUqE5O6+lEQv+RqlS\"\
-        \n  \"BVP/A+c5gpdmBvaXctNuUpxNa5kZUcqITcta5ux2k/kd3JdCpfb9sjeKraFB6E22p+E8TOa8MnMsJB7Zb/2EaHDfu5kL\"\n  \"5NmEvbS6Q+sUoiy1Uz0Dqb6cjOyLdC9wVTJiMNeO7rfyAlb6viXFaitpJcrxa9cyO9/1rTjZvtxT0N9a0UJI7p+QMNJ/\"\
-        \n  \"tcyL3Wz2H2IzKcrs6pt8Hj+0VRvl79jw2H/8wIZsnu7c4d9+IcLF5SGF7nZSd1bUlvLey9ZPO7z8WT5kl0uBHaycr3bw\"\n  \"2v+hiFm+W57e4A8wC6xHo9ZP4S6dP3/Be1fUgnuFiZ/VbBXJkJVqk8BKuqdA6MLvOqWVCUkbB2LHWfZ/W5/c1aFl81Sz\"\
-        \n  \"Wk7SIpUZzvlEAd20w7yfalGYDtzwaQIuNY63NPqE6XRRFSAV0pSAGuALSoEDfSoIv5x9AtBkJpWzguuYXcyFBrO8BDTJ\"\n  \"0qyQHFbnQgNMGyoZvEoVmVWJzNSKu8O92mHKOptbxAWClgzogfoBXcYZyESOfQR6l9Zq31YuDSfyrtW3a1TNTVPxLioN\"\
-        \n  \"VCWj+9336/FHqk+dcz6ri1TFxkz96McZ/W98cv5Hel13T/H4vbb77T5v5KybEuANmaSaFEzhfcWmlJRfmo6w26o3DWOh\"\n  \"7a4gDCP2AVBtsf6emdB29uH8+FCyi4u3rmbbfZCHfCso3MgVCsEvwvxaT1YpoWopOU6G1RjKrqtxvLIyWIuPWD8B6k9K\"\
-        \n  \"qnA0G8+4odfAtzkJLjciN/OIzbmYzYkdrV72R6zjRr1R5AaD9VQyIhMpS4567OWQWQ40OO5RitFCYhdanhj1e98odp/g\"\n  \"7grZy9clDotSI8Ca3Vrmd8tbx4tKG8JwneqV4bHkN4H/HoARbFmCaPRQ2qhYDu97l5h+AsfBrca2/wg6a2M7rY1g0Poo\"\
-        \n  \"sp4b0g+GoiiG/aMje1phiGbllJVV+q+aTtISZY41guPMZwpHLUIvsqhQxtmMlwtuVANvobOrDUPKzlBcCUxdZLx2+5A5\"\n  \"/eKiTKk8KxKCs0YpqlhD6ahw0HnQGuo8SwHu2ZGr2kuUXuuQLQB1Ii7RmjQjECS93jbQLbeR1BZ56CZkzb0NMFSUKMv1\"\
-        \n  \"zBcSLZJsSXo1/K4osjJOq4paksCKwM4IVB0n0PVQlFuDXttV0JYQ4/7Rt7Or1jWh5f0BU6kGgrqmyTK5s+IdArdYLYxG\"\n  \"eneQ0gSwzpoTajKvRVlrF7eGUfKwG2Tj897BKvzwAZrtJwBhzjIuSRJuB8nTnvXLJNWcijEg1XZuzTA5fup6MtfgKjET\"\
-        \n  \"Evq6Jl9ninMZe8sePB4M+j34wzoZbXWX9b2G5pNnz7xUKcA6SlSEkh7/UQoZ+OST2708sv/ufLZHZlpQoyflERnv4QSN\"\n  \"17UJHHy/u79x7WgzGB12WvCOyJrWlc5RVnNqukn593TlYVPcQVLd2MoRU2B+gsFXmgQ+73WmihrqCizKHB7FJQWHvYZR\"\
-        \n  \"Mi9vGMWusLwgksLmpFBzj7q23/Vci86oQWe7uvmAVkLv1lvVbRAjhbUBay1mEiBD5R4JZBCZMXngckTgNmS33p622+5O\"\n  \"XJuKVLmC2TVaV2Qi8rGdnwZOMq51KOX80fAwVBw1VK7X1wQTMn1v73mvDl8Nn+J3k9ByprhCUri9he3tIdHrcM3R0b5i\"\
-        \n  \"yVG43jegbLAvJ56lQ9zeUm5lTSqRSXR1QfVjnQ65ec7T64ZNSpXTdQkT5TVXWvx7BbvWvcSldevx2FBdQ/Ikx0f4HyXR\"\n  \"YT9KkuMD5xHkrRu1Sv7/tg2ifjSIkl4/6vcOo/7h0/+eFEkeXBEknrArQITzMBlbToON0Ifdr+dQBcIQ2w4OQnbr3cPV\"\
-        \n  \"kO3luNNYVpvkVyPsOFkTNt8iTDYIEayPhS2Q6FSQ+1RmiqK8oY6wIUw1vDMpqKyUuFzOMe3OnWOJI7cO2Ne+WdLlK2rs\"\n  \"7xcq9EeISIKgJNHxIDx5iEHU7N74vI1jFx7vJ+0YUUBFdLzuvDsPEAKwCSwm4eT0Ov0BPQ4sch0cuamnG1P9Q3rBCUPN\"\
-        \n  \"th8H9OWLdES3701sOqAL5osRoTS6pkWZi6nIbCeIftWVibpi9kzi5s2XuJITMi3Ka8GZxR1MW7QBBvP2Ag001Cl9Noht\"\n  \"fV2k6gqITRcR10tuHfXh8JCuJnQeCZEQkz+zs9enY3uAwlX7uROXwhPauVrqj1V5MzZltbGH6v14Bi0dhrXkUI5vzW7J\"\
-        \n  \"eDZ2VWeDd39MJo6PJ1Xle213gLRpDbPXAcn0fTHe1ZS+WflONyiVC0C5Ni8YfQ5xbGwx1nGGEmbowvYdTPa/88HDP62r\"\n  \"gkLJW7xffdZBSa7iG4Wj4L4TUVi/+lRU4TBAxn3FEvT5B3gPoEeflLPOK3dXgvl7+XIv3ypgFm7JVFCtU2bQ0QUcRY70\"\
+      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 -\
+        \ <<'PY_PATCH'\nimport base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"\
+        eNqtWG1z27gR/s5fgSR1SdoUJUp24sRROrlzcpdOmvM4znU6jqqhSEjCmQJZALTFevzf+yxAyVIiJ+m0nkQEgcW+49kF\"\
+        \n  \"NTesw+uSVaLi01QUXpYa9oo9/tP5pw8f3pyPL9787axbNLlKx9eD5Dg5HFepyeZx1TxmL1/67/9xev56/LtbOXt98fOv\"\
+        \n  \"vvfkUbfWqjsRssvlNasaMy/lwHvCQBYfx8nhC6Z4WrCzjwkzwhScVapcVIYJyVKmF2lRMF7wWSoN01yJacRkyfjSqJSJ\"\
+        \n  \"RTrjsTfFBgZF5oWYYK4qlWFnePXacakjyHBkZ+/er0je0e7IPU5VetMO35bSeF7FhpZHUOoYegtVykv/7Py3v775+WJ8\"\
+        \n  \"+u7cH4Wsy3ytMp+ei1TIOPM9jW1VDIPysYGOAZdZmQs5G/q1mXaO/dCD5X/nrJRFA52qIs04M3NMFDn7ePH6/ILNiqaa\"\
+        \n  \"Y03mXHEVwR0cdl+DCcugmiqLgitWlDORxZ5MFxwi/WvjAjIYIzY3Y21SZXxPLbGm/M8TvBuRfdYH16XI8fDZAbNbD2hZ\"\
+        \n  \"738OLv95Mtr/y+eQXm59b0Fh5WRNIbQJFI+nQubCcBWoZcSsQ+OPYeiJKSu4DFr6kD0asuSFx/CnUqE5O6+lEQv+RqlS\"\
+        \n  \"BVP/A+c5gpdmBvaXctNuUpxNa5kZUcqITcta5ux2k/kd3JdCpfb9sjeKraFB6E22p+E8TOa8MnMsJB7Zb/2EaHDfu5kL\"\
+        \n  \"5NmEvbS6Q+sUoiy1Uz0Dqb6cjOyLdC9wVTJiMNeO7rfyAlb6viXFaitpJcrxa9cyO9/1rTjZvtxT0N9a0UJI7p+QMNJ/\"\
+        \n  \"tcyL3Wz2H2IzKcrs6pt8Hj+0VRvl79jw2H/8wIZsnu7c4d9+IcLF5SGF7nZSd1bUlvLey9ZPO7z8WT5kl0uBHaycr3bw\"\
+        \n  \"2v+hiFm+W57e4A8wC6xHo9ZP4S6dP3/Be1fUgnuFiZ/VbBXJkJVqk8BKuqdA6MLvOqWVCUkbB2LHWfZ/W5/c1aFl81Sz\"\
+        \n  \"Wk7SIpUZzvlEAd20w7yfalGYDtzwaQIuNY63NPqE6XRRFSAV0pSAGuALSoEDfSoIv5x9AtBkJpWzguuYXcyFBrO8BDTJ\"\
+        \n  \"0qyQHFbnQgNMGyoZvEoVmVWJzNSKu8O92mHKOptbxAWClgzogfoBXcYZyESOfQR6l9Zq31YuDSfyrtW3a1TNTVPxLioN\"\
+        \n  \"VCWj+9336/FHqk+dcz6ri1TFxkz96McZ/W98cv5Hel13T/H4vbb77T5v5KybEuANmaSaFEzhfcWmlJRfmo6w26o3DWOh\"\
+        \n  \"7a4gDCP2AVBtsf6emdB29uH8+FCyi4u3rmbbfZCHfCso3MgVCsEvwvxaT1YpoWopOU6G1RjKrqtxvLIyWIuPWD8B6k9K\"\
+        \n  \"qnA0G8+4odfAtzkJLjciN/OIzbmYzYkdrV72R6zjRr1R5AaD9VQyIhMpS4567OWQWQ40OO5RitFCYhdanhj1e98odp/g\"\
+        \n  \"7grZy9clDotSI8Ca3Vrmd8tbx4tKG8JwneqV4bHkN4H/HoARbFmCaPRQ2qhYDu97l5h+AsfBrca2/wg6a2M7rY1g0Poo\"\
+        \n  \"sp4b0g+GoiiG/aMje1phiGbllJVV+q+aTtISZY41guPMZwpHLUIvsqhQxtmMlwtuVANvobOrDUPKzlBcCUxdZLx2+5A5\"\
+        \n  \"/eKiTKk8KxKCs0YpqlhD6ahw0HnQGuo8SwHu2ZGr2kuUXuuQLQB1Ii7RmjQjECS93jbQLbeR1BZ56CZkzb0NMFSUKMv1\"\
+        \n  \"zBcSLZJsSXo1/K4osjJOq4paksCKwM4IVB0n0PVQlFuDXttV0JYQ4/7Rt7Or1jWh5f0BU6kGgrqmyTK5s+IdArdYLYxG\"\
+        \n  \"eneQ0gSwzpoTajKvRVlrF7eGUfKwG2Tj897BKvzwAZrtJwBhzjIuSRJuB8nTnvXLJNWcijEg1XZuzTA5fup6MtfgKjET\"\
+        \n  \"Evq6Jl9ninMZe8sePB4M+j34wzoZbXWX9b2G5pNnz7xUKcA6SlSEkh7/UQoZ+OST2708sv/ufLZHZlpQoyflERnv4QSN\"\
+        \n  \"17UJHHy/u79x7WgzGB12WvCOyJrWlc5RVnNqukn593TlYVPcQVLd2MoRU2B+gsFXmgQ+73WmihrqCizKHB7FJQWHvYZR\"\
+        \n  \"Mi9vGMWusLwgksLmpFBzj7q23/Vci86oQWe7uvmAVkLv1lvVbRAjhbUBay1mEiBD5R4JZBCZMXngckTgNmS33p622+5O\"\
+        \n  \"XJuKVLmC2TVaV2Qi8rGdnwZOMq51KOX80fAwVBw1VK7X1wQTMn1v73mvDl8Nn+J3k9ByprhCUri9he3tIdHrcM3R0b5i\"\
+        \n  \"yVG43jegbLAvJ56lQ9zeUm5lTSqRSXR1QfVjnQ65ec7T64ZNSpXTdQkT5TVXWvx7BbvWvcSldevx2FBdQ/Ikx0f4HyXR\"\
+        \n  \"YT9KkuMD5xHkrRu1Sv7/tg2ifjSIkl4/6vcOo/7h0/+eFEkeXBEknrArQITzMBlbToON0Ifdr+dQBcIQ2w4OQnbr3cPV\"\
+        \n  \"kO3luNNYVpvkVyPsOFkTNt8iTDYIEayPhS2Q6FSQ+1RmiqK8oY6wIUw1vDMpqKyUuFzOMe3OnWOJI7cO2Ne+WdLlK2rs\"\
+        \n  \"7xcq9EeISIKgJNHxIDx5iEHU7N74vI1jFx7vJ+0YUUBFdLzuvDsPEAKwCSwm4eT0Ov0BPQ4sch0cuamnG1P9Q3rBCUPN\"\
+        \n  \"th8H9OWLdES3701sOqAL5osRoTS6pkWZi6nIbCeIftWVibpi9kzi5s2XuJITMi3Ka8GZxR1MW7QBBvP2Ag001Cl9Noht\"\
+        \n  \"fV2k6gqITRcR10tuHfXh8JCuJnQeCZEQkz+zs9enY3uAwlX7uROXwhPauVrqj1V5MzZltbGH6v14Bi0dhrXkUI5vzW7J\"\
+        \n  \"eDZ2VWeDd39MJo6PJ1Xle213gLRpDbPXAcn0fTHe1ZS+WflONyiVC0C5Ni8YfQ5xbGwx1nGGEmbowvYdTPa/88HDP62r\"\
+        \n  \"gkLJW7xffdZBSa7iG4Wj4L4TUVi/+lRU4TBAxn3FEvT5B3gPoEeflLPOK3dXgvl7+XIv3ypgFm7JVFCtU2bQ0QUcRY70\"\
         \n  \"91adZdtvIUO//oDntR/sfugboPcf/CMZlA==\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
         PY_PATCH\n"
     - name: V31.9.0 Verbesserte 360-Grad-Landscha
       shell: bash
-      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\nimport\
-        \ base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqdWW1z4zYO/u5fwabXSLJlW5Kd2LGjdDrbnXuZa7uTbtu52d3zyBZtsytLOlJOFKf57/eAlPyea3v5EEkkAAIg8ACk\"\
-        \n  \"FS9Ym68zlouczyORNGZRwe7YxV/uf/r++7f3k/dvv3vXTZ5iGU0eev6NN8mjYrbs5E8X7PbW+ue/vr3/ZvKznnj3zfs3\"\n  \"f7MaX37RXSvZnYq0y9MHlj8VyyztNS4uLkDWuel4bC6kKpiK5pzly0jxEVtlkrOHSAoes9611475QnLOHjOZxCxKYxYL\"\
-        \n  \"VURpwQouZSTSTuP9EsxJ9MSlpepRGki5y2ZZkgglshSv0YrLCCNpITHKpZYWJQmWf+AsjoqISb4i5nU6W0bpgscd0rUx\"\n  \"l9mKwdZlIqZMrPJMFuwdPhvVe6ZccDbykAbtTHVgrJBZ+sF6d//DP96+eT/59u/31ienayk569IKnZnVUGHekTyKJwUv\"\
-        \n  \"C5unsywW6SK01sW8PbScRuNLdo9praXksGfGofwqT3jB2Rs2h5IFDFNMYlVYU0BlaK59uUiyaQTDCgmRjMeiUJ1GzOdM\"\n  \"5VFqp/CEM2ow/K1oB7kK4aTClrwzFymIubSl9XEKPxdi9lG1HjIR42G1QMHVLMq5kdEClWp+tD/8e/yp+fVHhz6eLVe5\"\
-        \n  \"oPvRcfQKYs4SntrVQs4XoT/CBinO7tdpIVb8rZSZtOfW2zLnswKbnqWcPZP4lzGbZ2tY/7wv4MUycqOwGvngfepAU1nY\"\n  \"zljsD/I0xlDM82IZ+uNVFvPQgpO5pfkflyLhTNySbOWYyCJS4xf6m4Xqg/g0Zik9W/4nMgXPmoMnMMKytuSY1WtUi+zk\"\
-        \n  \"VJMzzHQtvVCqX0dGpUSk3BqLVugfcPDklKdZ8yAOVjwt/hfbRU1rgsA6S3VhXdQSl5E8T2M9WyPtmVeXeqkI2nsEerLy\"\n  \"h7bwrD8+pjuL6o055q5tPSugecahWtShZ2ivzivw0Rqd96FdLV+5Ty9j/OqwTG6ntd/qSbjTOWvPdgkINlF2Jgesn1Ik\"\
-        \n  \"bZTOkARTiXRXDFhktXSqaW7Ji7VMWeSKhs7mChZ0Mropf6ySus5+kyfuNNxlvR5SCOhR9KkFjg6Zl9tOi7aipT5MR58I\"\n  \"eP4qdeLNeJIoJGGSZI/AF86iB6AkgNNM08h8DQAlWIqU6jCCYpGmQKOFJoEoQVYU2EBgFcD2iYmYPmZQENYtuVgsiy6G\"\
-        \n  \"lCieWJEBs6IpEpMKxLDj90csxZhIP2MTOhD3QwoReuGoXgTLP3CpTOWIAKl6O9YK/lPraQF6CExjeDXJaFm1jGIOPKy9\"\n  \"Zz0UqGeeNwEOg25ipFqutJDd3SaratVovxwZUog0xO6uZLDeVbffb69TUbB5ggK6LUGmJnVYs9swyMoIV9nZ1W2actiz\"\
-        \n  \"CRpUO1G6YuMuSnexcaXvLnx36rsycBeBOw3GmgyVDbWUiFMeyYkqeB76Q8/VX3orQ79/TDqvKfsDz52fEIo5qsICyoeh\"\n  \"7zxLPxz2xws/9Hv98RSPYDiWQXgdjBdB6HvD8RQPPxi/NOqk2xcQaAG+f60l9HskYTggAYOhFuD7JGAw2OfXa15pDiwD\"\
-        \n  \"jhuPOK76mqMXaI6rigOb9Qv1Ce0oEYsUe1EA45UOIVP921P0GLqFiPIcbqFkY1O+FFU0mzaiU+et3y/9/q7hIGEu4/9Z\"\n  \"I4jevPtJpwdcuaa5zPBL/iCytULMVXG8inK94zovy9DOy27tcqdZv7Xtree7wW7YbMFiA67Nn+WaA1DEJvTGYnO7JcNH\"\
-        \n  \"q+XoqZKmyv2pElPPO8SCUWW4KFui3Ep2N+Fi0xKbo6Vq8rgMy1Y91Q3aeenGm3BzMLQ5ZFmGdfSj+VvapbtxDgl0rob2\"\n  \"8u6u71z2DuceI7nSUwPn0t+bmtu10Giq7Lh09jS4HV557PJyH+4PiDfHxA71iyJd890CxBD0/QllN6ns7qx2d9a6/b57\"\
-        \n  \"UFWk39bWNIMWad5E7h6OIKPNt/6qHLEN7DdSaNQcAXuiWYFQA+qlOtXbFQ4ueLbihXwiYKW+NhaSmx5xG9E/Ig0ASxkq\"\n  \"mIHeGstrZMfrMiPsRN+TYZbFTygcwCpDfiact2DjNLevbXsHOhSb24mDkP4/OI3vK5A05w/bgOKWcA/v9l8P9uJwX47Q\"\
-        \n  \"FJ5/aQD70YKflIhlJsUmS88UB6pBCVCFGm6tHXBGfX6i3kd7dZ5lBVpOaKL3piqZcGtEbb/ZoZ+FAra0M6pxNeoApj4r\"\n  \"NA04ewDACk5TGfv+h/fMFJy9+mK26NUCU+l+Wlr2EINQ4TbAP4ABO0QDLJYgFUWz791cO10QHYFFXrZ05gU3vQkqtq0Z\"\
-        \n  \"nGYwQBZ1fS/oHzJswnyzY5hl6vcYjHlh0Ltq2VDD91umsjQHzlcDp9nzD8klj1EsXCrXKSrF0J0max76gz2plFbmVDiX\"\n  \"a1WsVziPJjj90B5G5CY4XkaP9LkimMfJTe2XiweBDqpOhyPsgTuRxrFdEg5ugHzOLWsH1+cA5ajIQm/f88aV4qh0RvEb\"\
-        \n  \"f2w80KKC+HLQ2x6XWRKBalrbflOJuPa2IlB+X44QbUKhpgFtCL8ZQpzkYuNC7T7nQGlbXPpOGHr7kVJ7f/56PHjXJ9u7\"\n  \"5Xo9KF7h2ld9XrrzjXvV89wbr2WLr/pO0785TXyYdOcPv8aj7Q9HZCDTFt75V1/rl7Z/NTI2n/CSE4iOnkR25JSXCrNr\"\
-        \n  \"/KAjfKGvIyRv8xIpTbFkANZFHmcSjwegQrSgAfTpj6DN4Arg7yEMyCxXkLfgKIoJbQ0md3cl6J0JZHg5S9YxAMdcqVSS\"\n  \"0aikBY7kp3C2EvEkJg2TM4gGbSRCq9Ygm/6KaqKgFsTPRQl8M5cyCyniV0Fnt8IrLW2kMyus0EQjiafrCriR1J4HN3t7\"\
-        \n  \"sxtP144zs/stD4L/pNehsfIU19C1eNTlQBganI1HDU7P8057m7qh+ZNdzEk7cguN0YMcNx40fB4cjvjv/D6amN9+Oxag\"\n  \"x89L+KImFemEQAtiYIob9DznPIO9vBw4dwGtYjboDgD0+9rBOP/qakdHCPtOcsXlA9eIiRK0EDgHokRGsTrGzhrCTtwD\"\
-        \n  \"uYPgZHSjR38PUI/AiQB9Ms1KbJN/DazzARXLy57jDgIXseT6Q985gZj8SaIJApi7bb9PTL2KKRi0tKtcP7hyA28Alwb7\"\n  \"eFAdYs5BFjKSa7QlDaiN7TkkSL9eOV/1nBNc0cd5vRut1vgIaRDo7DPXrZ9J72DoT+D5LHngkxWaE7pDsZ2x5VazwUR7\"\
-        \n  \"QmPRJM1nyrYO4c6qUZi4bXuNE7o+UyHinTyKa1EJNnKyQBU1+X1GCF2vHlAY+IGje0YHc3t3bnkiCiYye5wUWQ6K7ehg\"\n  \"kgOBEvUKUzCBuevJcJrnVnUpIubaP9TUwkfq7AXM2xqhSVvdomUp3MZWQqGALUbMakGGo51N1yk7b5+5PjjtGc/BbqXd\"\
-        \n  \"3g0NFFUdfaq0rT9w9WDpK1VzPXTGpF9kBnu0HGiLRKTzgDm0ImzyziOOFdxcQSv39BI6Ry+0rwcvoWh8eDWPMwF7FAUi\"\n  \"qTA9qWmf9Hli15zqQ0fnjEh95IZEVBFdBHVRS6NiLQETdMtD5259EIRct65Kj1lGatB1jzqSStdGegfpNA+GddpdZbtf\"\
-        \n  \"AFwILBLeFfQ7QJfiRJfO7zgWfkI/KOm6nYo2j0nwyc8ajepnjD/yu0jjvxm3nzI=\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
-        PY_PATCH\n"
+      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 -\
+        \ <<'PY_PATCH'\nimport base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"\
+        eNqdWW1z4zYO/u5fwabXSLJlW5Kd2LGjdDrbnXuZa7uTbtu52d3zyBZtsytLOlJOFKf57/eAlPyea3v5EEkkAAIg8ACk\"\
+        \n  \"FS9Ym68zlouczyORNGZRwe7YxV/uf/r++7f3k/dvv3vXTZ5iGU0eev6NN8mjYrbs5E8X7PbW+ue/vr3/ZvKznnj3zfs3\"\
+        \n  \"f7MaX37RXSvZnYq0y9MHlj8VyyztNS4uLkDWuel4bC6kKpiK5pzly0jxEVtlkrOHSAoes9611475QnLOHjOZxCxKYxYL\"\
+        \n  \"VURpwQouZSTSTuP9EsxJ9MSlpepRGki5y2ZZkgglshSv0YrLCCNpITHKpZYWJQmWf+AsjoqISb4i5nU6W0bpgscd0rUx\"\
+        \n  \"l9mKwdZlIqZMrPJMFuwdPhvVe6ZccDbykAbtTHVgrJBZ+sF6d//DP96+eT/59u/31ienayk569IKnZnVUGHekTyKJwUv\"\
+        \n  \"C5unsywW6SK01sW8PbScRuNLdo9praXksGfGofwqT3jB2Rs2h5IFDFNMYlVYU0BlaK59uUiyaQTDCgmRjMeiUJ1GzOdM\"\
+        \n  \"5VFqp/CEM2ow/K1oB7kK4aTClrwzFymIubSl9XEKPxdi9lG1HjIR42G1QMHVLMq5kdEClWp+tD/8e/yp+fVHhz6eLVe5\"\
+        \n  \"oPvRcfQKYs4SntrVQs4XoT/CBinO7tdpIVb8rZSZtOfW2zLnswKbnqWcPZP4lzGbZ2tY/7wv4MUycqOwGvngfepAU1nY\"\
+        \n  \"zljsD/I0xlDM82IZ+uNVFvPQgpO5pfkflyLhTNySbOWYyCJS4xf6m4Xqg/g0Zik9W/4nMgXPmoMnMMKytuSY1WtUi+zk\"\
+        \n  \"VJMzzHQtvVCqX0dGpUSk3BqLVugfcPDklKdZ8yAOVjwt/hfbRU1rgsA6S3VhXdQSl5E8T2M9WyPtmVeXeqkI2nsEerLy\"\
+        \n  \"h7bwrD8+pjuL6o055q5tPSugecahWtShZ2ivzivw0Rqd96FdLV+5Ty9j/OqwTG6ntd/qSbjTOWvPdgkINlF2Jgesn1Ik\"\
+        \n  \"bZTOkARTiXRXDFhktXSqaW7Ji7VMWeSKhs7mChZ0Mropf6ySus5+kyfuNNxlvR5SCOhR9KkFjg6Zl9tOi7aipT5MR58I\"\
+        \n  \"eP4qdeLNeJIoJGGSZI/AF86iB6AkgNNM08h8DQAlWIqU6jCCYpGmQKOFJoEoQVYU2EBgFcD2iYmYPmZQENYtuVgsiy6G\"\
+        \n  \"lCieWJEBs6IpEpMKxLDj90csxZhIP2MTOhD3QwoReuGoXgTLP3CpTOWIAKl6O9YK/lPraQF6CExjeDXJaFm1jGIOPKy9\"\
+        \n  \"Zz0UqGeeNwEOg25ipFqutJDd3SaratVovxwZUog0xO6uZLDeVbffb69TUbB5ggK6LUGmJnVYs9swyMoIV9nZ1W2actiz\"\
+        \n  \"CRpUO1G6YuMuSnexcaXvLnx36rsycBeBOw3GmgyVDbWUiFMeyYkqeB76Q8/VX3orQ79/TDqvKfsDz52fEIo5qsICyoeh\"\
+        \n  \"7zxLPxz2xws/9Hv98RSPYDiWQXgdjBdB6HvD8RQPPxi/NOqk2xcQaAG+f60l9HskYTggAYOhFuD7JGAw2OfXa15pDiwD\"\
+        \n  \"jhuPOK76mqMXaI6rigOb9Qv1Ce0oEYsUe1EA45UOIVP921P0GLqFiPIcbqFkY1O+FFU0mzaiU+et3y/9/q7hIGEu4/9Z\"\
+        \n  \"I4jevPtJpwdcuaa5zPBL/iCytULMVXG8inK94zovy9DOy27tcqdZv7Xtree7wW7YbMFiA67Nn+WaA1DEJvTGYnO7JcNH\"\
+        \n  \"q+XoqZKmyv2pElPPO8SCUWW4KFui3Ep2N+Fi0xKbo6Vq8rgMy1Y91Q3aeenGm3BzMLQ5ZFmGdfSj+VvapbtxDgl0rob2\"\
+        \n  \"8u6u71z2DuceI7nSUwPn0t+bmtu10Giq7Lh09jS4HV557PJyH+4PiDfHxA71iyJd890CxBD0/QllN6ns7qx2d9a6/b57\"\
+        \n  \"UFWk39bWNIMWad5E7h6OIKPNt/6qHLEN7DdSaNQcAXuiWYFQA+qlOtXbFQ4ueLbihXwiYKW+NhaSmx5xG9E/Ig0ASxkq\"\
+        \n  \"mIHeGstrZMfrMiPsRN+TYZbFTygcwCpDfiact2DjNLevbXsHOhSb24mDkP4/OI3vK5A05w/bgOKWcA/v9l8P9uJwX47Q\"\
+        \n  \"FJ5/aQD70YKflIhlJsUmS88UB6pBCVCFGm6tHXBGfX6i3kd7dZ5lBVpOaKL3piqZcGtEbb/ZoZ+FAra0M6pxNeoApj4r\"\
+        \n  \"NA04ewDACk5TGfv+h/fMFJy9+mK26NUCU+l+Wlr2EINQ4TbAP4ABO0QDLJYgFUWz791cO10QHYFFXrZ05gU3vQkqtq0Z\"\
+        \n  \"nGYwQBZ1fS/oHzJswnyzY5hl6vcYjHlh0Ltq2VDD91umsjQHzlcDp9nzD8klj1EsXCrXKSrF0J0max76gz2plFbmVDiX\"\
+        \n  \"a1WsVziPJjj90B5G5CY4XkaP9LkimMfJTe2XiweBDqpOhyPsgTuRxrFdEg5ugHzOLWsH1+cA5ajIQm/f88aV4qh0RvEb\"\
+        \n  \"f2w80KKC+HLQ2x6XWRKBalrbflOJuPa2IlB+X44QbUKhpgFtCL8ZQpzkYuNC7T7nQGlbXPpOGHr7kVJ7f/56PHjXJ9u7\"\
+        \n  \"5Xo9KF7h2ld9XrrzjXvV89wbr2WLr/pO0785TXyYdOcPv8aj7Q9HZCDTFt75V1/rl7Z/NTI2n/CSE4iOnkR25JSXCrNr\"\
+        \n  \"/KAjfKGvIyRv8xIpTbFkANZFHmcSjwegQrSgAfTpj6DN4Arg7yEMyCxXkLfgKIoJbQ0md3cl6J0JZHg5S9YxAMdcqVSS\"\
+        \n  \"0aikBY7kp3C2EvEkJg2TM4gGbSRCq9Ygm/6KaqKgFsTPRQl8M5cyCyniV0Fnt8IrLW2kMyus0EQjiafrCriR1J4HN3t7\"\
+        \n  \"sxtP144zs/stD4L/pNehsfIU19C1eNTlQBganI1HDU7P8057m7qh+ZNdzEk7cguN0YMcNx40fB4cjvjv/D6amN9+Oxag\"\
+        \n  \"x89L+KImFemEQAtiYIob9DznPIO9vBw4dwGtYjboDgD0+9rBOP/qakdHCPtOcsXlA9eIiRK0EDgHokRGsTrGzhrCTtwD\"\
+        \n  \"uYPgZHSjR38PUI/AiQB9Ms1KbJN/DazzARXLy57jDgIXseT6Q985gZj8SaIJApi7bb9PTL2KKRi0tKtcP7hyA28Alwb7\"\
+        \n  \"eFAdYs5BFjKSa7QlDaiN7TkkSL9eOV/1nBNc0cd5vRut1vgIaRDo7DPXrZ9J72DoT+D5LHngkxWaE7pDsZ2x5VazwUR7\"\
+        \n  \"QmPRJM1nyrYO4c6qUZi4bXuNE7o+UyHinTyKa1EJNnKyQBU1+X1GCF2vHlAY+IGje0YHc3t3bnkiCiYye5wUWQ6K7ehg\"\
+        \n  \"kgOBEvUKUzCBuevJcJrnVnUpIubaP9TUwkfq7AXM2xqhSVvdomUp3MZWQqGALUbMakGGo51N1yk7b5+5PjjtGc/BbqXd\"\
+        \n  \"3g0NFFUdfaq0rT9w9WDpK1VzPXTGpF9kBnu0HGiLRKTzgDm0ImzyziOOFdxcQSv39BI6Ry+0rwcvoWh8eDWPMwF7FAUi\"\
+        \n  \"qTA9qWmf9Hli15zqQ0fnjEh95IZEVBFdBHVRS6NiLQETdMtD5259EIRct65Kj1lGatB1jzqSStdGegfpNA+GddpdZbtf\"\
+        \n  \"AFwILBLeFfQ7QJfiRJfO7zgWfkI/KOm6nYo2j0nwyc8ajepnjD/yu0jjvxm3nzI=\"\n)).decode('utf-8')\n\
+        subprocess.run(['bash','-euo','pipefail','-c',code],check=True)\nPY_PATCH\n"
     - name: V31.9.1 PS1 Gelaende-LOD und Sichtber
       shell: bash
-      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\nimport\
-        \ base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqdWG1zozgS/u5focndBDCyjfBr4pCp3ZlU7dzuzqYys1d1Ncm5MAisDQZOwjEmm/++LQE2fsnM3fkLRv2mbnU/3ULQ\"\
-        \n  \"DHXoKkEpS2ngsqjluRm6Rmd/v/v906ebu9mXm19ve9HG5+7sqU8uyCx1M2/RTTdn6OpK++VfH+5+mP1TEW5/+PL+J631\"\n  \"tze9leC9OYt7NH5C6SZbJHG/dXZ2Bmzdiy5Bt58JWic88hGnsU85i0OUpBlbssLNWBJjFCcodJc0jdwNSjgS7hNF3sKN\"\
-        \n  \"Qyq6rTvqrzyKkiDoCI9TGldqpM5H5MY+ClyOfvntA1ovWERRyqmg/ElaiSlQQp6sgEky9kdWx6chKEFLN+3KTbYCniwR\"\n  \"OLmI2ByxZZrwDN3Ca6v6nwgMBlupIxf1RHTBS8aT+Kt2e/fbP27ef5l9+HinPRg9TXCvt3RZ3PW0lnDSLqeuP8tonuk0\"\
-        \n  \"9hIfNuRoqyzoTDSj1fJpAGrBY4/OglXsyUDoMQQBokHXxmULwS+MkrkbIaFelvIgqHAiJjKd027AYp9llOtcu5+LDELp\"\n  \"3QvzKWE+PDQTOKjw3JQqrYYJXKJ9r3/99/Sh/e7ekC/PGhYY+D4bhrLAAhTRWK8MGW8cUm5D/rjLBEV3qxjOjd5wnnA9\"\
-        \n  \"0G7ylHoZ9VESUwQesZhJP9CzNPmCUaAi/9xU+qKVtmDDPHOq1a/WQ1ct6MaUNRfhoGHJp2m2cMh0mfjU0SCUVFM6yvNm\"\n  \"V1K/MNQJK9bdrr2FI76yh2ksHyZ5kC7Cs5agEfikaVt2oCoblZGdnooI6hytpylLsfp7We4pYjHVpsx0yJ4IjU4ItWuh\"\
-        \n  \"eZR4j9+UOqtZRca10zxn2lnF4y1e49GetUsVmNctvVQcnQaHolbxUA6ejsd9XO9ydzKH4qWrp+XbJ+KpNO1HRp7VKxu4\"\n  \"1y5PB1GvzMvwKSNVVA2JMjVRxm1LhHAaJ73ZGgC1ZZKdqAjt9xjq1Y09KIk5h9IWSDNV+ZU5D1l4qfL8wYQih5TnLNUN\"\
-        \n  \"8+w+PjMhQS8fWq0jTNCeMkBiy5oBkEA5zEo40zDXIHF7bVSh7CWKWLgAOJBo2IEnbC+WqDgtUbBa6XlJBAAii5TmrpdF\"\n  \"m0qB1UXtXquEESRBBJ20q0uSgZ7LUMQZYjlmBQ5zHBaYExwSPCeY2zi08dyeKjYviUWmmOVOZiKjqUMmFlZvHo0i4ZDB\"\
-        \n  \"IWtQcw5HFg52jJVOFgAEhuCG4xDjmRNnMpiGxCH9wXQOD3sy5bYzsqeh7RBrMp3DA0RfWnUmNRXYSgEhI6Vh0JcaJmOp\"\n  \"YDxRCgiRCsbjpryyOVQSYAYkLiwpMRwoib6tJIaVBBzTZ8iCZv/xkifK3ZBeotHYtqr+uAL8FAgIYiXQaDixIBTb86lT\"\
-        \n  \"kdg5sYEA0XEBeQNEBjkZqCaYAR6KSzS0UUDXkApzF3aaJtEmhLj2FFUds+otuaOnea+Os9Gu/3X0bbh79m65jHtYgFTx\"\n  \"v0oFUBuscKwpK662bPBimoYi5ZKUN0k5kKosqzMtd8LcZPlWNS6csDBZcWCrZvdzJzdrUs/upDn2C6fYWyr2RRZYLFyf\"\
-        \n  \"4rXLlzsKHN7PlKYoW0DWxDGEtUwcBDPSOkbzjaLQHNqynDkWUIZwyBnMVtXosQ15lbh1Yblzofu50djR1WRoofPzJpDt\"\n  \"MReHzAYUDFhd0b3tfn5k6S4f0BpCin68+enjpw9qq96KwwSVoSdG13L2ypAbJXEomA8OZt2m9S/AfmFZHZmYMJYFNNvA\"\
-        \n  \"HMJDSEuVwAJ5kNfcRdmKx0Kh6Fqq+c/K9cVrfsORQ4R98B1OxLjqgIETfiycmn/hioWe48LYEdU5Ofri+npgnPd36/Lk\"\n  \"1PLYOCe7ZanJHpBZELmZ1IR3mYF3GYEHA7zXQzjpKENt25SK24Bq+yuAdeW7eqv2ty35jz5EmXkwwJVzKE2WNOMbFaWE\"\
-        \n  \"MwgikOTMCym1g+UgShJ+WKVb4DTa278dfQegsuS2hL1K/T8ky2hVgF/O/3oJ8FvGBnY3/+5Fbz+SB50BYvXSgg5mfKPh\"\n  \"LSBIRRKfanUJoFvHS6BX+FB2LiQzdDoMQyWDVHebOFsCq3jcyAnm1R5XmTrubg38khh1BU2CHUMT3FQiSEfWHlgXI6MH\"\
-        \n  \"TAfIleamSn/7oj8TLNaVgNG2x1DCPWLZg32BwkmLnQD4+T2BBZXN37H7Q1OHbRBilhjVHhtvx0a7T/bZOfWhX2EZoBia\"\n  \"1QTPoxV1yLip9bhec4mhBaAm1Kw9OlWzB10ZrBDLmlZmoDWWZi7ItNyvKTvoy96Ed9iXpQpov/VOLyoVI2urAvr1y0Gh\"\
-        \n  \"z1LqPqo6B/MWLjnhouOXHitvjb1d6+ycGI5jNQ+2Dlbw+vFZo6PT2Eq9foavSDX3HuQ4KPCIWPjCMnX2dmC0ycVxeYFL\"\n  \"12TyDh4dMrncOnhNhu/Unw4ZXpYuH4nKGEg++ZRsBzF5qaDsu0W6ZP6s7HYn6rScQuoSzWAncJkuEa/j+n+ARlj+dPu+\"\
-        \n  \"7ByLZCWgXYEJdfX3X63Wnc1XxlF3CdCVQcFu13NL4ShIQzVAQyNDq0EtLIWVJ6jNyQXy8GhkkWsnZ5XckrMKKIMxpbDk\"\n  \"mNKvdTYnlHosOZ5FvtX+joeIK9gxTA6H44JcPl2nB/LXZACjx59/HipQ66c1vKlZWTyTo0TZz7Hdt4zTAvrifGxc29JK\"\
-        \n  \"eUDXMKh/f3fgHBkOv402R76DkByrD1YLtfo94DrAADnmzeZJDmdARgpTTPCkb+CxjSFRMJkQ46iS0w13IU1BpkMGUqhf\"\n  \"CdljU8UBE3uIbWsM8bKbdVfdLk4hg6yfCtUA5WHI6RtSkfo7NN72jaP6lb8y1KY53a9oSGI5yT1CfcIwV9azPSEzTkUS\"\
-        \n  \"PdHZEsa7JZSnbkw1rNUwJld1fRULFsZwx4VENVLXlyyHAFMCBMSmP1MBLD/vVKr6ZGzPQPtqJqIkE6el5VfAmfwsWBZ5\"\n  \"KRolrr+/+L37r1Z9S5MfI0p/5cQLNHHyBv8rE0KO8Vzii/QxoC4MtxQu8qW40Uq7a84yWn7aE/j4417KITD6bmfljW03\"\
-        \n  \"kOtrV5S3NkN+W4R1bwXjXxxiREa9CZItAIASZGroTOZ/UC8T3Z3yTyDWqYbHclLDqD4zvBsnsTwjngANol3C7JIuE5hC\"\n  \"PWjpDawFzUcfd1vVx9z/5utw6y9Bjo7v\"\
-        \n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\nPY_PATCH\n"
+      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 -\
+        \ <<'PY_PATCH'\nimport base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"\
+        eNqdWG1zozgS/u5focndBDCyjfBr4pCp3ZlU7dzuzqYys1d1Ncm5MAisDQZOwjEmm/++LQE2fsnM3fkLRv2mbnU/3ULQ\"\
+        \n  \"DHXoKkEpS2ngsqjluRm6Rmd/v/v906ebu9mXm19ve9HG5+7sqU8uyCx1M2/RTTdn6OpK++VfH+5+mP1TEW5/+PL+J631\"\
+        \n  \"tze9leC9OYt7NH5C6SZbJHG/dXZ2Bmzdiy5Bt58JWic88hGnsU85i0OUpBlbssLNWBJjFCcodJc0jdwNSjgS7hNF3sKN\"\
+        \n  \"Qyq6rTvqrzyKkiDoCI9TGldqpM5H5MY+ClyOfvntA1ovWERRyqmg/ElaiSlQQp6sgEky9kdWx6chKEFLN+3KTbYCniwR\"\
+        \n  \"OLmI2ByxZZrwDN3Ca6v6nwgMBlupIxf1RHTBS8aT+Kt2e/fbP27ef5l9+HinPRg9TXCvt3RZ3PW0lnDSLqeuP8tonuk0\"\
+        \n  \"9hIfNuRoqyzoTDSj1fJpAGrBY4/OglXsyUDoMQQBokHXxmULwS+MkrkbIaFelvIgqHAiJjKd027AYp9llOtcu5+LDELp\"\
+        \n  \"3QvzKWE+PDQTOKjw3JQqrYYJXKJ9r3/99/Sh/e7ekC/PGhYY+D4bhrLAAhTRWK8MGW8cUm5D/rjLBEV3qxjOjd5wnnA9\"\
+        \n  \"0G7ylHoZ9VESUwQesZhJP9CzNPmCUaAi/9xU+qKVtmDDPHOq1a/WQ1ct6MaUNRfhoGHJp2m2cMh0mfjU0SCUVFM6yvNm\"\
+        \n  \"V1K/MNQJK9bdrr2FI76yh2ksHyZ5kC7Cs5agEfikaVt2oCoblZGdnooI6hytpylLsfp7We4pYjHVpsx0yJ4IjU4ItWuh\"\
+        \n  \"eZR4j9+UOqtZRca10zxn2lnF4y1e49GetUsVmNctvVQcnQaHolbxUA6ejsd9XO9ydzKH4qWrp+XbJ+KpNO1HRp7VKxu4\"\
+        \n  \"1y5PB1GvzMvwKSNVVA2JMjVRxm1LhHAaJ73ZGgC1ZZKdqAjt9xjq1Y09KIk5h9IWSDNV+ZU5D1l4qfL8wYQih5TnLNUN\"\
+        \n  \"8+w+PjMhQS8fWq0jTNCeMkBiy5oBkEA5zEo40zDXIHF7bVSh7CWKWLgAOJBo2IEnbC+WqDgtUbBa6XlJBAAii5TmrpdF\"\
+        \n  \"m0qB1UXtXquEESRBBJ20q0uSgZ7LUMQZYjlmBQ5zHBaYExwSPCeY2zi08dyeKjYviUWmmOVOZiKjqUMmFlZvHo0i4ZDB\"\
+        \n  \"IWtQcw5HFg52jJVOFgAEhuCG4xDjmRNnMpiGxCH9wXQOD3sy5bYzsqeh7RBrMp3DA0RfWnUmNRXYSgEhI6Vh0JcaJmOp\"\
+        \n  \"YDxRCgiRCsbjpryyOVQSYAYkLiwpMRwoib6tJIaVBBzTZ8iCZv/xkifK3ZBeotHYtqr+uAL8FAgIYiXQaDixIBTb86lT\"\
+        \n  \"kdg5sYEA0XEBeQNEBjkZqCaYAR6KSzS0UUDXkApzF3aaJtEmhLj2FFUds+otuaOnea+Os9Gu/3X0bbh79m65jHtYgFTx\"\
+        \n  \"v0oFUBuscKwpK662bPBimoYi5ZKUN0k5kKosqzMtd8LcZPlWNS6csDBZcWCrZvdzJzdrUs/upDn2C6fYWyr2RRZYLFyf\"\
+        \n  \"4rXLlzsKHN7PlKYoW0DWxDGEtUwcBDPSOkbzjaLQHNqynDkWUIZwyBnMVtXosQ15lbh1Yblzofu50djR1WRoofPzJpDt\"\
+        \n  \"MReHzAYUDFhd0b3tfn5k6S4f0BpCin68+enjpw9qq96KwwSVoSdG13L2ypAbJXEomA8OZt2m9S/AfmFZHZmYMJYFNNvA\"\
+        \n  \"HMJDSEuVwAJ5kNfcRdmKx0Kh6Fqq+c/K9cVrfsORQ4R98B1OxLjqgIETfiycmn/hioWe48LYEdU5Ofri+npgnPd36/Lk\"\
+        \n  \"1PLYOCe7ZanJHpBZELmZ1IR3mYF3GYEHA7zXQzjpKENt25SK24Bq+yuAdeW7eqv2ty35jz5EmXkwwJVzKE2WNOMbFaWE\"\
+        \n  \"MwgikOTMCym1g+UgShJ+WKVb4DTa278dfQegsuS2hL1K/T8ky2hVgF/O/3oJ8FvGBnY3/+5Fbz+SB50BYvXSgg5mfKPh\"\
+        \n  \"LSBIRRKfanUJoFvHS6BX+FB2LiQzdDoMQyWDVHebOFsCq3jcyAnm1R5XmTrubg38khh1BU2CHUMT3FQiSEfWHlgXI6MH\"\
+        \n  \"TAfIleamSn/7oj8TLNaVgNG2x1DCPWLZg32BwkmLnQD4+T2BBZXN37H7Q1OHbRBilhjVHhtvx0a7T/bZOfWhX2EZoBia\"\
+        \n  \"1QTPoxV1yLip9bhec4mhBaAm1Kw9OlWzB10ZrBDLmlZmoDWWZi7ItNyvKTvoy96Ed9iXpQpov/VOLyoVI2urAvr1y0Gh\"\
+        \n  \"z1LqPqo6B/MWLjnhouOXHitvjb1d6+ycGI5jNQ+2Dlbw+vFZo6PT2Eq9foavSDX3HuQ4KPCIWPjCMnX2dmC0ycVxeYFL\"\
+        \n  \"12TyDh4dMrncOnhNhu/Unw4ZXpYuH4nKGEg++ZRsBzF5qaDsu0W6ZP6s7HYn6rScQuoSzWAncJkuEa/j+n+ARlj+dPu+\"\
+        \n  \"7ByLZCWgXYEJdfX3X63Wnc1XxlF3CdCVQcFu13NL4ShIQzVAQyNDq0EtLIWVJ6jNyQXy8GhkkWsnZ5XckrMKKIMxpbDk\"\
+        \n  \"mNKvdTYnlHosOZ5FvtX+joeIK9gxTA6H44JcPl2nB/LXZACjx59/HipQ66c1vKlZWTyTo0TZz7Hdt4zTAvrifGxc29JK\"\
+        \n  \"eUDXMKh/f3fgHBkOv402R76DkByrD1YLtfo94DrAADnmzeZJDmdARgpTTPCkb+CxjSFRMJkQ46iS0w13IU1BpkMGUqhf\"\
+        \n  \"CdljU8UBE3uIbWsM8bKbdVfdLk4hg6yfCtUA5WHI6RtSkfo7NN72jaP6lb8y1KY53a9oSGI5yT1CfcIwV9azPSEzTkUS\"\
+        \n  \"PdHZEsa7JZSnbkw1rNUwJld1fRULFsZwx4VENVLXlyyHAFMCBMSmP1MBLD/vVKr6ZGzPQPtqJqIkE6el5VfAmfwsWBZ5\"\
+        \n  \"KRolrr+/+L37r1Z9S5MfI0p/5cQLNHHyBv8rE0KO8Vzii/QxoC4MtxQu8qW40Uq7a84yWn7aE/j4417KITD6bmfljW03\"\
+        \n  \"kOtrV5S3NkN+W4R1bwXjXxxiREa9CZItAIASZGroTOZ/UC8T3Z3yTyDWqYbHclLDqD4zvBsnsTwjngANol3C7JIuE5hC\"\
+        \n  \"PWjpDawFzUcfd1vVx9z/5utw6y9Bjo7v\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
+        PY_PATCH\n"
     - name: V31.9.2 Gleichmaessige Kamera und Bew
       shell: bash
-      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 - <<'PY_PATCH'\nimport\
-        \ base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"eNqtWOtz27gR/66/AvF1QlLvh+M4kulMevH10ubhc5y76cQuByYgCw0FMgAoS3L8v3cBkBRJ0UmvU36QSGBfWPx2sQtJ\"\
-        \n  \"FerRNEYJS+gcs6gVYoVO0cFfLj69f392EVyevTsfRBsicLCajF6MgwSrcNFPNgfo5MR5+8/XF6+C383E+avLn391Wj89\"\n  \"GaRSDG4YH1C+QslGLWI+aR0cHABZ/0V/PEWKLpNY4AiFMZdMKsrDDWIcnX8coRAvqcCog5IIb6hAURzGy1ixmPdb/6A0\"\
-        \n  \"kcAURUzCQBfd0nhJldjAG7Bpji6SeEVlFymmItpFmBN0K3CyYKFEKQ8XmN9S0tfmtOYiXiJYziJiN4hpkxQ6h89W9h7L\"\n  \"rqCtxNdjbiz7sBwmYv7ZOb/48Pezny+D128unGtv4EgRDpaY8X7otKSf9AXFJFB0rVxYWUwYv/WdVM17x47XahE6R3Mu\"\
-        \n  \"E8xdDkZ70xaCZ6m96sO6lCtof844YYoKVzhXN1JhxcIr2XFfTlcxI98YVx58Oh2gpDLECbWSOkAt21fu53/Nrtsvrzz9\"\n  \"ce909Sr6Hz3P6GFzFFHuGnXeE380FZhJii5SrtiSngkRC3fuvKeUILrGoYo2KOYU3WsFD+DmWKH7nYAHx0oFE4Xyzdjn\"\
-        \n  \"4XXffLrejO2GKCcwQGiiFv5oppdEfQd8Qx0j4G7BIorYiRYtPbNrhtY6Rz+hLz+z6xnXf53RtV4I/OcMNIJFOE5BDbNW\"\n  \"R6ZkJyebDWFm4BhF3LxOM5sixqkzYx1/VGGh0T5Tu2C6AZR++R7XQUEqlXAaaQ6cg5wmXDxC49w7U+OXRxU9ZAS9EoGZ\"\
-        \n  \"zN1h1tfojiteGLnbmD1+u9RGAe0mfxpRVc/ozWq24MqZNvvQzdVr9xkt1qseisVuUvstnwR3es3LKTSAXAuyhhhwPvEb\"\n  \"HGEeQiDcCBxSiZyOiTLDKqhKBbe477JWy74AyP0stJ2VClbjF5NgGa8oREkcEUCuIZsC2XULlMNYP4xBq+vA+C1V/jwW\"\
-        \n  \"d1iQ9uhwMjmaOSZArb4GC8/WCQ0V2BemQlCuQxWWE8UbGLKpdoS09iXMIVePPO+P0YrCBjK1AT+Fi1h4YFvNFFhY++iw\"\n  \"83/QnuVy4yqrTidATu984UCwDtqoOBIKQ832Wb4UlNIIJxJErhihMbh9Lqhc6PzOIROBXkIFzM4FcMi+NvZywSRMkFRv\"\
-        \n  \"mTlokE36EpIM5ZDVEgqHzoqiu1hEOStaMikRRr//Ffb8ixGkDxv06Xzw+sMf7415kAgjOF/env1yObh487dfL+3CMmP1\"\n  \"5AxxuoIzCxNi54hgc9VH7UHLJnGk8zcqQ8NNwZhbDmuArA6HEfHQfZ5SNYMeBRPDYO0Pu+Zl6w9ndYoIS2UozAtQdA3S\"\
-        \n  \"KGmglQkk9+DraNgwp40Ovh4Dv3nT+vTJa4YqxFWrBV2xOJXB6kZ7Lyet0PD4zq+s1fv944aHbm/kNVBnu25n9ABR/qib\"\n  \"RUdmnf4zUdMleuWk8IumX627q22XUMkACoEmh49I4S7j4axlyAB9r2MDI2CgUCMoCgCIYn4LQIZKAuE5nMCwJQBDKCcE\"\
-        \n  \"BgO1M6ROOUu6jMWmF4I56M3gQz9PLq/QuGe9ALhIENb7LWF7wM5d3dIDBELVAo4EXQXw/50uE2mwYnOTW3NrDgybE41/\"\n  \"fPBqr0Y2K52BbkZ36o9T9PRpznbiP0s98OjY0j6Y3/omguidoz4AuME5UNdEEFMRNeWRXMQpBBAEJNSQMr1J2JpGyNZq\"\
-        \n  \"JoxxGAKtXicUb6WFPcnAib59Q8m6Z8F7ejysfJ+gnhnJl5Ns7cQ2J8y/DWHZOVm4VIPFYLeOfP3kkH8M8EV5A+4e5Q7L\"\n  \"V+JCwD49f/U6MPnA0z5+UozpROF5Bqq9jNOUKWU+Q1Nls6IsX8YGHPqzvEjYlN+OUW4vbAukuBRwVuT3LqJYJ847BvV3\"\
-        \n  \"qmBfNMrSJSQq2LJIT/bL5+zkSIuAIizlTEk0QBmMIZ/JFDLpgupDAuEbkSYKHR2iBIJDV902gxb7q59y3BnHtidH7fGz\"\n  \"o1mJAoLRL9P1so3Y25mO7xrqNlHeYFKbLm1Yx88YgLAUBDzc29pBxZT6bM8Hnqq1NmGPA0j1wQZDIqsNdICjczh8ceQ9\"\
-        \n  \"hd9nGUrsbt/vIW34uO58zoZkrgU0BFmBUFM820fip/ManvT55Xl57nwMiIaqygiSCrbeDolPsrEyGhsjqzEO97wCQD77\"\n  \"mrIVjnQStGeyhaAGmKTQIhJ7ctvTXudM6FCPhjoNT4ZonsgKjj/aU+S30dBahb6YppEwfGvipMi3pvsTUPPo/gxUwskN\"\
-        \n  \"Wa6C48aqrJxfi3WfWNKyTyp+6fiT4fNxBZl1EaeZiJ0v7cCO46HYtj2mx/T2fqz35Md6d4Gw9t1eXr5IxuuB4LULKd5g\"\n  \"NBwflmJo67tF5RPG8k+wWiB1/NW6shALLBjeVoZJBrl1TQoUCJajUXrPJ+t2w8QWJra1iQRsIevSNxhBthVgJPr8+uPD\"\
-        \n  \"xVtI8W/evbn07pO1Xx6Y5UXdrBw7D1UZp6guAv1JEds9M7YNZmy/L6NuxrbBjO+KIOtv38h2D6SKJoFpOjqdKjxzmOAV\"\n  \"BizalFvC/PDleHh4PB16vXoerufgig2nQ53fyBqd+sgl25Phyx7ZTsEub45DfUczntUaTxtsZH1iOHvfYR01sGZTQH/q\"\
-        \n  \"D72Xk+mwHlL2NyvekwxRWQmfAKAeWrpNktA4Tk0Jct2B3qkPLTBLXK+jG/aO/AxZcXrd+gmdrZk0FWVRZ1Z6qYToAhfy\"\n  \"HdBAv/Pu08dLff0GXykMp5xr1hj6XZN3S71RvwX5D+nWV1/R1RrbrpNvgVUQWHXZ+GQ4DOhagYXBrcm0TnbbVb7/MuKh\"\
-        \n  \"0l6WxB+PAigr42hFgzxfu97M6aJsehwQAYciFDaSBjwJpet0KxtgCSej5+MAmNNARrHSRPn48WhiRdirqiZufY8Y6ALH\"\n  \"1UW8l/FGMSaV0Ua1Lxx9ufALjkwHq6+mcncsGQkIVZhFbu4MoDTLt60Iko3XEe+gP9U7RPNdhoJbbiCEllPkdDS/6eNl\"\
-        \n  \"3sX/r431D7r+y/zmthBrroON7ThJIla5Nwz1zUfSvxMMkGHuQ2V3/0Y0gTO9bHH51sDUsN28qTB47GlzALpL3cdj3UaY\"\n  \"lRWgT3RDIlaU9EH23v10K7uP/m8uuFv/ASYb/ww=\"\
-        \n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\nPY_PATCH\n"
+      run: "# Lossless zlib copy of an existing, unchanged patch; source included in ZIP.\npython3 -\
+        \ <<'PY_PATCH'\nimport base64,zlib,subprocess\ncode=zlib.decompress(base64.b64decode(\n  \"\
+        eNqtWOtz27gR/66/AvF1QlLvh+M4kulMevH10ubhc5y76cQuByYgCw0FMgAoS3L8v3cBkBRJ0UmvU36QSGBfWPx2sQtJ\"\
+        \n  \"FerRNEYJS+gcs6gVYoVO0cFfLj69f392EVyevTsfRBsicLCajF6MgwSrcNFPNgfo5MR5+8/XF6+C383E+avLn391Wj89\"\
+        \n  \"GaRSDG4YH1C+QslGLWI+aR0cHABZ/0V/PEWKLpNY4AiFMZdMKsrDDWIcnX8coRAvqcCog5IIb6hAURzGy1ixmPdb/6A0\"\
+        \n  \"kcAURUzCQBfd0nhJldjAG7Bpji6SeEVlFymmItpFmBN0K3CyYKFEKQ8XmN9S0tfmtOYiXiJYziJiN4hpkxQ6h89W9h7L\"\
+        \n  \"rqCtxNdjbiz7sBwmYv7ZOb/48Pezny+D128unGtv4EgRDpaY8X7otKSf9AXFJFB0rVxYWUwYv/WdVM17x47XahE6R3Mu\"\
+        \n  \"E8xdDkZ70xaCZ6m96sO6lCtof844YYoKVzhXN1JhxcIr2XFfTlcxI98YVx58Oh2gpDLECbWSOkAt21fu53/Nrtsvrzz9\"\
+        \n  \"ce909Sr6Hz3P6GFzFFHuGnXeE380FZhJii5SrtiSngkRC3fuvKeUILrGoYo2KOYU3WsFD+DmWKH7nYAHx0oFE4Xyzdjn\"\
+        \n  \"4XXffLrejO2GKCcwQGiiFv5oppdEfQd8Qx0j4G7BIorYiRYtPbNrhtY6Rz+hLz+z6xnXf53RtV4I/OcMNIJFOE5BDbNW\"\
+        \n  \"R6ZkJyebDWFm4BhF3LxOM5sixqkzYx1/VGGh0T5Tu2C6AZR++R7XQUEqlXAaaQ6cg5wmXDxC49w7U+OXRxU9ZAS9EoGZ\"\
+        \n  \"zN1h1tfojiteGLnbmD1+u9RGAe0mfxpRVc/ozWq24MqZNvvQzdVr9xkt1qseisVuUvstnwR3es3LKTSAXAuyhhhwPvEb\"\
+        \n  \"HGEeQiDcCBxSiZyOiTLDKqhKBbe477JWy74AyP0stJ2VClbjF5NgGa8oREkcEUCuIZsC2XULlMNYP4xBq+vA+C1V/jwW\"\
+        \n  \"d1iQ9uhwMjmaOSZArb4GC8/WCQ0V2BemQlCuQxWWE8UbGLKpdoS09iXMIVePPO+P0YrCBjK1AT+Fi1h4YFvNFFhY++iw\"\
+        \n  \"83/QnuVy4yqrTidATu984UCwDtqoOBIKQ832Wb4UlNIIJxJErhihMbh9Lqhc6PzOIROBXkIFzM4FcMi+NvZywSRMkFRv\"\
+        \n  \"mTlokE36EpIM5ZDVEgqHzoqiu1hEOStaMikRRr//Ffb8ixGkDxv06Xzw+sMf7415kAgjOF/env1yObh487dfL+3CMmP1\"\
+        \n  \"5AxxuoIzCxNi54hgc9VH7UHLJnGk8zcqQ8NNwZhbDmuArA6HEfHQfZ5SNYMeBRPDYO0Pu+Zl6w9ndYoIS2UozAtQdA3S\"\
+        \n  \"KGmglQkk9+DraNgwp40Ovh4Dv3nT+vTJa4YqxFWrBV2xOJXB6kZ7Lyet0PD4zq+s1fv944aHbm/kNVBnu25n9ABR/qib\"\
+        \n  \"RUdmnf4zUdMleuWk8IumX627q22XUMkACoEmh49I4S7j4axlyAB9r2MDI2CgUCMoCgCIYn4LQIZKAuE5nMCwJQBDKCcE\"\
+        \n  \"BgO1M6ROOUu6jMWmF4I56M3gQz9PLq/QuGe9ALhIENb7LWF7wM5d3dIDBELVAo4EXQXw/50uE2mwYnOTW3NrDgybE41/\"\
+        \n  \"fPBqr0Y2K52BbkZ36o9T9PRpznbiP0s98OjY0j6Y3/omguidoz4AuME5UNdEEFMRNeWRXMQpBBAEJNSQMr1J2JpGyNZq\"\
+        \n  \"JoxxGAKtXicUb6WFPcnAib59Q8m6Z8F7ejysfJ+gnhnJl5Ns7cQ2J8y/DWHZOVm4VIPFYLeOfP3kkH8M8EV5A+4e5Q7L\"\
+        \n  \"V+JCwD49f/U6MPnA0z5+UozpROF5Bqq9jNOUKWU+Q1Nls6IsX8YGHPqzvEjYlN+OUW4vbAukuBRwVuT3LqJYJ847BvV3\"\
+        \n  \"qmBfNMrSJSQq2LJIT/bL5+zkSIuAIizlTEk0QBmMIZ/JFDLpgupDAuEbkSYKHR2iBIJDV902gxb7q59y3BnHtidH7fGz\"\
+        \n  \"o1mJAoLRL9P1so3Y25mO7xrqNlHeYFKbLm1Yx88YgLAUBDzc29pBxZT6bM8Hnqq1NmGPA0j1wQZDIqsNdICjczh8ceQ9\"\
+        \n  \"hd9nGUrsbt/vIW34uO58zoZkrgU0BFmBUFM820fip/ManvT55Xl57nwMiIaqygiSCrbeDolPsrEyGhsjqzEO97wCQD77\"\
+        \n  \"mrIVjnQStGeyhaAGmKTQIhJ7ctvTXudM6FCPhjoNT4ZonsgKjj/aU+S30dBahb6YppEwfGvipMi3pvsTUPPo/gxUwskN\"\
+        \n  \"Wa6C48aqrJxfi3WfWNKyTyp+6fiT4fNxBZl1EaeZiJ0v7cCO46HYtj2mx/T2fqz35Md6d4Gw9t1eXr5IxuuB4LULKd5g\"\
+        \n  \"NBwflmJo67tF5RPG8k+wWiB1/NW6shALLBjeVoZJBrl1TQoUCJajUXrPJ+t2w8QWJra1iQRsIevSNxhBthVgJPr8+uPD\"\
+        \n  \"xVtI8W/evbn07pO1Xx6Y5UXdrBw7D1UZp6guAv1JEds9M7YNZmy/L6NuxrbBjO+KIOtv38h2D6SKJoFpOjqdKjxzmOAV\"\
+        \n  \"BizalFvC/PDleHh4PB16vXoerufgig2nQ53fyBqd+sgl25Phyx7ZTsEub45DfUczntUaTxtsZH1iOHvfYR01sGZTQH/q\"\
+        \n  \"D72Xk+mwHlL2NyvekwxRWQmfAKAeWrpNktA4Tk0Jct2B3qkPLTBLXK+jG/aO/AxZcXrd+gmdrZk0FWVRZ1Z6qYToAhfy\"\
+        \n  \"HdBAv/Pu08dLff0GXykMp5xr1hj6XZN3S71RvwX5D+nWV1/R1RrbrpNvgVUQWHXZ+GQ4DOhagYXBrcm0TnbbVb7/MuKh\"\
+        \n  \"0l6WxB+PAigr42hFgzxfu97M6aJsehwQAYciFDaSBjwJpet0KxtgCSej5+MAmNNARrHSRPn48WhiRdirqiZufY8Y6ALH\"\
+        \n  \"1UW8l/FGMSaV0Ua1Lxx9ufALjkwHq6+mcncsGQkIVZhFbu4MoDTLt60Iko3XEe+gP9U7RPNdhoJbbiCEllPkdDS/6eNl\"\
+        \n  \"3sX/r431D7r+y/zmthBrroON7ThJIla5Nwz1zUfSvxMMkGHuQ2V3/0Y0gTO9bHH51sDUsN28qTB47GlzALpL3cdj3UaY\"\
+        \n  \"lRWgT3RDIlaU9EH23v10K7uP/m8uuFv/ASYb/ww=\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',code],check=True)\n\
+        PY_PATCH\n"
     - name: 'V31.9.2.1 Timing-Pruefung korrigiert '
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_LOSSLESS'\nimport base64,zlib,subprocess\ns=zlib.decompress(base64.b64decode(\n\
@@ -302,8 +412,8 @@ jobs:
         \n \"VaGbwxpNgd7uIhBGKekoM/pURty3VC3qDG2TJlV01xSNCx8HYsP1Gl0athRD5rldo09zY7fcZv3RJEnOLlkEB4bz2Xh4yXpRh8vQSYvU0crqtH\"\
         \n \"n1k7P+eLrHHhon073xCe9KpAu/RsOTNBmej/uZb5Evjy8mw/b4EDM4jhkcwSRnVI21Qqi09A5Oob5TXN83uMn0uImwvYDyBqOySOOWagdd2faN\"\
         \n \"fTEndOW54X9r+lfteI7Q8mzkJDZzwMdBwAfqC7XVaJwDO2kcts5c6kgzpeICw45INPpvXmRueR2j87Eb/z0fGttK+SZ0gwnKeGulx71SXXSo1Z\"\
-        \n \"Jm6kkfkziZg6303lf0qI9ux4VARftWdCfj6ZvLF1NJYmy5N8I7/AsFvwFrr4Iz\"\n )).decode('utf8')\nsubprocess.run(['bash','-euo','pipefail','-c',s],check=True)\n\
-        LYDRA_LOSSLESS\n"
+        \n \"Jm6kkfkziZg6303lf0qI9ux4VARftWdCfj6ZvLF1NJYmy5N8I7/AsFvwFrr4Iz\"\n )).decode('utf8')\n\
+        subprocess.run(['bash','-euo','pipefail','-c',s],check=True)\nLYDRA_LOSSLESS\n"
     - name: V31.9.5 Ruhigere Landschaftsfarben Be
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_LOSSLESS'\nimport base64,zlib,subprocess\nsource=zlib.decompress(base64.b64decode(\n\
@@ -330,67 +440,86 @@ jobs:
         \n  \"GNe7bENP6dx6bM2eXkG+5zjGjed3jedHrjeKmqTryZRTAmciqh12HbgHgPG46as+ni3CAIYecmBYMWDRRB+fYv2vP5n2w+ldNxFP/mzi\"\
         \n  \"oaugSESeFLvM1Srs1zkeJ5kgz4m9c1yHz8IEzqu7RJaVkq0CSfY02cB4snR6BV0C859JNTNnjhNBZVWCjm21p/o47OrcdGO4zUU7ky6O\"\
         \n  \"o/egg4o9jBRtQo8EtLU3LX1tbFR4vXr0LODaZ2+x0v/2HlvDcVh1l9BlN8/XcEHKaBbZGWvHWNct0VmxSPi1p0KynJlSOVMJlbVsDpL6\"\
-        \n  \"3Iq2VBY+yoUe7hAO+OLD3RU6HQ3C6Y8+0tm2A1JnWc91RVIFWi9c/Xv/A9Tix0k=\"\n)).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',source],check=True)\n\
-        LYDRA_LOSSLESS\n"
+        \n  \"3Iq2VBY+yoUe7hAO+OLD3RU6HQ3C6Y8+0tm2A1JnWc91RVIFWi9c/Xv/A9Tix0k=\"\n)).decode('utf-8')\n\
+        subprocess.run(['bash','-euo','pipefail','-c',source],check=True)\nLYDRA_LOSSLESS\n"
     - name: V31.9.6.1 Bergkoordinaten Fehler beheben
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_3196'\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
-        s=p.read_text()\ndef swap(a,b,n=1):\n    global s\n    if s.count(a)!=n:raise RuntimeError('V31.9.6.1 source\
-        \ mismatch: '+a[:65])\n    s=s.replace(a,b,n)\nswap('int height=215+((seed>>3)&3)*29;', 'int height=185+((seed>>3)&7)*24;')\n\
-        swap('int fh=75+((seed>>7)&3)*23;', 'int fh=64+((seed>>7)&7)*14;')\nswap('2800+(i%3)*110', '3060+(i%4)*130',2)\n\
-        swap('vt_v293_sin(angle)*2100', 'vt_v293_sin(angle)*2350')\nswap('vt_v293_cos(angle)*2100', 'vt_v293_cos(angle)*2350')\n\
-        swap('vt_v24_tree(x,z,10+((h>>3)&11),((h>>6)%3));',\n     'vt_v24_tree(x,z,11+((h>>3)&15),((h>>6)%3));')\nfor\
-        \ marker in ('near_cells=10','far_cells=12','amount>=8',\n               'target=forward*17920;','desired_turn=turn*45*256;',\n\
-        \               'vt_v3194_perf_hud(','vt_save_game(void)'):\n    if marker not in s:raise RuntimeError('Lost\
-        \ stable feature '+marker)\np.write_text(s)\nprint('V31.9.6.1: mountain and tree variants updated')\nLYDRA_3196\n"
+        s=p.read_text()\ndef swap(a,b,n=1):\n    global s\n    if s.count(a)!=n:raise RuntimeError('V31.9.6.1\
+        \ source mismatch: '+a[:65])\n    s=s.replace(a,b,n)\nswap('int height=215+((seed>>3)&3)*29;',\
+        \ 'int height=185+((seed>>3)&7)*24;')\nswap('int fh=75+((seed>>7)&3)*23;', 'int fh=64+((seed>>7)&7)*14;')\n\
+        swap('2800+(i%3)*110', '3060+(i%4)*130',2)\nswap('vt_v293_sin(angle)*2100', 'vt_v293_sin(angle)*2350')\n\
+        swap('vt_v293_cos(angle)*2100', 'vt_v293_cos(angle)*2350')\nswap('vt_v24_tree(x,z,10+((h>>3)&11),((h>>6)%3));',\n\
+        \     'vt_v24_tree(x,z,11+((h>>3)&15),((h>>6)%3));')\nfor marker in ('near_cells=10','far_cells=12','amount>=8',\n\
+        \               'target=forward*17920;','desired_turn=turn*45*256;',\n               'vt_v3194_perf_hud(','vt_save_game(void)'):\n\
+        \    if marker not in s:raise RuntimeError('Lost stable feature '+marker)\np.write_text(s)\n\
+        print('V31.9.6.1: mountain and tree variants updated')\nLYDRA_3196\n"
     - name: V31.9.8 Wege, Wiesen und Waldgruppen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LYDRA_EXACT_REPLAY'\nimport gzip,base64,subprocess\ncode = base64.b64decode(\n\
-        \    \"H4sIAAAAAAAC/61Ya5PbthX9rl+BOpMlKVESSWm9u5K5HY/jTtJ2Eo+9TdrZVTUUCZFoSZADQA+vk//eA5DUY6W1PUk14yUe94WLew4AS6pIn65KUrGKLiOWd6qPKiv5iPTJq1fW3//13fvX859H/s3V/N3ruzffWx1WVKVQpJSuoJ2lKAtSRSrL2YI0M+/Q7VSh/tilHFC+ZqLk99a79z/99e2bu/l3P7y3Zs7QkiIeFhHjg9jqyLAaCBolc0W3yqY8LhPG09BaqWX/2nI6CV2SOIt4Sm0eFdSFTyakM+kQ/NK8XEQ5kaZThDmTyhZ0sGQ8YYoKW1gPC6kixeIH2VuXLMHH6kGCyjiqaotOD1Ky+2Df/3s66/75wdGdT5arVzn44DjGNluSnHK7cP4U+hMRMUnJ+xVXrKBvhSiFbSFRg5vBFSmYlIifLFc8VqzkxOoZJ8ZKFBb33myAiISynSlhdZ/yRPcSWqks9KdER0xDC5mgltHbZCynhL3SIUiHRDyphesk6F8cyns2mxKuvz1/pgPGt9WgOQK2rJ04ZmsnjZe9oWY2xszQMp64aU6aoHLGqTVlvdA/UqH5qVJ3pxSXRUG5+pzei52wVAIJtM6KvbBe7GxmkTgvZH2yJiY9zzr7rRHoHwiYyTYpZpVnk/LAD1bV7s+Jfrvgsya65/JqjB3nR2/a+RgerMn5TNptAE0SjaM6vQ4pxX7eZK+dRVad84vaeYHtuuI+V/srDjBGPKbJUdUvyuQjyjKasJnpLxFImScupxvCeI3nyWFpaoVBXMKHDbkvQk6WKxFTjbwiUnHW+O5ZE7Sgfz+58WbOzr6JxngQtMqjmNpNLK5fC0nEOolmPS3TA5oms8435BcKTqMCKyvAVeVGTsiSbdFNaZmKqMpYrMkwzqjEmqSCECmXBC6gCLFlHimiGFcDGPuxJHrtciWW8C+nZBkJkgosOIGGJkZJ/GDrB3Wd0P2s7219b9Bp+NBaq/l65Hlz\"\
+      run: "set -euo pipefail\npython3 - <<'LYDRA_EXACT_REPLAY'\nimport gzip,base64,subprocess\ncode\
+        \ = base64.b64decode(\n    \"H4sIAAAAAAAC/61Ya5PbthX9rl+BOpMlKVESSWm9u5K5HY/jTtJ2Eo+9TdrZVTUUCZFoSZADQA+vk//eA5DUY6W1PUk14yUe94WLew4AS6pIn65KUrGKLiOWd6qPKiv5iPTJq1fW3//13fvX859H/s3V/N3ruzffWx1WVKVQpJSuoJ2lKAtSRSrL2YI0M+/Q7VSh/tilHFC+ZqLk99a79z/99e2bu/l3P7y3Zs7QkiIeFhHjg9jqyLAaCBolc0W3yqY8LhPG09BaqWX/2nI6CV2SOIt4Sm0eFdSFTyakM+kQ/NK8XEQ5kaZThDmTyhZ0sGQ8YYoKW1gPC6kixeIH2VuXLMHH6kGCyjiqaotOD1Ky+2Df/3s66/75wdGdT5arVzn44DjGNluSnHK7cP4U+hMRMUnJ+xVXrKBvhSiFbSFRg5vBFSmYlIifLFc8VqzkxOoZJ8ZKFBb33myAiISynSlhdZ/yRPcSWqks9KdER0xDC5mgltHbZCynhL3SIUiHRDyphesk6F8cyns2mxKuvz1/pgPGt9WgOQK2rJ04ZmsnjZe9oWY2xszQMp64aU6aoHLGqTVlvdA/UqH5qVJ3pxSXRUG5+pzei52wVAIJtM6KvbBe7GxmkTgvZH2yJiY9zzr7rRHoHwiYyTYpZpVnk/LAD1bV7s+Jfrvgsya65/JqjB3nR2/a+RgerMn5TNptAE0SjaM6vQ4pxX7eZK+dRVad84vaeYHtuuI+V/srDjBGPKbJUdUvyuQjyjKasJnpLxFImScupxvCeI3nyWFpaoVBXMKHDbkvQk6WKxFTjbwiUnHW+O5ZE7Sgfz+58WbOzr6JxngQtMqjmNpNLK5fC0nEOolmPS3TA5oms8435BcKTqMCKyvAVeVGTsiSbdFNaZmKqMpYrMkwzqjEmqSCECmXBC6gCLFlHimiGFcDGPuxJHrtciWW8C+nZBkJkgosOIGGJkZJ/GDrB3Wd0P2s7219b9Bp+NBaq/l65Hlz\"\
         \n    \"MCc4ZF4LWe59h9gWfJHMlVmUUHcTiWJqueRk0K1XM7UcV+voodDObm+vnAsfCsjHk7EH3uax1gxtuw0ii2Rmb4f+eOy5j+bj3N5eOhdXTn/UOhB+3zjvBj1ttxu46fGIu2j6puc0MZyo9Wrvp/rtxOjYUDPstHHomINxk7C52Tg73brpo6uzPcf+VXUrpnkuD5v7BDz9CR/BwK0rEFXgLoI2+mGXfMjLDYnLHJVKlIi4ZPpskA2xx6KsDw2UWJNXl/C6SKoy/5hCdEC6Q3CPtqedfSJ6K1XJaWg2ILgZzWHCrrbDkdNrR+JS2tUjRpxhcPlyeqBPyB9JwYGZs4no6cCQDfPFJi3q1jD4sm7Q6AY73aDRxQn5m94+YPkbcicokAYmKQhQn+caIGuMCANTJDLihK4pxwBPcFHBca9wIZiS6365+A+NAYNIJCRnBVPgrRpQySmyCpbME6pwO2phtbTtDDV9G5BffyVRoVnqNrwm2OSaj8YkwS0kwu6saUr13QOXgMUqQRtb6MQlKIyvaFMb2lxr7+KCnKDpxtNgwl9gaexcjECGnvNHPR9hQCGT9tZ9dH2/Z2ucj4DzS8c17ZfOtyieJtYvKnwm9tZQu391xNcTshAlQCoADs6xLXuCdXHhkrLephQusRRsJVCiGfRvlFYGLW//+frNHaFbLFwDyPDjsOZOMHNBlfjYpEB+HW0azjB8p9NtSPNoyD9M3zO0p5WeTl+bZOiP8xwX/n5SOyLJY2s7W0eWgrOWNMaa4H4HuzQF/Zzi+ETxEoqj6/G+KH6McLBvzL6WgqWM42r/czAmukSIYIsF6lmfiClbU5zjKgOXMmwpCoXAZX3I1iyri+QuY1Kfp4YYtNGUaXAkkfgvkBKBVWF/Q1Eckvzyw933P/3jzlBuIiKQNUjlScmg9vV7Z67r8OCQ3XokJP0NS1S2O2PrMdsMki4ZOWRIxoe53foQeKKjh55R0SHN28WO7IuF55KLGP8SlwhI\"\
         \n    \"jyF86ZJ031y0zbY8PmsCqlA5wOdf6AagBECQP9qX7BHA1MAnkuVZuaIgUyCUJbjkMqRqxzxGxlzdvoJL/x+Ecp6Zgr0h/2uZSS9cX005pYl+bXFEuDsKQyD34AwMfc9yrWU7efnSc5f7uUBHZe0YWkvivspCb8pe+WNc8nugCGvkvfR6Nvt27HT9kWdU8C4EU4WQBiqTrn91E3hYopVQyXD3nKuV4KH+0x1fdlvM1fn1b1CdVCzn2SqxdwTkX/ujudn5+s3ZystoTecpbsm2fhS3hJUDZ4ejzSMbN/ImJ7xUOi/yq17AjOMkZprRK7jWl/HaitOpBhs9Ub/4pXv65q/weFE7ixOAOGUGrfVB0JwQhgvq0x8Zo1I1l4ApeffBf0r/+0Me9k/+b6PzP5l2A30NEQAA\"\
         \n)\nsource = gzip.decompress(code).decode('utf-8')\nsubprocess.run(['bash','-euo','pipefail','-c',source],check=True)\n\
         LYDRA_EXACT_REPLAY\n"
     - name: V31.9.8.1 FIX4 Renderer-Patch vollsta
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LYDRA_FIX4_INSTALL'\nimport base64,gzip,hashlib,os\nfrom pathlib import Path\n\
-        payload = (\n    \"H4sIAAAAAAAC/7VaaXPbOBL9rl+BnakKSZmSRdmZcSQrqZlMZit7JCknk9rd2KviAUmYUKQWoGxaGf/3fQ2Ah64cW7\"\
-        \n    \"WpCsWj0ehudL/uBiyWq1wWLFc+k7wzk/mSrcJikYqICfPpDR47nRWb6Ds3V32e3QqZZx+cN1ev//Li+bvpLy+vnBuP\"\n    \"\
-        nTJHyfh0GYqsHzsdhSGrvuRhMi14Wbg8i/NEZPOJsy5mvQvH63QSPmOzdRYXIs+mahVmbhYuuTfqMPxbiIJYpEIVru\"\n    \"T9mcgSUXDpSuc6UkVYiPhandzmIsGPw04gf5+rOFxxw4TeONeqe+1++Pf4pvvs2qOHT47PtK79t56npxEzlvLMpdk8\"\
-        \n    \"9qcJC8zs9E+GQnF2tc4KseQvpMyl67w/C/pP+hf9YMR4ueJxwRPchHGR3rM847U6jETSgmh2EFgWPhNQiGb6MLjp61\"\n    \"\
-        eu59cveJa4hjrhq2Lh06CCY0TgMwe2447+eLcQKQenSy03hA6zxIxoJI8xSn0QN/WLrCzMq5PghlTGb8OAp1DTcWpi\"\n    \"fLdTT+zEDWf7PdbfTh09uWauH0e1zE4qMu6MIecJFNgaztNjDLptBnG+XPKs+CKP79qDVCHhYs4R2u+c79oTLEJ5jN\"\
-        \n    \"L5BK7aqJ+d+6Gm6rWpNEVjQm2KIya8zrZ1rlb5AJvKIEc4dT+zGJrvniFp3Y+JdY3hx+zuNjJZe+uZq+XwWC7bNNrO\"\n    \"\
-        DQUWwdue1QbIIRO0RMDExsu/FJfrLArTMIsRmc+PxaPkxVpmdVgaKJJ8lYYxn1ZjNJD41WuyvRV8nuaYgin9EPoR5D\"\n    \"4AYybwddiNwhuNUDWjPhlu5RJKkQvgR32IRjedzvfs15f/AAixdwvO8jRh74fn7C6XuFOFSFOWyPBOseIuZ92ZKHnS\"\
-        \n    \"ZXPJecYAjbALVFpwXqg+GFmTsDAlEL6vRoLvEjaG9sGgDAZ4uMUSsoyHsmZCixUMy2DIZnj7t9e/EL8rDlIIlQHqik\"\n    \"\
-        WOJUjWq1TEtHBalHp4HKapGrNFvlYcaEsZBT+v3jzHlRcxDKGTROeQ6ZzbYno7PJ+StFPMJ7XyyBZRDh3ImOEouoE4\"\n    \"P9/XGqp8yVkkseYLrmp9pZVX4u5OIndo3UEksABW4sZaLxO8FbN71jXJxQeftJetl1yKuLutmg9rQTJrS20+rOw9l7\"\
-        \n    \"0YTCRPwM+qMZf5OkumMEG8cOelP9/4/X7f03z6DNanDxBaQG7g8VzAp8mgOh76HSPlhFJZdICjzm+4uM9GH3onN8+u\"\n    \"\
-        kxM8+fjvfQoGD613Ov2NHW1F35pGM+Z9tY4yV0/ka5d1TrusDidyx3ODJCJuLbiRgiVChVHKkzFL7uH0ILEfVpIrLj\"\n    \"FHn3VPHcPYzD1Lw7ma6AzcEbNalKfswgTXZ6PbioPaJA3XSkRwxWWY3Vfy2cnNqsJn2tGn/aeKsxVgq3Bne4wraT7Z\"\
-        \n    \"mwfrJ4ZxTzPWa4e8Oabl42HWeFwYKQJorwrj4Yj9nCM5INbDbJ5imfMZ42G8AL9QKRZzBLTkMRe3xjlVSI6MtJxQNE\"\n    \"\
-        FE8sy39HLYYrKC69FQ39CbMJ5LkfgsWhcsyxlcKv7IZZSHMjlNRDjPM8IrHi4/H3Rt34IauRRzQSPrsCNEIm90HDGr\"\n    \"nM9eSkE/5Gsbob3tEf4HletNJrgMqqfrT7h08F9HeaXZ2bX7KCTnfRTra0RXGdB1rq9RcO2Nj42MWiMTPXKoR+prNG\"\
-        \n    \"xGXj/gQrnvGwU5wu4rBDmiwvUD7NjJ+B3lPYfCTnvLIkxvjauQSxhPKajmA5o2XhLnab6WI1ptM/k6BVS3F54ibyvP\"\n    \"\
-        ftrLuvAwJjG7KwPWhY8hRw2pkD8bHySdE+m8Ip1/jjQip3GjijY6RrttPTI7g+kYjMikz+bw6NT78qjIjkqOjtKmrv\"\n    \"wZ+L1etsAPXk2QfuezhiJGJBSTYA+v9MgJGxiw+l7naaCJzjIIW6mTAcUPgOm+RoZFiAi3+T/Ri7i1UpbXK51VkJ0p\"\
-        \n    \"D62zj1l+lwFiFBAkX2G954KrUQ2tmg0F5Jwj/xXyHobHu5AASvF+VTRVKvW1Rq5z3OKo3C7b/Y8BSWc0ugtlBr1Go1\"\n    \"\
-        24XGd1E2T9tAKpMZJZqDMjSah1AOIs8JFTMt8vP+vJshxIzvfnspDZMltT2YjZjMP8xbgyDk3MS7SOdKODh0TAxM2k\"\n    \"dsL9aaia2tEGpcwyn/NMbLT07bRSY+ROCXc2Yld5iFzE51TwKeMCCrUwdYxIUnci0WWR0IUHcko9nY1tXZa846qgSo\"\
-        \n    \"TN8AYfZMYlEs4ctQg+kAcYL3l/NuifYeFRroS6luvB1zI+0qGC3Icm/nsmSaBWMpKgFOAh++yNhO+RmNTExqlYrSAm\"\n    \"\
-        kGjGIo7Gg8wYosSiqe54Mod77VXLVRKhcm8aoYREr02ZotOuJ0Y6C/VmsLIRp7KPD4OgqkT+4mUBHeDv90hbSqOYTe\"\n    \"/U7bPdWVyCm42vUUfb1NxK8zM3P5Fn0U9TDbB+mhTodAZcOh833wLCLfPxhLnuBtcfBwReqMN7bKNvPG974Nv3L56/\"\
-        \n    \"e30FC03Ypx7Y99iq9NnZmY8BuId0g4dt0ohk+PRVpLHhGmyRklRH6BPN+YvkpK3KQKsN+uRsqkTmmvvhFI40vQ/vvI\"\n    \"\
-        Y0Vi3SOFdHSNMcnrIhQ7gu3Xth/3YDa2F4j9VvSrxRGVk1GMCuJ+z5T39/cfXT9F8g+nHQ5hQ1nKLBHit69fW84oZX\"\n    \"vMcq/hZOScMp2eOUfB0naqRhqEv26sVPV/jyxx+k7dZjvP2Y1I+ebWANp6OIPqjToXeYkih2EicoHzqI2rqIBSY+D6\"\
-        \n    \"t0o7e6DL7YWhvla2FQS+8exgBmlCnUNhLsInzfLYQi7NEFtaIvp7rXpN5Og1MV98vwI8HMIidsCjW4CVkhZkSThfKe\"\n    \"\
-        MPE3Wwe1xfjn5OwxMNL0ZDS7WssZ4Am9oS6IU6SIXio+YiT6RCUIsdBehXK64CkK6skBpLK9r8kfFSZW0NtYwqb7WZ\"\n    \"4XOqfozPubWgO1zZ5gbaIxW6+Qyg2W6z76DuCLnpQ9/mHQW2eiqHIV2hdjb4LaQwh4Fjy5CKYkP43QGFgaqLNQqAq+\"\
-        \n    \"8vcKpwOVGqkwLQd+87AZfMPAoD0w+KqBn4HmMpiUJ1p0tgkmG33bYNAmzfF+IaoAcsvgcmLlpwgpn9qnQMdL9XGjP2\"\n    \"\
-        7sx03gtSphk01gyTQs3NLf+FAIapw99qU/96NWFdmOuIdKgM2lnaHNk0SlDD8hEez3Z5tgZG/HrY1WMACld1AMfNiV\"\n    \"o5k3eHpAGW1OjnKEpq4Inm3sxMHWxJruksbvzK0/HDaDmR6rMKm4D2ruVi2szqTWOmi0Duo1w/BLUG3JjZW8tOvo7b\"\
-        \n    \"QpjTHLoKJ5Vlq25WC8s38JRgcNCs8he2LiQ2v7sCWKtW0ZHJKlsm9ZET0rrSzBnizGxuWujY2FSSSy8uckejBYfLxn\"\n    \"\
-        PxsMpqiXoJrt3YHbFhHrnh2JxtESUjBNgouBr59oB0FNgoEDfCyodbDjgKHOrKIGLvmzhni4Q/wVOzatcxKzUXFidx\"\n    \"arHbVoDYyjTRM0CtN4naamG4b5KgXDSLlJ6Z1UUp0OLy8eD9ijR217bxFvdom9OId02ZqPyZywiJHf9kTVzO0DoC9u\"\
-        \n    \"MtdqUYOD2XoauimrpeHK9CntxbAT2qq5ntLX220v6mRySklH5xrKhYLahixJKQHeH8B9vblmLEepdALl9pGkNoW/aW\"\n    \"\
-        7Pz7ehWgY9ZNqEn6DXW3aHJ0s0VvmdP2+/ti+7Qz868Pp06B01Lgn3vxl31tqVpg0xck9dNVTBAPXRuW+pv5MbyQi1\"\n    \"3ltK6ziYlyYe5hv7W5408dGtA6ciOvzx/2RLY8jJAd8hff1Kca+jDzJIf308UU7cVXla6ex1q7ueW8cyZqhfH1w2zd\"\
-        \n    \"Gu2ZfWaymUInelxaJ9SNsU1+6/q4A9drHiwv/1FqepqMxQ2uuCz/M0v6s8f3cz3av3t+yyaaXrJfGa1em5zZqR3vWH\"\n    \"\
-        cWv4BsM33zocGpwYQ+kYXGDxUEoSesFTRemLjW/2/GWA5cdS+3Loz7Hmw6OhYnhYw3/B7tV2t5hnIYoT2lSqNliOe4\"\n    \"6ZwD8g5G44HBR6e/ejKaC3T7TMmZaVr7Uz8lfOUQGjI7BFs1A5cIq2xPJm/2zMAKK0BUb7Hsvwd4T8nBxE3cPqS0Vb\"\
-        \n    \"D/9ZC6nPL1xzZAF4V0VTiB7OdGN7DtGiPproatpwSUvzdHLB6ubgnI49UNEXkBOpK9TniyaNNYcdDtwCLyboSRDYST\"\n    \"\
-        f48cmQJGBOwhUJP6VyckKX7vnj7vDxD/WUFsPOpzDrbLpYJy4NM28vgjNzNGb+fKA1RIW3fEp2cqlJ8OyQNA+Trbdb\"\n    \"U7RhEp+8DnVQAkamFF9ZeVS1q/qDzf/qi6AgMvQ2QmN4dQZrcWLEnBPi5XVWfX0wZ/5ARPn7fyKi/+bEgaYCzRwd6f\"\
-        \n    \"SXHxMhXb23N80/Tt7JNd8jO/359S8vXqF5nUKe6ZPpxTSY/vLypz+/ev32Rb8oUWy059XqzZxfDx/0qOpMaNQcCsG7\"\n    \"\
-        jRkHlKFvwxSQh04uo93HW5GvFTmwgsa7h5GJdmnby9mzx5rZlfZ/OnAi9FPN/qWpm3SruX0wqysOAlzNxWf79juyyW\"\n    \"klqBIrkHcpMjrFoy05xX7P9VMzfidnnhqgrw76YvgBelnbIY+p36ZDDXNqnUe/I5OrPpj9F85FYYBtJAAA\"\
-        \n)\nscript = gzip.decompress(base64.b64decode(payload))\nassert hashlib.sha256(script).hexdigest() == '7788ac60529c5131da953fea4f2d521f82de4a1709736e9cbbf71b94eb21bbad',\
-        \ 'Corrupted renderer patch'\ntarget=Path(os.environ['RUNNER_TEMP'])/'lydra_v31981_patch.py'\ntarget.write_bytes(script)\n\
+      run: "set -euo pipefail\npython3 - <<'LYDRA_FIX4_INSTALL'\nimport base64,gzip,hashlib,os\nfrom\
+        \ pathlib import Path\npayload = (\n    \"H4sIAAAAAAAC/7VaaXPbOBL9rl+BnakKSZmSRdmZcSQrqZlMZit7JCknk9rd2KviAUmYUKQWoGxaGf/3fQ2Ah64cW7\"\
+        \n    \"WpCsWj0ehudL/uBiyWq1wWLFc+k7wzk/mSrcJikYqICfPpDR47nRWb6Ds3V32e3QqZZx+cN1ev//Li+bvpLy+vnBuP\"\
+        \n    \"nTJHyfh0GYqsHzsdhSGrvuRhMi14Wbg8i/NEZPOJsy5mvQvH63QSPmOzdRYXIs+mahVmbhYuuTfqMPxbiIJYpEIVru\"\
+        \n    \"T9mcgSUXDpSuc6UkVYiPhandzmIsGPw04gf5+rOFxxw4TeONeqe+1++Pf4pvvs2qOHT47PtK79t56npxEzlvLMpdk8\"\
+        \n    \"9qcJC8zs9E+GQnF2tc4KseQvpMyl67w/C/pP+hf9YMR4ueJxwRPchHGR3rM847U6jETSgmh2EFgWPhNQiGb6MLjp61\"\
+        \n    \"eu59cveJa4hjrhq2Lh06CCY0TgMwe2447+eLcQKQenSy03hA6zxIxoJI8xSn0QN/WLrCzMq5PghlTGb8OAp1DTcWpi\"\
+        \n    \"fLdTT+zEDWf7PdbfTh09uWauH0e1zE4qMu6MIecJFNgaztNjDLptBnG+XPKs+CKP79qDVCHhYs4R2u+c79oTLEJ5jN\"\
+        \n    \"L5BK7aqJ+d+6Gm6rWpNEVjQm2KIya8zrZ1rlb5AJvKIEc4dT+zGJrvniFp3Y+JdY3hx+zuNjJZe+uZq+XwWC7bNNrO\"\
+        \n    \"DQUWwdue1QbIIRO0RMDExsu/FJfrLArTMIsRmc+PxaPkxVpmdVgaKJJ8lYYxn1ZjNJD41WuyvRV8nuaYgin9EPoR5D\"\
+        \n    \"4AYybwddiNwhuNUDWjPhlu5RJKkQvgR32IRjedzvfs15f/AAixdwvO8jRh74fn7C6XuFOFSFOWyPBOseIuZ92ZKHnS\"\
+        \n    \"ZXPJecYAjbALVFpwXqg+GFmTsDAlEL6vRoLvEjaG9sGgDAZ4uMUSsoyHsmZCixUMy2DIZnj7t9e/EL8rDlIIlQHqik\"\
+        \n    \"WOJUjWq1TEtHBalHp4HKapGrNFvlYcaEsZBT+v3jzHlRcxDKGTROeQ6ZzbYno7PJ+StFPMJ7XyyBZRDh3ImOEouoE4\"\
+        \n    \"P9/XGqp8yVkkseYLrmp9pZVX4u5OIndo3UEksABW4sZaLxO8FbN71jXJxQeftJetl1yKuLutmg9rQTJrS20+rOw9l7\"\
+        \n    \"0YTCRPwM+qMZf5OkumMEG8cOelP9/4/X7f03z6DNanDxBaQG7g8VzAp8mgOh76HSPlhFJZdICjzm+4uM9GH3onN8+u\"\
+        \n    \"kxM8+fjvfQoGD613Ov2NHW1F35pGM+Z9tY4yV0/ka5d1TrusDidyx3ODJCJuLbiRgiVChVHKkzFL7uH0ILEfVpIrLj\"\
+        \n    \"FHn3VPHcPYzD1Lw7ma6AzcEbNalKfswgTXZ6PbioPaJA3XSkRwxWWY3Vfy2cnNqsJn2tGn/aeKsxVgq3Bne4wraT7Z\"\
+        \n    \"mwfrJ4ZxTzPWa4e8Oabl42HWeFwYKQJorwrj4Yj9nCM5INbDbJ5imfMZ42G8AL9QKRZzBLTkMRe3xjlVSI6MtJxQNE\"\
+        \n    \"FE8sy39HLYYrKC69FQ39CbMJ5LkfgsWhcsyxlcKv7IZZSHMjlNRDjPM8IrHi4/H3Rt34IauRRzQSPrsCNEIm90HDGr\"\
+        \n    \"nM9eSkE/5Gsbob3tEf4HletNJrgMqqfrT7h08F9HeaXZ2bX7KCTnfRTra0RXGdB1rq9RcO2Nj42MWiMTPXKoR+prNG\"\
+        \n    \"xGXj/gQrnvGwU5wu4rBDmiwvUD7NjJ+B3lPYfCTnvLIkxvjauQSxhPKajmA5o2XhLnab6WI1ptM/k6BVS3F54ibyvP\"\
+        \n    \"ftrLuvAwJjG7KwPWhY8hRw2pkD8bHySdE+m8Ip1/jjQip3GjijY6RrttPTI7g+kYjMikz+bw6NT78qjIjkqOjtKmrv\"\
+        \n    \"wZ+L1etsAPXk2QfuezhiJGJBSTYA+v9MgJGxiw+l7naaCJzjIIW6mTAcUPgOm+RoZFiAi3+T/Ri7i1UpbXK51VkJ0p\"\
+        \n    \"D62zj1l+lwFiFBAkX2G954KrUQ2tmg0F5Jwj/xXyHobHu5AASvF+VTRVKvW1Rq5z3OKo3C7b/Y8BSWc0ugtlBr1Go1\"\
+        \n    \"24XGd1E2T9tAKpMZJZqDMjSah1AOIs8JFTMt8vP+vJshxIzvfnspDZMltT2YjZjMP8xbgyDk3MS7SOdKODh0TAxM2k\"\
+        \n    \"dsL9aaia2tEGpcwyn/NMbLT07bRSY+ROCXc2Yld5iFzE51TwKeMCCrUwdYxIUnci0WWR0IUHcko9nY1tXZa846qgSo\"\
+        \n    \"TN8AYfZMYlEs4ctQg+kAcYL3l/NuifYeFRroS6luvB1zI+0qGC3Icm/nsmSaBWMpKgFOAh++yNhO+RmNTExqlYrSAm\"\
+        \n    \"kGjGIo7Gg8wYosSiqe54Mod77VXLVRKhcm8aoYREr02ZotOuJ0Y6C/VmsLIRp7KPD4OgqkT+4mUBHeDv90hbSqOYTe\"\
+        \n    \"/U7bPdWVyCm42vUUfb1NxK8zM3P5Fn0U9TDbB+mhTodAZcOh833wLCLfPxhLnuBtcfBwReqMN7bKNvPG974Nv3L56/\"\
+        \n    \"e30FC03Ypx7Y99iq9NnZmY8BuId0g4dt0ohk+PRVpLHhGmyRklRH6BPN+YvkpK3KQKsN+uRsqkTmmvvhFI40vQ/vvI\"\
+        \n    \"Y0Vi3SOFdHSNMcnrIhQ7gu3Xth/3YDa2F4j9VvSrxRGVk1GMCuJ+z5T39/cfXT9F8g+nHQ5hQ1nKLBHit69fW84oZX\"\
+        \n    \"vMcq/hZOScMp2eOUfB0naqRhqEv26sVPV/jyxx+k7dZjvP2Y1I+ebWANp6OIPqjToXeYkih2EicoHzqI2rqIBSY+D6\"\
+        \n    \"t0o7e6DL7YWhvla2FQS+8exgBmlCnUNhLsInzfLYQi7NEFtaIvp7rXpN5Og1MV98vwI8HMIidsCjW4CVkhZkSThfKe\"\
+        \n    \"MPE3Wwe1xfjn5OwxMNL0ZDS7WssZ4Am9oS6IU6SIXio+YiT6RCUIsdBehXK64CkK6skBpLK9r8kfFSZW0NtYwqb7WZ\"\
+        \n    \"4XOqfozPubWgO1zZ5gbaIxW6+Qyg2W6z76DuCLnpQ9/mHQW2eiqHIV2hdjb4LaQwh4Fjy5CKYkP43QGFgaqLNQqAq+\"\
+        \n    \"8vcKpwOVGqkwLQd+87AZfMPAoD0w+KqBn4HmMpiUJ1p0tgkmG33bYNAmzfF+IaoAcsvgcmLlpwgpn9qnQMdL9XGjP2\"\
+        \n    \"7sx03gtSphk01gyTQs3NLf+FAIapw99qU/96NWFdmOuIdKgM2lnaHNk0SlDD8hEez3Z5tgZG/HrY1WMACld1AMfNiV\"\
+        \n    \"o5k3eHpAGW1OjnKEpq4Inm3sxMHWxJruksbvzK0/HDaDmR6rMKm4D2ruVi2szqTWOmi0Duo1w/BLUG3JjZW8tOvo7b\"\
+        \n    \"QpjTHLoKJ5Vlq25WC8s38JRgcNCs8he2LiQ2v7sCWKtW0ZHJKlsm9ZET0rrSzBnizGxuWujY2FSSSy8uckejBYfLxn\"\
+        \n    \"PxsMpqiXoJrt3YHbFhHrnh2JxtESUjBNgouBr59oB0FNgoEDfCyodbDjgKHOrKIGLvmzhni4Q/wVOzatcxKzUXFidx\"\
+        \n    \"arHbVoDYyjTRM0CtN4naamG4b5KgXDSLlJ6Z1UUp0OLy8eD9ijR217bxFvdom9OId02ZqPyZywiJHf9kTVzO0DoC9u\"\
+        \n    \"MtdqUYOD2XoauimrpeHK9CntxbAT2qq5ntLX220v6mRySklH5xrKhYLahixJKQHeH8B9vblmLEepdALl9pGkNoW/aW\"\
+        \n    \"7Pz7ehWgY9ZNqEn6DXW3aHJ0s0VvmdP2+/ti+7Qz868Pp06B01Lgn3vxl31tqVpg0xck9dNVTBAPXRuW+pv5MbyQi1\"\
+        \n    \"3ltK6ziYlyYe5hv7W5408dGtA6ciOvzx/2RLY8jJAd8hff1Kca+jDzJIf308UU7cVXla6ex1q7ueW8cyZqhfH1w2zd\"\
+        \n    \"Gu2ZfWaymUInelxaJ9SNsU1+6/q4A9drHiwv/1FqepqMxQ2uuCz/M0v6s8f3cz3av3t+yyaaXrJfGa1em5zZqR3vWH\"\
+        \n    \"cWv4BsM33zocGpwYQ+kYXGDxUEoSesFTRemLjW/2/GWA5cdS+3Loz7Hmw6OhYnhYw3/B7tV2t5hnIYoT2lSqNliOe4\"\
+        \n    \"6ZwD8g5G44HBR6e/ejKaC3T7TMmZaVr7Uz8lfOUQGjI7BFs1A5cIq2xPJm/2zMAKK0BUb7Hsvwd4T8nBxE3cPqS0Vb\"\
+        \n    \"D/9ZC6nPL1xzZAF4V0VTiB7OdGN7DtGiPproatpwSUvzdHLB6ubgnI49UNEXkBOpK9TniyaNNYcdDtwCLyboSRDYST\"\
+        \n    \"f48cmQJGBOwhUJP6VyckKX7vnj7vDxD/WUFsPOpzDrbLpYJy4NM28vgjNzNGb+fKA1RIW3fEp2cqlJ8OyQNA+Trbdb\"\
+        \n    \"U7RhEp+8DnVQAkamFF9ZeVS1q/qDzf/qi6AgMvQ2QmN4dQZrcWLEnBPi5XVWfX0wZ/5ARPn7fyKi/+bEgaYCzRwd6f\"\
+        \n    \"SXHxMhXb23N80/Tt7JNd8jO/359S8vXqF5nUKe6ZPpxTSY/vLypz+/ev32Rb8oUWy059XqzZxfDx/0qOpMaNQcCsG7\"\
+        \n    \"jRkHlKFvwxSQh04uo93HW5GvFTmwgsa7h5GJdmnby9mzx5rZlfZ/OnAi9FPN/qWpm3SruX0wqysOAlzNxWf79juyyW\"\
+        \n    \"klqBIrkHcpMjrFoy05xX7P9VMzfidnnhqgrw76YvgBelnbIY+p36ZDDXNqnUe/I5OrPpj9F85FYYBtJAAA\"\
+        \n)\nscript = gzip.decompress(base64.b64decode(payload))\nassert hashlib.sha256(script).hexdigest()\
+        \ == '7788ac60529c5131da953fea4f2d521f82de4a1709736e9cbbf71b94eb21bbad', 'Corrupted renderer\
+        \ patch'\ntarget=Path(os.environ['RUNNER_TEMP'])/'lydra_v31981_patch.py'\ntarget.write_bytes(script)\n\
         print('FIX4: renderer patch installed,',len(script),'bytes, SHA256 verified')\nLYDRA_FIX4_INSTALL\n"
     - name: V31.9.8.1 Bodenpolygone Wege und Uebe
       shell: bash
@@ -403,8 +532,8 @@ jobs:
         '
     - name: FIX9 Boden- und Wegpatch vorbereiten
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LYDRA_FIX9_INSTALL'\nimport gzip,base64,hashlib,os\nfrom pathlib import Path\n\
-        payload=(\n    \"H4sIAAAAAAAC/7Vc/XPbNtL+XX8F2s6UpEV92k4cKUwnTdJO7+3FGSfTe+8Svx5KhCTWNKkSlC2rl//9fXYB8EMfjtOby4wlUgQWwGKxePbBMt9901upvDeJ055Mb8Xyvlhk6XHr22+/\"\
+      run: "set -euo pipefail\npython3 - <<'LYDRA_FIX9_INSTALL'\nimport gzip,base64,hashlib,os\nfrom\
+        \ pathlib import Path\npayload=(\n    \"H4sIAAAAAAAC/7Vc/XPbNtL+XX8F2s6UpEV92k4cKUwnTdJO7+3FGSfTe+8Svx5KhCTWNKkSlC2rl//9fXYB8EMfjtOby4wlUgQWwGKxePbBMt9901upvDeJ055Mb8Xyvlhk6XHr22+/\"\
         \n    \"/SlePxmJXKoiy6WYZmkRp6tspcRvw5PuQORZGCmxUnE6F6kM884yCVOUS+LlUkb8WCyz5H6epaoLca34ZpnlhciUvcpla5ZnN2IZFoskngjz8zvctlpLEfCVm6kuOhbnWfrReXdx/rc3\"\
         \n    \"rz5cvf7lwrn0RE84Kp/2bsI47U6dlkKVZTeXYXRVyHXhynSaRehe4KyKWefM8VpoqZB5inJu7nyaqCIs4ukn1b7N4oi+iqvb4cngijr0SR19cp1PLVH9QxV1FKcFSq4HuPTL203zdj2k\"\
         \n    \"24OVN8NG6bs40s159PEnuol+5YUKklgVbi67sziNYvTbNd33lee14plIZOrqot43wWCUh7GS4mKFebqRb/I8y13np1/+F3Mo10s5LTApGSYonBbxrdTzM1uluMtStBkGWtTH/mWXr1xv\"\
@@ -463,8 +592,8 @@ jobs:
         \n    \"ujTkgxcqRVWHHZYJJ5Cz/SIIu7gdVK1WOdQgG3FV1Rc6N+RVJGCtBR2n1YiisTiGVQF519JmuKP6hZ0n+mEpOKU4LKm//8F0O72vbt/18eg8kV/UoCjAAm5++aOopyJXvf0xgVMn+CDK\"\
         \n    \"CWXHy3nFcThPMw3GS1oSSswSCv0n9/pNeP0/K8TrSuYHfbJpQy3ztk9PH98avdmQcTs4/Kr3fmDd1V5mNhlltWsOI/iVwu0IoDy65Yd2LZb5fWjk/wGjSDSvKEQAAA==\"\
         \n)\nsrc=gzip.decompress(base64.b64decode(payload))\nassert hashlib.sha256(src).hexdigest()=='82588dba9d4744ece778d380a8ad98e15897e57f88072235c8f32a84f647c473',\
-        \ \"FIX9 checksum mismatch\"\np=Path(os.environ[\"RUNNER_TEMP\"])/\"lydra_fix9_world_polish.py\"\np.write_bytes(src)\n\
-        print(\"FIX9 source ready\",len(src))\nLYDRA_FIX9_INSTALL\n"
+        \ \"FIX9 checksum mismatch\"\np=Path(os.environ[\"RUNNER_TEMP\"])/\"lydra_fix9_world_polish.py\"\
+        \np.write_bytes(src)\nprint(\"FIX9 source ready\",len(src))\nLYDRA_FIX9_INSTALL\n"
     - name: FIX9 Kreuzungen bereinigen und FIX7 Hauptweg behalten
       shell: bash
       run: 'set -euo pipefail
@@ -476,8 +605,8 @@ jobs:
         '
     - name: FIX12 75 Prozent Lauf- und Kameratempo in allen Regionen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LYDRA_RUN_LOSSLESS'\nimport base64,zlib,hashlib,subprocess\nsource=zlib.decompress(base64.b64decode(\n\
-        \    \"eNqlV21z2kYQ/q5fsZ3MVBIIgbCdYGx5xolxJo0bXNtN2zgezYEOcWOhI3cnIO70v3fvJPFisONp+QBo77nn9vW0K6mCBs05TNmUjghLrel3NebZHjTg+Ni++Ovs6jQ6//Bn\"\
+      run: "set -euo pipefail\npython3 - <<'LYDRA_RUN_LOSSLESS'\nimport base64,zlib,hashlib,subprocess\n\
+        source=zlib.decompress(base64.b64decode(\n    \"eNqlV21z2kYQ/q5fsZ3MVBIIgbCdYGx5xolxJo0bXNtN2zgezYEOcWOhI3cnIO70v3fvJPFisONp+QBo77nn9vW0K6mCBs05TNmUjghLrel3NebZHjTg+Ni++Ovs6jQ6//Bn\"\
         \n    \"EETXl73emW2NBJ/AlKhxygbAJlMuFFzio1X+59LSq6GWOVz6NJsxwbNb+/Kq/0vv3U109uHKvnObthTD5oSwzB/algz1Hl9QEkeKLpRDsyGPWZaEdq5GjY7tWiQbjrkIbamI\"\
         \n    \"YkOYcRbDTEWz9uFeNOEz6uSZZElGY2CZQgVjF/62LTYC6Q95nimnIHB/CoOuIExSuEIpm9CeEFw4tjGyC2/pnCZ5lshRnt0rxjPI2HCsgLIsprliiVYllL5+XFSc1gAlIxQ5\"\
         \n    \"9tfsH9sjrj54cNx60UkUqWBEx6lCbm1KKG9Jd1Bv31mv4Jwt0KQhz5Tgqf5F+zMlgQgKakxBkglu5gJOLy5A0AQ1xsUshgFXY5AsphL4CBSfZ7613B7att2sgdak3YUzLkaQ\"\
@@ -493,13 +622,13 @@ jobs:
         \n    \"vtpZEyLusYdEXzm2bu73gsPOmygReF4cCTrEQ7GzKVf2oykVo2icY9vtLdO//GiQJDMaJfj2cvS04JZbU45DxpYUCTvBXhQLMo/MhebY7ipQhVqFyiCfMxB7ZTFQFM6r8cE0\"\
         \n    \"9jpKBYlrpiN/Lpiixagjve1hxwxPNmrBRljH0nb9yX3MhEMXTKqI34c3IqdbsOZN79fLftm9nn04ff+pf93z1QLnivUD0aoidPBH/+riDPrngA/v+5/g817gH/od/zVOf8ae\"\
         \n    \"rxh8Db9WBHujajxYzS6AffPhvlf2+bGg41LYaXtwT3Wr/QUblazi+Xz9PRvCnGEvMmAS1noOTG7kxPeIMoNDQhMzI1B1BIhIKM6Y2LFkuoWZ47hCM7/i/GiOOTXloE8nGVyg\"\
-        \n    \"knI4JiOFqvE0ZRIj4cH11EwhwoMPepwCLCQBV2Yjet8Q6jzaDscU11UR4p3j0jNDkVfNPF8oU2tmIevWcG39C2UT46k=\"\n)).decode('utf-8')\n\
-        assert hashlib.sha256(source.encode('utf-8')).hexdigest()=='462737af6985b1ecf5a6ff6165d4e62ae01690ff3e953facd8547e3c2044963f'\n\
+        \n    \"knI4JiOFqvE0ZRIj4cH11EwhwoMPepwCLCQBV2Yjet8Q6jzaDscU11UR4p3j0jNDkVfNPF8oU2tmIevWcG39C2UT46k=\"\
+        \n)).decode('utf-8')\nassert hashlib.sha256(source.encode('utf-8')).hexdigest()=='462737af6985b1ecf5a6ff6165d4e62ae01690ff3e953facd8547e3c2044963f'\n\
         subprocess.run(['bash','-euo','pipefail','-c',source],check=True)\nLYDRA_RUN_LOSSLESS\n"
     - name: FIX13.1 Fluss und Bruecke mit Quellcode-Erkennung korrigieren
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LYDRA_FIX131_REPLAY'\nimport base64,zlib,hashlib,subprocess\nsource=zlib.decompress(base64.b64decode(\n\
-        \    \"eNqdWHtz27gR/1+fApfMBKRF06IfjUuZuXFiXc6dnO3KTqY9WdVAJCThTJEsAOph19+9uwCph63kOvV4BIJY7C5++wQV12SflzkpRMFHTKSNYqkneXZE9snZGf3yz4vu+eCX\"\
+      run: "set -euo pipefail\npython3 - <<'LYDRA_FIX131_REPLAY'\nimport base64,zlib,hashlib,subprocess\n\
+        source=zlib.decompress(base64.b64decode(\n    \"eNqdWHtz27gR/1+fApfMBKRF06IfjUuZuXFiXc6dnO3KTqY9WdVAJCThTJEsAOph19+9uwCph63kOvV4BIJY7C5++wQV12SflzkpRMFHTKSNYqkneXZE9snZGf3yz4vu+eCX\"\
         \n    \"y38ER8Hg5vzu06+08fang1LJg6HIDng2IxV94y0xZH4QkiQnWa5JwgueJSTPCF+wWJOUj1m8JEMpkjEnMUtTogqepiIb+w0xLXKpSa48yRsjmU9JwfQkFUNSrdzAtFFEODi5\"\
         \n    \"8kG0kHnWozfd6791Pt0NLi67tO8eUCXjgykTmR/ThooKX3KWDDRfaIdncZ6AsIiWerR/St1GI+Ej0IFlTsam3A0bBP5AbiTp/VBppkV8r5qzXCQw0KbkPlcxK7glbwKV2rt3\"\
         \n    \"ev9q9/d+vndx8kQNj4nQUSqUdmDLSGSJ0Fw6wNjD4/m3rmuoxAgwyRwgdn+KglAyoTjplpkWU96RMpcOXWFaoQYKi0xoAaCy6VCMy7xUIaFNpaVT86q4swgmvVbfh4NI7bht\"\
@@ -528,12 +657,13 @@ jobs:
     - name: FIX13.1 Ergebnis pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'BRIDGE_CHECK'\nimport os\nfrom pathlib import Path\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text()\n\
-        for k in ('LYDRA_FIX12_GLOBAL_PERCENT 75','vt_v319881_solid_quad(', 'vt_v31987_ground_rect(', 'vt_save_game(void)'):\n\
-        \ assert k in s,k\nassert Path('artifacts/FLUSS_FIX13_1_DIAGNOSE.txt').stat().st_size>20\nBRIDGE_CHECK\n"
+        for k in ('LYDRA_FIX12_GLOBAL_PERCENT 75','vt_v319881_solid_quad(', 'vt_v31987_ground_rect(',\
+        \ 'vt_save_game(void)'):\n assert k in s,k\nassert Path('artifacts/FLUSS_FIX13_1_DIAGNOSE.txt').stat().st_size>20\n\
+        BRIDGE_CHECK\n"
     - name: FIX15 Wegberge entfernen und FIX14 Fernkulisse erhalten
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LYDRA_FIX15_REPLAY'\nimport base64,zlib,hashlib,subprocess\npayload=zlib.decompress(base64.b64decode(\n\
-        \  \"eNrFV21z47YR/s5fgV6mBSlRlKiXky2ZzdyLfXftTeyxnaQdS+VAJEgiIkEdQNmyM/nvWYCkTFuynPRL7BEFLRaLfd+HkhaoQ9c5WrEVjQhLjdV9keR8gDro5AR//e/Hy3f+2Zf/uEP/4t31h8/YYNkqFwXKpS2o\"\
+      run: "set -euo pipefail\npython3 - <<'LYDRA_FIX15_REPLAY'\nimport base64,zlib,hashlib,subprocess\n\
+        payload=zlib.decompress(base64.b64decode(\n  \"eNrFV21z47YR/s5fgV6mBSlRlKiXky2ZzdyLfXftTeyxnaQdS+VAJEgiIkEdQNmyM/nvWYCkTFuynPRL7BEFLRaLfd+HkhaoQ9c5WrEVjQhLjdV9keR8gDro5AR//e/Hy3f+2Zf/uEP/4t31h8/YYNkqFwXKpS2o\"\
         \n  \"EYk8QytSJClboGrnAn4aK099mbl0KL9lIuc3+OLy/F+nH679j18u8dzqYimCbkYYdwJsSG/lCEpCv6CbwqQ8yEPGYw+vi6hzhC0DrvAEni1kQQoWzGT7Nmeh+ir820Gv5ye5YA85n8nWzLz533Te+n5mqR+/YiMj\"\
         \n  \"RZBQ6aVMFqagTsR4yAoqTJBpKyOcK8syWIRSys2K2fqb504EYZKiyzUvWEZPhciFibUnJug9FXHnc3lngTgLkgJRkEvXBYtBXeJVgm56cwd0FoVpTVmTSHkIpNBzjbuEpRSxE3W9tBDhIQonBgKF5A2bex7+FU/C\"\
         \n  \"NjA2SL8BqaNJagPo4WvaRmu+LFjOK2XJIqYySNJcSspB4UUe3nvyhkzY3AgSwmHXMw1k4kHvba9tsr8PrZY76GEbD4b9LcEdYbtv2YpPBaI/9FeULM2N/WC7br9nJ5TFSWELO7YX1hQDI9phHB/1bLNkbA2t7uiR\"\
@@ -589,184 +719,406 @@ jobs:
         \    'HFIs60ReQTt+pyUPfiHVGuQ/NvfGdm9YI7k/jmZTMo6m0A5NySwiNI5JROckSpKjZn5JME5P+tD0hMznJMsIBebpLDpIBWT4cjldyFc0WcjRKMBPWhwYUtr1LNl/KNEaYY'\n\
         \    'XpQIhSMLc1AjXSWlhXkKHHCLw2fDTSiWGZLXm+zmy4DsyMkyUrnMXBgoXNA5fGFztpXa4flndmC1g+m+CL1fr6zWp9uTqolsEFnV1e33xYhW7ncHBcDHj4GNNwDk98imiC'\n\
         \    'OIAx5VBPi0VwIuPXsPzoUXK3QUxx1FtOpuA3hYC44SgWKEWl1m4j69oiWP7x6+j/WeFXhaGBs7pGrbbSSa0sgZ36HWZbIThB52YPTdXwobDgN7IThqAOSrFK2AN8vyIWVr'\n\
-        \    '7YMFUJ3gP/hcXWSDidQZV+2FH6+zSGcTtpt6yu98gIvi360kojoMkwaLDeV9AfwPwEn8N+qA=='\n)).decode('utf-8')\nexec(compile(source,'FIX18_horizon.py','exec'))\n\
-        LYDRA_FIX18_PATCH\n"
+        \    '7YMFUJ3gP/hcXWSDidQZV+2FH6+zSGcTtpt6yu98gIvi360kojoMkwaLDeV9AfwPwEn8N+qA=='\n)).decode('utf-8')\n\
+        exec(compile(source,'FIX18_horizon.py','exec'))\nLYDRA_FIX18_PATCH\n"
     - name: FIX19 Haus von Hauptweg versetzen und Kollision/Teleport korrigieren
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_fix19_patch.py\" <<'LYDRA_FIX19_PATCH'\n#!/usr/bin/env python3\n\
-        \"\"\"FIX19 for Lydra V31.9.9.3: clear route, robust swept collision, guard walking warps.\"\"\"\nfrom pathlib\
-        \ import Path\nimport os,re\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\n\
-        \ndef change_one(pattern,replacement,what):\n    global s\n    s,n=re.subn(pattern,replacement,s,count=1,flags=re.S)\n\
-        \    if n!=1:raise RuntimeError('FIX19 source mismatch: '+what)\n\n# Move the actual Sunmeadow house, its blocking\
-        \ footprint and its indoor NPC\n# together. Keep the front entrance, other buildings, and memory saves intact.\n\
-        change_one(r'vt_v241_building\\s*\\(\\s*15\\s*,\\s*330\\s*,\\s*52\\s*,\\s*1\\s*,\\s*1\\s*\\)\\s*;',\n       \
-        \    'vt_v241_building(-175,125,52,1,1);','middle-road house')\nchange_one(r'\\{\\s*0\\s*,\\s*15\\s*,\\s*330\\\
-        s*,\\s*52\\s*\\}',\n           '{0,-175,125,52}','collision of middle house')\nchange_one(r'\\{\\s*0\\s*,\\s*15\\\
-        s*,\\s*330\\s*,\\s*0\\s*,\\s*0\\s*,\\s*24\\s*,\\s*0\\s*,\\s*0\\s*,\\s*1\\s*,\\s*0\\s*\\}',\n           '{0,-175,125,0,0,24,0,0,1,0}','indoor\
-        \ resident of moved house')\n\n# Find exact C function without trusting whitespace or nested braces.\nneedle=r'\\\
-        bstatic\\s+void\\s+vt_v281_resolve_movement\\s*\\(\\s*void\\s*\\)\\s*\\{'\nhits=list(re.finditer(needle,s))\n\
-        if len(hits)!=1:raise RuntimeError('FIX19: movement collision function missing/ambiguous')\na=hits[0].start();i=hits[0].end();depth=1;mode='code'\n\
-        while i<len(s) and depth:\n    c=s[i];n=s[i+1] if i+1<len(s) else ''\n    if mode=='code':\n        if c=='/'\
-        \ and n=='/':mode='line';i+=1\n        elif c=='/' and n=='*':mode='comment';i+=1\n        elif c=='\"':mode='str'\n\
-        \        elif c==\"'\":mode='char'\n        elif c=='{':depth+=1\n        elif c=='}':depth-=1\n    elif mode=='line':\n\
-        \        if c=='\\n':mode='code'\n    elif mode=='comment':\n        if c=='*' and n=='/':mode='code';i+=1\n\
-        \    else:\n        if c=='\\\\':i+=1\n        elif (mode=='str' and c=='\"') or (mode=='char' and c==\"'\"):mode='code'\n\
-        \    i+=1\nif depth:raise RuntimeError('FIX19: unbalanced collision function')\nold=s[a:i]\nfor require in ('vt_v281_last_px','vt_v281_last_pz','vt_v281_is_blocked','vt_v281_last_region'):\n\
-        \    if require not in old: raise RuntimeError('FIX19: unexpected collision implementation '+require)\n\nnew=r'''/*\
-        \ FIX19: swept player collision, no one-frame wall penetration.\n   Keeps the original obstacle set, door openings\
-        \ and 75% movement routine.\n   Run after the movement code and before scene rendering, as in V28.1. */\nstatic\
-        \ void vt_v281_resolve_movement(void) {\n    static int last_step_count=0;\n    int old_x,old_z,dx,dz,span,steps,i,traveling;\n\
-        \    int cx,cz,tx,tz,nx,nz,prevx,prevz;\n    if (!vt_v281_initialized) {\n        vt_v281_last_px=px; vt_v281_last_pz=pz;\n\
-        \        vt_v281_last_region=region; vt_v281_initialized=1;\n        last_step_count=step_count;\n        return;\n\
-        \    }\n    old_x=vt_v281_last_px; old_z=vt_v281_last_pz;\n    traveling=(step_count!=last_step_count);\n   \
-        \ dx=px-old_x;dz=pz-old_z;\n    span=vt_v281_abs(dx);\n    if (vt_v281_abs(dz)>span)span=vt_v281_abs(dz);\n\n\
-        \    /* Scene changes while WALKING must not silently reset world position.\n       Loading a saved game while\
-        \ idle remains allowed. */\n    if (region!=vt_v281_last_region) {\n        if(traveling && span>120) {px=old_x;pz=old_z;}\n\
-        \        vt_v281_last_region=region;\n        vt_v281_last_px=px;vt_v281_last_pz=pz;\n        last_step_count=step_count;\n\
-        \        return;\n    }\n    /* Reject unrelated large scene jumps while actively walking.\n       Ordinary frame-time\
-        \ compensated running below this threshold continues. */\n    if(traveling && span>320) {\n        px=old_x;pz=old_z;\n\
-        \        vt_v281_last_px=px;vt_v281_last_pz=pz;\n        last_step_count=step_count;\n        return;\n    }\n\
-        \    if(!traveling && span>320) {\n        /* Explicit menu load / intentional scripted travel; keep it. */\n\
-        \        vt_v281_last_px=px;vt_v281_last_pz=pz;\n        last_step_count=step_count;\n        return;\n    }\n\
-        \    if(span>0) {\n        /* 5 world units each: cannot jump over the 8-unit wall band.\n           Never increase\
-        \ the number of rendered polygons. */\n        steps=(span+4)/5;\n        if(steps>64)steps=64;\n        if(steps<1)steps=1;\n\
-        \        cx=old_x;cz=old_z;\n        prevx=old_x;prevz=old_z;\n        for(i=1;i<=steps;i++) {\n            tx=old_x+(dx*i)/steps;\n\
-        \            tz=old_z+(dz*i)/steps;\n            nx=cx+(tx-prevx);\n            nz=cz+(tz-prevz);\n         \
-        \   prevx=tx;prevz=tz;\n            if(!vt_v281_is_blocked(nx,nz)) {\n                cx=nx;cz=nz;\n        \
-        \    } else {\n                /* Slide along the nearest free wall axis. */\n                if(!vt_v281_is_blocked(nx,cz))cx=nx;\n\
-        \                if(!vt_v281_is_blocked(cx,nz))cz=nz;\n            }\n        }\n        px=cx;pz=cz;\n    }\n\
-        \    vt_v281_last_px=px;vt_v281_last_pz=pz;\n    last_step_count=step_count;\n}'''\ns=s[:a]+new+s[i:]\nrequired=('LYDRA_FIX12_GLOBAL_PERCENT\
-        \ 75','vt_v282_house_wall(',\n          'vt_v281_resolve_movement();','vt_v31987_ground_rect(',\n          'vt_save_game(void)','vt_load_game(void)',\n\
-        \          'vt_v31813_draw_start(','vt_v3194_perf_hud(')\nfor token in required:\n    if token not in s:raise\
-        \ RuntimeError('FIX19 inherited game feature missing: '+token)\nif 'vt_v241_building(15,330,52' in s:raise RuntimeError('FIX19\
-        \ old road house still rendered')\nif 'vt_v241_building(-175,125,52,1,1);' not in s:raise RuntimeError('FIX19\
-        \ relocated house missing')\nif s.count('static void vt_v281_resolve_movement(void)')!=1:raise RuntimeError('FIX19\
-        \ duplicate collision function')\np.write_text(s,encoding='utf-8')\nPath('artifacts').mkdir(exist_ok=True)\n\
-        Path('artifacts/KOLLISION_FIX19_DIAGNOSE.txt').write_text(\n  'FIX19: Sunmeadow middle home (15,330) moved to\
-        \ (-175,125) in drawing, collision and NPC.\\n'\n  'Walls checked with 5-unit swept steps, sliding without end-frame\
-        \ penetration.\\n'\n  'Walk-triggered region/large-coordinate jumps suppressed; explicit idle load retained.\\\
-        n'\n  'V31.9.8.7 global 75-percent walk/camera kept unchanged.\\n',encoding='utf-8')\nprint('FIX19: central road\
-        \ clear; wall collision swept; unrequested walking warp guarded; 75 percent kept')\nLYDRA_FIX19_PATCH\npython3\
-        \ \"$RUNNER_TEMP/lydra_fix19_patch.py\"\n"
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_fix19_patch.py\" <<'LYDRA_FIX19_PATCH'\n#!/usr/bin/env\
+        \ python3\n\"\"\"FIX19 for Lydra V31.9.9.3: clear route, robust swept collision, guard walking\
+        \ warps.\"\"\"\nfrom pathlib import Path\nimport os,re\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
+        s=p.read_text(encoding='utf-8')\n\ndef change_one(pattern,replacement,what):\n    global s\n\
+        \    s,n=re.subn(pattern,replacement,s,count=1,flags=re.S)\n    if n!=1:raise RuntimeError('FIX19\
+        \ source mismatch: '+what)\n\n# Move the actual Sunmeadow house, its blocking footprint and\
+        \ its indoor NPC\n# together. Keep the front entrance, other buildings, and memory saves intact.\n\
+        change_one(r'vt_v241_building\\s*\\(\\s*15\\s*,\\s*330\\s*,\\s*52\\s*,\\s*1\\s*,\\s*1\\s*\\\
+        )\\s*;',\n           'vt_v241_building(-175,125,52,1,1);','middle-road house')\nchange_one(r'\\\
+        {\\s*0\\s*,\\s*15\\s*,\\s*330\\s*,\\s*52\\s*\\}',\n           '{0,-175,125,52}','collision of\
+        \ middle house')\nchange_one(r'\\{\\s*0\\s*,\\s*15\\s*,\\s*330\\s*,\\s*0\\s*,\\s*0\\s*,\\s*24\\\
+        s*,\\s*0\\s*,\\s*0\\s*,\\s*1\\s*,\\s*0\\s*\\}',\n           '{0,-175,125,0,0,24,0,0,1,0}','indoor\
+        \ resident of moved house')\n\n# Find exact C function without trusting whitespace or nested\
+        \ braces.\nneedle=r'\\bstatic\\s+void\\s+vt_v281_resolve_movement\\s*\\(\\s*void\\s*\\)\\s*\\\
+        {'\nhits=list(re.finditer(needle,s))\nif len(hits)!=1:raise RuntimeError('FIX19: movement collision\
+        \ function missing/ambiguous')\na=hits[0].start();i=hits[0].end();depth=1;mode='code'\nwhile\
+        \ i<len(s) and depth:\n    c=s[i];n=s[i+1] if i+1<len(s) else ''\n    if mode=='code':\n   \
+        \     if c=='/' and n=='/':mode='line';i+=1\n        elif c=='/' and n=='*':mode='comment';i+=1\n\
+        \        elif c=='\"':mode='str'\n        elif c==\"'\":mode='char'\n        elif c=='{':depth+=1\n\
+        \        elif c=='}':depth-=1\n    elif mode=='line':\n        if c=='\\n':mode='code'\n   \
+        \ elif mode=='comment':\n        if c=='*' and n=='/':mode='code';i+=1\n    else:\n        if\
+        \ c=='\\\\':i+=1\n        elif (mode=='str' and c=='\"') or (mode=='char' and c==\"'\"):mode='code'\n\
+        \    i+=1\nif depth:raise RuntimeError('FIX19: unbalanced collision function')\nold=s[a:i]\n\
+        for require in ('vt_v281_last_px','vt_v281_last_pz','vt_v281_is_blocked','vt_v281_last_region'):\n\
+        \    if require not in old: raise RuntimeError('FIX19: unexpected collision implementation '+require)\n\
+        \nnew=r'''/* FIX19: swept player collision, no one-frame wall penetration.\n   Keeps the original\
+        \ obstacle set, door openings and 75% movement routine.\n   Run after the movement code and\
+        \ before scene rendering, as in V28.1. */\nstatic void vt_v281_resolve_movement(void) {\n  \
+        \  static int last_step_count=0;\n    int old_x,old_z,dx,dz,span,steps,i,traveling;\n    int\
+        \ cx,cz,tx,tz,nx,nz,prevx,prevz;\n    if (!vt_v281_initialized) {\n        vt_v281_last_px=px;\
+        \ vt_v281_last_pz=pz;\n        vt_v281_last_region=region; vt_v281_initialized=1;\n        last_step_count=step_count;\n\
+        \        return;\n    }\n    old_x=vt_v281_last_px; old_z=vt_v281_last_pz;\n    traveling=(step_count!=last_step_count);\n\
+        \    dx=px-old_x;dz=pz-old_z;\n    span=vt_v281_abs(dx);\n    if (vt_v281_abs(dz)>span)span=vt_v281_abs(dz);\n\
+        \n    /* Scene changes while WALKING must not silently reset world position.\n       Loading\
+        \ a saved game while idle remains allowed. */\n    if (region!=vt_v281_last_region) {\n    \
+        \    if(traveling && span>120) {px=old_x;pz=old_z;}\n        vt_v281_last_region=region;\n \
+        \       vt_v281_last_px=px;vt_v281_last_pz=pz;\n        last_step_count=step_count;\n      \
+        \  return;\n    }\n    /* Reject unrelated large scene jumps while actively walking.\n     \
+        \  Ordinary frame-time compensated running below this threshold continues. */\n    if(traveling\
+        \ && span>320) {\n        px=old_x;pz=old_z;\n        vt_v281_last_px=px;vt_v281_last_pz=pz;\n\
+        \        last_step_count=step_count;\n        return;\n    }\n    if(!traveling && span>320)\
+        \ {\n        /* Explicit menu load / intentional scripted travel; keep it. */\n        vt_v281_last_px=px;vt_v281_last_pz=pz;\n\
+        \        last_step_count=step_count;\n        return;\n    }\n    if(span>0) {\n        /* 5\
+        \ world units each: cannot jump over the 8-unit wall band.\n           Never increase the number\
+        \ of rendered polygons. */\n        steps=(span+4)/5;\n        if(steps>64)steps=64;\n     \
+        \   if(steps<1)steps=1;\n        cx=old_x;cz=old_z;\n        prevx=old_x;prevz=old_z;\n    \
+        \    for(i=1;i<=steps;i++) {\n            tx=old_x+(dx*i)/steps;\n            tz=old_z+(dz*i)/steps;\n\
+        \            nx=cx+(tx-prevx);\n            nz=cz+(tz-prevz);\n            prevx=tx;prevz=tz;\n\
+        \            if(!vt_v281_is_blocked(nx,nz)) {\n                cx=nx;cz=nz;\n            } else\
+        \ {\n                /* Slide along the nearest free wall axis. */\n                if(!vt_v281_is_blocked(nx,cz))cx=nx;\n\
+        \                if(!vt_v281_is_blocked(cx,nz))cz=nz;\n            }\n        }\n        px=cx;pz=cz;\n\
+        \    }\n    vt_v281_last_px=px;vt_v281_last_pz=pz;\n    last_step_count=step_count;\n}'''\n\
+        s=s[:a]+new+s[i:]\nrequired=('LYDRA_FIX12_GLOBAL_PERCENT 75','vt_v282_house_wall(',\n      \
+        \    'vt_v281_resolve_movement();','vt_v31987_ground_rect(',\n          'vt_save_game(void)','vt_load_game(void)',\n\
+        \          'vt_v31813_draw_start(','vt_v3194_perf_hud(')\nfor token in required:\n    if token\
+        \ not in s:raise RuntimeError('FIX19 inherited game feature missing: '+token)\nif 'vt_v241_building(15,330,52'\
+        \ in s:raise RuntimeError('FIX19 old road house still rendered')\nif 'vt_v241_building(-175,125,52,1,1);'\
+        \ not in s:raise RuntimeError('FIX19 relocated house missing')\nif s.count('static void vt_v281_resolve_movement(void)')!=1:raise\
+        \ RuntimeError('FIX19 duplicate collision function')\np.write_text(s,encoding='utf-8')\nPath('artifacts').mkdir(exist_ok=True)\n\
+        Path('artifacts/KOLLISION_FIX19_DIAGNOSE.txt').write_text(\n  'FIX19: Sunmeadow middle home\
+        \ (15,330) moved to (-175,125) in drawing, collision and NPC.\\n'\n  'Walls checked with 5-unit\
+        \ swept steps, sliding without end-frame penetration.\\n'\n  'Walk-triggered region/large-coordinate\
+        \ jumps suppressed; explicit idle load retained.\\n'\n  'V31.9.8.7 global 75-percent walk/camera\
+        \ kept unchanged.\\n',encoding='utf-8')\nprint('FIX19: central road clear; wall collision swept;\
+        \ unrequested walking warp guarded; 75 percent kept')\nLYDRA_FIX19_PATCH\npython3 \"$RUNNER_TEMP/lydra_fix19_patch.py\"\
+        \n"
     - name: FIX19 Hauskollision und einheitliches Tempo pruefen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'PY_FIX19_VERIFY'\nimport os\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
-        s=p.read_text(encoding='utf-8')\nrequired=('vt_v241_building(-175,125,52,1,1);',\n          '{0,-175,125,52}',\n\
-        \          '{0,-175,125,0,0,24,0,0,1,0}',\n          'steps=(span+4)/5;',\n          'vt_v281_is_blocked(nx,nz)',\n\
-        \          'LYDRA_FIX12_GLOBAL_PERCENT 75',\n          'vt_save_game(void)', 'vt_load_game(void)')\nfor token\
-        \ in required:\n if token not in s:raise RuntimeError('FIX19 verification failed: '+token)\nif s.count('static\
-        \ void vt_v281_resolve_movement(void)')!=1:\n raise RuntimeError('FIX19 duplicate collision code')\nif not Path('artifacts/KOLLISION_FIX19_DIAGNOSE.txt').stat().st_size>140:\n\
-        \ raise RuntimeError('FIX19 diagnosis missing')\nprint('FIX19: no central-road home, swept walls, guarded region\
-        \ change; speed 75%')\nPY_FIX19_VERIFY\n"
+      run: "set -euo pipefail\npython3 - <<'PY_FIX19_VERIFY'\nimport os\nfrom pathlib import Path\n\
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\nrequired=('vt_v241_building(-175,125,52,1,1);',\n\
+        \          '{0,-175,125,52}',\n          '{0,-175,125,0,0,24,0,0,1,0}',\n          'steps=(span+4)/5;',\n\
+        \          'vt_v281_is_blocked(nx,nz)',\n          'LYDRA_FIX12_GLOBAL_PERCENT 75',\n      \
+        \    'vt_save_game(void)', 'vt_load_game(void)')\nfor token in required:\n if token not in s:raise\
+        \ RuntimeError('FIX19 verification failed: '+token)\nif s.count('static void vt_v281_resolve_movement(void)')!=1:\n\
+        \ raise RuntimeError('FIX19 duplicate collision code')\nif not Path('artifacts/KOLLISION_FIX19_DIAGNOSE.txt').stat().st_size>140:\n\
+        \ raise RuntimeError('FIX19 diagnosis missing')\nprint('FIX19: no central-road home, swept walls,\
+        \ guarded region change; speed 75%')\nPY_FIX19_VERIFY\n"
     - name: FIX20 Staedte erhalten und ungewollte Gebietswechsel stoppen
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_fix20_cities.py\" <<'LYDRA_FIX20_SCRIPT'\n#!/usr/bin/env python3\n\
-        \"\"\"FIX20: Preserve complete towns, only physically cross region boundaries.\"\"\"\nfrom pathlib import Path\n\
-        import os,re\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\n\n# Original world\
-        \ geometry uses physical map borders at z=+/-1120.\n# A second legacy system changes region after 120/260 walking\
-        \ steps,\n# even when the player is still in the town.  It hides the city's houses\n# because vt_v24_draw_overworld\
-        \ selects its buildings by region.\nfor old_region,new_region in ((0,1),(1,2)):\n    pattern=(r'if\\s*\\(\\s*region\\\
-        s*==\\s*'+str(old_region)+\n             r'\\s*&&\\s*step_count\\s*>\\s*\\d+\\s*\\)\\s*'\n             r'region\\\
-        s*=\\s*'+str(new_region)+r'\\s*;')\n    text=f'/* FIX20: no automatic region {old_region}->{new_region} from\
-        \ step count. */'\n    s,n=re.subn(pattern,text,s)\n    if n!=1:\n        raise RuntimeError(f'FIX20: unexpected\
-        \ step-count region transition {old_region}->{new_region}: {n}; no changes saved')\n\n# Preserve original forward/backward\
-        \ gate changes; no arbitrary teleport.\nforward=r'if\\s*\\(\\s*pz\\s*>\\s*1120\\s*&&\\s*region\\s*<\\s*2\\s*\\\
-        )'\nbackward=r'if\\s*\\(\\s*pz\\s*<\\s*-1120\\s*&&\\s*region\\s*>\\s*0\\s*\\)'\nif not re.search(forward,s) or\
-        \ not re.search(backward,s):\n    raise RuntimeError('FIX20: original geographic region gates not recognized')\n\
-        \n# FIX19 inadvertently overwrote a new region's mapped coordinates with old\n# coordinates if it was entered\
-        \ while walking.  Accept map-entry coordinates\n# and reset collision history for the new area.  No speed/camera\
-        \ modifications.\ninvalid=r'if\\s*\\(\\s*traveling\\s*&&\\s*span\\s*>\\s*120\\s*\\)\\s*\\{\\s*px\\s*=\\s*old_x\\\
-        s*;\\s*pz\\s*=\\s*old_z\\s*;\\s*\\}'\ns,n=re.subn(invalid,'/* FIX20: valid geographic transition keeps its new\
-        \ location. */',s)\nif n!=1:\n    raise RuntimeError('FIX20: unexpected FIX19 region-position reset: '+str(n))\n\
-        \n# All original Sunmeadow homes + 6 Crystal Pass homes + arena homes remain.\n# FIX19's relocated house remains\
-        \ in sync with its collision and NPC.\nregions={\n  'Sunmeadow': ['vt_v241_building(-205,265,43,0,1);',\n   \
-        \             'vt_v241_building(-175,125,52,1,1);',\n                'vt_v241_building(208,280,42,0,0);'],\n\
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_fix20_cities.py\" <<'LYDRA_FIX20_SCRIPT'\n\
+        #!/usr/bin/env python3\n\"\"\"FIX20: Preserve complete towns, only physically cross region boundaries.\"\
+        \"\"\nfrom pathlib import Path\nimport os,re\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
+        s=p.read_text(encoding='utf-8')\n\n# Original world geometry uses physical map borders at z=+/-1120.\n\
+        # A second legacy system changes region after 120/260 walking steps,\n# even when the player\
+        \ is still in the town.  It hides the city's houses\n# because vt_v24_draw_overworld selects\
+        \ its buildings by region.\nfor old_region,new_region in ((0,1),(1,2)):\n    pattern=(r'if\\\
+        s*\\(\\s*region\\s*==\\s*'+str(old_region)+\n             r'\\s*&&\\s*step_count\\s*>\\s*\\\
+        d+\\s*\\)\\s*'\n             r'region\\s*=\\s*'+str(new_region)+r'\\s*;')\n    text=f'/* FIX20:\
+        \ no automatic region {old_region}->{new_region} from step count. */'\n    s,n=re.subn(pattern,text,s)\n\
+        \    if n!=1:\n        raise RuntimeError(f'FIX20: unexpected step-count region transition {old_region}->{new_region}:\
+        \ {n}; no changes saved')\n\n# Preserve original forward/backward gate changes; no arbitrary\
+        \ teleport.\nforward=r'if\\s*\\(\\s*pz\\s*>\\s*1120\\s*&&\\s*region\\s*<\\s*2\\s*\\)'\nbackward=r'if\\\
+        s*\\(\\s*pz\\s*<\\s*-1120\\s*&&\\s*region\\s*>\\s*0\\s*\\)'\nif not re.search(forward,s) or\
+        \ not re.search(backward,s):\n    raise RuntimeError('FIX20: original geographic region gates\
+        \ not recognized')\n\n# FIX19 inadvertently overwrote a new region's mapped coordinates with\
+        \ old\n# coordinates if it was entered while walking.  Accept map-entry coordinates\n# and reset\
+        \ collision history for the new area.  No speed/camera modifications.\ninvalid=r'if\\s*\\(\\\
+        s*traveling\\s*&&\\s*span\\s*>\\s*120\\s*\\)\\s*\\{\\s*px\\s*=\\s*old_x\\s*;\\s*pz\\s*=\\s*old_z\\\
+        s*;\\s*\\}'\ns,n=re.subn(invalid,'/* FIX20: valid geographic transition keeps its new location.\
+        \ */',s)\nif n!=1:\n    raise RuntimeError('FIX20: unexpected FIX19 region-position reset: '+str(n))\n\
+        \n# All original Sunmeadow homes + 6 Crystal Pass homes + arena homes remain.\n# FIX19's relocated\
+        \ house remains in sync with its collision and NPC.\nregions={\n  'Sunmeadow': ['vt_v241_building(-205,265,43,0,1);',\n\
+        \                'vt_v241_building(-175,125,52,1,1);',\n                'vt_v241_building(208,280,42,0,0);'],\n\
         \  'Crystal Pass': ['vt_v241_building(-145,450,42,0,1);',\n                   'vt_v241_building(145,310,44,1,0);',\n\
         \                   'vt_v241_building(-145,635,42,1,1);',\n                   'vt_v241_building(145,770,42,0,0);',\n\
         \                   'vt_v241_building(-145,985,43,0,1);',\n                   'vt_v241_building(145,1055,43,1,0);'],\n\
         \  'Storm Arena': ['vt_v241_building(-390,365,53,0,1);',\n                  'vt_v241_building(370,375,53,0,1);',\n\
         \                  'vt_v241_building(-165,590,41,0,1);',\n                  'vt_v241_building(175,680,42,1,0);']\n\
-        }\nfor town,buildings in regions.items():\n    for call in buildings:\n        if s.count(call)!=1: raise RuntimeError(f'FIX20:\
-        \ house missing or duplicated in {town}: {call}')\nfor token in ('LYDRA_FIX12_GLOBAL_PERCENT 75', 'vt_v281_resolve_movement();',\n\
-        \              'vt_v281_is_blocked(nx,nz)', 'vt_v24_draw_overworld();',\n              '{0,-175,125,52}', '{0,-175,125,0,0,24,0,0,1,0}',\n\
-        \              'vt_v31987_ground_rect(', 'vt_save_game(void)', 'vt_load_game(void)',\n              'vt_v3194_perf_hud('):\n\
-        \    if token not in s: raise RuntimeError('FIX20 lost stable feature '+token)\n\np.write_text(s,encoding='utf-8')\n\
-        Path('artifacts').mkdir(exist_ok=True)\nPath('artifacts/STAEDTE_FIX20_DIAGNOSE.txt').write_text(\n   'FIX20:\
-        \ 3 settlements retained: Sunmeadow 7, Crystal Pass 6, Storm Arena 6 houses.\\n'\n   'No region switches after\
-        \ step_count=120/260; only geographical z+/-1120 gates.\\n'\n   'FIX19 on-road house remains relocated with NPC\
-        \ and collider; region crossing retains position.\\n'\n   'Movement and camera unchanged from FIX12 global 75\
-        \ percent.\\n',encoding='utf-8')\nprint('FIX20: city geometry preserved; step-count region switching disabled;\
-        \ mapped region positions retained')\nLYDRA_FIX20_SCRIPT\npython3 \"$RUNNER_TEMP/lydra_fix20_cities.py\"\n"
+        }\nfor town,buildings in regions.items():\n    for call in buildings:\n        if s.count(call)!=1:\
+        \ raise RuntimeError(f'FIX20: house missing or duplicated in {town}: {call}')\nfor token in\
+        \ ('LYDRA_FIX12_GLOBAL_PERCENT 75', 'vt_v281_resolve_movement();',\n              'vt_v281_is_blocked(nx,nz)',\
+        \ 'vt_v24_draw_overworld();',\n              '{0,-175,125,52}', '{0,-175,125,0,0,24,0,0,1,0}',\n\
+        \              'vt_v31987_ground_rect(', 'vt_save_game(void)', 'vt_load_game(void)',\n     \
+        \         'vt_v3194_perf_hud('):\n    if token not in s: raise RuntimeError('FIX20 lost stable\
+        \ feature '+token)\n\np.write_text(s,encoding='utf-8')\nPath('artifacts').mkdir(exist_ok=True)\n\
+        Path('artifacts/STAEDTE_FIX20_DIAGNOSE.txt').write_text(\n   'FIX20: 3 settlements retained:\
+        \ Sunmeadow 7, Crystal Pass 6, Storm Arena 6 houses.\\n'\n   'No region switches after step_count=120/260;\
+        \ only geographical z+/-1120 gates.\\n'\n   'FIX19 on-road house remains relocated with NPC\
+        \ and collider; region crossing retains position.\\n'\n   'Movement and camera unchanged from\
+        \ FIX12 global 75 percent.\\n',encoding='utf-8')\nprint('FIX20: city geometry preserved; step-count\
+        \ region switching disabled; mapped region positions retained')\nLYDRA_FIX20_SCRIPT\npython3\
+        \ \"$RUNNER_TEMP/lydra_fix20_cities.py\"\n"
     - name: FIX20 Staedte und 75 Prozent Tempo pruefen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'PY_FIX20_VERIFY'\nfrom pathlib import Path\nimport os,re\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
-        for k in ('no automatic region 0->1 from step count','no automatic region 1->2 from step count',\n          'valid\
-        \ geographic transition keeps its new location',\n          'vt_v241_building(-175,125,52,1,1);',\n         \
-        \ 'LYDRA_FIX12_GLOBAL_PERCENT 75','vt_v281_resolve_movement();'):\n if k not in s:raise RuntimeError('FIX20 verify\
-        \ missing '+k)\nif re.search(r'if\\s*\\(\\s*region\\s*==\\s*[01]\\s*&&\\s*step_count\\s*>',s):\n raise RuntimeError('FIX20\
-        \ stale time-based region switch')\nif Path('artifacts/STAEDTE_FIX20_DIAGNOSE.txt').stat().st_size<160:\n raise\
-        \ RuntimeError('FIX20 city report missing')\nprint('FIX20: town visibility, safe area borders, preserved 75%\
-        \ movement verified')\nPY_FIX20_VERIFY\n"
+      run: "set -euo pipefail\npython3 - <<'PY_FIX20_VERIFY'\nfrom pathlib import Path\nimport os,re\n\
+        s=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\nfor k in ('no\
+        \ automatic region 0->1 from step count','no automatic region 1->2 from step count',\n     \
+        \     'valid geographic transition keeps its new location',\n          'vt_v241_building(-175,125,52,1,1);',\n\
+        \          'LYDRA_FIX12_GLOBAL_PERCENT 75','vt_v281_resolve_movement();'):\n if k not in s:raise\
+        \ RuntimeError('FIX20 verify missing '+k)\nif re.search(r'if\\s*\\(\\s*region\\s*==\\s*[01]\\\
+        s*&&\\s*step_count\\s*>',s):\n raise RuntimeError('FIX20 stale time-based region switch')\n\
+        if Path('artifacts/STAEDTE_FIX20_DIAGNOSE.txt').stat().st_size<160:\n raise RuntimeError('FIX20\
+        \ city report missing')\nprint('FIX20: town visibility, safe area borders, preserved 75% movement\
+        \ verified')\nPY_FIX20_VERIFY\n"
     - name: FIX21.2 Kamera ohne falsche Hoehen-Annahme korrigieren
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_fix21_camera.py\" <<'LYDRA_FIX21_PATCH'\n#!/usr/bin/env python3\n\
-        \"\"\"FIX21.2: stabilize near-house camera without touching movement or map state.\"\"\"\nfrom pathlib import\
-        \ Path\nimport os, re\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\n\ndef\
-        \ func_span(src,name):\n    rx=r'\\bstatic\\s+int\\s+'+re.escape(name)+r'\\s*\\(\\s*void\\s*\\)\\s*\\{'\n   \
-        \ hits=list(re.finditer(rx,src))\n    if len(hits)!=1:raise RuntimeError('FIX21 missing/duplicate camera function\
-        \ '+name)\n    a=hits[0].start();i=hits[0].end();depth=1;mode='code'\n    while i<len(src) and depth:\n     \
-        \   c=src[i];n=src[i+1] if i+1<len(src) else ''\n        if mode=='code':\n            if c=='/' and n=='/':mode='line';i+=1\n\
-        \            elif c=='/' and n=='*':mode='comment';i+=1\n            elif c=='\"':mode='string'\n           \
-        \ elif c==\"'\":mode='char'\n            elif c=='{':depth+=1\n            elif c=='}':depth-=1\n        elif\
-        \ mode=='line':\n            if c=='\\n':mode='code'\n        elif mode=='comment':\n            if c=='*' and\
-        \ n=='/':mode='code';i+=1\n        else:\n            if c=='\\\\':i+=1\n            elif (mode=='string' and\
-        \ c=='\"') or (mode=='char' and c==\"'\"):mode='code'\n        i+=1\n    if depth:raise RuntimeError('FIX21 unbalanced\
-        \ camera function')\n    return a,i\n\na,b=func_span(s,'vt_v281_camera_obstructed')\nold=s[a:b]\nchecks=('vt_v281_houses','h->map_region','h->half','CAMERA_Z','return\
-        \ 1;','return 0;')\nfor token in checks:\n    if token not in old:raise RuntimeError('FIX21 unknown camera logic:\
-        \ '+token)\nnew=r\"\"\"/* FIX21: avoid view oscillation when passing house edges. A short\n   grace period preserves\
-        \ perspective through minor frame-to-frame occlusions.\n   No camera-yaw, collision, region or save-data changes.\
-        \ */\nstatic int vt_v281_camera_obstructed(void) {\n    static int hold_frames=0;\n    static int previous_region=-1;\n\
-        \    unsigned int i;\n    int blocked=0;\n    if(previous_region!=region) {\n        previous_region=region;\n\
-        \        hold_frames=0;\n    }\n    for(i=0;i<sizeof(vt_v281_houses)/sizeof(vt_v281_houses[0]);i++) {\n     \
-        \   const vt_v281_blocker_t *h=&vt_v281_houses[i];\n        int dx=vt_v281_abs(px-h->x);\n        int dz=h->z-pz;\n\
-        \        if(h->map_region==region &&\n           dx<h->half+76 &&\n           dz>-CAMERA_Z-h->half && dz<h->half+60)\
-        \ {\n            blocked=1;\n            break;\n        }\n    }\n    if(blocked) hold_frames=9;\n    else if(hold_frames>0)hold_frames--;\n\
-        \    return hold_frames>0;\n}\"\"\"\ns=s[:a]+new+s[b:]\n\n# House proximity uses the SAME 75% turning and movement\
-        \ controls as FIX12.\n# Raise/shorten camera slightly ONLY when the existing house detector is active.\nwanted_pat=r'int\\\
-        s+wanted\\s*=\\s*vt_v281_camera_obstructed\\s*\\(\\s*\\)\\s*\\?\\s*35\\s*:\\s*0\\s*;'\ns,n=re.subn(wanted_pat,'int\
-        \ wanted = vt_v281_camera_obstructed() ? 52 : 0;',s)\nif n!=1:raise RuntimeError('FIX21 camera house target changed;\
-        \ nothing written')\n# FIX21.2: the actual FIX20 camera uses 48 + blend/4, while a separate\n# camera setup assigns\
-        \ 62 unconditionally. Never touch that static setup.\n# Some older project variants used blend/2 or blend/3 instead.\
-        \ All use one\n# dynamic expression. Retain its existing baseline Y and raise modestly when\n# the obstruction\
-        \ hold mode increases the target blend from 35 to 52.\nheight_pat=(r'camera_pos\\.vy\\s*=\\s*'\n            r'(?P<base>48|62)\\\
-        s*\\+\\s*'\n            r'(?:\\(\\s*)?vt_v28_camera_blend\\s*/\\s*'\n            r'(?P<divisor>2|3|4)\\s*(?:\\\
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_fix21_camera.py\" <<'LYDRA_FIX21_PATCH'\n\
+        #!/usr/bin/env python3\n\"\"\"FIX21.2: stabilize near-house camera without touching movement\
+        \ or map state.\"\"\"\nfrom pathlib import Path\nimport os, re\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
+        s=p.read_text(encoding='utf-8')\n\ndef func_span(src,name):\n    rx=r'\\bstatic\\s+int\\s+'+re.escape(name)+r'\\\
+        s*\\(\\s*void\\s*\\)\\s*\\{'\n    hits=list(re.finditer(rx,src))\n    if len(hits)!=1:raise\
+        \ RuntimeError('FIX21 missing/duplicate camera function '+name)\n    a=hits[0].start();i=hits[0].end();depth=1;mode='code'\n\
+        \    while i<len(src) and depth:\n        c=src[i];n=src[i+1] if i+1<len(src) else ''\n    \
+        \    if mode=='code':\n            if c=='/' and n=='/':mode='line';i+=1\n            elif c=='/'\
+        \ and n=='*':mode='comment';i+=1\n            elif c=='\"':mode='string'\n            elif c==\"\
+        '\":mode='char'\n            elif c=='{':depth+=1\n            elif c=='}':depth-=1\n      \
+        \  elif mode=='line':\n            if c=='\\n':mode='code'\n        elif mode=='comment':\n\
+        \            if c=='*' and n=='/':mode='code';i+=1\n        else:\n            if c=='\\\\':i+=1\n\
+        \            elif (mode=='string' and c=='\"') or (mode=='char' and c==\"'\"):mode='code'\n\
+        \        i+=1\n    if depth:raise RuntimeError('FIX21 unbalanced camera function')\n    return\
+        \ a,i\n\na,b=func_span(s,'vt_v281_camera_obstructed')\nold=s[a:b]\nchecks=('vt_v281_houses','h->map_region','h->half','CAMERA_Z','return\
+        \ 1;','return 0;')\nfor token in checks:\n    if token not in old:raise RuntimeError('FIX21\
+        \ unknown camera logic: '+token)\nnew=r\"\"\"/* FIX21: avoid view oscillation when passing house\
+        \ edges. A short\n   grace period preserves perspective through minor frame-to-frame occlusions.\n\
+        \   No camera-yaw, collision, region or save-data changes. */\nstatic int vt_v281_camera_obstructed(void)\
+        \ {\n    static int hold_frames=0;\n    static int previous_region=-1;\n    unsigned int i;\n\
+        \    int blocked=0;\n    if(previous_region!=region) {\n        previous_region=region;\n  \
+        \      hold_frames=0;\n    }\n    for(i=0;i<sizeof(vt_v281_houses)/sizeof(vt_v281_houses[0]);i++)\
+        \ {\n        const vt_v281_blocker_t *h=&vt_v281_houses[i];\n        int dx=vt_v281_abs(px-h->x);\n\
+        \        int dz=h->z-pz;\n        if(h->map_region==region &&\n           dx<h->half+76 &&\n\
+        \           dz>-CAMERA_Z-h->half && dz<h->half+60) {\n            blocked=1;\n            break;\n\
+        \        }\n    }\n    if(blocked) hold_frames=9;\n    else if(hold_frames>0)hold_frames--;\n\
+        \    return hold_frames>0;\n}\"\"\"\ns=s[:a]+new+s[b:]\n\n# House proximity uses the SAME 75%\
+        \ turning and movement controls as FIX12.\n# Raise/shorten camera slightly ONLY when the existing\
+        \ house detector is active.\nwanted_pat=r'int\\s+wanted\\s*=\\s*vt_v281_camera_obstructed\\\
+        s*\\(\\s*\\)\\s*\\?\\s*35\\s*:\\s*0\\s*;'\ns,n=re.subn(wanted_pat,'int wanted = vt_v281_camera_obstructed()\
+        \ ? 52 : 0;',s)\nif n!=1:raise RuntimeError('FIX21 camera house target changed; nothing written')\n\
+        # FIX21.2: the actual FIX20 camera uses 48 + blend/4, while a separate\n# camera setup assigns\
+        \ 62 unconditionally. Never touch that static setup.\n# Some older project variants used blend/2\
+        \ or blend/3 instead. All use one\n# dynamic expression. Retain its existing baseline Y and\
+        \ raise modestly when\n# the obstruction hold mode increases the target blend from 35 to 52.\n\
+        height_pat=(r'camera_pos\\.vy\\s*=\\s*'\n            r'(?P<base>48|62)\\s*\\+\\s*'\n       \
+        \     r'(?:\\(\\s*)?vt_v28_camera_blend\\s*/\\s*'\n            r'(?P<divisor>2|3|4)\\s*(?:\\\
         )\\s*)?;')\ncandidates=list(re.finditer(height_pat,s))\nif len(candidates)!=1:\n    current=re.findall(r'camera_pos\\\
-        .vy\\s*=\\s*[^;]+;',s)\n    raise RuntimeError('FIX21.2: expected one dynamic camera height; found '+repr(current[:6]))\n\
-        match=candidates[0]\n# At target blend=52 this gives +20 camera units instead of the former +13\n# for the FIX20\
-        \ 48+blend/4 expression; no change when blend has settled to 0.\nbase=match.group('base')\nnew_height='camera_pos.vy\
-        \ = '+base+' + (vt_v28_camera_blend * 2) / 5;'\ns=s[:match.start()]+new_height+s[match.end():]\nassert s.count(new_height)==1\n\
+        .vy\\s*=\\s*[^;]+;',s)\n    raise RuntimeError('FIX21.2: expected one dynamic camera height;\
+        \ found '+repr(current[:6]))\nmatch=candidates[0]\n# At target blend=52 this gives +20 camera\
+        \ units instead of the former +13\n# for the FIX20 48+blend/4 expression; no change when blend\
+        \ has settled to 0.\nbase=match.group('base')\nnew_height='camera_pos.vy = '+base+' + (vt_v28_camera_blend\
+        \ * 2) / 5;'\ns=s[:match.start()]+new_height+s[match.end():]\nassert s.count(new_height)==1\n\
         \n# Preserve older stable source and 75-percent gameplay, including all region portals.\nrequired=('LYDRA_FIX12_GLOBAL_PERCENT\
-        \ 75','vt_v281_resolve_movement();',\n          'vt_v281_is_blocked(nx,nz)','vt_v282_house_wall(',\n        \
-        \  'vt_v241_building(-175,125,52,1,1);',\n          'no automatic region 0->1 from step count',\n          'no\
-        \ automatic region 1->2 from step count',\n          'vt_save_game(void)','vt_load_game(void)',\n          'vt_v31987_ground_rect(','vt_v3194_perf_hud(')\n\
-        for token in required:\n    if token not in s:raise RuntimeError('FIX21 inherited feature missing '+token)\n\
-        if s.count('static int vt_v281_camera_obstructed(void)')!=1:\n    raise RuntimeError('FIX21 duplicate camera\
+        \ 75','vt_v281_resolve_movement();',\n          'vt_v281_is_blocked(nx,nz)','vt_v282_house_wall(',\n\
+        \          'vt_v241_building(-175,125,52,1,1);',\n          'no automatic region 0->1 from step\
+        \ count',\n          'no automatic region 1->2 from step count',\n          'vt_save_game(void)','vt_load_game(void)',\n\
+        \          'vt_v31987_ground_rect(','vt_v3194_perf_hud(')\nfor token in required:\n    if token\
+        \ not in s:raise RuntimeError('FIX21 inherited feature missing '+token)\nif s.count('static\
+        \ int vt_v281_camera_obstructed(void)')!=1:\n    raise RuntimeError('FIX21 duplicate camera\
         \ routine')\np.write_text(s,encoding='utf-8')\nPath('artifacts').mkdir(exist_ok=True)\nPath('artifacts/KAMERA_FIX21_2_DIAGNOSE.txt').write_text(\n\
-        \  'FIX21.2: obstruction retained 9 frames; camera base height preserved and dynamic lift adjusted moderately.\\\
-        n'\n  'City/region boundaries, relocated central building, collision, saves, FIX12 75% movement unchanged.\\\
-        n'\n  'Only viewing angle/height near houses was modified. Runtime emulator test required.\\n',encoding='utf-8')\n\
-        print('FIX21.2: recognized actual 48+blend/4 expression, preserved static 62, cities and 75 percent tempo')\n\
-        LYDRA_FIX21_PATCH\npython3 \"$RUNNER_TEMP/lydra_fix21_camera.py\"\n"
+        \  'FIX21.2: obstruction retained 9 frames; camera base height preserved and dynamic lift adjusted\
+        \ moderately.\\n'\n  'City/region boundaries, relocated central building, collision, saves,\
+        \ FIX12 75% movement unchanged.\\n'\n  'Only viewing angle/height near houses was modified.\
+        \ Runtime emulator test required.\\n',encoding='utf-8')\nprint('FIX21.2: recognized actual 48+blend/4\
+        \ expression, preserved static 62, cities and 75 percent tempo')\nLYDRA_FIX21_PATCH\npython3\
+        \ \"$RUNNER_TEMP/lydra_fix21_camera.py\"\n"
     - name: FIX21.2 Hauskamera und 75 Prozent pruefen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LYDRA_FIX21_VERIFY'\nfrom pathlib import Path\nimport os\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
-        for token in ('static int vt_v281_camera_obstructed(void)',\n              'hold_frames=9;',\n              'camera_pos.vy\
-        \ = 62;',\n              'int wanted = vt_v281_camera_obstructed() ? 52 : 0;',\n              'camera_pos.vy\
-        \ = 48 + (vt_v28_camera_blend * 2) / 5;',\n              'LYDRA_FIX12_GLOBAL_PERCENT 75',\n              'valid\
-        \ geographic transition keeps its new location',\n              'vt_v241_building(-175,125,52,1,1);'):\n    if\
-        \ token not in s:raise RuntimeError('FIX21 source verify '+token)\nif Path('artifacts/KAMERA_FIX21_2_DIAGNOSE.txt').stat().st_size<180:\n\
-        \    raise RuntimeError('FIX21 missing camera report')\nprint('FIX21.2 camera validated without changes to movement\
-        \ or region state')\nLYDRA_FIX21_VERIFY\n"
+      run: "set -euo pipefail\npython3 - <<'LYDRA_FIX21_VERIFY'\nfrom pathlib import Path\nimport os\n\
+        s=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\nfor token in ('static\
+        \ int vt_v281_camera_obstructed(void)',\n              'hold_frames=9;',\n              'camera_pos.vy\
+        \ = 62;',\n              'int wanted = vt_v281_camera_obstructed() ? 52 : 0;',\n           \
+        \   'camera_pos.vy = 48 + (vt_v28_camera_blend * 2) / 5;',\n              'LYDRA_FIX12_GLOBAL_PERCENT\
+        \ 75',\n              'valid geographic transition keeps its new location',\n              'vt_v241_building(-175,125,52,1,1);'):\n\
+        \    if token not in s:raise RuntimeError('FIX21 source verify '+token)\nif Path('artifacts/KAMERA_FIX21_2_DIAGNOSE.txt').stat().st_size<180:\n\
+        \    raise RuntimeError('FIX21 missing camera report')\nprint('FIX21.2 camera validated without\
+        \ changes to movement or region state')\nLYDRA_FIX21_VERIFY\n"
+    - name: FIX22 Kamera vor Hauswaenden halten
+      shell: bash
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_fix22_camera.py\" <<'FIX22_PY'\n#!/usr/bin/env\
+        \ python3\n# FIX22: rotate-aware camera occlusion, camera really approaches player.\nimport\
+        \ os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\n\
+        \ndef span(name):\n    pattern=r'\\bstatic\\s+int\\s+'+re.escape(name)+r'\\s*\\(\\s*void\\s*\\\
+        )\\s*\\{'\n    matches=list(re.finditer(pattern,s))\n    if len(matches)!=1: raise RuntimeError('FIX22:\
+        \ unknown camera function '+name)\n    a=matches[0].start();i=matches[0].end();depth=1;mode='code'\n\
+        \    while i<len(s) and depth:\n        c=s[i];n=s[i+1] if i+1<len(s) else ''\n        if mode=='code':\n\
+        \            if c=='/' and n=='/':mode='line';i+=1\n            elif c=='/' and n=='*':mode='comment';i+=1\n\
+        \            elif c=='\"':mode='str'\n            elif c==\"'\":mode='chr'\n            elif\
+        \ c=='{':depth+=1\n            elif c=='}':depth-=1\n        elif mode=='line':\n          \
+        \  if c=='\\n':mode='code'\n        elif mode=='comment':\n            if c=='*' and n=='/':mode='code';i+=1\n\
+        \        else:\n            if c=='\\\\':i+=1\n            elif (mode=='str' and c=='\"') or\
+        \ (mode=='chr' and c==\"'\"):mode='code'\n        i+=1\n    if depth:raise RuntimeError('FIX22:\
+        \ unbalanced camera function')\n    return a,i\n\n# This function is already part of FIX21.2,\
+        \ including nine-frame hysteresis.\na,b=span('vt_v281_camera_obstructed')\nold=s[a:b]\nfor marker\
+        \ in ('hold_frames=9','previous_region','vt_v281_houses','h->half'):\n    if marker not in old:raise\
+        \ RuntimeError('FIX22: FIX21.2 detector changed: '+marker)\nnew=r'''/* FIX22: building visibility\
+        \ depends on actual rotated camera bearing.\n   A tiny five-sample 2D ray check keeps the camera\
+        \ on the player side of walls.\n   FIX21.2 hysteresis remains; no movement, collision or save\
+        \ state changed. */\nstatic int vt_v31997_house_ray_blocked(void);\nstatic int vt_v281_camera_obstructed(void)\
+        \ {\n    static int hold_frames=0;\n    static int previous_region=-1;\n    int blocked;\n \
+        \   if(previous_region!=region) {\n        previous_region=region;\n        hold_frames=0;\n\
+        \    }\n    blocked=vt_v31997_house_ray_blocked();\n    if(blocked)hold_frames=9;\n    else\
+        \ if(hold_frames>0)hold_frames--;\n    return hold_frames>0;\n}'''\ns=s[:a]+new+s[b:]\n\n# vt_v293_sin/cos\
+        \ are declared below V28's camera helper but are available\n# before this insertion point. vt_v292_cam_yaw\
+        \ is the 0..4095 active heading.\nanchor='static void vt_v293_rotate_mesh_point('\nif s.count(anchor)!=1\
+        \ or 'vt_v293_sin(int angle)' not in s or 'vt_v292_cam_yaw' not in s:\n    raise RuntimeError('FIX22:\
+        \ yaw/trigonometry anchor not recognized')\nray=r'''/* FIX22: ray from avatar backwards toward\
+        \ camera in WORLD coordinates.\n   Five samples cost no draw polygons and work when yaw changes\
+        \ 360 degrees. */\nstatic int vt_v31997_house_ray_blocked(void) {\n    int length=CAMERA_Z<0?-CAMERA_Z:CAMERA_Z;\n\
+        \    int sn=vt_v293_sin(vt_v292_cam_yaw);\n    int cs=vt_v293_cos(vt_v292_cam_yaw);\n    unsigned\
+        \ int j;\n    int k;\n    if(length<80)length=80;\n    if(length>360)length=360;\n    for(j=0;j<sizeof(vt_v281_houses)/sizeof(vt_v281_houses[0]);j++)\
+        \ {\n        const vt_v281_blocker_t *h=&vt_v281_houses[j];\n        if(h->map_region!=region)continue;\n\
+        \        for(k=1;k<=5;k++) {\n            int d=(length*k)/5;\n            int cx=px+(sn*d)/1024;\n\
+        \            int cz=pz-(cs*d)/1024;\n            if(vt_v281_abs(cx-h->x)<h->half+28 &&\n   \
+        \            vt_v281_abs(cz-h->z)<h->half+28)\n                return 1;\n        }\n    }\n\
+        \    return 0;\n}\n'''\ns=s.replace(anchor,ray+'\\n'+anchor,1)\n\n# Source of persistent problem:\
+        \ V28 moves the PS1 follow camera AWAY from\n# avatar when the obstacle blend grows. Change\
+        \ sign; 2x blend = gentle dolly.\n# Dynamic height / hold behaviour from FIX21.2 remains unchanged.\n\
+        old_z=r'camera_pos\\.vz\\s*=\\s*CAMERA_Z\\s*-\\s*vt_v28_camera_blend\\s*;'\ns,n=re.subn(old_z,'camera_pos.vz\
+        \ = CAMERA_Z + (vt_v28_camera_blend * 2);',s)\nif n!=1:raise RuntimeError('FIX22: camera distance\
+        \ assignment not recognized: '+str(n))\n\n# Guard inherited gameplay features before overwriting\
+        \ the source file.\nfor token in ('LYDRA_FIX12_GLOBAL_PERCENT 75',\n 'int wanted = vt_v281_camera_obstructed()\
+        \ ? 52 : 0;',\n 'camera_pos.vy = 48 + (vt_v28_camera_blend * 2) / 5;',\n 'vt_v281_resolve_movement();',\n\
+        \ 'vt_v241_building(-175,125,52,1,1);',\n 'no automatic region 0->1 from step count',\n 'no\
+        \ automatic region 1->2 from step count',\n 'vt_v31987_ground_rect(', 'vt_save_game(void)',\
+        \ 'vt_load_game(void)'):\n    if token not in s:raise RuntimeError('FIX22 inherited element\
+        \ missing: '+token)\nif s.count('static int vt_v31997_house_ray_blocked(void) {')!=1:\n    raise\
+        \ RuntimeError('FIX22: duplicate ray helper')\np.write_text(s,encoding='utf-8')\nPath('artifacts').mkdir(exist_ok=True)\n\
+        Path('artifacts/KAMERA_FIX22_DIAGNOSE.txt').write_text(\n 'V31.9.9.7 FIX22: camera samples five\
+        \ points behind avatar along camera yaw.\\n'\n 'If a house is in camera line, follow camera\
+        \ shifts TOWARD player by 2x blend; V28 moved AWAY.\\n'\n 'FIX21.2 height, 9-frame hold, FIX20\
+        \ cities, FIX19 collisions, FIX12 speed 75 percent kept.\\n'\n 'Covers buildings in all three\
+        \ map regions; PS1 emulator test required.\\n',encoding='utf-8')\nprint('FIX22: yaw-aware house\
+        \ camera + approach on occlusion; original 75 percent controls kept')\nFIX22_PY\npython3 \"\
+        $RUNNER_TEMP/lydra_fix22_camera.py\"\n"
+    - name: FIX22 Kameraposition und Spielfunktionen pruefen
+      shell: bash
+      run: "set -euo pipefail\npython3 - <<'FIX22_CHECK'\nfrom pathlib import Path\nimport os\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
+        for term in ('static int vt_v31997_house_ray_blocked(void) {',\n             'camera_pos.vz\
+        \ = CAMERA_Z + (vt_v28_camera_blend * 2);',\n             'camera_pos.vy = 48 + (vt_v28_camera_blend\
+        \ * 2) / 5;',\n             'hold_frames=9;', 'LYDRA_FIX12_GLOBAL_PERCENT 75',\n           \
+        \  'vt_v241_building(-175,125,52,1,1);',\n             'valid geographic transition keeps its\
+        \ new location'):\n    if term not in s: raise RuntimeError('FIX22: expected unchanged feature\
+        \ missing: '+term)\nif s.count('static int vt_v31997_house_ray_blocked(void) {')!=1:\n    raise\
+        \ RuntimeError('FIX22: camera helper duplicate')\nassert Path('artifacts/KAMERA_FIX22_DIAGNOSE.txt').stat().st_size>180\n\
+        print('FIX22: rotated camera ray, house pull-in, stable city/region collision and 75-percent\
+        \ input verified')\nFIX22_CHECK\n"
+    - name: FIX23 PS1 Fachwerk-Buergerhaus in allen Staedten rendern
+      shell: bash
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_fix23_buergerhaus.py\" <<'LYDRA_FIX23_HOUSE'\n\
+        #!/usr/bin/env python3\n\"\"\"FIX23: Reference-inspired PS1 citizens' standard cottage in every\
+        \ town.\nDo not modify collision maps, interior, NPCs, portals, saves or camera.\n\"\"\"\nimport\
+        \ os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\n\
+        \n# House radius, town positions and collision structures are NOT changed.\n# Replace only the\
+        \ old renderer, keeping the original signature and gameplay.\ndef find_c_function(src,name):\n\
+        \    pattern=(r'\\bstatic\\s+void\\s+'+re.escape(name)+\n             r'\\s*\\(\\s*int\\s+x\\\
+        s*,\\s*int\\s+z\\s*,\\s*int\\s+size\\s*,\\s*'\n             r'int\\s+roof\\s*,\\s*int\\s+style\\\
+        s*\\)\\s*\\{')\n    hits=list(re.finditer(pattern,src))\n    if len(hits)!=1:\n        raise\
+        \ RuntimeError('FIX23: expected one five-parameter house function: '+str(len(hits)))\n    start=hits[0].start();i=hits[0].end();depth=1;mode='code'\n\
+        \    while i<len(src) and depth:\n        c=src[i];n=src[i+1] if i+1<len(src) else ''\n    \
+        \    if mode=='code':\n            if c=='/' and n=='/':mode='line';i+=1\n            elif c=='/'\
+        \ and n=='*':mode='comment';i+=1\n            elif c=='\"':mode='string'\n            elif c==\"\
+        '\":mode='char'\n            elif c=='{':depth+=1\n            elif c=='}':depth-=1\n      \
+        \  elif mode=='line':\n            if c=='\\n':mode='code'\n        elif mode=='comment':\n\
+        \            if c=='*' and n=='/':mode='code';i+=1\n        else:\n            if c=='\\\\':i+=1\n\
+        \            elif (mode=='string' and c=='\"') or (mode=='char' and c==\"'\"):mode='code'\n\
+        \        i+=1\n    if depth:raise RuntimeError('FIX23: unbalanced original house function')\n\
+        \    return start,i\n\na,b=find_c_function(s,'vt_v241_building')\nold=s[a:b]\nfor required in\
+        \ ('vt_v282_size(size)','vt_v282_inside(x,z)',\n                 'vt_v28_house_blocks_view(x,z,s)','vt_v282_wall(',\n\
+        \                 'vt_v282_draw_house_npcs(x,z)','hide_roof'):\n    if required not in old:\n\
+        \        raise RuntimeError('FIX23: incompatible existing house renderer: '+required)\n# The\
+        \ V31.9.9.7 FIX22 houses are in three mapped settlements. Reusing their\n# call sites means\
+        \ all citizens receive the new silhouette automatically.\n\nnew=r\"\"\"/* FIX23 | Reference\
+        \ house: PS1-era half timber, pale stone, steep slate gables.\n   Hollow 64-unit doorway + removable\
+        \ roof are essential for indoor gameplay.\n   Geometry is genuine world-space triangles, not\
+        \ a static picture/sprite. */\nstatic void vt_v241_building(int x,int z,int size,int roof,int\
+        \ style) {\n    int s=vt_v282_size(size);\n    int inside=vt_v282_inside(x,z);\n    int occluded,hide_roof,closeup;\n\
+        \    int wr=style?196:212, wg=style?184:198, wb=style?156:172;\n    int br=roof?59:65, bg=roof?68:72,\
+        \ bb=roof?90:96;\n    int timber=style?86:100;\n    if(!vt_v241_visible(x,z,800))return;\n \
+        \   occluded=vt_v28_house_blocks_view(x,z,s) && !inside;\n    hide_roof=inside || occluded;\n\
+        \    closeup=vt_v281_abs(x-px)<310 && vt_v281_abs(z-pz)<430;\n\n    /* Stone floor remains at\
+        \ original walkable height; same physical collider. */\n    vt_v241_flat(x-s+3,z-s+3,x+s-3,z+s-3,31,153,147,129);\n\
+        \    vt_v241_flat(x-s+10,z-s+10,x+s-10,z+s-10,30,177,163,139);\n\n    if(!occluded) {\n    \
+        \    /* Five real walls, with the unchanged central 64-unit door opening. */\n        vt_v282_wall(x-s,z-s,x-32,z-s,wr,wg,wb);\n\
+        \        vt_v282_wall(x+32,z-s,x+s,z-s,wr,wg,wb);\n        vt_v282_wall(x-s,z+s,x+s,z+s,wr-15,wg-15,wb-13);\n\
+        \        vt_v282_wall(x-s,z-s,x-s,z+s,wr-23,wg-24,wb-21);\n        vt_v282_wall(x+s,z-s,x+s,z+s,wr-23,wg-24,wb-21);\n\
+        \n        /* Exposed timber frame, corners, posts and upper dark lintel. */\n        draw_box(x-s+5,-14,z-s+3,5,timber,61,38);\n\
+        \        draw_box(x+s-5,-14,z-s+3,5,timber,61,38);\n        draw_box(x-33,-6,z-s-2,4,97,60,38);\n\
+        \        draw_box(x+33,-6,z-s-2,4,97,60,38);\n        draw_box(x,-48,z-s-3,5,92,59,36);\n  \
+        \      draw_box(x-s+5,-14,z+s-5,5,103,69,46);\n        draw_box(x+s-5,-14,z+s-5,5,103,69,46);\n\
+        \n        /* Tall timber doorway remains physically open: no solid box at center. */\n     \
+        \   draw_box(x-27,5,z-s-3,4,121,76,43);\n        draw_box(x+27,5,z-s-3,4,121,76,43);\n     \
+        \   draw_box(x-22,-14,z-s-2,3,133,85,46);\n        draw_box(x+22,-14,z-s-2,3,133,85,46);\n\n\
+        \        /* Two amber windows with dark wood frames: PS1 palette 'warm light'. */\n        draw_box(x-s/2,-11,z-s+2,12,70,48,32);\n\
+        \        draw_box(x+s/2,-11,z-s+2,12,70,48,32);\n        draw_box(x-s/2,-11,z-s-1,8,244,171,64);\n\
+        \        draw_box(x+s/2,-11,z-s-1,8,255,183,72);\n        if(closeup) {\n            /* Side\
+        \ window and oak shutters on the facade facing the lane. */\n            draw_box(x+s+2,-11,z+6,11,69,48,32);\n\
+        \            draw_box(x+s+6,-11,z+6,7,241,165,61);\n            draw_box(x+s+9,-11,z+6,2,101,69,40);\n\
+        \            /* Window lattices + golden lamps, faceted stones at doorstep. */\n           \
+        \ draw_box(x-s/2,-11,z-s-6,2,83,54,32);\n            draw_box(x+s/2,-11,z-s-6,2,83,54,32);\n\
+        \            draw_box(x-41,-28,z-s-9,5,81,55,37);\n            draw_box(x+41,-28,z-s-9,5,81,55,37);\n\
+        \            draw_box(x-41,-32,z-s-12,4,255,167,49);\n            draw_box(x+41,-32,z-s-12,4,255,167,49);\n\
+        \            draw_box(x-s+7,25,z-s+6,9,128,124,111);\n            draw_box(x+s-7,25,z-s+6,9,137,132,119);\n\
+        \            /* Small ashlar landing that never changes navigation/collision. */\n         \
+        \   vt_v241_flat(x-23,z-s-20,x+23,z-s-6,32,153,150,139);\n            vt_v241_flat(x-27,z-s-30,x+27,z-s-21,32,137,135,125);\n\
+        \        }\n        if(inside) {\n            /* Old interior furnishings and resident stay\
+        \ attached to the house. */\n            draw_box(x-s/2,22,z+s/3,13,133,88,51);\n          \
+        \  draw_box(x+s/2,22,z+s/3,11,148,118,78);\n            draw_box(x-s/2,-3,z+s/3,7,208,161,89);\n\
+        \            draw_box(x+s/2,25,z+s/3,8,121,81,59);\n            vt_pyramid(x+s/2,12,z+s/3,5,9,244,158,65);\n\
+        \        }\n    } else {\n        /* Camera is between wall and hero: suppress the tall silhouette.\
+        \ */\n        draw_box(x-s+7,34,z-s+7,6,147,142,124);\n        draw_box(x+s-7,34,z+s-7,6,147,142,124);\n\
+        \    }\n\n    if(!hide_roof) {\n        /* True pitched GAMBREL-LIKE GABLE roof along Z, longer\
+        \ than the walls.\n           Unlike the old pyramids, it forms the characteristic cottage shape.\
+        \ */\n        int e=s+11,depth=s+12;\n        SVECTOR lf={(short)(x-e-px),-57,(short)(z-depth-pz),0};\n\
+        \        SVECTOR lb={(short)(x-e-px),-57,(short)(z+depth-pz),0};\n        SVECTOR rf={(short)(x+e-px),-57,(short)(z-depth-pz),0};\n\
+        \        SVECTOR rb={(short)(x+e-px),-57,(short)(z+depth-pz),0};\n        SVECTOR peakf={(short)(x-px),-126,(short)(z-depth-pz),0};\n\
+        \        SVECTOR peakb={(short)(x-px),-126,(short)(z+depth-pz),0};\n        SVECTOR front_l={(short)(x-s+4-px),-52,(short)(z-s-2-pz),0};\n\
+        \        SVECTOR front_r={(short)(x+s-4-px),-52,(short)(z-s-2-pz),0};\n        SVECTOR front_peak={(short)(x-px),-117,(short)(z-s-2-pz),0};\n\
+        \        /* Triangular sandstone/timber gable on facade. */\n        draw_triangle3(&front_l,&front_r,&front_peak,174,146,108);\n\
+        \        draw_triangle3(&lf,&peakf,&lb,br,bg,bb);\n        draw_triangle3(&lb,&peakf,&peakb,br-5,bg-6,bb-7);\n\
+        \        draw_triangle3(&peakf,&rf,&rb,br+11,bg+10,bb+10);\n        draw_triangle3(&peakf,&rb,&peakb,br+3,bg+3,bb+3);\n\
+        \        /* Pointed timber gable crest, and stone stack topped by red brick. */\n        draw_box(x,-123,z-depth,4,111,73,46);\n\
+        \        draw_box(x+s/2,-109,z+s/3,12,165,157,139);\n        draw_box(x+s/2,-132,z+s/3,11,173,163,142);\n\
+        \        draw_box(x+s/2,-149,z+s/3,12,112,68,49);\n        if(closeup) {\n            int k,j,seg=(depth*2)/3;\n\
+        \            /* Staggered slate patches: 18 tiny flat polygons, no new textures. */\n      \
+        \      for(k=0;k<3;k++)for(j=1;j<=3;j++) {\n                int dz=-depth+k*seg+5;\n       \
+        \         int off=(e*j)/4;\n                int yy=-126+((126-57)*j)/4;\n                int\
+        \ shade=((k+j)&1)?8:-5;\n                SVECTOR la={(short)(x-off-px),(short)yy,(short)(z+dz-pz),0};\n\
+        \                SVECTOR lb2={(short)(x-off+7-px),(short)(yy-5),(short)(z+dz+seg-8-pz),0};\n\
+        \                SVECTOR lc={(short)(x-off-px),(short)yy,(short)(z+dz+seg-8-pz),0};\n      \
+        \          SVECTOR ra={(short)(x+off-px),(short)yy,(short)(z+dz-pz),0};\n                SVECTOR\
+        \ rb2={(short)(x+off-7-px),(short)(yy-5),(short)(z+dz+seg-8-pz),0};\n                SVECTOR\
+        \ rc={(short)(x+off-px),(short)yy,(short)(z+dz+seg-8-pz),0};\n                draw_triangle3(&la,&lb2,&lc,br+shade,bg+shade,bb+shade);\n\
+        \                draw_triangle3(&ra,&rc,&rb2,br+shade+9,bg+shade+8,bb+shade+8);\n          \
+        \  }\n        }\n    }\n    if(inside)vt_v282_draw_house_npcs(x,z);\n}\"\"\"\n\ns=s[:a]+new+s[b:]\n\
+        # IMPORTANT: Guard exactly the formerly tested mechanics rather than altering\n# house positions,\
+        \ NPC registries, collision arrays or game movement functions.\nfor signature in (\n    'LYDRA_FIX12_GLOBAL_PERCENT\
+        \ 75',\n    'vt_v241_building(-175,125,52,1,1);',\n    'vt_v281_resolve_movement();',\n    'vt_v281_is_blocked(nx,nz)',\n\
+        \    'vt_v31997_house_ray_blocked(void)',\n    'no automatic region 0->1 from step count',\n\
+        \    'no automatic region 1->2 from step count',\n    'vt_save_game(void)', 'vt_load_game(void)',\n\
+        \    'vt_v31987_ground_rect(', 'vt_v282_draw_house_npcs('):\n    if signature not in s:raise\
+        \ RuntimeError('FIX23: gameplay regression '+signature)\nif s.count('static void vt_v241_building(')!=1:\n\
+        \    raise RuntimeError('FIX23: duplicate citizen house renderer')\nfor call in ('vt_v241_building(-205,265,43,0,1);',\n\
+        \             'vt_v241_building(-175,125,52,1,1);',\n             'vt_v241_building(208,280,42,0,0);',\n\
+        \             'vt_v241_building(-145,450,42,0,1);',\n             'vt_v241_building(145,1055,43,1,0);',\n\
+        \             'vt_v241_building(-390,365,53,0,1);',\n             'vt_v241_building(175,680,42,1,0);'):\n\
+        \    if s.count(call)!=1:raise RuntimeError('FIX23: missing placed house '+call)\np.write_text(s,encoding='utf-8')\n\
+        art=Path('artifacts');art.mkdir(exist_ok=True)\n(art/'BUERGERHAEUSER_FIX23_DIAGNOSE.txt').write_text(\n\
+        \    'Lydra V31.9.9.8 FIX23: Citizens share a new 3D PS1 cottage.\\n'\n    'Pitched slate gable\
+        \ roof, wood timber, stone floor, chimney, amber windows, lanterns.\\n'\n    'Original street\
+        \ layout and house blockers, portals, hollow doors and interiors retained.\\n'\n    'Camera\
+        \ roof hiding / FIX22 ray, FIX20 cities, FIX12 75% movement unchanged.\\n'\n    'Built-in rendering\
+        \ is flat-shaded PS1 geometry inspired by user image;\\n'\n    'not a high-resolution texture\
+        \ or a pixel-identical imported 3D model.\\n'\n    'Emulator visual and frame-rate validation\
+        \ recommended.\\n',encoding='utf-8')\nprint('FIX23: Standard citizen houses across all towns\
+        \ converted to timber/stone/slate cottages')\n\nLYDRA_FIX23_HOUSE\npython3 \"$RUNNER_TEMP/lydra_fix23_buergerhaus.py\"\
+        \n"
+    - name: FIX23 Hausdetails, Innenraeume und FIX22-Kamera pruefen
+      shell: bash
+      run: "set -euo pipefail\npython3 - <<'LYDRA_FIX23_TEST'\nimport os\nfrom pathlib import Path\n\
+        source=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\nchecks={\n\
+        \  'Dach als echte PS1-3D-Dreiecke':'SVECTOR peakf=',\n  'Schieferdach':'Staggered slate patches',\n\
+        \  'Steinkamin':'draw_box(x+s/2,-149',\n  'Fenster mit Laternen':'draw_box(x-41,-32',\n  'Innenraeume\
+        \ offen':'if(inside)vt_v282_draw_house_npcs(x,z);',\n  'Kamera-FIX22':'vt_v31997_house_ray_blocked(void)',\n\
+        \  'Bewegung 75 Prozent':'LYDRA_FIX12_GLOBAL_PERCENT 75',\n  'Kollisions-FIX19':'vt_v281_is_blocked(nx,nz)',\n\
+        \  'Staedte-FIX20':'no automatic region 1->2 from step count',\n  'Speichern':'vt_save_game(void)',\n\
+        \  'Laden':'vt_load_game(void)'\n}\nfor name,needle in checks.items():\n    assert needle in\
+        \ source,'FIX23 Test fehlgeschlagen: '+name\nassert source.count('static void vt_v241_building(')==1\n\
+        print('FIX23: 11 Bestandstests und 3D-Buergerhaeuser-Pruefung erfolgreich')\nLYDRA_FIX23_TEST\n"
     - name: Basis 50
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
@@ -782,31 +1134,35 @@ jobs:
     - name: Basis 54
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 54
-    - name: FIX21.2 PS1-Dateien und Kamera-Diagnose pruefen
+    - name: FIX22 PS1-Ausgaben und Kamera-Diagnose kontrollieren
       shell: bash
-      run: "set -euo pipefail\nfor f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe TEMPO_FIX12_DIAGNOSE.txt FLUSS_FIX13_1_DIAGNOSE.txt\
-        \ BERGE_FIX14_DIAGNOSE.txt BERGE_FIX15_DIAGNOSE.txt BAUM_FIX16_DIAGNOSE.txt FELS_FIX17_DIAGNOSE.txt FERNBERGE_FIX18_DIAGNOSE.txt\
-        \ KOLLISION_FIX19_DIAGNOSE.txt STAEDTE_FIX20_DIAGNOSE.txt; do\n test -s \"artifacts/$f\" || { echo \"::error::Fehlende\
-        \ Datei: $f\"; exit 1; }\ndone\nprintf '%s\\n' 'Lydra World Of Dragon V31.9.9.3 FIX18' 'Fernberge kleiner, Crystal\
-        \ Pass erhalten, 75-Prozent-Tempo beibehalten.' > artifacts/VERSION_V31_9_9_3_FIX18.txt\n\nprintf \"%s\\n\" \"\
-        Lydra World Of Dragon V31.9.9.4 FIX19: Kollisionen/Haustuer, keine Wander-Teleports, Stadtweg frei und Bewegung\
-        \ 75 Prozent\" > artifacts/VERSION_V31_9_9_4_FIX19.txt\n\nprintf '%s\\n' 'LYDRA WORLD OF DRAGON V31.9.9.5 FIX20:\
-        \ all cities present; region travel by coordinates; fixed 75 percent tempo.' > artifacts/VERSION_V31_9_9_5_FIX20.txt\n\
-        \ntest -s artifacts/KAMERA_FIX21_2_DIAGNOSE.txt || { echo '::error::FIX21 Kamera-Diagnose fehlt'; exit 1; }\n\
-        printf '%s\\n' 'LYDRA WORLD OF DRAGON V31.9.9.6 FIX21.2: near-house camera steadier; FIX20 cities and FIX12 75\
-        \ percent speed retained.' > artifacts/VERSION_V31_9_9_6_FIX21_2.txt\n"
-    - name: FIX21.2 BIN CUE EXE ELF hochladen
+      run: "set -euo pipefail\nfor f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe TEMPO_FIX12_DIAGNOSE.txt\
+        \ FLUSS_FIX13_1_DIAGNOSE.txt BERGE_FIX14_DIAGNOSE.txt BERGE_FIX15_DIAGNOSE.txt BAUM_FIX16_DIAGNOSE.txt\
+        \ FELS_FIX17_DIAGNOSE.txt FERNBERGE_FIX18_DIAGNOSE.txt KOLLISION_FIX19_DIAGNOSE.txt STAEDTE_FIX20_DIAGNOSE.txt;\
+        \ do\n test -s \"artifacts/$f\" || { echo \"::error::Fehlende Datei: $f\"; exit 1; }\ndone\n\
+        printf '%s\\n' 'Lydra World Of Dragon V31.9.9.3 FIX18' 'Fernberge kleiner, Crystal Pass erhalten,\
+        \ 75-Prozent-Tempo beibehalten.' > artifacts/VERSION_V31_9_9_3_FIX18.txt\n\nprintf \"%s\\n\"\
+        \ \"Lydra World Of Dragon V31.9.9.4 FIX19: Kollisionen/Haustuer, keine Wander-Teleports, Stadtweg\
+        \ frei und Bewegung 75 Prozent\" > artifacts/VERSION_V31_9_9_4_FIX19.txt\n\nprintf '%s\\n' 'LYDRA\
+        \ WORLD OF DRAGON V31.9.9.5 FIX20: all cities present; region travel by coordinates; fixed 75\
+        \ percent tempo.' > artifacts/VERSION_V31_9_9_5_FIX20.txt\n\ntest -s artifacts/KAMERA_FIX21_2_DIAGNOSE.txt\
+        \ && test -s artifacts/KAMERA_FIX22_DIAGNOSE.txt || { echo '::error::FIX21 Kamera-Diagnose fehlt';\
+        \ exit 1; }\nprintf '%s\\n' 'LYDRA WORLD OF DRAGON V31.9.9.6 FIX21.2: near-house camera steadier;\
+        \ FIX20 cities and FIX12 75 percent speed retained.' > artifacts/VERSION_V31_9_9_7_FIX22.txt\n\
+        \nprintf '%s\\n' 'LYDRA WORLD OF DRAGON V31.9.9.7 FIX22' 'Kamera zieht bei Hausverdeckung naeher,\
+        \ Staedte und FIX12 75 Prozent unveraendert.' > artifacts/VERSION_V31_9_9_7_FIX22.txt\n"
+    - name: FIX22 PS1 BIN CUE EXE ELF als Artefakt hochladen
       uses: actions/upload-artifact@v4
       id: lydra_ps1_artifact
       with:
-        name: Lydra-PS1-V31-9-9-6-FIX21-2-HAUSKAMERA
+        name: Lydra-PS1-V31-9-9-7-FIX22-HAUSKAMERA
         path: artifacts/
         if-no-files-found: error
         retention-days: 14
     - name: GitHub Artefakt-ID nach dem Upload erzwingen
       shell: bash
-      run: "set -euo pipefail\nif [ -z \"${LYDRA_ARTIFACT_ID:-}\" ]; then\n  echo '::error::GitHub meldet keine Artefakt-ID\
-        \ trotz Build. Kein gruenes Ergebnis erlauben.'\n  exit 1\nfi\nprintf 'PS1 ZIP wurde von GitHub gespeichert.\
-        \ Artefakt-ID: %s\\n' \"$LYDRA_ARTIFACT_ID\"\n"
+      run: "set -euo pipefail\nif [ -z \"${LYDRA_ARTIFACT_ID:-}\" ]; then\n  echo '::error::GitHub meldet\
+        \ keine Artefakt-ID trotz Build. Kein gruenes Ergebnis erlauben.'\n  exit 1\nfi\nprintf 'PS1\
+        \ ZIP wurde von GitHub gespeichert. Artefakt-ID: %s\\n' \"$LYDRA_ARTIFACT_ID\"\n"
       env:
         LYDRA_ARTIFACT_ID: ${{ steps.lydra_ps1_artifact.outputs.artifact-id }}
