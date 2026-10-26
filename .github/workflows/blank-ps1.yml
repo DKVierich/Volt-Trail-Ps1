@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.9.15 FIX29.1 - Grafikdiagnose Reparatur
+name: Lydra World Of Dragon V31.9.9.16 FIX29.2 - Saubere Hausgeometrie
 'on':
   workflow_dispatch: {}
 permissions:
@@ -303,61 +303,55 @@ jobs:
     - name: FIX28 Architektur Landschaft Kamera und Speicher vor Build pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LYDRA_FIX28_PREFLIGHT'\nfrom pathlib import Path\nimport os\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\ns=p.read_text(encoding='utf-8')\nfor t in ('FIX28 PS1: polygonal urban/fantasy architecture',\n          'FIX28: Sparse visible rock outcrops',\n          'vt_v281_resolve_movement();',\n          'LYDRA_FIX12_GLOBAL_PERCENT 75',\n          'vt_v282_draw_house_npcs(x,z)',\n          'vt_v31997_house_ray_blocked(void)',\n          'vt_save_game(void)', 'vt_load_game(void)'):\n    if t not in s: raise RuntimeError('FIX28 preflight missing '+t)\nassert Path('artifacts/GRAFIK_FIX28_DIAGNOSE.txt').stat().st_size>100\nprint('FIX28: architecture and terrain integrated. Running original PS1 build next.')\nLYDRA_FIX28_PREFLIGHT\n"
-    - name: FIX29.1 Sichtlinie Hausformen und Diagnose korrigiert
+    - name: FIX29.2 Frontwaende Dachueberlagerung und freie Sicht verbessern
       shell: bash
       run: |
         set -euo pipefail
         python3 - <<'LYDRA_FIX282_MESH'
         import base64,zlib,hashlib,subprocess
         source=zlib.decompress(base64.b64decode(
-            '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'
+            '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'
+            'B'
         )).decode('utf-8')
-        assert hashlib.sha256(source.encode()).hexdigest()=='3d28836cd09b7fc2f084eaf3fb25c1749504eda067ecfde937ba2dd06be94fc0'
+        assert hashlib.sha256(source.encode()).hexdigest()=='e4a4afdf22ca1ee0e92362e110b40fd5ff4ed5295c50e57b6bd6a790a8eec3a0'
         subprocess.run(['python3','-c', source],check=True)
         LYDRA_FIX282_MESH
     - name: Basis 50
@@ -410,12 +404,12 @@ jobs:
 
         test -s artifacts/GRAFIK_FIX29_DIAGNOSE.txt || { echo "::error::FIX29 Grafikdiagnose fehlt"; exit 1; }
         test -s artifacts/GRAFIK_FIX28_DIAGNOSE.txt || { echo "::error::FIX28 Grafikdiagnose fehlt"; exit 1; }
-        printf '%s\n' 'LYDRA WORLD OF DRAGON V31.9.9.15 FIX29.1: FIX29 Grafikdiagnose-Dateiname repariert, Sichtlinien und PS1-Materialmuster beibehalten.' > artifacts/VERSION_V31_9_9_15_FIX29_1.txt
+        printf '%s\n' 'LYDRA WORLD OF DRAGON V31.9.9.16 FIX29.2: Fassaden-Doppelpolygone und Zusatzmarkisen entfernt, Dachgeometrie komprimiert, Kamera-LOD verbessert.' > artifacts/VERSION_V31_9_9_16_FIX29_2.txt
     - name: FIX29 PS1 BIN CUE EXE ELF als GitHub Artefakt hochladen
       uses: actions/upload-artifact@v4
       id: lydra_ps1_artifact
       with:
-        name: Lydra-PS1-V31-9-9-15-FIX29-1-GRAFIK-FIX
+        name: Lydra-PS1-V31-9-9-16-FIX29-2-HAUSGRAFIK
         path: artifacts/
         if-no-files-found: error
         retention-days: 14
