@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.9.11 FIX26 - Hauskamera Kompilierfehler korrigiert
+name: Lydra World Of Dragon V31.9.9.12 FIX27 - Hauskamera C-Reihenfolge robust
 'on':
   workflow_dispatch: {}
 permissions:
@@ -755,7 +755,7 @@ jobs:
         \ RuntimeError('FIX21 source verify '+token)\nif Path('artifacts/KAMERA_FIX21_2_DIAGNOSE.txt').stat().st_size<180:\n\
         \    raise RuntimeError('FIX21 missing camera report')\nprint('FIX21.2 camera validated without changes to movement\
         \ or region state')\nLYDRA_FIX21_VERIFY\n"
-    - name: FIX26 Hauskamera C-Reihenfolge und PS1 Kompilierfehler beheben
+    - name: FIX27 Hauskamera sicher nach Haus-Kollisionen definieren
       shell: bash
       run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_fix22_camera.py\" <<'FIX22_PY'\n#!/usr/bin/env python3\n# FIX22:\
         \ rotate-aware camera occlusion, camera really approaches player.\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
@@ -776,55 +776,60 @@ jobs:
         static int vt_v281_camera_obstructed(void) {\n    static int hold_frames=0;\n    static int previous_region=-1;\n\
         \    int blocked;\n    if(previous_region!=region) {\n        previous_region=region;\n        hold_frames=0;\n  \
         \  }\n    blocked=vt_v31997_house_ray_blocked();\n    if(blocked)hold_frames=9;\n    else if(hold_frames>0)hold_frames--;\n\
-        \    return hold_frames>0;\n}'''\ns=s[:a]+new+s[b:]\n\n# FIX26: the old insertion near vt_v293_rotate_mesh_point()\
-        \ occurred before\n# the V28.1 house collider type and array (main.c about line 861 versus 2490).\n# The camera function\
-        \ lives AFTER the V28.1 declarations. Place the exact\n# same camera-ray implementation just BEFORE its forward declaration\
-        \ there.\n# vt_v293_sin/cos are already defined by that point.\nanchor='static int vt_v31997_house_ray_blocked(void);'\n\
-        if s.count(anchor)!=1 or 'vt_v293_sin(int angle)' not in s or 'vt_v292_cam_yaw' not in s:\n    raise RuntimeError('FIX26:\
-        \ yaw helper anchor not recognized')\nray=r'''/* FIX22: ray from avatar backwards toward camera in WORLD coordinates.\n\
-        \   Five samples cost no draw polygons and work when yaw changes 360 degrees. */\nstatic int vt_v31997_house_ray_blocked(void)\
-        \ {\n    int length=CAMERA_Z<0?-CAMERA_Z:CAMERA_Z;\n    int sn=vt_v293_sin(vt_v292_cam_yaw);\n    int cs=vt_v293_cos(vt_v292_cam_yaw);\n\
-        \    unsigned int j;\n    int k;\n    if(length<80)length=80;\n    if(length>360)length=360;\n    for(j=0;j<sizeof(vt_v281_houses)/sizeof(vt_v281_houses[0]);j++)\
-        \ {\n        const vt_v281_blocker_t *h=&vt_v281_houses[j];\n        if(h->map_region!=region)continue;\n        for(k=1;k<=5;k++)\
-        \ {\n            int d=(length*k)/5;\n            int cx=px+(sn*d)/1024;\n            int cz=pz-(cs*d)/1024;\n   \
-        \         if(vt_v281_abs(cx-h->x)<h->half+28 &&\n               vt_v281_abs(cz-h->z)<h->half+28)\n               \
-        \ return 1;\n        }\n    }\n    return 0;\n}\n'''\ns=s.replace(anchor,ray+'\\n'+anchor,1)\n\n# Source of persistent\
-        \ problem: V28 moves the PS1 follow camera AWAY from\n# avatar when the obstacle blend grows. Change sign; 2x blend\
-        \ = gentle dolly.\n# Dynamic height / hold behaviour from FIX21.2 remains unchanged.\nold_z=r'camera_pos\\.vz\\s*=\\\
-        s*CAMERA_Z\\s*-\\s*vt_v28_camera_blend\\s*;'\ns,n=re.subn(old_z,'camera_pos.vz = CAMERA_Z + (vt_v28_camera_blend *\
-        \ 2);',s)\nif n!=1:raise RuntimeError('FIX22: camera distance assignment not recognized: '+str(n))\n\n# Guard inherited\
-        \ gameplay features before overwriting the source file.\nfor token in ('LYDRA_FIX12_GLOBAL_PERCENT 75',\n 'int wanted\
-        \ = vt_v281_camera_obstructed() ? 52 : 0;',\n 'camera_pos.vy = 48 + (vt_v28_camera_blend * 2) / 5;',\n 'vt_v281_resolve_movement();',\n\
-        \ 'vt_v241_building(-175,125,52,1,1);',\n 'no automatic region 0->1 from step count',\n 'no automatic region 1->2\
-        \ from step count',\n 'vt_v31987_ground_rect(', 'vt_save_game(void)', 'vt_load_game(void)'):\n    if token not in\
-        \ s:raise RuntimeError('FIX22 inherited element missing: '+token)\nif s.count('static int vt_v31997_house_ray_blocked(void)\
-        \ {')!=1:\n    raise RuntimeError('FIX22: duplicate ray helper')\n# FIX26: prevent the old undeclared-identifier/compiler\
-        \ regression.\n# Required order: trig -> V28 house struct/array/abs -> ray implementation -> camera.\nordered=(\n\
-        \ 'static int vt_v293_cos(int angle)',\n '} vt_v281_blocker_t;',\n 'static const vt_v281_blocker_t vt_v281_houses[]',\n\
-        \ 'static int vt_v281_abs(int n)',\n 'static int vt_v31997_house_ray_blocked(void) {',\n 'static int vt_v281_camera_obstructed(void)\
-        \ {'\n)\nfor marker in ordered:\n    if s.count(marker)!=1:\n        raise RuntimeError('FIX26: missing/duplicate\
-        \ C declaration: '+marker)\nwhere=[s.index(marker) for marker in ordered]\nif where!=sorted(where):\n    raise RuntimeError('FIX26:\
-        \ C definitions are still out of order: '+str(where))\np.write_text(s,encoding='utf-8')\nPath('artifacts').mkdir(exist_ok=True)\n\
+        \    return hold_frames>0;\n}'''\n# FIX27: The *existing* V28.1 camera function already compiled using the\n# house\
+        \ struct, its array and vt_v281_abs. Define the new ray directly AFTER\n# that same camera routine. The camera uses\
+        \ its forward prototype; the ray\n# is compiled where the colliders are already declared. Never insert the ray\n#\
+        \ near vt_v293_rotate_mesh_point(), which is above the collider definitions.\nray=r'''/* FIX22: ray from avatar backwards\
+        \ toward camera in WORLD coordinates.\n   Five samples cost no draw polygons and work when yaw changes 360 degrees.\
+        \ */\nstatic int vt_v31997_house_ray_blocked(void) {\n    int length=CAMERA_Z<0?-CAMERA_Z:CAMERA_Z;\n    int sn=vt_v293_sin(vt_v292_cam_yaw);\n\
+        \    int cs=vt_v293_cos(vt_v292_cam_yaw);\n    unsigned int j;\n    int k;\n    if(length<80)length=80;\n    if(length>360)length=360;\n\
+        \    for(j=0;j<sizeof(vt_v281_houses)/sizeof(vt_v281_houses[0]);j++) {\n        const vt_v281_blocker_t *h=&vt_v281_houses[j];\n\
+        \        if(h->map_region!=region)continue;\n        for(k=1;k<=5;k++) {\n            int d=(length*k)/5;\n      \
+        \      int cx=px+(sn*d)/1024;\n            int cz=pz-(cs*d)/1024;\n            if(vt_v281_abs(cx-h->x)<h->half+28\
+        \ &&\n               vt_v281_abs(cz-h->z)<h->half+28)\n                return 1;\n        }\n    }\n    return 0;\n\
+        }\n'''\ns=s[:a]+new+'\\n'+ray+s[b:]\n\n# Source of persistent problem: V28 moves the PS1 follow camera AWAY from\n\
+        # avatar when the obstacle blend grows. Change sign; 2x blend = gentle dolly.\n# Dynamic height / hold behaviour from\
+        \ FIX21.2 remains unchanged.\nold_z=r'camera_pos\\.vz\\s*=\\s*CAMERA_Z\\s*-\\s*vt_v28_camera_blend\\s*;'\ns,n=re.subn(old_z,'camera_pos.vz\
+        \ = CAMERA_Z + (vt_v28_camera_blend * 2);',s)\nif n!=1:raise RuntimeError('FIX22: camera distance assignment not recognized:\
+        \ '+str(n))\n\n# Guard inherited gameplay features before overwriting the source file.\nfor token in ('LYDRA_FIX12_GLOBAL_PERCENT\
+        \ 75',\n 'int wanted = vt_v281_camera_obstructed() ? 52 : 0;',\n 'camera_pos.vy = 48 + (vt_v28_camera_blend * 2) /\
+        \ 5;',\n 'vt_v281_resolve_movement();',\n 'vt_v241_building(-175,125,52,1,1);',\n 'no automatic region 0->1 from step\
+        \ count',\n 'no automatic region 1->2 from step count',\n 'vt_v31987_ground_rect(', 'vt_save_game(void)', 'vt_load_game(void)'):\n\
+        \    if token not in s:raise RuntimeError('FIX22 inherited element missing: '+token)\nif s.count('static int vt_v31997_house_ray_blocked(void)\
+        \ {')!=1:\n    raise RuntimeError('FIX22: duplicate ray helper')\n# FIX27: Validate REAL source dependency order by\
+        \ regex, not the fragile\n# exact spelling/count of a trig function in an auto-generated PS1 source.\n# Crucially\
+        \ the old camera used house types successfully before FIX22.\nneed={\n 'V28 house typedef': r'\\}\\s*vt_v281_blocker_t\\\
+        s*;',\n 'V28 house array': r'\\bstatic\\s+const\\s+vt_v281_blocker_t\\s+vt_v281_houses\\s*\\[\\s*\\]',\n 'V28 abs\
+        \ implementation': r'\\bstatic\\s+int\\s+vt_v281_abs\\s*\\(\\s*int\\s+\\w+\\s*\\)\\s*\\{',\n 'camera function': r'\\\
+        bstatic\\s+int\\s+vt_v281_camera_obstructed\\s*\\(\\s*void\\s*\\)\\s*\\{',\n 'ray implementation': r'\\bstatic\\s+int\\\
+        s+vt_v31997_house_ray_blocked\\s*\\(\\s*void\\s*\\)\\s*\\{',\n}\npositions=[]\nfor name,regex in need.items():\n \
+        \   matches=list(re.finditer(regex,s,re.S))\n    if len(matches)!=1:\n        raise RuntimeError('FIX27: unrecognized\
+        \ or duplicate '+name+': '+str(len(matches)))\n    positions.append(matches[0].start())\nif positions!=sorted(positions):\n\
+        \    raise RuntimeError('FIX27: camera dependency order wrong: '+str(dict(zip(need,positions))))\n# Original camera\
+        \ must have a prototype before it invokes the ray.\nassert s.index('static int vt_v31997_house_ray_blocked(void);')<positions[-2]\n\
+        print('FIX27 declarations verified: typedef < array < abs < camera < ray')\np.write_text(s,encoding='utf-8')\nPath('artifacts').mkdir(exist_ok=True)\n\
         Path('artifacts/KAMERA_FIX22_DIAGNOSE.txt').write_text(\n 'V31.9.9.7 FIX22: camera samples five points behind avatar\
         \ along camera yaw.\\n'\n 'If a house is in camera line, follow camera shifts TOWARD player by 2x blend; V28 moved\
         \ AWAY.\\n'\n 'FIX21.2 height, 9-frame hold, FIX20 cities, FIX19 collisions, FIX12 speed 75 percent kept.\\n'\n 'Covers\
         \ buildings in all three map regions; PS1 emulator test required.\\n',encoding='utf-8')\nprint('FIX22: yaw-aware house\
         \ camera + approach on occlusion; original 75 percent controls kept')\nFIX22_PY\npython3 \"$RUNNER_TEMP/lydra_fix22_camera.py\"\
         \n"
-    - name: FIX26 Kamera Typen und Deklarationsreihenfolge validieren
+    - name: FIX27 Hauskamera C-Deklarationen robust pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'FIX22_CHECK'\nfrom pathlib import Path\nimport os\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
         for term in ('static int vt_v31997_house_ray_blocked(void) {',\n             'camera_pos.vz = CAMERA_Z + (vt_v28_camera_blend\
         \ * 2);',\n             'camera_pos.vy = 48 + (vt_v28_camera_blend * 2) / 5;',\n             'hold_frames=9;', 'LYDRA_FIX12_GLOBAL_PERCENT\
         \ 75',\n             'vt_v241_building(-175,125,52,1,1);',\n             'valid geographic transition keeps its new\
         \ location'):\n    if term not in s: raise RuntimeError('FIX22: expected unchanged feature missing: '+term)\nif s.count('static\
-        \ int vt_v31997_house_ray_blocked(void) {')!=1:\n    raise RuntimeError('FIX22: camera helper duplicate')\n# FIX26:\
-        \ explicit compile-order assertion based on the actual compiler errors.\nordered=('static int vt_v293_sin(int angle)',\n\
-        \         '} vt_v281_blocker_t;',\n         'static const vt_v281_blocker_t vt_v281_houses[]',\n         'static int\
-        \ vt_v281_abs(int n)',\n         'static int vt_v31997_house_ray_blocked(void) {',\n         'static int vt_v281_camera_obstructed(void)\
-        \ {')\nfor marker in ordered:\n    if s.count(marker)!=1:\n        raise RuntimeError('FIX26 incorrect helper ordering/duplicate:\
-        \ '+marker)\nif [s.index(x) for x in ordered]!=sorted(s.index(x) for x in ordered):\n    raise RuntimeError('FIX26\
-        \ PS1 camera uses collider types before their declaration')\nassert Path('artifacts/KAMERA_FIX22_DIAGNOSE.txt').stat().st_size>180\n\
+        \ int vt_v31997_house_ray_blocked(void) {')!=1:\n    raise RuntimeError('FIX22: camera helper duplicate')\n# FIX27:\
+        \ C-Dependency order based on the actual source, with flexible whitespace.\nimport re\npatterns=(\n r'\\}\\s*vt_v281_blocker_t\\\
+        s*;',\n r'\\bstatic\\s+const\\s+vt_v281_blocker_t\\s+vt_v281_houses\\s*\\[\\s*\\]',\n r'\\bstatic\\s+int\\s+vt_v281_abs\\\
+        s*\\(\\s*int\\s+\\w+\\s*\\)\\s*\\{',\n r'\\bstatic\\s+int\\s+vt_v281_camera_obstructed\\s*\\(\\s*void\\s*\\)\\s*\\\
+        {',\n r'\\bstatic\\s+int\\s+vt_v31997_house_ray_blocked\\s*\\(\\s*void\\s*\\)\\s*\\{',\n)\nocc=[list(re.finditer(p,s,re.S))\
+        \ for p in patterns]\nif any(len(ms)!=1 for ms in occ):\n    raise RuntimeError('FIX27: missing or duplicated house/ray\
+        \ C declaration: '+str([len(ms) for ms in occ]))\npos=[ms[0].start() for ms in occ]\nif pos!=sorted(pos):\n    raise\
+        \ RuntimeError('FIX27: house/ray C declarations in wrong order: '+str(pos))\nprint('FIX27: collider types and ray\
+        \ ordered correctly; no exact trig helper signature assumed')\nassert Path('artifacts/KAMERA_FIX22_DIAGNOSE.txt').stat().st_size>180\n\
         print('FIX22: rotated camera ray, house pull-in, stable city/region collision and 75-percent input verified')\nFIX22_CHECK\n"
     - name: FIX24 PS1-Fachwerk Buergerhaeuser stabil einbauen
       shell: bash
@@ -891,11 +896,11 @@ jobs:
     - name: Basis 50
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
-    - name: FIX26 Basis 51 PS1 kompilieren mit vollstaendigem Fehlerprotokoll
+    - name: FIX27 Basis 51 PS1 mit vollstaendigem Compilerprotokoll
       shell: bash
       run: "set -uo pipefail\nmkdir -p artifacts\n# Der bisherige Wrapper meldete nur CalledProcessError / exit code 1.\n\
-        # Das eigentliche Compiler-Stderr und der Linker-Status bleiben jetzt erhalten.\necho '=== FIX25: Originalen, UNVERAENDERTEN\
-        \ V31.8.5 Build-Schritt 51 ausfuehren ==='\nprintf '%s\\n' 'FIX25: volle Kompilierausgabe unter artifacts/FIX25_BUILD_LOG.txt'\n\
+        # Das eigentliche Compiler-Stderr und der Linker-Status bleiben jetzt erhalten.\necho '=== FIX27: Originalen, UNVERAENDERTEN\
+        \ V31.8.5 Build-Schritt 51 ausfuehren ==='\nprintf '%s\\n' 'FIX27: volle Kompilierausgabe unter artifacts/FIX25_BUILD_LOG.txt'\n\
         python3 \"$RUNNER_TEMP/lydra_v3185_replay.py\" 51 2>&1 | tee artifacts/FIX25_BUILD_LOG.txt\nbuild_rc=${PIPESTATUS[0]}\n\
         export LYDRA_FIX25_BUILD_RC=\"$build_rc\"\npython3 - <<'FIX25_PARSE'\nimport os,re\nfrom pathlib import Path\nroot=Path('artifacts')\n\
         log=(root/'FIX25_BUILD_LOG.txt').read_text(encoding='utf-8',errors='replace').splitlines()\nrc=int(os.environ.get('LYDRA_FIX25_BUILD_RC','1'))\n\
@@ -909,15 +914,15 @@ jobs:
         else:\n    out.append('PS1 Build erfolgreich abgeschlossen.')\n(root/'FIX25_ERSTE_FEHLER.txt').write_text('\\n'.join(out)+'\\\
         n',encoding='utf-8')\nsrc=Path(os.environ.get('PROJECT_DIR',''))/'src'/'main.c'\nif src.is_file():\n    # Voller Quelltext\
         \ hilft, Zeilenangaben aus dem Compiler zurueckzuverfolgen.\n    (root/'FIX25_MAIN_C.c').write_bytes(src.read_bytes())\n\
-        print('\\n=== FIX25: Erste Compiler-/Linkerfehler ===')\nprint('\\n'.join(out[:130]))\nprint('=== ENDE FIX25 Diagnose\
-        \ ===')\nFIX25_PARSE\nif [ \"$build_rc\" -ne 0 ]; then\n  echo \"::error::FIX25: Basis 51 scheiterte mit Exitcode\
-        \ $build_rc. Echte Compilerfehler stehen oben und im Diagnose-Artefakt.\"\n  exit \"$build_rc\"\nfi\necho 'FIX25:\
+        print('\\n=== FIX27: Erste Compiler-/Linkerfehler ===')\nprint('\\n'.join(out[:130]))\nprint('=== ENDE FIX27 Diagnose\
+        \ ===')\nFIX25_PARSE\nif [ \"$build_rc\" -ne 0 ]; then\n  echo \"::error::FIX27: Basis 51 scheiterte mit Exitcode\
+        \ $build_rc. Echte Compilerfehler stehen oben und im Diagnose-Artefakt.\"\n  exit \"$build_rc\"\nfi\necho 'FIX27:\
         \ PS1-Komplettbuild erfolgreich. Alle FIX24-Hausdetails beibehalten.'\n"
-    - name: FIX26 Fehlerlog bei fehlgeschlagenem Build hochladen
+    - name: FIX27 Fehlermeldungen als Artefakt sichern
       if: ${{ failure() }}
       uses: actions/upload-artifact@v4
       with:
-        name: LYDRA-FIX26-FEHLERPROTOKOLL
+        name: LYDRA-FIX27-PS1-BUILD-DIAGNOSE
         path: 'artifacts/FIX25_BUILD_LOG.txt
 
           artifacts/FIX25_ERSTE_FEHLER.txt
@@ -934,7 +939,7 @@ jobs:
     - name: Basis 54
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 54
-    - name: FIX26 PS1-Ausgaben Hauskamera Staedte und Spielbasis pruefen
+    - name: FIX27 PS1 Hauskamera Staedte und Spielbasis pruefen
       shell: bash
       run: "set -euo pipefail\nfor f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe TEMPO_FIX12_DIAGNOSE.txt FLUSS_FIX13_1_DIAGNOSE.txt\
         \ BERGE_FIX14_DIAGNOSE.txt BERGE_FIX15_DIAGNOSE.txt BAUM_FIX16_DIAGNOSE.txt FELS_FIX17_DIAGNOSE.txt FERNBERGE_FIX18_DIAGNOSE.txt\
@@ -949,13 +954,13 @@ jobs:
         \ speed retained.' > artifacts/VERSION_V31_9_9_7_FIX22.txt\n\nprintf '%s\\n' 'LYDRA WORLD OF DRAGON V31.9.9.7 FIX22'\
         \ 'Kamera zieht bei Hausverdeckung naeher, Staedte und FIX12 75 Prozent unveraendert.' > artifacts/VERSION_V31_9_9_7_FIX22.txt\n\
         \ntest -s artifacts/BUERGERHAUS_FIX24_DIAGNOSE.txt || { echo \"::error::FIX24 Hausdiagnose fehlt\"; exit 1; }\n\n\
-        printf '%s\\n' 'LYDRA WORLD OF DRAGON V31.9.9.11 FIX26: Reihenfolge der V28-Haustypen und FIX22-Kamerafunktion berichtigt,\
-        \ FIX24-Buergerhaeuser erhalten.' > artifacts/VERSION_V31_9_9_11_FIX26.txt\n"
-    - name: FIX26 PS1 BIN CUE EXE ELF und Hausdetails als Artefakt hochladen
+        printf '%s\\n' 'LYDRA WORLD OF DRAGON V31.9.9.12 FIX27: Kameraray hinter bestehenden V28.1-Kollisionen definiert,\
+        \ FIX24-Buergerhaeuser erhalten.' > artifacts/VERSION_V31_9_9_12_FIX27.txt\n"
+    - name: FIX27 PS1 BIN CUE EXE ELF und Buergerhaus-Grafik bereitstellen
       uses: actions/upload-artifact@v4
       id: lydra_ps1_artifact
       with:
-        name: Lydra-PS1-V31-9-9-11-FIX26-BUERGERHAEUSER
+        name: Lydra-PS1-V31-9-9-12-FIX27-BUERGERHAEUSER
         path: artifacts/
         if-no-files-found: error
         retention-days: 14
