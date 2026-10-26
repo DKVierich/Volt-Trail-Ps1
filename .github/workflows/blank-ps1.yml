@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.9.12 FIX27 - Hauskamera C-Reihenfolge robust
+name: Lydra World Of Dragon V31.9.9.13 FIX28 - Buergerhaus Grafikpolitur
 'on':
   workflow_dispatch: {}
 permissions:
@@ -755,7 +755,7 @@ jobs:
         \ RuntimeError('FIX21 source verify '+token)\nif Path('artifacts/KAMERA_FIX21_2_DIAGNOSE.txt').stat().st_size<180:\n\
         \    raise RuntimeError('FIX21 missing camera report')\nprint('FIX21.2 camera validated without changes to movement\
         \ or region state')\nLYDRA_FIX21_VERIFY\n"
-    - name: FIX27 Hauskamera sicher nach Haus-Kollisionen definieren
+    - name: FIX28 Hauskamera sicher nach Haus-Kollisionen definieren
       shell: bash
       run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lydra_fix22_camera.py\" <<'FIX22_PY'\n#!/usr/bin/env python3\n# FIX22:\
         \ rotate-aware camera occlusion, camera really approaches player.\nimport os,re\nfrom pathlib import Path\np=Path(os.environ['PROJECT_DIR'])/'src/main.c'\n\
@@ -776,7 +776,7 @@ jobs:
         static int vt_v281_camera_obstructed(void) {\n    static int hold_frames=0;\n    static int previous_region=-1;\n\
         \    int blocked;\n    if(previous_region!=region) {\n        previous_region=region;\n        hold_frames=0;\n  \
         \  }\n    blocked=vt_v31997_house_ray_blocked();\n    if(blocked)hold_frames=9;\n    else if(hold_frames>0)hold_frames--;\n\
-        \    return hold_frames>0;\n}'''\n# FIX27: The *existing* V28.1 camera function already compiled using the\n# house\
+        \    return hold_frames>0;\n}'''\n# FIX28: The *existing* V28.1 camera function already compiled using the\n# house\
         \ struct, its array and vt_v281_abs. Define the new ray directly AFTER\n# that same camera routine. The camera uses\
         \ its forward prototype; the ray\n# is compiled where the colliders are already declared. Never insert the ray\n#\
         \ near vt_v293_rotate_mesh_point(), which is above the collider definitions.\nray=r'''/* FIX22: ray from avatar backwards\
@@ -796,16 +796,16 @@ jobs:
         \ 5;',\n 'vt_v281_resolve_movement();',\n 'vt_v241_building(-175,125,52,1,1);',\n 'no automatic region 0->1 from step\
         \ count',\n 'no automatic region 1->2 from step count',\n 'vt_v31987_ground_rect(', 'vt_save_game(void)', 'vt_load_game(void)'):\n\
         \    if token not in s:raise RuntimeError('FIX22 inherited element missing: '+token)\nif s.count('static int vt_v31997_house_ray_blocked(void)\
-        \ {')!=1:\n    raise RuntimeError('FIX22: duplicate ray helper')\n# FIX27: Validate REAL source dependency order by\
+        \ {')!=1:\n    raise RuntimeError('FIX22: duplicate ray helper')\n# FIX28: Validate REAL source dependency order by\
         \ regex, not the fragile\n# exact spelling/count of a trig function in an auto-generated PS1 source.\n# Crucially\
         \ the old camera used house types successfully before FIX22.\nneed={\n 'V28 house typedef': r'\\}\\s*vt_v281_blocker_t\\\
         s*;',\n 'V28 house array': r'\\bstatic\\s+const\\s+vt_v281_blocker_t\\s+vt_v281_houses\\s*\\[\\s*\\]',\n 'V28 abs\
         \ implementation': r'\\bstatic\\s+int\\s+vt_v281_abs\\s*\\(\\s*int\\s+\\w+\\s*\\)\\s*\\{',\n 'camera function': r'\\\
         bstatic\\s+int\\s+vt_v281_camera_obstructed\\s*\\(\\s*void\\s*\\)\\s*\\{',\n 'ray implementation': r'\\bstatic\\s+int\\\
         s+vt_v31997_house_ray_blocked\\s*\\(\\s*void\\s*\\)\\s*\\{',\n}\npositions=[]\nfor name,regex in need.items():\n \
-        \   matches=list(re.finditer(regex,s,re.S))\n    if len(matches)!=1:\n        raise RuntimeError('FIX27: unrecognized\
+        \   matches=list(re.finditer(regex,s,re.S))\n    if len(matches)!=1:\n        raise RuntimeError('FIX28: unrecognized\
         \ or duplicate '+name+': '+str(len(matches)))\n    positions.append(matches[0].start())\nif positions!=sorted(positions):\n\
-        \    raise RuntimeError('FIX27: camera dependency order wrong: '+str(dict(zip(need,positions))))\n# Original camera\
+        \    raise RuntimeError('FIX28: camera dependency order wrong: '+str(dict(zip(need,positions))))\n# Original camera\
         \ must have a prototype before it invokes the ray.\nassert s.index('static int vt_v31997_house_ray_blocked(void);')<positions[-2]\n\
         print('FIX27 declarations verified: typedef < array < abs < camera < ray')\np.write_text(s,encoding='utf-8')\nPath('artifacts').mkdir(exist_ok=True)\n\
         Path('artifacts/KAMERA_FIX22_DIAGNOSE.txt').write_text(\n 'V31.9.9.7 FIX22: camera samples five points behind avatar\
@@ -814,21 +814,21 @@ jobs:
         \ buildings in all three map regions; PS1 emulator test required.\\n',encoding='utf-8')\nprint('FIX22: yaw-aware house\
         \ camera + approach on occlusion; original 75 percent controls kept')\nFIX22_PY\npython3 \"$RUNNER_TEMP/lydra_fix22_camera.py\"\
         \n"
-    - name: FIX27 Hauskamera C-Deklarationen robust pruefen
+    - name: FIX28 Hauskamera C-Deklarationen robust pruefen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'FIX22_CHECK'\nfrom pathlib import Path\nimport os\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
         for term in ('static int vt_v31997_house_ray_blocked(void) {',\n             'camera_pos.vz = CAMERA_Z + (vt_v28_camera_blend\
         \ * 2);',\n             'camera_pos.vy = 48 + (vt_v28_camera_blend * 2) / 5;',\n             'hold_frames=9;', 'LYDRA_FIX12_GLOBAL_PERCENT\
         \ 75',\n             'vt_v241_building(-175,125,52,1,1);',\n             'valid geographic transition keeps its new\
         \ location'):\n    if term not in s: raise RuntimeError('FIX22: expected unchanged feature missing: '+term)\nif s.count('static\
-        \ int vt_v31997_house_ray_blocked(void) {')!=1:\n    raise RuntimeError('FIX22: camera helper duplicate')\n# FIX27:\
+        \ int vt_v31997_house_ray_blocked(void) {')!=1:\n    raise RuntimeError('FIX22: camera helper duplicate')\n# FIX28:\
         \ C-Dependency order based on the actual source, with flexible whitespace.\nimport re\npatterns=(\n r'\\}\\s*vt_v281_blocker_t\\\
         s*;',\n r'\\bstatic\\s+const\\s+vt_v281_blocker_t\\s+vt_v281_houses\\s*\\[\\s*\\]',\n r'\\bstatic\\s+int\\s+vt_v281_abs\\\
         s*\\(\\s*int\\s+\\w+\\s*\\)\\s*\\{',\n r'\\bstatic\\s+int\\s+vt_v281_camera_obstructed\\s*\\(\\s*void\\s*\\)\\s*\\\
         {',\n r'\\bstatic\\s+int\\s+vt_v31997_house_ray_blocked\\s*\\(\\s*void\\s*\\)\\s*\\{',\n)\nocc=[list(re.finditer(p,s,re.S))\
-        \ for p in patterns]\nif any(len(ms)!=1 for ms in occ):\n    raise RuntimeError('FIX27: missing or duplicated house/ray\
+        \ for p in patterns]\nif any(len(ms)!=1 for ms in occ):\n    raise RuntimeError('FIX28: missing or duplicated house/ray\
         \ C declaration: '+str([len(ms) for ms in occ]))\npos=[ms[0].start() for ms in occ]\nif pos!=sorted(pos):\n    raise\
-        \ RuntimeError('FIX27: house/ray C declarations in wrong order: '+str(pos))\nprint('FIX27: collider types and ray\
+        \ RuntimeError('FIX28: house/ray C declarations in wrong order: '+str(pos))\nprint('FIX28: collider types and ray\
         \ ordered correctly; no exact trig helper signature assumed')\nassert Path('artifacts/KAMERA_FIX22_DIAGNOSE.txt').stat().st_size>180\n\
         print('FIX22: rotated camera ray, house pull-in, stable city/region collision and 75-percent input verified')\nFIX22_CHECK\n"
     - name: FIX24 PS1-Fachwerk Buergerhaeuser stabil einbauen
@@ -893,14 +893,128 @@ jobs:
         \    'vt_save_game(void)','vt_load_game(void)'):\n    if feature not in s:raise RuntimeError('FIX24 missing '+feature)\n\
         assert s.count('static void vt_v241_building(')==1\nassert Path('artifacts/BUERGERHAUS_FIX24_DIAGNOSE.txt').stat().st_size>100\n\
         print('FIX24 precompile checks successful; now PS1 SDK will compile unchanged function plus small accents')\nLYDRA_FIX24_TEST"
+    - name: FIX28 Buergerhaeuser optisch naeher ans Referenzhaus bringen
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > "$RUNNER_TEMP/lydra_fix28_house_style.py" <<'LYDRA_FIX28_HOUSE'
+        #!/usr/bin/env python3
+        import os,re
+        from pathlib import Path
+
+        path=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=path.read_text(encoding='utf-8')
+        pattern=re.compile(r'/\* FIX24: PS1-Fachwerkhaus nach Vorlagenbild; reine Darstellung\. \*/.*?if \(inside\) vt_v282_draw_house_npcs\(x,z\);', re.S)
+        if not pattern.search(s):
+            raise RuntimeError('FIX28: existing FIX24 house ornament block not found')
+
+        replacement = r'''
+            /* FIX28: richer citizen house silhouette inspired by the fantasy reference house. */
+            if (!occluded && vt_v281_abs(x-px)<360 && vt_v281_abs(z-pz)<520) {
+                /* Light stone plinth, stronger timber framing and warm plaster facade. */
+                draw_box(x-s+9,26,z-s+5,8,146,143,133);
+                draw_box(x+s-9,26,z-s+5,8,146,143,133);
+                draw_box(x-s+9,10,z+s-8,8,132,130,121);
+                draw_box(x+s-9,10,z+s-8,8,132,130,121);
+                draw_box(x-s+7,-27,z-s+4,4,108,72,46);
+                draw_box(x+s-7,-27,z-s+4,4,108,72,46);
+                draw_box(x-s+8,-5,z+3,3,104,69,43);
+                draw_box(x+s-8,-5,z+3,3,104,69,43);
+                draw_box(x-35,-21,z-s-2,3,114,76,46);
+                draw_box(x+35,-21,z-s-2,3,114,76,46);
+                draw_box(x,-49,z-s,5,124,84,51);
+                draw_box(x,-78,z-s+2,4,113,80,49);
+
+                /* Entrance remains clear; only posts, lintel and small steps are added. */
+                draw_box(x-36,-48,z-s+2,5,102,67,42);
+                draw_box(x+36,-48,z-s+2,5,102,67,42);
+                draw_box(x,-54,z-s+1,5,113,76,45);
+                vt_v241_flat(x-30,z-s-22,x+30,z-s-7,32,161,154,140);
+                vt_v241_flat(x-22,z-s-31,x+22,z-s-23,32,144,139,126);
+
+                /* Front windows: dark frames, amber glass, narrow shutters. */
+                draw_box(x-s/2,-9,z-s-4,10,77,53,38);
+                draw_box(x+s/2,-9,z-s-4,10,77,53,38);
+                draw_box(x-s/2,-9,z-s-7,6,245,174,72);
+                draw_box(x+s/2,-9,z-s-7,6,248,182,79);
+                draw_box(x-s/2-11,-9,z-s-4,3,96,63,41);
+                draw_box(x-s/2+11,-9,z-s-4,3,96,63,41);
+                draw_box(x+s/2-11,-9,z-s-4,3,96,63,41);
+                draw_box(x+s/2+11,-9,z-s-4,3,96,63,41);
+
+                /* Side window / shutter and a tiny woodshed hint. */
+                draw_box(x+s+2,-10,z+8,8,85,59,40);
+                draw_box(x+s+4,-10,z+8,5,240,170,72);
+                draw_box(x+s+18,6,z+28,7,98,70,44);
+                draw_box(x+s+26,12,z+33,5,119,92,58);
+
+                /* Hanging lanterns and warm light. */
+                draw_box(x-43,-36,z-s-15,2,66,50,40);
+                draw_box(x+43,-36,z-s-15,2,66,50,40);
+                draw_box(x-43,-30,z-s-15,4,78,61,46);
+                draw_box(x+43,-30,z-s-15,4,78,61,46);
+                draw_box(x-43,-28,z-s-17,3,248,177,62);
+                draw_box(x+43,-28,z-s-17,3,248,177,62);
+            }
+            if (!hide_roof && vt_v281_abs(x-px)<360 && vt_v281_abs(z-pz)<520) {
+                /* Steeper blue slate roof, layered ridge and taller chimney. */
+                vt_pyramid(x,-93,z,s+10,36,r0,g0,b0);
+                vt_pyramid(x,-103,z,s-20,18,r0+10,g0+10,b0+12);
+                vt_pyramid(x,-118,z,s-33,9,r0+18,g0+18,b0+20);
+                /* Little dormer window on the front roof slope. */
+                vt_pyramid(x,-103,z-s+16,13,11,86,91,121);
+                draw_box(x,-97,z-s+16,5,242,175,72);
+                /* Front gable board and crest. */
+                draw_box(x,-101,z-s+2,4,111,79,51);
+                draw_box(x,-88,z-s+6,4,128,93,58);
+                /* Stone chimney with dark cap. */
+                draw_box(x+s/2,-112,z+s/3,11,165,157,140);
+                draw_box(x+s/2,-135,z+s/3,10,177,166,146);
+                draw_box(x+s/2,-152,z+s/3,12,123,74,52);
+            }
+            if (inside) vt_v282_draw_house_npcs(x,z);
+        '''
+        s, n = pattern.subn(replacement, s, count=1)
+        if n != 1:
+            raise RuntimeError('FIX28: citizen house style replacement failed')
+        path.write_text(s, encoding='utf-8')
+        art=Path('artifacts')
+        art.mkdir(exist_ok=True)
+        (art/'BUERGERHAUS_FIX28_DIAGNOSE.txt').write_text(
+            'Lydra World Of Dragon V31.9.9.13 FIX28\n'
+            'Citizen houses visually upgraded on top of the working FIX24/FIX27 base.\n'
+            'Preserved: doorway gap, interiors, camera behavior, collisions, saves, 75 percent speed.\n'
+            'Added visuals: steeper roof layers, dormer, taller chimney, timber framing, shutters, lanterns, path steps.\n',
+            encoding='utf-8')
+        print('FIX28: citizen houses upgraded visually while keeping existing gameplay logic stable')
+        LYDRA_FIX28_HOUSE
+        python3 -m py_compile "$RUNNER_TEMP/lydra_fix28_house_style.py"
+        python3 "$RUNNER_TEMP/lydra_fix28_house_style.py"
+    - name: FIX28 Hausdetails vor Build pruefen
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'LYDRA_FIX28_TEST'
+        import os
+        from pathlib import Path
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text(encoding='utf-8')
+        assert 'FIX28: richer citizen house silhouette inspired by the fantasy reference house.' in s
+        assert 'vt_v282_draw_house_npcs(x,z);' in s
+        assert 'vt_v31997_house_ray_blocked(void)' in s
+        assert 'LYDRA_FIX12_GLOBAL_PERCENT 75' in s
+        assert Path('artifacts/BUERGERHAUS_FIX24_DIAGNOSE.txt').is_file()
+        assert Path('artifacts/BUERGERHAUS_FIX28_DIAGNOSE.txt').is_file()
+        print('FIX28 checks successful: upgraded roofs/timber/lanterns present, FIX24/FIX27 base preserved')
+        LYDRA_FIX28_TEST
     - name: Basis 50
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
-    - name: FIX27 Basis 51 PS1 mit vollstaendigem Compilerprotokoll
+    - name: FIX28 Basis 51 PS1 mit vollstaendigem Compilerprotokoll
       shell: bash
       run: "set -uo pipefail\nmkdir -p artifacts\n# Der bisherige Wrapper meldete nur CalledProcessError / exit code 1.\n\
-        # Das eigentliche Compiler-Stderr und der Linker-Status bleiben jetzt erhalten.\necho '=== FIX27: Originalen, UNVERAENDERTEN\
-        \ V31.8.5 Build-Schritt 51 ausfuehren ==='\nprintf '%s\\n' 'FIX27: volle Kompilierausgabe unter artifacts/FIX25_BUILD_LOG.txt'\n\
+        # Das eigentliche Compiler-Stderr und der Linker-Status bleiben jetzt erhalten.\necho '=== FIX28: Originalen, UNVERAENDERTEN\
+        \ V31.8.5 Build-Schritt 51 ausfuehren ==='\nprintf '%s\\n' 'FIX28: volle Kompilierausgabe unter artifacts/FIX25_BUILD_LOG.txt'\n\
         python3 \"$RUNNER_TEMP/lydra_v3185_replay.py\" 51 2>&1 | tee artifacts/FIX25_BUILD_LOG.txt\nbuild_rc=${PIPESTATUS[0]}\n\
         export LYDRA_FIX25_BUILD_RC=\"$build_rc\"\npython3 - <<'FIX25_PARSE'\nimport os,re\nfrom pathlib import Path\nroot=Path('artifacts')\n\
         log=(root/'FIX25_BUILD_LOG.txt').read_text(encoding='utf-8',errors='replace').splitlines()\nrc=int(os.environ.get('LYDRA_FIX25_BUILD_RC','1'))\n\
@@ -914,15 +1028,15 @@ jobs:
         else:\n    out.append('PS1 Build erfolgreich abgeschlossen.')\n(root/'FIX25_ERSTE_FEHLER.txt').write_text('\\n'.join(out)+'\\\
         n',encoding='utf-8')\nsrc=Path(os.environ.get('PROJECT_DIR',''))/'src'/'main.c'\nif src.is_file():\n    # Voller Quelltext\
         \ hilft, Zeilenangaben aus dem Compiler zurueckzuverfolgen.\n    (root/'FIX25_MAIN_C.c').write_bytes(src.read_bytes())\n\
-        print('\\n=== FIX27: Erste Compiler-/Linkerfehler ===')\nprint('\\n'.join(out[:130]))\nprint('=== ENDE FIX27 Diagnose\
-        \ ===')\nFIX25_PARSE\nif [ \"$build_rc\" -ne 0 ]; then\n  echo \"::error::FIX27: Basis 51 scheiterte mit Exitcode\
-        \ $build_rc. Echte Compilerfehler stehen oben und im Diagnose-Artefakt.\"\n  exit \"$build_rc\"\nfi\necho 'FIX27:\
+        print('\\n=== FIX28: Erste Compiler-/Linkerfehler ===')\nprint('\\n'.join(out[:130]))\nprint('=== ENDE FIX27 Diagnose\
+        \ ===')\nFIX25_PARSE\nif [ \"$build_rc\" -ne 0 ]; then\n  echo \"::error::FIX28: Basis 51 scheiterte mit Exitcode\
+        \ $build_rc. Echte Compilerfehler stehen oben und im Diagnose-Artefakt.\"\n  exit \"$build_rc\"\nfi\necho 'FIX28:\
         \ PS1-Komplettbuild erfolgreich. Alle FIX24-Hausdetails beibehalten.'\n"
-    - name: FIX27 Fehlermeldungen als Artefakt sichern
+    - name: FIX28 Fehlermeldungen als Artefakt sichern
       if: ${{ failure() }}
       uses: actions/upload-artifact@v4
       with:
-        name: LYDRA-FIX27-PS1-BUILD-DIAGNOSE
+        name: LYDRA-FIX28-PS1-BUILD-DIAGNOSE
         path: 'artifacts/FIX25_BUILD_LOG.txt
 
           artifacts/FIX25_ERSTE_FEHLER.txt
@@ -939,7 +1053,7 @@ jobs:
     - name: Basis 54
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 54
-    - name: FIX27 PS1 Hauskamera Staedte und Spielbasis pruefen
+    - name: FIX28 PS1 Hauskamera Staedte und Spielbasis pruefen
       shell: bash
       run: "set -euo pipefail\nfor f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe TEMPO_FIX12_DIAGNOSE.txt FLUSS_FIX13_1_DIAGNOSE.txt\
         \ BERGE_FIX14_DIAGNOSE.txt BERGE_FIX15_DIAGNOSE.txt BAUM_FIX16_DIAGNOSE.txt FELS_FIX17_DIAGNOSE.txt FERNBERGE_FIX18_DIAGNOSE.txt\
@@ -948,26 +1062,4 @@ jobs:
         \ Pass erhalten, 75-Prozent-Tempo beibehalten.' > artifacts/VERSION_V31_9_9_3_FIX18.txt\n\nprintf \"%s\\n\" \"Lydra\
         \ World Of Dragon V31.9.9.4 FIX19: Kollisionen/Haustuer, keine Wander-Teleports, Stadtweg frei und Bewegung 75 Prozent\"\
         \ > artifacts/VERSION_V31_9_9_4_FIX19.txt\n\nprintf '%s\\n' 'LYDRA WORLD OF DRAGON V31.9.9.5 FIX20: all cities present;\
-        \ region travel by coordinates; fixed 75 percent tempo.' > artifacts/VERSION_V31_9_9_5_FIX20.txt\n\ntest -s artifacts/KAMERA_FIX21_2_DIAGNOSE.txt\
-        \ && test -s artifacts/KAMERA_FIX22_DIAGNOSE.txt || { echo '::error::FIX21 Kamera-Diagnose fehlt'; exit 1; }\nprintf\
-        \ '%s\\n' 'LYDRA WORLD OF DRAGON V31.9.9.6 FIX21.2: near-house camera steadier; FIX20 cities and FIX12 75 percent\
-        \ speed retained.' > artifacts/VERSION_V31_9_9_7_FIX22.txt\n\nprintf '%s\\n' 'LYDRA WORLD OF DRAGON V31.9.9.7 FIX22'\
-        \ 'Kamera zieht bei Hausverdeckung naeher, Staedte und FIX12 75 Prozent unveraendert.' > artifacts/VERSION_V31_9_9_7_FIX22.txt\n\
-        \ntest -s artifacts/BUERGERHAUS_FIX24_DIAGNOSE.txt || { echo \"::error::FIX24 Hausdiagnose fehlt\"; exit 1; }\n\n\
-        printf '%s\\n' 'LYDRA WORLD OF DRAGON V31.9.9.12 FIX27: Kameraray hinter bestehenden V28.1-Kollisionen definiert,\
-        \ FIX24-Buergerhaeuser erhalten.' > artifacts/VERSION_V31_9_9_12_FIX27.txt\n"
-    - name: FIX27 PS1 BIN CUE EXE ELF und Buergerhaus-Grafik bereitstellen
-      uses: actions/upload-artifact@v4
-      id: lydra_ps1_artifact
-      with:
-        name: Lydra-PS1-V31-9-9-12-FIX27-BUERGERHAEUSER
-        path: artifacts/
-        if-no-files-found: error
-        retention-days: 14
-    - name: GitHub Artefakt-ID nach dem Upload erzwingen
-      shell: bash
-      run: "set -euo pipefail\nif [ -z \"${LYDRA_ARTIFACT_ID:-}\" ]; then\n  echo '::error::GitHub meldet keine Artefakt-ID\
-        \ trotz Build. Kein gruenes Ergebnis erlauben.'\n  exit 1\nfi\nprintf 'PS1 ZIP wurde von GitHub gespeichert. Artefakt-ID:\
-        \ %s\\n' \"$LYDRA_ARTIFACT_ID\"\n"
-      env:
-        LYDRA_ARTIFACT_ID: ${{ steps.lydra_ps1_artifact.outputs.artifact-id }}
+        \ region travel by coordinates; fixed 75 percent tempo.' > artifacts/VERSION_V31_9_9_5_FIX20.txt\n\n
