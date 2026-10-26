@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.9.18 FIX30.1 - Pruefsumme und Stadtanker repariert
+name: Lydra World Of Dragon V31.9.9.18 FIX30.2 - Pruefsumme und Stadtanker repariert
 'on':
   workflow_dispatch: {}
 permissions:
@@ -389,7 +389,7 @@ jobs:
     - name: Basis 54
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 54
-    - name: FIX30 PS1 Grafik Hausgroesse Stadtgroesse und Spielbasis pruefen
+    - name: FIX30.2 PS1 Ergebnis pruefen und kompakten Spielordner erstellen
       shell: bash
       run: |
         set -euo pipefail
@@ -413,14 +413,29 @@ jobs:
         test -s artifacts/GRAFIK_FIX30_DIAGNOSE.txt || { echo "::error::FIX30.1 Grafikdiagnose fehlt"; exit 1; }
         test -s artifacts/GRAFIK_FIX28_DIAGNOSE.txt || { echo "::error::FIX28 Grafikdiagnose fehlt"; exit 1; }
         printf '%s\n' 'LYDRA WORLD OF DRAGON V31.9.9.18 FIX30.1: groessere Hausmodelle und zusaetzliche Stadtgebaeude mit verifizierten Platzierungen.' > artifacts/VERSION_V31_9_9_18_FIX30_1.txt
-    - name: FIX30 PS1 BIN CUE EXE ELF als GitHub Artefakt hochladen
+
+        # FIX30.2: Fuer den Spieler NUR die beiden noetigen PS1-Dateien exportieren.
+        # Compiler-Logs, ELFs, EXEs und Diagnose-Dateien bleiben intern im Runner.
+        release_dir="$RUNNER_TEMP/lydra_ps1_spiel"
+        mkdir -p "$release_dir"
+        cp -- artifacts/VTRAIL.bin "$release_dir/VTRAIL.bin"
+        cp -- artifacts/VTRAIL.cue "$release_dir/VTRAIL.cue"
+        test -s "$release_dir/VTRAIL.bin"
+        test -s "$release_dir/VTRAIL.cue"
+        # Die CUE muss zum mitgelieferten BIN passen.
+        grep -qi 'VTRAIL.bin' "$release_dir/VTRAIL.cue" || { echo '::error::PS1-CUE zeigt nicht auf VTRAIL.bin'; exit 1; }
+        anzahl="$(find "$release_dir" -maxdepth 1 -type f | wc -l)"
+        test "$anzahl" -eq 2 || { echo "::error::Erwartet 2 Dateien im Spielordner, gefunden: $anzahl"; exit 1; }
+        echo "FIX30.2: Kompakter PS1-Download vorbereitet: VTRAIL.bin und VTRAIL.cue."
+    - name: FIX30.2 Nur BIN und CUE als Spiel herunterladen
       uses: actions/upload-artifact@v4
       id: lydra_ps1_artifact
       with:
-        name: Lydra-PS1-V31-9-9-18-FIX30-1-STADT-HAEUSER
-        path: artifacts/
+        name: Lydra-World-Of-Dragon-PS1-FIX30-2-KOMPAKT
+        path: ${{ runner.temp }}/lydra_ps1_spiel/
         if-no-files-found: error
         retention-days: 14
+        compression-level: 9
     - name: GitHub Artefakt-ID nach dem Upload erzwingen
       shell: bash
       run: "set -euo pipefail\nif [ -z \"${LYDRA_ARTIFACT_ID:-}\" ]; then\n  echo '::error::GitHub meldet keine Artefakt-ID trotz Build. Kein gruenes Ergebnis erlauben.'\n  exit 1\nfi\nprintf 'PS1 ZIP wurde von GitHub gespeichert. Artefakt-ID: %s\\n' \"$LYDRA_ARTIFACT_ID\"\n"
