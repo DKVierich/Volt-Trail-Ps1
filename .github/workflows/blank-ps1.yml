@@ -1,4 +1,4 @@
-name: Lydra World Of Dragon V31.9.9.14 FIX29 - Buergerhaus YAML Syntaxfix
+name: Lydra World Of Dragon V31.9.9.15 FIX30 - PS1 Artefaktpruefung korrigiert
 'on':
   workflow_dispatch: {}
 permissions:
@@ -1010,7 +1010,7 @@ jobs:
     - name: Basis 50
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
-    - name: FIX29 Basis 51 PS1 mit vollstaendigem Compilerprotokoll
+    - name: FIX30 Basis 51 PS1 mit vollstaendigem Compilerprotokoll
       shell: bash
       run: "set -uo pipefail\nmkdir -p artifacts\n# Der bisherige Wrapper meldete nur CalledProcessError / exit code 1.\n\
         # Das eigentliche Compiler-Stderr und der Linker-Status bleiben jetzt erhalten.\necho '=== FIX28: Originalen, UNVERAENDERTEN\
@@ -1032,11 +1032,11 @@ jobs:
         \ ===')\nFIX25_PARSE\nif [ \"$build_rc\" -ne 0 ]; then\n  echo \"::error::FIX28: Basis 51 scheiterte mit Exitcode\
         \ $build_rc. Echte Compilerfehler stehen oben und im Diagnose-Artefakt.\"\n  exit \"$build_rc\"\nfi\necho 'FIX28:\
         \ PS1-Komplettbuild erfolgreich. Alle FIX24-Hausdetails beibehalten.'\n"
-    - name: FIX29 Fehlermeldungen als Artefakt sichern
+    - name: FIX30 Fehlermeldungen als Artefakt sichern
       if: ${{ failure() }}
       uses: actions/upload-artifact@v4
       with:
-        name: LYDRA-FIX29-PS1-BUILD-DIAGNOSE
+        name: LYDRA-FIX30-PS1-BUILD-DIAGNOSE
         path: 'artifacts/FIX25_BUILD_LOG.txt
 
           artifacts/FIX25_ERSTE_FEHLER.txt
@@ -1053,17 +1053,26 @@ jobs:
     - name: Basis 54
       shell: bash
       run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 54
-    - name: FIX29 PS1 Hauskamera Staedte und Spielbasis pruefen
+    - name: FIX30 Echte PS1 Dateien pruefen - alte Diagnoseberichte optional
       shell: bash
       run: |
         set -euo pipefail
-        for f in VTRAIL.bin VTRAIL.cue VTRAIL.elf VTRAIL.exe TEMPO_FIX12_DIAGNOSE.txt FLUSS_FIX13_1_DIAGNOSE.txt BERGE_FIX14_DIAGNOSE.txt BERGE_FIX15_DIAGNOSE.txt BAUM_FIX16_DIAGNOSE.txt FELS_FIX17_DIAGNOSE.txt FERNBERGE_FIX18_DIAGNOSE.txt KOLLISION_FIX19_DIAGNOSE.txt STAEDTE_FIX20_DIAGNOSE.txt; do
-         test -s "artifacts/$f" || { echo "::error::Fehlende Datei: $f"; exit 1; }
+        mkdir -p artifacts
+        log=artifacts/FIX30_PRUEFPROTOKOLL.txt
+        printf '%s\n' 'LYDRA V31.9.9.15 FIX30 - Echte PS1 Build-Ausgaben' > "$log"
+        find artifacts -type f -printf '%p (%s bytes)\n' | sort | tee -a "$log"
+        missing=0
+        # Only genuine PS1 output files are build-critical. Never invent artifacts.
+        for ext in bin cue exe elf; do
+          file="artifacts/VTRAIL.$ext"
+          if [ ! -s "$file" ]; then
+            echo "::error::FIX30: Echte PS1-Datei fehlt oder ist leer: $file" | tee -a "$log"
+            missing=1
+          fi
         done
-        printf '%s\n' 'Lydra World Of Dragon V31.9.9.3 FIX18' 'Fernberge kleiner, Crystal Pass erhalten, 75-Prozent-Tempo beibehalten.' > artifacts/VERSION_V31_9_9_3_FIX18.txt
-
-        printf "%s\n" "Lydra World Of Dragon V31.9.9.4 FIX19: Kollisionen/Haustuer, keine Wander-Teleports, Stadtweg frei und Bewegung 75 Prozent" > artifacts/VERSION_V31_9_9_4_FIX19.txt
-
-        printf '%s\n' 'LYDRA WORLD OF DRAGON V31.9.9.5 FIX20: all cities present; region travel by coordinates; fixed 75 percent tempo.' > artifacts/VERSION_V31_9_9_5_FIX20.txt
-
-        test -s artifacts/KAMERA_FIX21_2
+        if [ -s artifacts/VTRAIL.cue ] && ! grep -qi 'VTRAIL.bin' artifacts/VTRAIL.cue; then
+          echo '::error::FIX30: CUE verweist nicht auf VTRAIL.bin' | tee -a "$log"
+          missing=1
+        fi
+        # Historical debug text files are informative, NOT part of the PS1 disc image.
+        for diag in KAMERA_FIX22_DIAGNOSE.txt STAEDTE_FIX20_DIAGNOSE.txt
