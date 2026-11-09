@@ -1,9 +1,291 @@
 
+# Lydra World Of Dragon - FIX38 STABIL
+# Grafikfix 320x240, FIX33 3D-Modelle
+# Reparierte GitHub-Buildkette
+# Code NICHT automatisch uebersetzen!
+
+name: LWOD FIX38 STABIL - Grafik und Build
+
+'on':
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blank-ps1.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: LWOD FIX38 PS1 erstellen
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Projekt laden
+        uses: actions/checkout@v4
+
+      - name: Werkzeuge installieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build unzip curl ffmpeg python3-pil python3-yaml
+
+      - name: FIX36 Referenz und Replay laden
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl --fail --location --silent --show-error --retry 3 \
+            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/efb8cdbb05262caf1a714bae16fccaa5984b719a/.github/workflows/blank-ps1.yml' \
+            -o "$RUNNER_TEMP/fix36.yml"
+
+          python3 - <<'PY_VERIFY'
+          from pathlib import Path
+          import os
+          import hashlib
+          import yaml
+
+          root = Path(os.environ['RUNNER_TEMP'])
+          source = root / 'fix36.yml'
+          raw = source.read_bytes()
+
+          blob = hashlib.sha1(
+              b'blob' + b' ' + str(len(raw)).encode()
+              + b'\0' + raw
+          ).hexdigest()
+
+          expected = '3f40dc4623f5fe438329b12c33e8453c9177e1f0'
+
+          if blob != expected:
+              raise SystemExit('FIX36 Referenz unvollstaendig')
+
+          steps = yaml.safe_load(raw)['jobs']['build']['steps']
+
+          if len(steps) != 68:
+              raise SystemExit(
+                  'FIX36 Schrittzahl falsch: ' + str(len(steps))
+              )
+
+          script = '''import os,sys,yaml,subprocess
+          from pathlib import Path
+
+          path=Path(os.environ["RUNNER_TEMP"])/"fix36.yml"
+          steps=yaml.safe_load(path.read_bytes())["jobs"]["build"]["steps"]
+
+          name=sys.argv[1]
+          found=[
+              x for x in steps
+              if x.get("name")==name
+              and isinstance(x.get("run"),str)
+          ]
+
+          if len(found)!=1:
+              raise SystemExit("FIX36 Schritt fehlt: "+name)
+
+          subprocess.run(
+              ["bash","-euo","pipefail","-c",found[0]["run"]],
+              check=True
+          )
+          '''
+          import textwrap
+          script = textwrap.dedent(script)
+          (root/'fix38_step.py').write_text(
+              script, encoding='utf-8'
+          )
+          print('FIX38: Referenz und Replay bereit')
+          PY_VERIFY
+
+      - name: FIX35R Vorbereitung wiederherstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/fix38_step.py" \
+            'FIX35R-Patch aus festem GitHub-Stand laden'
+
+          test -s "$RUNNER_TEMP/lwod_fix36_replay.py"
+          echo "FIX38: Fehlende Vorbereitungsdatei erstellt"
+
       - name: FIX32 Basis vorbereiten
         shell: bash
         run: |
           set -euo pipefail
-          python3 "$RUNNER_TEMP/fix37_step.py" 'FIX35R-Patch aus festem GitHub-Stand laden'
-          python3 "$RUNNER_TEMP/fix37_step.py" 'FIX32 Basis vorbereiten'
+          python3 "$RUNNER_TEMP/fix38_step.py" \
+            'FIX32 Basis vorbereiten'
+
           test -s "$RUNNER_TEMP/lwod_run.py"
-          echo "FIX38: Basis erfolgreich vorbereitet."
+          echo "FIX38: Basis erfolgreich vorbereitet"
+
+      # Originale PS1-Buildschritte einzeln ausfuehren.
+      # Wichtig fuer die GitHub-Umgebungsvariablen.
+
+      - {name: Basis 03, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 3'}
+      - {name: Basis 04, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 4'}
+      - {name: Basis 05, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 5'}
+      - {name: Basis 06, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 6'}
+      - {name: Basis 07, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 7'}
+      - {name: Basis 08, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 8'}
+      - {name: Basis 09, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 9'}
+      - {name: Basis 10, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 10'}
+      - {name: Basis 11, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 11'}
+      - {name: Basis 12, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 12'}
+      - {name: Basis 13, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 13'}
+      - {name: Basis 14, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 14'}
+      - {name: Basis 15, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 15'}
+      - {name: Basis 16, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 16'}
+      - {name: Basis 17, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 17'}
+      - {name: Basis 18, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 18'}
+      - {name: Basis 19, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 19'}
+      - {name: Basis 20, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 20'}
+      - {name: Basis 21, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 21'}
+      - {name: Basis 22, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 22'}
+      - {name: Basis 23, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 23'}
+      - {name: Basis 24, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 24'}
+      - {name: Basis 25, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 25'}
+      - {name: Basis 26, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 26'}
+      - {name: Basis 27, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 27'}
+      - {name: Basis 28, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 28'}
+      - {name: Basis 29, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 29'}
+      - {name: Basis 30, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 30'}
+      - {name: Basis 31, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 31'}
+      - {name: Basis 32, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 32'}
+      - {name: Basis 33, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 33'}
+      - {name: Basis 34, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 34'}
+      - {name: Basis 35, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 35'}
+      - {name: Basis 36, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 36'}
+      - {name: Basis 37, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 37'}
+      - {name: Basis 38, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 38'}
+      - {name: Basis 39, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 39'}
+      - {name: Basis 40, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 40'}
+      - {name: Basis 41, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 41'}
+      - {name: Basis 42, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 42'}
+      - {name: Basis 43, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 43'}
+      - {name: Basis 44, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 44'}
+      - {name: Basis 45, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 45'}
+      - {name: Basis 46, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 46'}
+      - {name: Basis 47, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 47'}
+      - {name: Basis 48, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 48'}
+      - {name: Basis 49, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 49'}
+      - {name: Basis 50, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 50'}
+      - {name: Basis 51, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 51'}
+      - {name: Basis 52, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 52'}
+      - {name: Basis 53, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 53'}
+      - {name: Basis 54, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 54'}
+
+      - name: FIX33 3D-Modelle laden
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/fix38_step.py" \
+            'FIX33 Geometrie verbessern'
+
+      - name: FIX33 Grafik kontrollieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/fix38_step.py" \
+            'FIX33 pruefen'
+
+      # Keine 640x240-Umschaltung.
+      # Damit bleiben Intro, Spiel und Bildspeicher
+      # im gemeinsamen 320x240-Modus.
+
+      - name: Bildschirmaufloesung pruefen
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY_DISPLAY'
+          from pathlib import Path
+          import os,re
+
+          source=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+          s=source.read_text(encoding='utf-8')
+
+          width=re.search(
+              r'(?m)^\s*#\s*define\s+SCREEN_W\s+320\b',s
+          )
+          height=re.search(
+              r'(?m)^\s*#\s*define\s+SCREEN_H\s+240\b',s
+          )
+
+          if not width or not height:
+              raise SystemExit(
+                  'FIX38: Bildaufloesung nicht 320x240'
+              )
+
+          if 'LWOD_FIX33_GEOMETRY' not in s:
+              raise SystemExit(
+                  'FIX38: Verbesserte 3D-Modelle fehlen'
+              )
+
+          print('FIX38: 320x240 und FIX33 Modelle aktiv')
+          PY_DISPLAY
+
+      - name: PS1 SDK installieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/lwod_run.py" 55
+
+          grep -q '^PSN00BSDK_CMAKE=' "$GITHUB_ENV" || {
+            echo '::error::PS1 SDK-Variable fehlt'
+            exit 1
+          }
+
+      - name: PS1 Spiel kompilieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${PSN00BSDK_CMAKE:?PS1 SDK nicht geladen}"
+          test -f "$PSN00BSDK_CMAKE"
+
+          python3 "$RUNNER_TEMP/lwod_run.py" 56
+
+      - name: Fehlerprotokoll hochladen
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: LWOD_FIX38_FEHLER
+          path: |
+            artifacts/FIX25_BUILD_LOG.txt
+            artifacts/FIX25_ERSTE_FEHLER.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: PS1 Disc fertigstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for i in 58 59 60 61; do
+            python3 "$RUNNER_TEMP/lwod_run.py" "$i"
+          done
+
+          folder="$RUNNER_TEMP/lydra_ps1_spiel"
+
+          test -s "$folder/LWOD_FIX32.bin"
+          test -s "$folder/LWOD_FIX32.cue"
+
+          mv "$folder/LWOD_FIX32.bin" \
+             "$folder/LWOD_FIX38.bin"
+
+          sed 's/LWOD_FIX32[.]bin/LWOD_FIX38.bin/g' \
+             "$folder/LWOD_FIX32.cue" \
+             > "$folder/LWOD_FIX38.cue"
+
+          rm "$folder/LWOD_FIX32.cue"
+
+          grep -qi 'LWOD_FIX38.bin' \
+            "$folder/LWOD_FIX38.cue"
+
+          echo "FIX38: BIN und CUE fertig"
+
+      - name: Spiel als ZIP-Artefakt bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: LWOD_FIX38_STABIL
+          path: ${{ runner.temp }}/lydra_ps1_spiel/
+          if-no-files-found: error
+          retention-days: 14
