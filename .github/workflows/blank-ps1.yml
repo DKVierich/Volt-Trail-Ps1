@@ -1,17 +1,10 @@
 
-# LWOD FIX36 HD - korrigierter Compileraufbau
-# Nicht automatisch uebersetzen lassen.
-name: LWOD FIX36 HD - PS1 SDK Reparatur
+# LWOD FIX37 STABIL - Bilddarstellung reparieren
+# PS1 320x240 mit FIX33 Grafikmodellen
+name: LWOD FIX37 STABIL - Bildfix
 
 'on':
-  workflow_dispatch:
-    inputs:
-      video_width:
-        description: "PS1 Grafikbreite (640 Test / 320 stabil)"
-        required: true
-        default: "640"
-        type: choice
-        options: ["640", "320"]
+  workflow_dispatch: {}
   push:
     branches: [main]
     paths:
@@ -22,220 +15,163 @@ permissions:
 
 jobs:
   build:
+    name: PS1 Bild und Grafik reparieren
     runs-on: ubuntu-latest
-    env:
-      LWOD_VIDEO_WIDTH: ${{ github.event.inputs.video_width || '640' }}
-
     steps:
-      - name: Quellprojekt laden
+      - name: Projekt laden
         uses: actions/checkout@v4
 
-      - name: Buildwerkzeuge installieren
+      - name: Programme installieren
+        shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build unzip curl ffmpeg python3-pil python3-yaml
 
-      - name: FIX35R-Patch aus festem GitHub-Stand laden
+      - name: FIX36 Basis laden
+        shell: bash
         run: |
           set -euo pipefail
           curl --fail --location --silent --show-error --retry 3 \
-            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/fc0906e7faf760b13e8a683d44925268d4b3e696/.github/workflows/blank-ps1.yml' \
-            -o "$RUNNER_TEMP/lwod_fix35r_pinned.yml"
-          python3 - <<'PY'
-          import os,yaml,hashlib
+            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/efb8cdbb05262caf1a714bae16fccaa5984b719a/.github/workflows/blank-ps1.yml' \
+            -o "$RUNNER_TEMP/fix36.yml"
+          python3 - <<'PY_VERIFY'
           from pathlib import Path
-          file=Path(os.environ['RUNNER_TEMP'])/'lwod_fix35r_pinned.yml'
-          raw=file.read_bytes()
-          digest=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
-          assert digest=='8eeec1f6ef32e9d79ab20e6ca520baa7fee6e750', 'Vorlage unvollstaendig oder veraendert'
-          steps=yaml.safe_load(raw)['jobs']['build']['steps']
-          assert len(steps)==62, ('Schrittzahl unerwartet',len(steps))
-          print('FIX35R-Vorlage unveraendert geladen:',len(steps),'Schritte')
-          PY
-          cat > "$RUNNER_TEMP/lwod_fix36_replay.py" <<'PY'
-          import os,sys,yaml,subprocess
-          from pathlib import Path
-          src=Path(os.environ['RUNNER_TEMP'])/'lwod_fix35r_pinned.yml'
-          steps=yaml.safe_load(src.read_bytes())['jobs']['build']['steps']
-          name=sys.argv[1]
-          matches=[s for s in steps if s.get('name')==name and isinstance(s.get('run'),str)]
-          if len(matches)!=1: raise SystemExit('Buildschritt fehlt oder mehrfach: '+name)
-          subprocess.run(['bash','-euo','pipefail','-c',matches[0]['run']],check=True)
-          PY
+          import os,hashlib,yaml
+          root=Path(os.environ['RUNNER_TEMP'])
+          source=root/'fix36.yml'
+          raw=source.read_bytes()
+          blob=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+          assert blob=='3f40dc4623f5fe438329b12c33e8453c9177e1f0', 'FIX36 Basis unvollstaendig'
+          data=yaml.safe_load(raw)
+          steps=data['jobs']['build']['steps']
+          assert len(steps)==68, ('Unerwartete Schrittzahl',len(steps))
+          script='import os,sys,yaml,subprocess\nfrom pathlib import Path\npath=Path(os.environ["RUNNER_TEMP"])/"fix36.yml"\nsteps=yaml.safe_load(path.read_bytes())["jobs"]["build"]["steps"]\nname=sys.argv[1]\nfound=[x for x in steps if x.get("name")==name and isinstance(x.get("run"),str)]\nif len(found)!=1:raise SystemExit("FIX36 Schritt fehlt: "+name)\nsubprocess.run(["bash","-euo","pipefail","-c",found[0]["run"]],check=True)\n'
+          (root/'fix37_step.py').write_text(script,encoding='utf-8')
+          print('FIX36 Bausteine verifiziert')
+          PY_VERIFY
 
       - name: FIX32 Basis vorbereiten
-        run: python3 "$RUNNER_TEMP/lwod_fix36_replay.py" 'Originalschritte herunterladen und pruefen'
+        run: python3 "$RUNNER_TEMP/fix37_step.py" 'FIX32 Basis vorbereiten'
 
-      - name: PS1 Basis 03
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 3
-      - name: PS1 Basis 04
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 4
-      - name: PS1 Basis 05
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 5
-      - name: PS1 Basis 06
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 6
-      - name: PS1 Basis 07
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 7
-      - name: PS1 Basis 08
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 8
-      - name: PS1 Basis 09
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 9
-      - name: PS1 Basis 10
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 10
-      - name: PS1 Basis 11
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 11
-      - name: PS1 Basis 12
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 12
-      - name: PS1 Basis 13
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 13
-      - name: PS1 Basis 14
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 14
-      - name: PS1 Basis 15
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 15
-      - name: PS1 Basis 16
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 16
-      - name: PS1 Basis 17
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 17
-      - name: PS1 Basis 18
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 18
-      - name: PS1 Basis 19
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 19
-      - name: PS1 Basis 20
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 20
-      - name: PS1 Basis 21
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 21
-      - name: PS1 Basis 22
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 22
-      - name: PS1 Basis 23
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 23
-      - name: PS1 Basis 24
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 24
-      - name: PS1 Basis 25
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 25
-      - name: PS1 Basis 26
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 26
-      - name: PS1 Basis 27
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 27
-      - name: PS1 Basis 28
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 28
-      - name: PS1 Basis 29
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 29
-      - name: PS1 Basis 30
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 30
-      - name: PS1 Basis 31
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 31
-      - name: PS1 Basis 32
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 32
-      - name: PS1 Basis 33
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 33
-      - name: PS1 Basis 34
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 34
-      - name: PS1 Basis 35
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 35
-      - name: PS1 Basis 36
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 36
-      - name: PS1 Basis 37
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 37
-      - name: PS1 Basis 38
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 38
-      - name: PS1 Basis 39
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 39
-      - name: PS1 Basis 40
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 40
-      - name: PS1 Basis 41
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 41
-      - name: PS1 Basis 42
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 42
-      - name: PS1 Basis 43
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 43
-      - name: PS1 Basis 44
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 44
-      - name: PS1 Basis 45
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 45
-      - name: PS1 Basis 46
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 46
-      - name: PS1 Basis 47
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 47
-      - name: PS1 Basis 48
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 48
-      - name: PS1 Basis 49
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 49
-      - name: PS1 Basis 50
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 50
-      - name: PS1 Basis 51
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 51
-      - name: PS1 Basis 52
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 52
-      - name: PS1 Basis 53
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 53
-      - name: PS1 Basis 54
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 54
+      - {name: Basis 03, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 3'}
+      - {name: Basis 04, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 4'}
+      - {name: Basis 05, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 5'}
+      - {name: Basis 06, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 6'}
+      - {name: Basis 07, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 7'}
+      - {name: Basis 08, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 8'}
+      - {name: Basis 09, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 9'}
+      - {name: Basis 10, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 10'}
+      - {name: Basis 11, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 11'}
+      - {name: Basis 12, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 12'}
+      - {name: Basis 13, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 13'}
+      - {name: Basis 14, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 14'}
+      - {name: Basis 15, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 15'}
+      - {name: Basis 16, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 16'}
+      - {name: Basis 17, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 17'}
+      - {name: Basis 18, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 18'}
+      - {name: Basis 19, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 19'}
+      - {name: Basis 20, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 20'}
+      - {name: Basis 21, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 21'}
+      - {name: Basis 22, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 22'}
+      - {name: Basis 23, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 23'}
+      - {name: Basis 24, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 24'}
+      - {name: Basis 25, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 25'}
+      - {name: Basis 26, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 26'}
+      - {name: Basis 27, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 27'}
+      - {name: Basis 28, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 28'}
+      - {name: Basis 29, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 29'}
+      - {name: Basis 30, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 30'}
+      - {name: Basis 31, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 31'}
+      - {name: Basis 32, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 32'}
+      - {name: Basis 33, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 33'}
+      - {name: Basis 34, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 34'}
+      - {name: Basis 35, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 35'}
+      - {name: Basis 36, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 36'}
+      - {name: Basis 37, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 37'}
+      - {name: Basis 38, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 38'}
+      - {name: Basis 39, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 39'}
+      - {name: Basis 40, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 40'}
+      - {name: Basis 41, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 41'}
+      - {name: Basis 42, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 42'}
+      - {name: Basis 43, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 43'}
+      - {name: Basis 44, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 44'}
+      - {name: Basis 45, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 45'}
+      - {name: Basis 46, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 46'}
+      - {name: Basis 47, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 47'}
+      - {name: Basis 48, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 48'}
+      - {name: Basis 49, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 49'}
+      - {name: Basis 50, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 50'}
+      - {name: Basis 51, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 51'}
+      - {name: Basis 52, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 52'}
+      - {name: Basis 53, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 53'}
+      - {name: Basis 54, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 54'}
 
-      - name: FIX33 Geometrie verbessern
-        run: python3 "$RUNNER_TEMP/lwod_fix36_replay.py" 'FIX33 3D-Haeuser, Baeume und Felsen'
+      - name: FIX33 Modelle laden
+        run: python3 "$RUNNER_TEMP/fix37_step.py" 'FIX33 Geometrie verbessern'
 
-      - name: FIX33 pruefen
-        run: python3 "$RUNNER_TEMP/lwod_fix36_replay.py" 'FIX33 Grafik pruefen'
+      - name: FIX33 Grafik pruefen
+        run: python3 "$RUNNER_TEMP/fix37_step.py" 'FIX33 pruefen'
 
-      - name: PS1 Aufloesung waehlen
-        run: python3 "$RUNNER_TEMP/lwod_fix36_replay.py" 'PS1-Aufloesung 640 oder 320 einstellen'
+      - name: Display-Aufloesung verifizieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY_DISPLAY'
+          from pathlib import Path
+          import re,os
+          source=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+          s=source.read_text(encoding='utf-8')
+          assert re.search(r'(?m)^\s*#\s*define\s+SCREEN_W\s+320\b',s), 'SCREEN_W ist nicht 320'
+          assert re.search(r'(?m)^\s*#\s*define\s+SCREEN_H\s+240\b',s), 'SCREEN_H ist nicht 240'
+          assert 'LWOD_FIX33_GEOMETRY' in s, 'FIX33 Modelle fehlen'
+          print('320x240 aktiv, FIX33 Modelle erhalten.')
+          PY_DISPLAY
 
-      # SDK-Installation und Kompilierung getrennt ausfuehren.
-      - name: PS1 SDK installieren und Variablen speichern
+      - name: PS1 SDK installieren
+        shell: bash
         run: |
           set -euo pipefail
           python3 "$RUNNER_TEMP/lwod_run.py" 55
-          test -s "$GITHUB_ENV"
-          grep -q '^PSN00BSDK_CMAKE=' "$GITHUB_ENV" || {
-            echo '::error::PSN00BSDK_CMAKE nicht an den naechsten GitHub-Schritt weitergegeben'
-            exit 1
-          }
+          grep -q '^PSN00BSDK_CMAKE=' "$GITHUB_ENV"
 
       - name: PS1 kompilieren
+        shell: bash
         run: |
           set -euo pipefail
-          : "${PSN00BSDK_CMAKE:?PS1 SDK wurde nicht uebernommen}"
+          : "${PSN00BSDK_CMAKE:?PS1 SDK nicht geladen}"
           test -f "$PSN00BSDK_CMAKE"
           python3 "$RUNNER_TEMP/lwod_run.py" 56
 
-      - name: Fehlerprotokoll fuer GitHub sichern
+      - name: Fehlerprotokoll sichern
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_FIX36_Buildfehler
+          name: LWOD_FIX37_FEHLER
           path: |
             artifacts/FIX25_BUILD_LOG.txt
             artifacts/FIX25_ERSTE_FEHLER.txt
           if-no-files-found: warn
 
-      - name: PS1 Finale 52
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 58
-
-      - name: PS1 Finale 53
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 59
-
-      - name: PS1 Finale 54
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 60
-
-      - name: BIN und CUE erstellen
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 61
-
-      - name: BIN und CUE fuer FIX36 benennen
+      - name: PS1 Disc bauen
+        shell: bash
         run: |
           set -euo pipefail
+          for idx in 58 59 60 61; do
+            python3 "$RUNNER_TEMP/lwod_run.py" "$idx"
+          done
           folder="$RUNNER_TEMP/lydra_ps1_spiel"
           test -s "$folder/LWOD_FIX32.bin"
           test -s "$folder/LWOD_FIX32.cue"
-          mv "$folder/LWOD_FIX32.bin" "$folder/LWOD_FIX36.bin"
-          sed 's/LWOD_FIX32[.]bin/LWOD_FIX36.bin/g' "$folder/LWOD_FIX32.cue" > "$folder/LWOD_FIX36.cue"
+          mv "$folder/LWOD_FIX32.bin" "$folder/LWOD_FIX37.bin"
+          sed 's/LWOD_FIX32[.]bin/LWOD_FIX37.bin/g' "$folder/LWOD_FIX32.cue" > "$folder/LWOD_FIX37.cue"
           rm "$folder/LWOD_FIX32.cue"
-          grep -qi 'LWOD_FIX36.bin' "$folder/LWOD_FIX36.cue"
+          grep -qi 'LWOD_FIX37.bin' "$folder/LWOD_FIX37.cue"
 
       - name: PS1 Spiel herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_FIX36_HD
+          name: LWOD_FIX37_STABIL
           path: ${{ runner.temp }}/lydra_ps1_spiel/
           if-no-files-found: error
           retention-days: 14
