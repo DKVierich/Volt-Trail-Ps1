@@ -1,252 +1,367 @@
-# LWOD FIX35 HD | Kompakter Workflow für praktisch.
-Name: LWOD FIX35 HD - PS1 640x240 Grafik und FIX33 Modelle
-'An':
-  Workflow-Versand:
-    Eingaben:
-      Videobreite:
-        Beschreibung: 'Native PS1-Bildbreite: 640 HD oder 320 stabil'
-        Erforderlich: Ja
-        Standardwert: '640'
-        Typ: Auswahl
-        Optionen:
-        - '640'
-        - '320'
-  drücken:
-    Zweige:
-    - hauptsächlich
-    Pfade:
-    - .github/workflows/blank-ps1.yml
-    - .github/workflows/LWOD_FIX35_HD.yml
-Berechtigungen:
-  Inhalt: lesen
-Jobs:
-  bauen:
-    läuft auf: ubuntu-latest
-    Schritte:
-    - Name: Quellprojekt auschecken
-      Verwendung: actions/checkout@v4
-    - Name: Werkzeuge installieren
-      Shell: Bash
-      Ausführen: 'set -euo pipefail
 
-        sudo apt-get update
+# LWOD FIX35R HD - nicht automatisch uebersetzen lassen!
+name: LWOD FIX35R HD PS1
+'on':
+  workflow_dispatch:
+    inputs:
+      video_width:
+        description: "PS1-Breite: 640 HD oder 320 stabil"
+        type: choice
+        required: true
+        default: "640"
+        options: ["640", "320"]
+  push:
+    branches: [main]
+    paths: [.github/workflows/blank-ps1.yml]
 
-        sudo apt-get install -y cmake ninja-build unzip curl ffmpeg python3-pil python3-yaml
+permissions:
+  contents: read
 
-        '
-    - Name: FIX35 Originalbasis sicher laden und verifizieren
-      Shell: Bash
-      run: "set -euo pipefail\nFIX32_URL=\"https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/c8b67d5645df4cf58e5ff8cdc07f5b623c76db96/.github/workflows/blank-ps1.yml\"\
-        \ncurl --fail --location --silent --show-error --retry 3 \"$FIX32_URL\" -o \"$RUNNER_TEMP/LWOD_FIX32_PINNED.yml\"\npython3 -\
-        \ <<'PY_LWOD_LOAD'\nfrom pathlib import Path\nimport os, hashlib, yaml, json\np=Path(os.environ['RUNNER_TEMP'])/'LWOD_FIX32_PINNED.yml'\n\
-        b=p.read_bytes()\nactual=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\\0'+b).hexdigest()\nexpected='34a7d142602d6fc5c48a682aeec5f0508e372c9a'\n\
-        if fact!=expected:\n raise SystemExit('FIX32 Referenz-Datei stimmt nicht mehr: '+actual)\ns=yaml.safe_load(b)['jobs']['build']['steps']\n\
-        if len(s)!=64 or any('run' not in s[i] for i in range(3,55)):\n raise SystemExit('FIX32 Basis-Workflow unvollstaendig')\n\
-        (Path(os.environ['RUNNER_TEMP'])/'LWOD_FIX35_REPLAY.json').write_text(\n json.dumps([{'name':s[i]['name'],'run':s[i]['run']}\
-        \ for i in range(3,55)],ensure_ascii=False),encoding='utf8')\nprint('FIX34: Original-FIX32-Basis mit 52 unveraenderten Schritten\
-        \ verifiziert.')\nprint('Die aktuellen FIX33-Grafikpatches werden danach separat ausgefuehrt.')\nPY_LWOD_LOAD\n"
-    - Name: FIX35 Basis 03-14 - PS1-Grundlage und Compiler vorbereiten
-      Shell: Bash
-      run: "set -euo pipefail\npython3 - <<'PY_LWOD_REPLAY'\nfrom pathlib import Path\nimport os,json,subprocess\nsteps=json.loads((Path(os.environ['RUNNER_TEMP'])/'LWOD_FIX35_REPLAY.json').read_text(encoding='utf8'))\n\
-        for index in range(3,14+1):\n entry=steps[index-3]\n print(f'LWOD BASIS {index:02d}/54: {entry[\"name\"]}',flush=True)\n\
-        \ status=subprocess.run(['bash','-euo','pipefail','-c',entry['run']]).returncode\n if status:\n raise SystemExit(f'PS1-Basisschritt\
-        \ {index} fehlgeschlagen: {entry[\"name\"]} (Exit {status})')\nprint('Alle Schritte dieser Basisgruppe erfolgreich.',flush=True)\n\
-        PY_LWOD_REPLAY\n"
-    - Name: FIX35 Basis 15-24 - Einführung Kameramenü und Renderer
-      Shell: Bash
-      run: "set -euo pipefail\npython3 - <<'PY_LWOD_REPLAY'\nfrom pathlib import Path\nimport os,json,subprocess\nsteps=json.loads((Path(os.environ['RUNNER_TEMP'])/'LWOD_FIX35_REPLAY.json').read_text(encoding='utf8'))\n\
-        for index in range(15,24+1):\n entry=steps[index-3]\n print(f'LWOD BASIS {index:02d}/54: {entry[\"name\"]}',flush=True)\n\
-        \ status=subprocess.run(['bash','-euo','pipefail','-c',entry['run']]).returncode\n if status:\n raise SystemExit(f'PS1-Basisschritt\
-        \ {index} fehlgeschlagen: {entry[\"name\"]} (Exit {status})')\nprint('Alle Schritte dieser Basisgruppe erfolgreich.',flush=True)\n\
-        PY_LWOD_REPLAY\n"
-    - Name: FIX35 Basis 25-34 - Landschaft Wege Bewegung und Fluss
-      Shell: Bash
-      run: "set -euo pipefail\npython3 - <<'PY_LWOD_REPLAY'\nfrom pathlib import Path\nimport os,json,subprocess\nsteps=json.loads((Path(os.environ['RUNNER_TEMP'])/'LWOD_FIX35_REPLAY.json').read_text(encoding='utf8'))\n\
-        for index in range(25,34+1):\n entry=steps[index-3]\n print(f'LWOD BASIS {index:02d}/54: {entry[\"name\"]}',flush=True)\n\
-        \ status=subprocess.run(['bash','-euo','pipefail','-c',entry['run']]).returncode\n if status:\n raise SystemExit(f'PS1-Basisschritt\
-        \ {index} fehlgeschlagen: {entry[\"name\"]} (Exit {status})')\nprint('Alle Schritte dieser Basisgruppe erfolgreich.',flush=True)\n\
-        PY_LWOD_REPLAY\n"
-    - Name: FIX35 Basis 35-44 - Staedte Kollision und Fernlandschaft
-      Shell: Bash
-      run: "set -euo pipefail\npython3 - <<'PY_LWOD_REPLAY'\nfrom pathlib import Path\nimport os,json,subprocess\nsteps=json.loads((Path(os.environ['RUNNER_TEMP'])/'LWOD_FIX35_REPLAY.json').read_text(encoding='utf8'))\n\
-        for index in range(35,44+1):\n entry=steps[index-3]\n print(f'LWOD BASIS {index:02d}/54: {entry[\"name\"]}',flush=True)\n\
-        \ status=subprocess.run(['bash','-euo','pipefail','-c',entry['run']]).returncode\n if status:\n raise SystemExit(f'PS1-Basisschritt\
-        \ {index} fehlgeschlagen: {entry[\"name\"]} (Exit {status})')\nprint('Alle Schritte dieser Basisgruppe erfolgreich.',flush=True)\n\
-        PY_LWOD_REPLAY\n"
-    - Name: FIX35 Basis 45-54 - Hausgrafik PS1 Figuren und FIX32 Modelle
-      Shell: Bash
-      run: "set -euo pipefail\npython3 - <<'PY_LWOD_REPLAY'\nfrom pathlib import Path\nimport os,json,subprocess\nsteps=json.loads((Path(os.environ['RUNNER_TEMP'])/'LWOD_FIX35_REPLAY.json').read_text(encoding='utf8'))\n\
-        for index in range(45,54+1):\n entry=steps[index-3]\n print(f'LWOD BASIS {index:02d}/54: {entry[\"name\"]}',flush=True)\n\
-        \ status=subprocess.run(['bash','-euo','pipefail','-c',entry['run']]).returncode\n if status:\n raise SystemExit(f'PS1-Basisschritt\
-        \ {index} fehlgeschlagen: {entry[\"name\"]} (Exit {status})')\nprint('Alle Schritte dieser Basisgruppe erfolgreich.',flush=True)\n\
-        PY_LWOD_REPLAY\n"
-    - Name: FIX33 Neue PS1-Geometrie für Häuser Bäume und Felsen
-      Shell: Bash
-      run: "set -euo pipefail\npython3 - <<'LWOD_FIX33_INJECT'\nimport base64,zlib,hashlib,subprocess\nsource=zlib.decompress(base64.b64decode(\n\
-        \ 'eNqtWW1z2zYS/q5fgaTTkDRJSZQs+a1uJy9Ommua5GzfXTuxq4FISOKZIlSQlGR1+t/vWYCUKFu2M3PxjG0ABPbl2cViF/juWavIVGsYpy'\n '2RztnsNp/ItNt4/vz5h/98esPevv+t22U+y7kai1xEjEdRnMcy5QmTKh7H1Ph8EbCxkFORq9sTpkTO4zTTSztsNrnN4jBjPI1YxuciazYa'\n\
-        \ 'l5M4Y3Gai9RQSm4Zn8s4ylgqFiwXy7xQgo2kmvLcrEyIPb4oBdJsJpPbsUxZKIs0B0EI24inM6lyJjMPAjRGSk7ZjOeTJB6y8tNndBuNTI'\n 'XsVLdtmTWhcqxk+sX6fP7pH2evLwdv3p9b1w5rMQsTW1Nwa4ZWI8MS9JtK8GhA8tkiDWUUp+NTq8hH/qHlNOIRswiygYZs8O7s069nl+e/'\n\
-        \ 'W1CUZccNhh8Inwl2DqHjqThTSirbMgDzhEgDhtksiUUEco3v2NmSh7nHhoqHwh/yhKchDDAq0pBgY0NoH3EVA1KmEZ0pMQekGQCYJTyEdC'\n 'yR8oYn8Y0AOTn8rwhzAp4VqRIJJ3OO+VRg1jgOm41IjFg246mdyUKFwmOj1CkFXwIAZV0Ns5zncXiVuWQu/LOYC25NkYV8JmzMp751le1d'\n\
-        \ '2V/+OLne++nKoc5fliYziXNCMomz3MaqUZzCl4Sy1dJjFU+MXziOng5EE5HatMphz05ZYIR5HEkl/ixiBc2USCOhhGLfZ8f4ZfClcCIyi3'\n '3PIKi3IV1y45CM+l/a102oqXK7lKI2DpLlaCRm+QRfAt2bykigY8EnhFF1MYkTgbU/aD5GOUe7sl650SQkKub7l/h6PZwu89q4G1wTGvh/'\n\
-        \ 'h6BIAINlrZdhkpGlEmbDqPxM/PCxZWlhNBvdPV4rkcSpsE4gu1upV/2I5EECezUCoZxO4YdP03heW5TlCg5rPTT3ufW8xmDCsSfgOQ9Ot/'\n '4CaWOjRyX4ez3Nr0/TU9ZAakAeAvIq3dK8sv99KhUqDxHae9gimuw9NMn2D0p1heUPoW+vZSpB14zXNnEQ2GtzNmDXpsEczjbv3dvAbKC1'\n\
-        \ 'GGB+x/0f3sgYEmqK8yWvBb1jRhEHccaEJYGDimXcYzHFy3Oz43HOTBCNKAzqowUKpDg8EPYWUiURhTgKNIsYJ12Rs1wW4YRiZXlSNRu5Ek'\n 'LHO8tq7bEdMf2Y5QvJeHY7pSMvDpkMcz7WZ+JIJjEHt1DJRWrOLp7WvueqSG+abK/VMKGUUSBl83wwipfdzkBRTB+QADbOR7b06O/KYX8Z'\n\
-        \ '+NCZn9q2vWx1D5w/7FWrFzjOiwPH757oCWs6deLaS2/lBW3P7/a9vtfzjnreAf4Hzs657txb+XPP7+x7fq/vBUde0PfuWZixXse15y+6zl'\n '4XtHvrdr+zm6y/T4TdrufvH3j+AageeEe76PaDDd3O/rp9QHT/hiUaSoY3G6tog8DFlRLjAtkBy+IE5hR5DktnDOAOk5rNQylVpH0pewp8'\n\
-        \ '4lMHX//N4pXQjYmIx5N8lwLbPzRX6RVj/Xe4w4b7R9qGB19jQ8O31fG0JPRnr9va3yWHAuBj/A7d+QMmodWtI20X3QT9HXQ2LMvWhqtudF'\n 'q9nez9oEMS+EGbhPAPtRjagkjoWIp8wysTFEHxkGxk29aOHWB5jP45Hrv3mWyEz/TPKeMQgsCQTkydv3iazzqLsLYRsFgqNd/sCz8eXn9d'\n\
-        'MBLLGbInBJeZiqEHhboE0cjdMNJJ4pdjfq1zoo2CLkaHx9cUoXSaliHYwDcpOrEQEQr2yIEJyYT8Td1qrUm8fCJ0fuYhuaY8GCmM0gk3gt'\n 'oiRqgDxVRw5Y9iAR//8OlNk32UOodG3jfzWKT4gs2QAo2UJkNy8xlhtEibjTuIEUjzbrs9mMbRIKIcPkEaarbPaQlVI5SpSf8pzFcL+DCD'\n\
-        'V82WjlsfWfmzlfPD/kGbvXjBtL8H7a7jwuEDBC/nReCcnrYtSps1j6ZO5u01g3rG97BdJISDW4ksJ/Vp5xOMBNzaXqYMAbAZqNY0MlxLQ2'\n '34PrS1v0rbXvdxbT0WOI26nxhhah7yMkKxIxd+KKFSWedkOKPY2W/vLy7ff3zHEOUyAXuZDDMRfE6HF6m8rseUlCMPxEKZINcma42kzOG4'\n\
-        \ 'KcoJuKSiSgKuBRehKkw7NJ1UHz+/zrBoOktQ6lFRlshUNEGINO0cdjqDPwuODJgteEaFINAd3mqA2819TQEGQBWBfAlfBBnGLN0PBsMiTq'\n 'hgsp1mY8RDHol7wXwo+JQQuYHnCjGDj6eRXEDVLIccFOGT8kRFCQG5UYHCrFr1CPG9SZZ7V5ahvkxJgSrf9pN4il0WIduTwjjJMKEDRbtK'\n\
-        \ 'hQhgKJOFNXL6tCjDiP0MZS32HZn4mQzDpAACVVyvYvsoOjVoBXc8pRrRnnJSz9jtUfQjzlIiO4p+6B616zTXdFenKz/zg97JvU8LKREST7'\n 'P8NhE/HfaOg/ahp8fG5Vi/f4yTVw8Ny6HewXF/B6lEjPJTnBBusO8pCvqnSxdM93cwPbWzvY7T6m5/gjVfS+zTtICbMuzXISxUWosyLlSz'\n\
-        \ 'RJYVM4pLIhqLNcLVz7azkURIHA690cpIdKdzuE8dM8u0HzubDVQlOiUizsmT7A3hLY5Vp19j33+KfdA78BAPvCAInHu4XZBrzbDvMxOvtW'\n '8iOmXYodhxSbJOWUPy+2rXa9f/GgyDTiWq27/Xa3c3epSdb4qjhstf8y3R2+4YtpuZ30QMAPtKwu/KYIJjNxTxHMAqSR6YiRnKGySN2aTI'\n\
-        \ 'CWichqIMM7Ww8wTAS3/hI2P2A+2Zute929vf9I6q3mO6wcv7Ha/XfRRWkHO3WLlbYrgbVtXMb8XY3dLY3dLY3dLY/bYau1sau1sau1sau9'\n '9WY1iu067Deb/X61Q23vQejQddFETdHiqezpNo17i5W7zdLd7u/88bW+Ylm/Bk5Jv4TRW1oASJdoQSt6Z2ZhFXN9gwUVyWtvqe8umd0kWB'\n\
-        \ 'eXhkcOocbtqHtOMPTBunT9X5plFo6dY4ujVJ3BrHpXv4rbgDyX/pg648AfkQkbtMT+MspxAe6uwj0WF8wW+fhg9ldL9dKlBvB2j3DXyb9m'\n 'PyH/W8w8DrH9Vk/rux+UsV264SoZ7MIZ2ebIoD5FATpFCoDCipMbmSUykwoGJkoJPXQToLM6psnROd/0/K3N+sN4k/5WI6x+8cm0oJOaN+'\n\
-        'f9AUcAKqlFI/7Z/ZuqCbPFUvVIIzw6tF9cMQVVeyuS42GWBUqjZZVwhmhcfK5NVl1cCdlH5ST+dfT4ROMnmuKzlQMkkpXdXHlCGNFZ9N9P'\n 'sIcuUiLZlTWp3rK326tG7qynkkuH4WoXrZGGh9M9UZ/Hp28TOqi50PEJXdyImM8LZlHMOq8lIUUDKZi8EU7kk1qw3LVBVhcHR0UNpN8duB'\n\
-        'TptFZNPVibNNZ7eNtVi/vzl/SXIFncG7D59evfww+Hx2/vrs4yU76NWI0APRgICqyOvRRPJoa9TMTyXjRS6n+iZHiTHVOW3/x4Dpxx9kTT'\n 'PzQPTY/MD/sfPQ/LKuOUbVLliKVdi6xvvWvlI92+i7PtrWVHmtn8KaoFTeTsDLK/tVdw9fc+2QUBUYpxNke/oW1JCga4eyaZ6d1uYl9vbX'\n\
-        \ 'vTgtZJHQI4mPyKRkVIQmLkXFLIlDSoiIFjaBdr1Ue90DlzQPXM7sCBZGpiqa0C0upM/K3W89XgVaX3chYAxkri/oqSsTipCLU0QMpH55ck'\n 'tva/SWtyBMzWNeRlXx3fc8rvLqodBCO8bWyTMz3pzeRLGydQwfyJvTS1XAEja+tLZ24PnLt+9/aebL3HLq7Da7t3xepffTcru+P7tKzdW5'\n\
-        \ '9YqLYgpjr++ZsxAG4uEkR0yJUaSuFgICFCNqv+LF9EYhX6XHPdi1IA9lFzmfTptrim/pySA91gv1jYjIV/kWSZqR8LFICXxz/07nlOb8Vq'\n 'rpnKuY0zXJhujPEBMoH9M2SvNMxLkmBKILoW6GPLnR1MosQUAmJYZ6qEhvEmKZUoWTcBFhdE32IhdxOjLfhlykN0IrdllAbHj+CnsvY4Ik'\n\
-        \ 'Z5/NNYkOjR/5JILEPF1tJPy3VAiroC7YG44lAkGb6JAQv1SFPpqIMAon3sfPrz12MROxmXkxi0WSi+lMrgmSIBexiJICwRp7Y8r+WYgkoW'\n 'cPlmJZTuByHSTyjRgfhP4kFNDPyS0z9pFu7+jiioxV2SNlxvLMpssz/0fW67adDZlfgIsgl/EvzUN5yiQtP5sWCUd+lvBitAIHkiEexasY'\n\
-        \ 'rBDD6IqMMpF3cf5zMfRp/SvamETYBLz7W0DfGFU7q4pq5kyiq5S5TIryAaQs9I0L0MUsQVS9hbj6ohbDdD0GbUH5f4PjaqE='\n))\nassert hashlib.sha256(source).hexdigest()=='d5a09b0f029c33e4f8093b10fe676ab840f4d56935faeefb909e4bb6e6b5f3dc',\
-        'FIX33 Patch-Integritätsfehler'\nsubprocess.run(['python3','-c',source.decode('utf-8')],check=True)\nLWOD_FIX33_INJECT\n"
-    - Name: FIX35 HD PS1 640x240 Framebuffer und 3D Projektion
-      Shell: Bash
-      run: "set -euo pipefail\npython3 - <<'PY_FIX35_HD'\nimport os,re\nfrom pathlib import Path\nwidth=int(os.environ.get('LWOD_VIDEO_WIDTH','640'))\n\
-        wenn Breite nicht in (320.640):\n raise SystemExit('FIX35: Nur 320 oder 640 Pixel native PS1-Breite erlaubt')\nroot=Path(os.environ['PROJECT_DIR'])\n\
-        path=root/'src'/'main.c'\nif not path.is_file():\n raise SystemExit('FIX35: Das Hauptprogramm src/main.c fehlt')\ns=path.read_text(encoding='utf-8')\n\
-        report=['LWOD FIX35 HD - PS1 3D-Auflösung',\n 'Angeforderter Modus: %dx240 progressiv'%width,\n 'Original C-Datei:\
-        \ %d Zeichen'%len(s)]\nif width==320:\n report.append('Standard 320x240 unveränderlich (höchste Kompatibilität).')\nelse:\n\
-        # Native PS1-Modi: 640 Pixel breit bei 240 progressiven Zeilen.\n # Vertikales Framebuffer-Layout verwendet VRAM x=0..639 und\
-        y=0..479,\n # x>=640 bleibt für die ursprünglichen Intro-/Menü-Texturseiten verfügbar.\n patterns=[\n ('SCREEN_W',r'(?m)^(\\\
-        s*#\\s*define\\s+SCREEN_W\\s+)320(?=\\s|$)'),\n ]\n for label,regex in patterns:\ns,n=re.subn(regex,lambda m:m.group(1)+'640',s)\n\
-        \ if n!=1:\n raise SystemExit('FIX35: '+label+' nicht eindeutig 320; ungeprueften PS1-Patch abgebrochen (Treffer\
-        \ %d)'%n)\n screen_h=re.search(r'(?m)^\\s*#\\s*define\\s+SCREEN_H\\s+\\(?240\\)?(?=\\s|$)',s)\n if not screen_h:\n \
-        \ raise SystemExit('FIX35: SCREEN_H ist nicht 240; keine VRAM-Risiken eingehen')\n\n # Nur das Gameplay's disp[]/draw[]\
-        \ arrays, never intro_disp/intro_draw.\n # Halte die Framebuffer getrennt und innerhalb des 1024x512 VRAM der PS1.\n for kind\
-        \ in ('Disp','Draw'):\n for index in (0,1):\n pattern=(r'\\bSetDef%sEnv\\s*\\(\\s*&\\s*%s\\s*\\[\\s*%s\\s*\\\
-        ]\\s*,[^;]*?\\)\\s*;'\n %(kind,('disp' if kind=='Disp' else 'draw'),index))\n matches=list(re.finditer(pattern,s,flags=re.S))\n\
-        \ if len(matches)!=1:\n raise SystemExit('FIX35: SetDef%sEnv %s[%d] erwartet 1 Treffer, fand %d; Original\
-        \ unveraendert.'\n %(kind,('disp' if kind=='Disp' else 'draw'),index,len(matches)))\n \
-        # db0: oben anzeigen, unten zeichnen; db1: unten anzeigen, oben zeichnen.\ny=(index*240) wenn kind=='Disp' sonst ((1-index)*240)\n\
-        \ replacement='SetDef%sEnv(&%s[%d], 0, %d, SCREEN_W, SCREEN_H);'%(kind,('disp' if kind=='Disp' else 'draw'),index,y)\n\
-        \ s=s[:matches[0].start()]+replacement+s[matches[0].end():]\n report.append(replacement)\n\n # On 3D\
-        Geometrie, die Projektionsskalierung erweitern, anstatt lediglich schwarzen Raum rechts neben der 320px-Szene hinzuzufügen.\n
-        def adjust_geom_screen(m):\n val=int(m.group(2))\n if val>2048:\n raise SystemExit('FIX35: Unerwarteter\
-        \ GTE Projektionswert '+str(val))\n return m.group(1)+str(val*2)+m.group(3)\ns, projection_count=re.subn(r'(\\bgte_SetGeomScreen\\\
-        s*\\(\\s*)(\\d+)(\\s*\\))',adjust_geom_screen,s)\n # Nur fest codierte 160px-Mitte anpassen, makrobasierte Mitte folgt SCREEN_W.\n\
-        \ s,center_count=re.subn(r'\\bgte_SetGeomOffset\\s*\\(\\s*160\\s*,\\s*120\\s*\\)',\n 'gte_SetGeomOffset(320,\
-        \ 120)',s)\n if projection_count==0:\n raise SystemExit('FIX35: Kein statischer GTE Projektionswert gefunden; Szene\
-        \ nicht sicher skaliert')\n if center_count==0 and not re.search(r'gte_SetGeomOffset\\s*\\([^;]*SCREEN_W',s):\n raise\
-        \ SystemExit('FIX35: GTE Bildschirmmitte nicht erkannt; Szene nicht sicher zentriert')\n report += ['GTE-Projektionsaufrufe\
-        \ vergroessert: '+str(projection_count),\n 'Direkte 160->320 GTE-Mittenkorrekturen: '+str(center_count),\n \
-        \ 'Ergebnis: native 640x240, doppelte horizontale Pixelzahl.']\n # Berühren Sie keine festen 320x240 Intro-Bilder; einheimisch\
-        Der 3D-Modus wurde geändert,\n # RetroArch-Upscaling bietet eine noch höhere wahrgenommene 3D-Qualität.\n path.write_text(s,encoding='utf-8')\n
-        # Überprüfen, ob die bearbeiteten Aufrufe in der geschriebenen Datei vorhanden sind; nicht stillschweigend fortfahren.\np=path.read_text(encoding='utf-8')\n
-        \ for token in ['#define SCREEN_W 640',\n 'SetDefDispEnv(&disp[0], 0, 0, SCREEN_W, SCREEN_H);',\n \
-        'SetDefDispEnv(&disp[1], 0, 240, SCREEN_W, SCREEN_H);',\n 'SetDefDrawEnv(&draw[0], 0, 240, SCREEN_W,\
-        \ SCREEN_H);',\n 'SetDefDrawEnv(&draw[1], 0, 0, SCREEN_W, SCREEN_H);']:\n if token not in p:\n \
-        \ raise SystemExit('FIX35: Ausgabepruefung nicht bestanden: '+token)\nartifacts=Path('artifacts')\nartifacts.mkdir(exist_ok=True)\n\
-        (artifacts/'FIX35_AUFLOESUNG.txt').write_text('\\n'.join(report)+'\\n',encoding='utf-8')\nprint('\\n'.join(report),flush=True)\n\
-        PY_FIX35_HD"
-    - Name: FIX33 Rendering und Kernfunktionen prüfen
-      Shell: Bash
-      run: "set -euo pipefail\npython3 - <<'LWOD_FIX33_VERIFY'\nfrom pathlib import Path\nimport os\ns=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')\n\
-        for m in ('LWOD_FIX32_MESH','LWOD_FIX33_GEOMETRY','FIX33: beam work, deep windows',\n 'vt_v281_resolve_movement();','vt_save_game(void)','vt_load_game(void)',\n\
-        'LYDRA_FIX12_GLOBAL_PERCENT 75','vt_v282_draw_house_npcs(x,z)'):\n assert m in s, 'FIX33: missing '+m\nassert\
-        s.count('FIX33: beam work, deep windows')==1\nassert Path('artifacts/LWOD_FIX33_GRAFIK.txt').stat().st_size>100\nprint('FIX33\
-        \ renderer, gameplay guards and diagnosis passed')\nLWOD_FIX33_VERIFY\n"
-    - Name: Basis 50
-      Shell: Bash
-      run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 50
-    - Name: FIX27 Basis 51 PS1 mit vollständigem Compilerprotokoll
-      Shell: Bash
-      run: "set -uo pipefail\nmkdir -p artefakte\n# Der bisherige Wrapper meldete nur CalledProcessError / Exit-Code 1.\n# Das eigentliche\
-        \ Compiler-Standard und der Linker-Status bleiben jetzt erhalten.\necho '=== FIX27: Originaler, UNVERAENDERTEN V31.8.5 Build-Schritt\
-        \ 51 ausfuehren ==='\nprintf '%s\\n' 'FIX27: volle Kompilierausgabe unter artefakte/FIX25_BUILD_LOG.txt'\npython3 \"$RUNNER_TEMP/lydra_v3185_replay.py\"\
-        51 2>&1 | tee artifacts/FIX25_BUILD_LOG.txt\nbuild_rc=${PIPESTATUS[0]}\nexport LYDRA_FIX25_BUILD_RC=\"$build_rc\"\npython3\
-        \ - <<'FIX25_PARSE'\nimport os,re\nfrom pathlib import Path\nroot=Path('artifacts')\nlog=(root/'FIX25_BUILD_LOG.txt').read_text(encoding='utf-8',errors='replace').splitlines()\n\
-        rc=int(os.environ.get('LYDRA_FIX25_BUILD_RC','1'))\nrx=re.compile(r'(?:\\berror:|\\bfatal error:|undefined reference|collect2:|ld:|overflowed\
-        \ by|passt nicht in die Region|CMake-Fehler|ninja: Build abgebrochen|make(?:\\[[0-9]+\\])?: \\*\\*\\*|fatal:|Datei oder Verzeichnis nicht gefunden|not\
-        \ found)',re.I)\nhits=[(i,line) for i,line in enumerate(log) if rx.search(line)]\nout=['LYDRA V31.9.9.10 FIX25 | Compiler/Linker-Diagnose',\n\
-        \ 'Build-Exitcode: '+str(rc),'Ausgabezeilen insgesamt: '+str(len(log)),\n 'Fehlerzeilen gefunden: '+str(len(hits)),'']\n\
-        if hits:\n out.append('ERSTE FEHLERMELDUNGEN MIT KONTEXT:')\n for i,_ in hits[:12]:\n out.append('--- Zeile '+str(i+1)+'\
-        \ ---')\n for n in range(max(0,i-2),min(len(log),i+4)):\n out.append(f'{n+1:05d} {log[n]}')\nelif rc!=0:\n\
-        \ out.append('KEIN EXPLIZITES error: GEFUNDEN. LETZTE 100 LOGZEILEN:')\n out.extend(log[-100:])\nelse:\n out.append('PS1\
-        \ Build erfolgreich abgeschlossen.')\n(root/'FIX25_ERSTE_FEHLER.txt').write_text('\\n'.join(out)+'\\n',encoding='utf-8')\nsrc=Path(os.environ.get('PROJECT_DIR',''))/'src'/'main.c'\n\
-        if src.is_file():\n # Voller Quelltext hilft, Zeilenangaben aus dem Compiler zurueckzuverfolgen.\n (root/'FIX25_MAIN_C.c').write_bytes(src.read_bytes())\n\
-        print('\\n=== FIX27: Erster Compiler-/Linkerfehler ===')\nprint('\\n'.join(out[:130]))\nprint('=== ENDE FIX27 Diagnose ===')\n\
-        FIX25_PARSE\nif [ \"$build_rc\" -ne 0 ]; then\n echo \"::error::FIX27: Basis 51 scheiterte mit Exitcode $build_rc. Echte Compilerfehler\
-        \ stehen oben und im Diagnose-Artefakt.\"\n exit \"$build_rc\"\nfi\necho 'FIX27: PS1-Komplettbuild erfolgreich. Alle FIX24-Hausdetails\
-        \ halten."\n"
-    - Name: FIX27 Fehlermeldungen als Artefakt sichern
-      if: ${{ failure() }}
-      Verwendung: Aktionen/Upload-Artefakt@v4
-      mit:
-        Name: LYDRA-FIX27-PS1-BUILD-DIAGNOSE
-        Pfad: 'artifacts/FIX25_BUILD_LOG.txt'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      LWOD_VIDEO_WIDTH: ${{ github.event.inputs.video_width || '640' }}
+    steps:
+      - name: Projekt laden
+        uses: actions/checkout@v4
 
-          artefakte/FIX25_ERSTE_FEHLER.txt
+      - name: Werkzeuge installieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build unzip curl ffmpeg python3-pil python3-yaml
 
-          artifacts/FIX25_MAIN_C.c'
-        if-no-files-found: warn
-        Aufbewahrungsdauer: 14 Tage
-    - Name: Basis 52
-      Shell: Bash
-      run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 52
-    - Name: Basis 53
-      Shell: Bash
-      run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 53
-    - Name: Basis 54
-      Shell: Bash
-      run: python3 "$RUNNER_TEMP/lydra_v3185_replay.py" 54
-    - Name: FIX35 Disc-Dateien vor Download prüfen
-      Shell: Bash
-      run: "set -euo pipefail\npython3 - <<'LWOD_EXPORT32'\nimport base64,zlib,hashlib,subprocess\ns=zlib.decompress(base64.b64decode(\n\
-        \ 'eNqVVe9v2kgQ/e6/YuTm6laKSYBcL0d0lZxiUsSvyECvHyqhBY9hhVm7u+uGpOn/frMGAqYk4b7Aamd23ts387wKNbiYJZDyFCPGYytKJETABXwZ'\n \
-        \ 'BF6zXRpvl5MMN0uMo6flEmHgd257o0bza7kyqje9m26v75f0UkOjPez380B1VC6Grv3gxs9DF88F/twLeMNOvv9hD8RvrzD+2t8Puttil8Vgq9du'\n 'N/vNXjcP/l0M9geeXx/k5yrnhdAVhIkFGhXppsBmUvOITbQ6O4lseHyEn4CTWQJ2rYZSJrJWa+AsRhEi1JlGXgPKuwJccg3lK/hlhYlAy9rU25Zr'\n\
-        \ 'eR0/8HIC5dGeqG/fwosH9tK3rJwtK1MXWmyBkrl1zqYiUQgRcdXOLr0DzK6HRtLgszfMRa9cPIdmF9Au4DPLVFiAsl+B6nhBa2BAquej42Cq56UL'\n \
-        \ '6DA51y8g/Q50E3iNZmuNdCROFW4ki/j8fwG1/+3Vc5jjelQtHwRxjr1N5fK45ly+fpdUcqEjcP5Q34QDjrkI5BepQTu5c2+T+B68scxEmIkpCogy'\n 'lNRyzBTKU7imxQJPoYGxoiBlAco5E0IjNPg0k24nCTGOsQS3/TJcN7tnn4Y+zJNFyua65MDHwyJ+8QPjYXM56w2sGkOMGgY8JKB+yjGmdXcYQMgR'\n\
-        \ 'xsjNtkhQc8OSwNzcmLTGZZoQBkoUJSr2ibA5nXXbyVSdgt9umN+vvsrZbzzzdHocIx/TP6mEkv4WEGRCoCxZkhgwhaOQy3/sk2DY7frByHwxz+L7'\n \
-        \ 'ULJRqsojZXja1oI6IMFNwT7ZOWVbkxRcd0eBnW9zIXNHGhO0LYUhfd/B2Rz5Zrb3ss6mzjrnh5b0BDyX8xu8eQ8+Pk+AwvbTdL5M89WsvNYbUh3B'\n 'zMUiUwoesgUsuJ5izDFCqUl8mhtImVKmg1OJpNp3vprVLZrzMspBK5oxMbgPyKcaBJ/MNLAs2nkjC5Zk4oHNYmr2u4jTrBSbCe6CLUNM9QzK4Or7'\n\
-        \ 'lNwGj3A3ATd+v5bCPlmVoGT8DpWDvvXlHXWE3u8KbGaQhi4f+ESGwrhuihHNKgp6ddb1dlmu6q093Fo5jaySWyK5E3HCQviRyDEZghMO+bygY26D'\n \
-        \ 'ongl2/oPSZypgQ=='\n))\nassert hashlib.sha256(s).hexdigest()=='1a7aa485badb1d8c6857b0c29f9cff19f1f92a4cc485de0d9e80ce4f7b1bd23a',\
-        'LWOD: eingebettetes Shell-Skript geändert'\nsubprocess.run(['bash','-euo','pipefail','-c',s.decode('utf-8')],check=True)\nLWOD_EXPORT32\n"
-    - Name: FIX35 PS1 Disc-Dateien korrekt benennen
-      Shell: Bash
-      Ausführen: 'set -euo pipefail
+      - name: Originalschritte herunterladen und pruefen
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1
+          curl -fLSs --retry 3 "$BASE/c8b67d5645df4cf58e5ff8cdc07f5b623c76db96/.github/workflows/blank-ps1.yml" -o "$RUNNER_TEMP/lwod32.yml"
+          python3 - <<'PY'
+          import hashlib, yaml, os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          expected={'32':('34a7d142602d6fc5c48a682aeec5f0508e372c9a',64)}
+          for v,(sha,n) in expected.items():
+              data=(root/('lwod'+v+'.yml')).read_bytes()
+              git=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+              assert git==sha, 'FIX'+v+' unvollstaendig: '+git
+              steps=yaml.safe_load(data)['jobs']['build']['steps']
+              assert len(steps)==n, 'FIX'+v+' Anzahl Schritte falsch'
+          print('Original FIX32 unveraendert und geprueft')
+          PY
+          cat > "$RUNNER_TEMP/lwod_run.py" <<'PYREPLAY'
+          import sys,os,yaml,subprocess
+          from pathlib import Path
+          ver='32'
+          idx=int(sys.argv[1])
+          base=Path(os.environ['RUNNER_TEMP'])/'lwod32.yml'
+          step=yaml.safe_load(base.read_bytes())['jobs']['build']['steps'][idx]
+          print('FIX'+ver,idx,step['name'],flush=True)
+          subprocess.run(['bash','-euo','pipefail','-c',step['run']],check=True)
+          PYREPLAY
 
-        release_dir="$RUNNER_TEMP/lydra_ps1_spiel"
+      - name: PS1 Basis 03
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 3
+      - name: PS1 Basis 04
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 4
+      - name: PS1 Basis 05
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 5
+      - name: PS1 Basis 06
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 6
+      - name: PS1 Basis 07
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 7
+      - name: PS1 Basis 08
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 8
+      - name: PS1 Basis 09
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 9
+      - name: PS1 Basis 10
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 10
+      - name: PS1 Basis 11
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 11
+      - name: PS1 Basis 12
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 12
+      - name: PS1 Basis 13
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 13
+      - name: PS1 Basis 14
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 14
+      - name: PS1 Basis 15
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 15
+      - name: PS1 Basis 16
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 16
+      - name: PS1 Basis 17
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 17
+      - name: PS1 Basis 18
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 18
+      - name: PS1 Basis 19
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 19
+      - name: PS1 Basis 20
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 20
+      - name: PS1 Basis 21
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 21
+      - name: PS1 Basis 22
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 22
+      - name: PS1 Basis 23
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 23
+      - name: PS1 Basis 24
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 24
+      - name: PS1 Basis 25
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 25
+      - name: PS1 Basis 26
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 26
+      - name: PS1 Basis 27
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 27
+      - name: PS1 Basis 28
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 28
+      - name: PS1 Basis 29
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 29
+      - name: PS1 Basis 30
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 30
+      - name: PS1 Basis 31
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 31
+      - name: PS1 Basis 32
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 32
+      - name: PS1 Basis 33
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 33
+      - name: PS1 Basis 34
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 34
+      - name: PS1 Basis 35
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 35
+      - name: PS1 Basis 36
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 36
+      - name: PS1 Basis 37
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 37
+      - name: PS1 Basis 38
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 38
+      - name: PS1 Basis 39
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 39
+      - name: PS1 Basis 40
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 40
+      - name: PS1 Basis 41
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 41
+      - name: PS1 Basis 42
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 42
+      - name: PS1 Basis 43
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 43
+      - name: PS1 Basis 44
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 44
+      - name: PS1 Basis 45
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 45
+      - name: PS1 Basis 46
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 46
+      - name: PS1 Basis 47
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 47
+      - name: PS1 Basis 48
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 48
+      - name: PS1 Basis 49
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 49
+      - name: PS1 Basis 50
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 50
+      - name: PS1 Basis 51
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 51
+      - name: PS1 Basis 52
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 52
+      - name: PS1 Basis 53
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 53
+      - name: PS1 Basis 54
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 54
 
-        test -s "$release_dir/LWOD_FIX32.bin"
+      - name: FIX33 3D-Haeuser, Baeume und Felsen
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'LWOD_FIX33_INJECT'
+          import base64,zlib,hashlib,subprocess
+          source=zlib.decompress(base64.b64decode(
+              'eNqtWW1z2zYS/q5fgaTTkDRJSZQs+a1uJy9Ommua5GzfXTuxq4FISOKZIlSQlGR1+t/vWYCUKFu2M3PxjG0ABPbl2cViF/juWavIVGsYpy'
+              '2RztnsNp/ItNt4/vz5h/98esPevv+t22U+y7kai1xEjEdRnMcy5QmTKh7H1Ph8EbCxkFORq9sTpkTO4zTTSztsNrnN4jBjPI1YxuciazYa'
+              'l5M4Y3Gai9RQSm4Zn8s4ylgqFiwXy7xQgo2kmvLcrEyIPb4oBdJsJpPbsUxZKIs0B0EI24inM6lyJjMPAjRGSk7ZjOeTJB6y8tNndBuNTI'
+              'XsVLdtmTWhcqxk+sX6fP7pH2evLwdv3p9b1w5rMQsTW1Nwa4ZWI8MS9JtK8GhA8tkiDWUUp+NTq8hH/qHlNOIRswiygYZs8O7s069nl+e/'
+              'W1CUZccNhh8Inwl2DqHjqThTSirbMgDzhEgDhtksiUUEco3v2NmSh7nHhoqHwh/yhKchDDAq0pBgY0NoH3EVA1KmEZ0pMQekGQCYJTyEdC'
+              'yR8oYn8Y0AOTn8rwhzAp4VqRIJJ3OO+VRg1jgOm41IjFg246mdyUKFwmOj1CkFXwIAZV0Ns5zncXiVuWQu/LOYC25NkYV8JmzMp751le1d'
+              '2V/+OLne++nKoc5fliYziXNCMomz3MaqUZzCl4Sy1dJjFU+MXziOng5EE5HatMphz05ZYIR5HEkl/ixiBc2USCOhhGLfZ8f4ZfClcCIyi3'
+              '3PIKi3IV1y45CM+l/a102oqXK7lKI2DpLlaCRm+QRfAt2bykigY8EnhFF1MYkTgbU/aD5GOUe7sl650SQkKub7l/h6PZwu89q4G1wTGvh/'
+              'h6BIAINlrZdhkpGlEmbDqPxM/PCxZWlhNBvdPV4rkcSpsE4gu1upV/2I5EECezUCoZxO4YdP03heW5TlCg5rPTT3ufW8xmDCsSfgOQ9Ot/'
+              '4CaWOjRyX4ez3Nr0/TU9ZAakAeAvIq3dK8sv99KhUqDxHae9gimuw9NMn2D0p1heUPoW+vZSpB14zXNnEQ2GtzNmDXpsEczjbv3dvAbKC1'
+              'GGB+x/0f3sgYEmqK8yWvBb1jRhEHccaEJYGDImXcYzHFy3Oz43HOTBCNKAzqowUKpDg8EPYWUiURhTgKNIsYJ12Rs1wW4YRiZXlSNRu5Ek'
+              'LHO8tq7bEdMf2Y5QvJeHY7pSMvDpkMcz7WZ+JIJjEHt1DJRWrOLp7WvueqSG+abK/VMKGUUSBl83wwipfdzkBRTB+QADbOR7b06O/KYX8Z'
+              '+NCZn9q2vWx1D5w/7FWrFzjOiwPH757oCWs6dELaS2/lBW3P7/a9vtfzjnreAf4Hzs657txb+XPP7+x7fq/vBUde0PfuWZixXse15y+6zl'
+              '4XtHvrdr+zm6y/T4TdrufvH3j+AageeEe76PaDDd3O/rp9QHT/hiUaSoY3G6tog8DFlRLjAtkBy+IE5hR5DktnDOAOk5rNQylVpH0pewp8'
+              '4lMHX//N4pXQjYmIx5N8lwLbPzRX6RVj/Xe4w4b7R9qGB19jQ8O31fG0JPRnr9va3yWHAuBj/A7d+QMmodWtI20X3QT9HXQ2LMvWhqtudF'
+              'q9nez9oEMS+EGbhPAPtRjagkjoWIp8wysTFEHxkGxk29aOHWB5jP45Hrv3mWyEz/TPKeMQgsCQTkydv3iazzqLsLYRsFgqNd/sCz8eXn9d'
+              'MBLLGbInBJeZiqEHhboE0cjdMNJJ4pdjfq1zoo2CLkaHx9cUoXSaliHYwDcpOrEQEQr2yIEJyYT8Td1qrUm8fCJ0fuYhuaY8GCmM0gk3gt'
+              'oiRqgDxVRw5Y9iAR//8OlNk32UOodG3jfzWKT4gs2QAo2UJkNy8xlhtEibjTuIEUjzbrs9mMbRIKIcPkEaarbPaQlVI5SpSf8pzFcL+DCD'
+              'V82WjlsfWfmzlfPD/kGbvXjBtL8H7a7jwuEDBC/nReCcnrYtSps1j6ZO5u01g3rG97BdJISDW4ksJ/Vp5xOMBNzaXqYMAbAZqNY0MlxLQ2'
+              '34PrS1v0rbXvdxbT0WOI26nxhhah7yMkKxIxd+KKFSWedkOKPY2W/vLy7ff3zHEOUyAXuZDDMRfE6HF6m8rseUlCMPxEKZINcma42kzOG4'
+              'KcoJuKSiSgKuBRehKkw7NJ1UHz+/zrBoOktQ6lFRlshUNEGINO0cdjqDPwuODJgteEaFINAd3mqA2819TQEGQBWBfAlfBBnGLN0PBsMiTq'
+              'hgsp1mY8RDHol7wXwo+JQQuYHnCjGDj6eRXEDVLIccFOGT8kRFCQG5UYHCrFr1CPG9SZZ7V5ahvkxJgSrf9pN4il0WIduTwjjJMKEDRbtK'
+              'hQhgKJOFNXL6tCjDiP0MZS32HZn4mQzDpAACVVyvYvsoOjVoBXc8pRrRnnJSz9jtUfQjzlIiO4p+6B616zTXdFenKz/zg97JvU8LKREST7'
+              'P8NhE/HfaOg/ahp8fG5Vi/f4yTVw8Ny6HewXF/B6lEjPJTnBBusO8pCvqnSxdM93cwPbWzvY7T6m5/gjVfS+zTtICbMuzXISxUWosyLlSz'
+              'RJYVM4pLIhqLNcLVz7azkURIHA690cpIdKdzuE8dM8u0HzubDVQlOiUizsmT7A3hLY5Vp19j33+KfdA78BAPvCAInHu4XZBrzbDvMxOvtW'
+              '8iOmXYodhxSbJOWUPy+2rXa9f/GgyDTiWq27/Xa3c3epSdb4qjhstf8y3R2+4YtpuZ30QMAPtKwu/KYIJjNxTxHMAqSR6YiRnKGySN2aTI'
+              'CWichqIMM7Ww8wTAS3/hI2P2A+2Zute929vf9I6q3mO6wcv7Ha/XfRRWkHO3WLlbYrgbVtXMb8XY3dLY3dLY3dLY/bYau1sau1sau1sau9'
+              '9WY1iu067Deb/X61Q23vQejQddFETdHiqezpNo17i5W7zdLd7u/88bW+Ylm/Bk5Jv4TRW1oASJdoQSt6Z2ZhFXN9gwUVyWtvqe8umd0kWB'
+              'eXhkcOocbtqHtOMPTBunT9X5plFo6dY4ujVJ3BrHpXv4rbgDyX/pg648AfkQkbtMT+MspxAe6uwj0WF8wW+fhg9ldL9dKlBvB2j3DXyb9m'
+              'PyH/W8w8DrH9Vk/rux+UsV264SoZ7MIZ2ebIoD5FATpFCoDCipMbmSUykwoGJkoJPXQToLM6psnROd/0/K3N+sN4k/5WI6x+8cm0oJOaN+'
+              'f9AUcAKqlFI/7Z/ZuqCbPFUvVIIzw6tF9cMQVVeyuS42GWBUqjZZVwhmhcfK5NVl1cCdlH5ST+dfT4ROMnmuKzlQMkkpXdXHlCGNFZ9N9P'
+              'sIcuUiLZlTWp3rK326tG7qynkkuH4WoXrZGGh9M9UZ/Hp28TOqi50PEJXdyImM8LZlHMOq8lIUUDKZi8EU7kk1qw3LVBVhcHR0UNpN8duB'
+              'TptFZNPVibNNZ7eNtVi/vzl/SXIFncG7D59evfww+Hx2/vrs4yU76NWI0APRgICqyOvRRPJoa9TMTyXjRS6n+iZHiTHVOW3/x4Dpxx9kTT'
+              'PzQPTY/MD/sfPQ/LKuOUbVLliKVdi6xvvWvlI92+i7PtrWVHmtn8KaoFTeTsDLK/tVdw9fc+2QUBUYpxNke/oW1JCga4eyaZ6d1uYl9vbX'
+              'vTgtZJHQI4mPyKRkVIQmLkXFLIlDSoiIFjaBdr1Ue90DlzQPXM7sCBZGpiqa0C0upM/K3W89XgVaX3chYAxkri/oqSsTipCLU0QMpH55ck'
+              'tva/SWtyBMzWNeRlXx3fc8rvLqodBCO8bWyTMz3pzeRLGydQwfyJvTS1XAEja+tLZ24PnLt+9/aebL3HLq7Da7t3xepffTcru+P7tKzdW5'
+              '9YqLYgpjr++ZsxAG4uEkR0yJUaSuFgICFCNqv+LF9EYhX6XHPdi1IA9lFzmfTptrim/pySA91gv1jYjIV/kWSZqR8LFICXxz/07nlOb8Vq'
+              'rpnKuY0zXJhujPEBMoH9M2SvNMxLkmBKILoW6GPLnR1MosQUAmJYZ6qEhvEmKZUoWTcBFhdE32IhdxOjLfhlykN0IrdllAbHj+CnsvY4Ik'
+              'Z5/NNYkOjR/5JILEPF1tJPy3VAiroC7YG44lAkGb6JAQv1SFPpqIMAon3sfPrz12MROxmXkxi0WSi+lMrgmSIBexiJICwRp7Y8r+WYgkoW'
+              'cPlmJZTuByHSTyjRgfhP4kFNDPyS0z9pFu7+jiioxV2SNlxvLMpssz/0fW67adDZlfgIsgl/EvzUN5yiQtP5sWCUd+lvBitAIHkiEexasY'
+              'rBDD6IqMMpF3cf5zMfRp/SvamETYBLz7W0DfGFU7q4pq5kyiq5S5TIryAaQs9I0L0MUsQVS9hbj6ohbDdD0GbUH5f4PjaqE='
+          ))
+          assert hashlib.sha256(source).hexdigest()=='d5a09b0f029c33e4f8093b10fe676ab840f4d56935faeefb909e4bb6e6b5f3dc', 'FIX33 patch integrity error'
+          subprocess.run(['python3','-c',source.decode('utf-8')],check=True)
+          LWOD_FIX33_INJECT
 
-        test -s "$release_dir/LWOD_FIX32.cue"
+      - name: FIX33 Grafik pruefen
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'LWOD_FIX33_VERIFY'
+          from pathlib import Path
+          import os
+          s=(Path(os.environ['PROJECT_DIR'])/'src/main.c').read_text(encoding='utf-8')
+          for m in ('LWOD_FIX32_MESH','LWOD_FIX33_GEOMETRY','FIX33: beam work, deep windows',
+                    'vt_v281_resolve_movement();','vt_save_game(void)','vt_load_game(void)',
+                    'LYDRA_FIX12_GLOBAL_PERCENT 75','vt_v282_draw_house_npcs(x,z)'):
+              assert m in s, 'FIX33: missing '+m
+          assert s.count('FIX33: beam work, deep windows')==1
+          assert Path('artifacts/LWOD_FIX33_GRAFIK.txt').stat().st_size>100
+          print('FIX33 renderer, gameplay guards and diagnosis passed')
+          LWOD_FIX33_VERIFY
 
-        mv -- "$release_dir/LWOD_FIX32.bin" "$release_dir/LWOD_FIX35.bin"
+      - name: PS1-Aufloesung 640 oder 320 einstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          mode=os.environ.get('LWOD_VIDEO_WIDTH','640')
+          if mode not in ('320','640'): raise SystemExit('Ungueltige Breite: '+mode)
+          file=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+          source=file.read_text(encoding='utf8')
+          if mode=='640':
+              source,n=re.subn(r'(?m)^(\s*#\s*define\s+SCREEN_W\s+)320(?=\s|$)',
+                               r'\g<1>640',source)
+              if n!=1: raise SystemExit('SCREEN_W 320 nicht eindeutig: '+str(n))
+              if not re.search(r'(?m)^\s*#\s*define\s+SCREEN_H\s+240\b',source):
+                  raise SystemExit('SCREEN_H ist nicht 240')
+              for kind in ('Disp','Draw'):
+                  ident='disp' if kind=='Disp' else 'draw'
+                  for i in (0,1):
+                      rx=r'\bSetDef%sEnv\s*\(\s*&\s*%s\s*\[\s*%s\s*\]\s*,[^;]*?\)\s*;'%(kind,ident,i)
+                      y=i*240 if kind=='Disp' else (1-i)*240
+                      replacement='SetDef%sEnv(&%s[%d], 0, %d, SCREEN_W, SCREEN_H);'%(kind,ident,i,y)
+                      source,n=re.subn(rx,replacement,source,flags=re.S)
+                      if n!=1: raise SystemExit('Frame-Umstellung nicht eindeutig: '+replacement)
+              def widen(m): return m.group(1)+str(int(m.group(2))*2)+m.group(3)
+              source,n=re.subn(r'(\bgte_SetGeomScreen\s*\(\s*)(\d+)(\s*\))',widen,source)
+              if n<1: raise SystemExit('GTE Projektion nicht gefunden')
+              source,n=re.subn(r'\bgte_SetGeomOffset\s*\(\s*160\s*,\s*120\s*\)',
+                               'gte_SetGeomOffset(320, 120)',source)
+              if n==0 and not re.search(r'gte_SetGeomOffset\s*\([^;]*SCREEN_W',source):
+                  raise SystemExit('GTE Bildmitte nicht erkannt')
+              file.write_text(source,encoding='utf8')
+          print('LWOD PS1 Modus:',mode+'x240')
+          PY
 
-        sed ''s/LWOD_FIX32\.bin/LWOD_FIX35.bin/g'' "$release_dir/LWOD_FIX32.cue" > "$release_dir/LWOD_FIX35.cue"
+      - name: PS1 kompilieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/lwod_run.py" 55
+          python3 "$RUNNER_TEMP/lwod_run.py" 56
 
-        rm -- "$release_dir/LWOD_FIX32.cue"
+      - name: Compilerfehler sichern
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: LWOD-FIX35R-FEHLER
+          path: |
+            artifacts/FIX25_BUILD_LOG.txt
+            artifacts/FIX25_ERSTE_FEHLER.txt
+          if-no-files-found: warn
 
-        test -s "$release_dir/LWOD_FIX35.bin"
+      - name: PS1 Disc fertigstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 58 59 60 61; do
+            python3 "$RUNNER_TEMP/lwod_run.py" "$i"
+          done
+          folder="$RUNNER_TEMP/lydra_ps1_spiel"
+          test -s "$folder/LWOD_FIX32.bin"
+          test -s "$folder/LWOD_FIX32.cue"
+          mv "$folder/LWOD_FIX32.bin" "$folder/LWOD_FIX35R.bin"
+          sed 's/LWOD_FIX32[.]bin/LWOD_FIX35R.bin/g' "$folder/LWOD_FIX32.cue" > "$folder/LWOD_FIX35R.cue"
+          rm "$folder/LWOD_FIX32.cue"
+          grep -qi 'LWOD_FIX35R.bin' "$folder/LWOD_FIX35R.cue"
 
-        grep -qi ''LWOD_FIX35.bin'' "$release_dir/LWOD_FIX35.cue"
-
-        test "$(find "$release_dir" -maxdepth 1 -type f | wc -l)" -eq 2
-
-        echo ''FIX34: Nur LWOD_FIX35.bin und LWOD_FIX35.cue im Download.''
-
-        '
-    - Name: FIX35 BIN und CUE als GitHub Artefakt
-      Verwendung: Aktionen/Upload-Artefakt@v4
-      ID: lydra_ps1_artifact
-      mit:
-        Name: LWOD_FIX35_HD
-        Pfad: ${{ runner.temp }}/lydra_ps1_spiel/
-        if-no-files-found: Fehler
-        Aufbewahrungsdauer: 14 Tage
-        Kompressionsgrad: 9
-    - Name: GitHub Artefakt-ID nach dem Upload erzwingen
-      Shell: Bash
-      run: "set -euo pipefail\nif [ -z \"${LYDRA_ARTIFACT_ID:-}\" ]; then\n echo '::error::GitHub meldet keine Artefakt-ID trotz Build.\
-        \Kein grünes Ergebnis erlauben.'\n exit 1\nfi\nprintf 'PS1 ZIP wurde von GitHub gespeichert. Artefakt-ID: %s\\n' \"$LYDRA_ARTIFACT_ID\"\
-        \N"
-      Umgebungsvariable:
-        LYDRA_ARTIFACT_ID: ${{ steps.lydra_ps1_artifact.outputs.artifact-id }}
-Umgebungsvariable:
-  LWOD_VIDEO_WIDTH: ${{ inputs.video_width || '640' }}
+      - name: BIN und CUE herunterladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: LWOD_FIX35R_HD
+          path: ${{ runner.temp }}/lydra_ps1_spiel/
+          if-no-files-found: error
+          retention-days: 14
