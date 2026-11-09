@@ -1,4 +1,4 @@
-name: LWOD FIX43 - Hauspolygone und Bodenrisse
+name: LWOD FIX44 - PS1 Rendering Compilerfix
 'on':
   workflow_dispatch: {}
   push:
@@ -601,6 +601,35 @@ jobs:
         print((Path('artifacts')/'FIX43_RENDER_NACHWEIS.txt').read_text(),flush=True)
 
         LWOD_FIX43_PY
+    - name: FIX44 C Funktionsdeklaration reparieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY_FIX44'
+        # FIX44: vt_v281_abs wird in der neuen Bodenroutine aufgerufen,
+        # bevor die alte static-Definition folgt. Deklaration voranstellen.
+        from pathlib import Path
+        import os,re
+        path=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        code=path.read_text(encoding='utf-8')
+        marker='/* LWOD_FIX44_FORWARD_DECLARATION */'
+        decl='static int vt_v281_abs(int n);'
+        definition=re.findall(r'\bstatic\s+int\s+vt_v281_abs\s*\(\s*int\s+n\s*\)\s*\{',code)
+        if len(definition)!=1:
+            raise SystemExit('FIX44: Funktion vt_v281_abs nicht genau einmal definiert')
+        ground=re.search(r'\bstatic\s+void\s+vt_v31987_ground_rect\s*\(',code)
+        if not ground:
+            raise SystemExit('FIX44: Boden-Zeichenfunktion fehlt')
+        if marker in code or decl in code:
+            raise SystemExit('FIX44: Deklaration bereits eingefuegt')
+        if code.count('vt_v281_abs(((zs[j]+zs[j+1])/2)-pz)')!=1:
+            raise SystemExit('FIX44: FIX43 Boden-Funktion anders als erwartet')
+        code=code[:ground.start()]+marker+'\n'+decl+'\n'+code[ground.start():]
+        if not code.index(decl)<code.index('vt_v281_abs(((zs[j]+zs[j+1])/2)-pz)')<code.index('static int vt_v281_abs(int n) {'):
+            raise SystemExit('FIX44: Deklarationsreihenfolge nicht korrekt')
+        path.write_text(code,encoding='utf-8')
+        print('FIX44: C-Vorabdeklaration vor Boden-Zeichenroutine eingefuegt')
+        PY_FIX44
     - name: Sichere Bildschirmaufteilung verifizieren
       shell: bash
       run: |
@@ -632,7 +661,7 @@ jobs:
       if: ${{ failure() }}
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_FIX41_BUILD_LOG
+        name: LWOD_FIX44_BUILD_LOG
         path: |
           artifacts/FIX25_BUILD_LOG.txt
           artifacts/FIX25_ERSTE_FEHLER.txt
@@ -648,14 +677,14 @@ jobs:
         folder="$RUNNER_TEMP/lydra_ps1_spiel"
         test -s "$folder/LWOD_FIX32.bin"
         test -s "$folder/LWOD_FIX32.cue"
-        mv "$folder/LWOD_FIX32.bin" "$folder/LWOD_FIX43.bin"
-        sed 's/LWOD_FIX32[.]bin/LWOD_FIX43.bin/g' "$folder/LWOD_FIX32.cue" > "$folder/LWOD_FIX43.cue"
+        mv "$folder/LWOD_FIX32.bin" "$folder/LWOD_FIX44.bin"
+        sed 's/LWOD_FIX32[.]bin/LWOD_FIX44.bin/g' "$folder/LWOD_FIX32.cue" > "$folder/LWOD_FIX44.cue"
         rm "$folder/LWOD_FIX32.cue"
-        grep -qi 'LWOD_FIX43.bin' "$folder/LWOD_FIX43.cue"
-    - name: LWOD FIX43 herunterladen
+        grep -qi 'LWOD_FIX44.bin' "$folder/LWOD_FIX44.cue"
+    - name: LWOD FIX44 herunterladen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_FIX43_RENDERFIX
+        name: LWOD_FIX44_RENDERFIX
         path: ${{ runner.temp }}/lydra_ps1_spiel/
         if-no-files-found: error
         retention-days: 14
