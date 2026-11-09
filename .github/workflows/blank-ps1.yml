@@ -1,7 +1,7 @@
-# Lydra World Of Dragon FIX41 - stabile 320x240-Ausgabe
+# Lydra World Of Dragon FIX42 - wirkliche Renderer-Aenderungen 320x240
 # Die hochaufgeloesten 640x240-Koordinaten werden NICHT angewendet.
 # NICHT vom Browser uebersetzen lassen.
-name: LWOD FIX41 - Haus und Boden Grafikfix
+name: LWOD FIX42 - Sichtbarer Haus und Weg Fix
 'on':
   workflow_dispatch: {}
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   build:
-    name: FIX41 PS1 Spiel erstellen
+    name: FIX42 PS1 Spiel erstellen
     runs-on: ubuntu-latest
     steps:
       - name: Projekt laden
@@ -338,6 +338,125 @@ jobs:
           print(report.read_text(encoding='utf-8'))
           LWOD_FIX41_PY
 
+      - name: FIX42 Tatsächliche Haus- und Wegpolygone korrigieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY_FIX42'
+          #!/usr/bin/env python3
+          """FIX42: remove demonstrably overlapping ornamental house meshes and
+          cell-by-cell ground tint, preserving the older functional geometry and collision.
+          This intentionally does not claim to cure PS1 rasterization hairline cracks.
+          """
+          from pathlib import Path
+          import os,re
+          p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+          s=p.read_text(encoding='utf-8')
+          if 'LWOD_FIX42_RENDER' in s:
+              raise SystemExit('FIX42 already applied')
+          
+          def span(txt,fn):
+              rx=r'\bstatic\s+void\s+'+re.escape(fn)+r'\s*\([^;]*?\)\s*\{'
+              hits=list(re.finditer(rx,txt,re.S))
+              if len(hits)!=1:raise SystemExit('FIX42 function not unique: '+fn+': '+str(len(hits)))
+              a=hits[0].start();i=hits[0].end();depth=1;state='code'
+              while i<len(txt) and depth:
+                  c=txt[i]; nxt=txt[i+1] if i+1<len(txt) else ''
+                  if state=='code':
+                      if c=='/' and nxt=='/':state='line';i+=1
+                      elif c=='/' and nxt=='*':state='comment';i+=1
+                      elif c=='"':state='string'
+                      elif c=="'":state='char'
+                      elif c=='{':depth+=1
+                      elif c=='}':depth-=1
+                  elif state=='line':
+                      if c=='\n':state='code'
+                  elif state=='comment':
+                      if c=='*' and nxt=='/':state='code';i+=1
+                  else:
+                      if c=='\\':i+=1
+                      elif (state=='string' and c=='"') or (state=='char' and c=="'"):state='code'
+                  i+=1
+              if depth:raise SystemExit('FIX42 unbalanced C function: '+fn)
+              return a,i
+          
+          # The old FIX28 visual layer draws many big dark cuboids at almost the same
+          # depth as original walls and windows, and FIX30 adds still more flat ornaments.
+          # Remove only these decorative additions, never the base house body, NPCs,
+          # roof-hiding code, doors or collision.
+          a,b=span(s,'vt_v241_building');h=s[a:b]
+          mark28='/* FIX28 PS1: polygonal urban/fantasy architecture, original meshes.'
+          mark30='/* FIX30.4: facade accents only; single authoritative original roof. */'
+          mark32='/* FIX32: real faceted house corner timbers, depth-limited. */'
+          for marker in (mark28,mark30,mark32):
+              if h.count(marker)!=1:raise SystemExit('FIX42 missing expected house layer: '+marker)
+          pos28=h.index(mark28);pos30=h.index(mark30);pos32=h.index(mark32)
+          if not(pos28<pos30<pos32):raise SystemExit('FIX42 house layer order changed')
+          removed=h[pos28:pos32]
+          if removed.count('draw_box(')<15 or 'vt_v2822_facade(x,z,s,roof,style);' not in removed:
+              raise SystemExit('FIX42 overlap layer unexpectedly different')
+          # The original background walls/windows and roofs remain as drawn by vt_v241_building;
+          # the lower-cost FIX32 corner bevels remain as the one visual upgrade.
+          replacement='/* LWOD_FIX42_RENDER: remove FIX28 boxes and FIX30 facade. */\n    if (0) vt_v2822_facade(x,z,s,roof,style); /* keep symbol referenced */\n    '
+          h=h[:pos28]+replacement+h[pos32:]
+          for marker in ('vt_v282_wall(','if (inside) vt_v282_draw_house_npcs(x,z);','hide_roof'):
+              if marker not in h:raise SystemExit('FIX42 functional house piece missing: '+marker)
+          s=s[:a]+h+s[b:]
+          
+          # FIX30 cell tint changed per terrain block. Remove the WHOLE per-cell modulation,
+          # not just weaken its coefficients as FIX41 did. Keep road/grass mesh and height.
+          a,b=span(s,'vt_v31987_ground_rect');g=s[a:b]
+          cellmark='/* FIX30: visible PS1 material breakup for paths and grass. */'
+          if g.count(cellmark)!=1:raise SystemExit('FIX42 modulated ground code missing')
+          pos=g.index(cellmark)
+          open_brace=g.find('{',pos+len(cellmark))
+          if open_brace<0:raise SystemExit('FIX42 ground color block missing')
+          depth=1;end=open_brace+1
+          while depth and end<len(g):
+              if g[end]=='{':depth+=1
+              elif g[end]=='}':depth-=1
+              end+=1
+          if depth:raise SystemExit('FIX42 ground color block not balanced')
+          mod=g[pos:end]
+          if 'int cell=' not in mod or 'if (road)' not in mod or 'rr+=' not in mod:
+              raise SystemExit('FIX42 ground cell tint unexpectedly different')
+          g=g[:pos]+'/* FIX42: uniform grass/road cell tint - no checkerboard modulation. */'+g[end:]
+          base='int rr=road?148:r,gg=road?134:g,bb=road?112:b;'
+          if g.count(base)!=1:raise SystemExit('FIX42 baseline road color not found')
+          g=g.replace(base,'int rr=road?155:r,gg=road?135:g,bb=road?108:b;',1)
+          s=s[:a]+g+s[b:]
+          
+          # Assert no gameplay, saving or screen change.
+          for token in ('LWOD_FIX32_MESH','LWOD_FIX33_GEOMETRY','LWOD_FIX41_VISUAL',
+                        'vt_v281_resolve_movement();','vt_save_game(void)',
+                        'vt_load_game(void)','LYDRA_FIX12_GLOBAL_PERCENT 75',
+                        'vt_v282_draw_house_npcs(x,z)','vt_fix32_round_tree('):
+              if token not in s:raise SystemExit('FIX42 original feature missing: '+token)
+          for name,value in (('SCREEN_W','320'),('SCREEN_H','240')):
+              if not re.search(r'(?m)^\s*#\s*define\s+'+name+r'\s+'+value+r'\b',s):
+                  raise SystemExit('FIX42 screen dimensions changed: '+name)
+          if s.count('LWOD_FIX42_RENDER')!=1:
+              raise SystemExit('FIX42 marker duplicated')
+          p.write_text(s,encoding='utf-8')
+          report=Path('artifacts/FIX42_NACHWEIS.txt');report.parent.mkdir(exist_ok=True)
+          report.write_text(
+              'FIX42 Render-Nachweis\n'
+              'Haeuser: %s Zeichen aus zusaetzlichen FIX28/30-Fassaden entfernt; '# noqa
+              'Originalwand, Dach, NPC und Kollisionscode erhalten.\n'
+              'Weg/Gras: %s Zeichen Farb-Checker aus FIX30 entfernt; einheitliche Materialfarbe.\n'
+              'NICHT sicher gefixt: blaue Linien durch GPU-Polygonrisse (benoetigt Renderer-Test).\n'
+              'Aktive Aufloesung: 320x240; FIX33 Baum/Felsdetails erhalten.\n'
+              % (len(removed),len(mod)),encoding='utf-8'
+          )
+          print(report.read_text(),flush=True)
+          print('=== FIX42_GROUND_RECT_BEGIN ===',flush=True)
+          print(g,flush=True)
+          print('=== FIX42_GROUND_RECT_END ===',flush=True)
+          print('=== FIX42_HOUSE_RENDERER_BEGIN ===',flush=True)
+          print(h,flush=True)
+          print('=== FIX42_HOUSE_RENDERER_END ===',flush=True)
+          PY_FIX42
+
       - name: Sichere Bildschirmaufteilung verifizieren
         shell: bash
         run: |
@@ -389,15 +508,15 @@ jobs:
           folder="$RUNNER_TEMP/lydra_ps1_spiel"
           test -s "$folder/LWOD_FIX32.bin"
           test -s "$folder/LWOD_FIX32.cue"
-          mv "$folder/LWOD_FIX32.bin" "$folder/LWOD_FIX41.bin"
-          sed 's/LWOD_FIX32[.]bin/LWOD_FIX41.bin/g' "$folder/LWOD_FIX32.cue" > "$folder/LWOD_FIX41.cue"
+          mv "$folder/LWOD_FIX32.bin" "$folder/LWOD_FIX42.bin"
+          sed 's/LWOD_FIX32[.]bin/LWOD_FIX42.bin/g' "$folder/LWOD_FIX32.cue" > "$folder/LWOD_FIX42.cue"
           rm "$folder/LWOD_FIX32.cue"
-          grep -qi 'LWOD_FIX41.bin' "$folder/LWOD_FIX41.cue"
+          grep -qi 'LWOD_FIX42.bin' "$folder/LWOD_FIX42.cue"
 
-      - name: LWOD FIX41 herunterladen
+      - name: LWOD FIX42 herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_FIX41_GRAFIKFIX
+          name: LWOD_FIX42_GRAFIKFIX
           path: ${{ runner.temp }}/lydra_ps1_spiel/
           if-no-files-found: error
           retention-days: 14
