@@ -1,522 +1,661 @@
-# Lydra World Of Dragon FIX42 - wirkliche Renderer-Aenderungen 320x240
-# Die hochaufgeloesten 640x240-Koordinaten werden NICHT angewendet.
-# NICHT vom Browser uebersetzen lassen.
-name: LWOD FIX42 - Sichtbarer Haus und Weg Fix
+name: LWOD FIX43 - Hauspolygone und Bodenrisse
 'on':
   workflow_dispatch: {}
   push:
-    branches: [main]
+    branches:
+    - main
     paths:
-      - .github/workflows/blank-ps1.yml
+    - .github/workflows/blank-ps1.yml
 permissions:
   contents: read
 jobs:
   build:
-    name: FIX42 PS1 Spiel erstellen
+    name: FIX43 PS1 Renderer reparieren
     runs-on: ubuntu-latest
     steps:
-      - name: Projekt laden
-        uses: actions/checkout@v4
+    - name: Projekt laden
+      uses: actions/checkout@v4
+    - name: Buildwerkzeuge installieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build unzip curl ffmpeg python3-pil python3-yaml
+    - name: Funktionierende FIX36-Buildbasis laden
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl --fail --location --silent --show-error --retry 3 \
+          'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/efb8cdbb05262caf1a714bae16fccaa5984b719a/.github/workflows/blank-ps1.yml' \
+          -o "$RUNNER_TEMP/lwod_fix36.yml"
+        python3 - <<'PY_BASE'
+        from pathlib import Path
+        import os,hashlib,yaml
+        p=Path(os.environ['RUNNER_TEMP'])/'lwod_fix36.yml'
+        data=p.read_bytes()
+        h=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+        assert h=='3f40dc4623f5fe438329b12c33e8453c9177e1f0', 'FIX36 Vorlagendatei unvollstaendig'
+        steps=yaml.safe_load(data)['jobs']['build']['steps']
+        assert len(steps)==68, 'FIX36 Vorlagenschritte unerwartet'
+        print('FIX36 Original-Vorlage geprueft')
+        PY_BASE
+        cat > "$RUNNER_TEMP/lwod_fix40_step.py" <<'PY_REPLAY'
+        import os,sys,yaml,subprocess
+        from pathlib import Path
+        p=Path(os.environ['RUNNER_TEMP'])/'lwod_fix36.yml'
+        steps=yaml.safe_load(p.read_bytes())['jobs']['build']['steps']
+        name=sys.argv[1]
+        found=[s for s in steps if s.get('name')==name and isinstance(s.get('run'),str)]
+        if len(found)!=1:
+            raise SystemExit('FIX41 Schritt nicht eindeutig: '+name)
+        print('FIX41 Replay:',name,flush=True)
+        subprocess.run(['bash','-euo','pipefail','-c',found[0]['run']],check=True)
+        PY_REPLAY
+    - name: Vorgaenger-Workflow vorbereiten
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX35R-Patch aus festem GitHub-Stand laden'
+        test -s "$RUNNER_TEMP/lwod_fix36_replay.py"
+        python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX32 Basis vorbereiten'
+        test -s "$RUNNER_TEMP/lwod_run.py"
+        echo 'FIX41 Basis vollstaendig vorbereitet'
+    - name: Basis 03
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 3
+    - name: Basis 04
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 4
+    - name: Basis 05
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 5
+    - name: Basis 06
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 6
+    - name: Basis 07
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 7
+    - name: Basis 08
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 8
+    - name: Basis 09
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 9
+    - name: Basis 10
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 10
+    - name: Basis 11
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 11
+    - name: Basis 12
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 12
+    - name: Basis 13
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 13
+    - name: Basis 14
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 14
+    - name: Basis 15
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 15
+    - name: Basis 16
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 16
+    - name: Basis 17
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 17
+    - name: Basis 18
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 18
+    - name: Basis 19
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 19
+    - name: Basis 20
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 20
+    - name: Basis 21
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 21
+    - name: Basis 22
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 22
+    - name: Basis 23
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 23
+    - name: Basis 24
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 24
+    - name: Basis 25
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 25
+    - name: Basis 26
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 26
+    - name: Basis 27
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 27
+    - name: Basis 28
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 28
+    - name: Basis 29
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 29
+    - name: Basis 30
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 30
+    - name: Basis 31
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 31
+    - name: Basis 32
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 32
+    - name: Basis 33
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 33
+    - name: Basis 34
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 34
+    - name: Basis 35
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 35
+    - name: Basis 36
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 36
+    - name: Basis 37
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 37
+    - name: Basis 38
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 38
+    - name: Basis 39
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 39
+    - name: Basis 40
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 40
+    - name: Basis 41
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 41
+    - name: Basis 42
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 42
+    - name: Basis 43
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 43
+    - name: Basis 44
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 44
+    - name: Basis 45
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 45
+    - name: Basis 46
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 46
+    - name: Basis 47
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 47
+    - name: Basis 48
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 48
+    - name: Basis 49
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 49
+    - name: Basis 50
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 50
+    - name: Basis 51
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 51
+    - name: Basis 52
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 52
+    - name: Basis 53
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 53
+    - name: Basis 54
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_run.py" 54
+    - name: Verfeinerte FIX33-Modelle anwenden
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX33 Geometrie verbessern'
+    - name: FIX33 Grafikverifikation
+      shell: bash
+      run: python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX33 pruefen'
+    - name: FIX41 Hauspolygone und Bodenfarben korrigieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'LWOD_FIX41_PY'
+        #!/usr/bin/env python3
+        """LWOD FIX41: reduce near-house mesh overlap and road/grass checker tint.
+        No physics, world positions, camera, video resolution or game saves are touched.
+        """
+        from pathlib import Path
+        import os,re
+        src=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=src.read_text(encoding='utf-8')
+        if 'LWOD_FIX41_VISUAL' in s:
+            raise SystemExit('FIX41 already applied')
 
-      - name: Buildwerkzeuge installieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build unzip curl ffmpeg python3-pil python3-yaml
+        def span(data,name):
+            rx=r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
+            m=list(re.finditer(rx,data,re.S))
+            if len(m)!=1:
+                raise SystemExit('FIX41 expected one function '+name+', found '+str(len(m)))
+            begin=m[0].start(); i=m[0].end(); depth=1; mode='code'
+            while i<len(data) and depth:
+                c=data[i]; nxt=data[i+1] if i+1<len(data) else ''
+                if mode=='code':
+                    if c=='/' and nxt=='/': mode='line';i+=1
+                    elif c=='/' and nxt=='*': mode='comment';i+=1
+                    elif c=='"': mode='string'
+                    elif c=="'": mode='char'
+                    elif c=='{': depth+=1
+                    elif c=='}': depth-=1
+                elif mode=='line':
+                    if c=='\n': mode='code'
+                elif mode=='comment':
+                    if c=='*' and nxt=='/':mode='code';i+=1
+                else:
+                    if c=='\\':i+=1
+                    elif (mode=='string' and c=='"') or (mode=='char' and c=="'"):mode='code'
+                i+=1
+            if depth:raise SystemExit('FIX41 unbalanced function '+name)
+            return begin,i
 
-      - name: Funktionierende FIX36-Buildbasis laden
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail --location --silent --show-error --retry 3 \
-            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/efb8cdbb05262caf1a714bae16fccaa5984b719a/.github/workflows/blank-ps1.yml' \
-            -o "$RUNNER_TEMP/lwod_fix36.yml"
-          python3 - <<'PY_BASE'
-          from pathlib import Path
-          import os,hashlib,yaml
-          p=Path(os.environ['RUNNER_TEMP'])/'lwod_fix36.yml'
-          data=p.read_bytes()
-          h=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
-          assert h=='3f40dc4623f5fe438329b12c33e8453c9177e1f0', 'FIX36 Vorlagendatei unvollstaendig'
-          steps=yaml.safe_load(data)['jobs']['build']['steps']
-          assert len(steps)==68, 'FIX36 Vorlagenschritte unerwartet'
-          print('FIX36 Original-Vorlage geprueft')
-          PY_BASE
-          cat > "$RUNNER_TEMP/lwod_fix40_step.py" <<'PY_REPLAY'
-          import os,sys,yaml,subprocess
-          from pathlib import Path
-          p=Path(os.environ['RUNNER_TEMP'])/'lwod_fix36.yml'
-          steps=yaml.safe_load(p.read_bytes())['jobs']['build']['steps']
-          name=sys.argv[1]
-          found=[s for s in steps if s.get('name')==name and isinstance(s.get('run'),str)]
-          if len(found)!=1:
-              raise SystemExit('FIX41 Schritt nicht eindeutig: '+name)
-          print('FIX41 Replay:',name,flush=True)
-          subprocess.run(['bash','-euo','pipefail','-c',found[0]['run']],check=True)
-          PY_REPLAY
+        # Fix 1: FIX33 appended a *second* front-facade ornament set over the
+        # existing FIX28+FIX30 front. Keep the already working FIX30 version instead.
+        a,b=span(s,'vt_v241_building'); house=s[a:b]
+        mark='/* FIX33: beam work, deep windows, stone sills and a lintel over the door.'
+        anchor='if (inside) vt_v282_draw_house_npcs(x,z);'
+        if house.count(mark)!=1 or house.count(anchor)!=1:
+            raise SystemExit('FIX41 house facade/NPC anchors changed')
+        start=house.index(mark); end=house.index(anchor,start)
+        removed=house[start:end]
+        if removed.count('vt_v2822_quad(')<10 or 'if (!inside && !occluded)' not in removed:
+            raise SystemExit('FIX41 expected duplicate FIX33 geometry not found')
+        house=(house[:start]+ '/* LWOD_FIX41_VISUAL: duplicate FIX33 facade removed; FIX30 facade kept. */\n    '
+               +house[end:])
+        # Limit the older front ornament mesh to the nearby street, not distant houses.
+        old='if (d>175 && d<750) vt_v2822_facade(x,z,s,roof,style);'
+        new='if (d>175 && d<440) vt_v2822_facade(x,z,s,roof,style);'
+        if house.count(old)!=1:raise SystemExit('FIX41 unexpected FIX30 facade distance')
+        house=house.replace(old,new,1)
+        s=s[:a]+house+s[b:]
 
-      - name: Vorgaenger-Workflow vorbereiten
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX35R-Patch aus festem GitHub-Stand laden'
-          test -s "$RUNNER_TEMP/lwod_fix36_replay.py"
-          python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX32 Basis vorbereiten'
-          test -s "$RUNNER_TEMP/lwod_run.py"
-          echo 'FIX41 Basis vollstaendig vorbereitet'
+        # Fix 2: soften the brown/green checker-block material without
+        # altering road geometry, triangle vertices, collision or map generation.
+        a,b=span(s,'vt_v31987_ground_rect'); ground=s[a:b]
+        changes={
+          'int tone=(cell-3)*2;':'int tone=(cell-3);',
+          'if (cell==0 || cell==4) {rr-=14;gg-=11;bb-=8;}':
+              'if (cell==0 || cell==4) {rr-=4;gg-=3;bb-=2;}',
+          'else if (cell==2 || cell==5) {rr+=10;gg+=7;bb+=5;}':
+              'else if (cell==2 || cell==5) {rr+=3;gg+=2;bb+=2;}',
+          'if (cell==1 || cell==6) {rr-=8;gg-=10;bb-=6;}':
+              'if (cell==1 || cell==6) {rr-=3;gg-=3;bb-=2;}',
+          'if (cell==3) {rr+=4;gg+=6;bb+=2;}':
+              'if (cell==3) {rr+=2;gg+=2;bb+=1;}',
+        }
+        for old,new in changes.items():
+            if ground.count(old)!=1:raise SystemExit('FIX41 ground palette anchor changed: '+old)
+            ground=ground.replace(old,new,1)
+        s=s[:a]+ground+s[b:]
 
-      # JEDER Schritt einzeln: GitHub muss $GITHUB_ENV dazwischen einlesen.
-      - name: Basis 03
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 3
-      - name: Basis 04
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 4
-      - name: Basis 05
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 5
-      - name: Basis 06
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 6
-      - name: Basis 07
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 7
-      - name: Basis 08
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 8
-      - name: Basis 09
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 9
-      - name: Basis 10
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 10
-      - name: Basis 11
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 11
-      - name: Basis 12
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 12
-      - name: Basis 13
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 13
-      - name: Basis 14
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 14
-      - name: Basis 15
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 15
-      - name: Basis 16
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 16
-      - name: Basis 17
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 17
-      - name: Basis 18
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 18
-      - name: Basis 19
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 19
-      - name: Basis 20
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 20
-      - name: Basis 21
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 21
-      - name: Basis 22
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 22
-      - name: Basis 23
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 23
-      - name: Basis 24
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 24
-      - name: Basis 25
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 25
-      - name: Basis 26
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 26
-      - name: Basis 27
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 27
-      - name: Basis 28
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 28
-      - name: Basis 29
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 29
-      - name: Basis 30
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 30
-      - name: Basis 31
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 31
-      - name: Basis 32
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 32
-      - name: Basis 33
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 33
-      - name: Basis 34
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 34
-      - name: Basis 35
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 35
-      - name: Basis 36
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 36
-      - name: Basis 37
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 37
-      - name: Basis 38
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 38
-      - name: Basis 39
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 39
-      - name: Basis 40
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 40
-      - name: Basis 41
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 41
-      - name: Basis 42
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 42
-      - name: Basis 43
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 43
-      - name: Basis 44
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 44
-      - name: Basis 45
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 45
-      - name: Basis 46
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 46
-      - name: Basis 47
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 47
-      - name: Basis 48
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 48
-      - name: Basis 49
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 49
-      - name: Basis 50
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 50
-      - name: Basis 51
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 51
-      - name: Basis 52
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 52
-      - name: Basis 53
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 53
-      - name: Basis 54
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_run.py" 54
+        # Invariants: prevent accidental regressions to old 640-wide screen or gameplay.
+        for token in ('LWOD_FIX32_MESH','LWOD_FIX33_GEOMETRY','vt_v2822_facade(',
+         'vt_v281_resolve_movement();','vt_save_game(void)','vt_load_game(void)',
+         'LYDRA_FIX12_GLOBAL_PERCENT 75','vt_v282_draw_house_npcs(x,z)',
+         'no automatic region 0->1 from step count','no automatic region 1->2 from step count'):
+            if token not in s:raise SystemExit('FIX41 retained feature missing: '+token)
+        for dim,val in [('SCREEN_W','320'),('SCREEN_H','240')]:
+            if not re.search(r'(?m)^\s*#\s*define\s+'+dim+r'\s+'+val+r'\b',s):
+                raise SystemExit('FIX41 resolution unexpectedly changed: '+dim)
+        if s.count('LWOD_FIX41_VISUAL')!=1:
+            raise SystemExit('FIX41 duplicated/missing visual patch')
+        src.write_text(s,encoding='utf-8')
+        report=Path('artifacts/FIX41_GRAFIK_DIAGNOSE.txt')
+        report.parent.mkdir(exist_ok=True)
+        report.write_text(
+            'LWOD FIX41 - gezielte Rendering-Korrektur\n'
+            'Haeuser: zusaetzliche FIX33-Fassadenpolygone entfernt, bestehende FIX30-Fassade bleibt.\n'
+            'FIX30-Fassaden-LOD 750 -> 440, weniger entfernte Ueberlagerungen.\n'
+            'Weg/Gras: Farbmodulation stark verringert, Geometrie unveraendert.\n'
+            'Kamera, NPC, Kollision, Speicher, Intro und Bildschirm 320x240 unveraendert.\n'
+            'Drachen/Spieler-Abstand und genaue Ursache blauer Bodenkanten noch nicht identifiziert.\n',
+            encoding='utf-8')
+        print(report.read_text(encoding='utf-8'))
+        LWOD_FIX41_PY
+    - name: FIX42 Tatsächliche Haus- und Wegpolygone korrigieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY_FIX42'
+        #!/usr/bin/env python3
+        """FIX42: remove demonstrably overlapping ornamental house meshes and
+        cell-by-cell ground tint, preserving the older functional geometry and collision.
+        This intentionally does not claim to cure PS1 rasterization hairline cracks.
+        """
+        from pathlib import Path
+        import os,re
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text(encoding='utf-8')
+        if 'LWOD_FIX42_RENDER' in s:
+            raise SystemExit('FIX42 already applied')
 
-      - name: Verfeinerte FIX33-Modelle anwenden
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX33 Geometrie verbessern'
+        def span(txt,fn):
+            rx=r'\bstatic\s+void\s+'+re.escape(fn)+r'\s*\([^;]*?\)\s*\{'
+            hits=list(re.finditer(rx,txt,re.S))
+            if len(hits)!=1:raise SystemExit('FIX42 function not unique: '+fn+': '+str(len(hits)))
+            a=hits[0].start();i=hits[0].end();depth=1;state='code'
+            while i<len(txt) and depth:
+                c=txt[i]; nxt=txt[i+1] if i+1<len(txt) else ''
+                if state=='code':
+                    if c=='/' and nxt=='/':state='line';i+=1
+                    elif c=='/' and nxt=='*':state='comment';i+=1
+                    elif c=='"':state='string'
+                    elif c=="'":state='char'
+                    elif c=='{':depth+=1
+                    elif c=='}':depth-=1
+                elif state=='line':
+                    if c=='\n':state='code'
+                elif state=='comment':
+                    if c=='*' and nxt=='/':state='code';i+=1
+                else:
+                    if c=='\\':i+=1
+                    elif (state=='string' and c=='"') or (state=='char' and c=="'"):state='code'
+                i+=1
+            if depth:raise SystemExit('FIX42 unbalanced C function: '+fn)
+            return a,i
 
-      - name: FIX33 Grafikverifikation
-        shell: bash
-        run: python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX33 pruefen'
+        # The old FIX28 visual layer draws many big dark cuboids at almost the same
+        # depth as original walls and windows, and FIX30 adds still more flat ornaments.
+        # Remove only these decorative additions, never the base house body, NPCs,
+        # roof-hiding code, doors or collision.
+        a,b=span(s,'vt_v241_building');h=s[a:b]
+        mark28='/* FIX28 PS1: polygonal urban/fantasy architecture, original meshes.'
+        mark30='/* FIX30.4: facade accents only; single authoritative original roof. */'
+        mark32='/* FIX32: real faceted house corner timbers, depth-limited. */'
+        for marker in (mark28,mark30,mark32):
+            if h.count(marker)!=1:raise SystemExit('FIX42 missing expected house layer: '+marker)
+        pos28=h.index(mark28);pos30=h.index(mark30);pos32=h.index(mark32)
+        if not(pos28<pos30<pos32):raise SystemExit('FIX42 house layer order changed')
+        removed=h[pos28:pos32]
+        if removed.count('draw_box(')<15 or 'vt_v2822_facade(x,z,s,roof,style);' not in removed:
+            raise SystemExit('FIX42 overlap layer unexpectedly different')
+        # The original background walls/windows and roofs remain as drawn by vt_v241_building;
+        # the lower-cost FIX32 corner bevels remain as the one visual upgrade.
+        replacement='/* LWOD_FIX42_RENDER: remove FIX28 boxes and FIX30 facade. */\n    if (0) vt_v2822_facade(x,z,s,roof,style); /* keep symbol referenced */\n    '
+        h=h[:pos28]+replacement+h[pos32:]
+        for marker in ('vt_v282_wall(','if (inside) vt_v282_draw_house_npcs(x,z);','hide_roof'):
+            if marker not in h:raise SystemExit('FIX42 functional house piece missing: '+marker)
+        s=s[:a]+h+s[b:]
 
-      - name: FIX41 Hauspolygone und Bodenfarben korrigieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'LWOD_FIX41_PY'
-          #!/usr/bin/env python3
-          """LWOD FIX41: reduce near-house mesh overlap and road/grass checker tint.
-          No physics, world positions, camera, video resolution or game saves are touched.
-          """
-          from pathlib import Path
-          import os,re
-          src=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-          s=src.read_text(encoding='utf-8')
-          if 'LWOD_FIX41_VISUAL' in s:
-              raise SystemExit('FIX41 already applied')
-          
-          def span(data,name):
-              rx=r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
-              m=list(re.finditer(rx,data,re.S))
-              if len(m)!=1:
-                  raise SystemExit('FIX41 expected one function '+name+', found '+str(len(m)))
-              begin=m[0].start(); i=m[0].end(); depth=1; mode='code'
-              while i<len(data) and depth:
-                  c=data[i]; nxt=data[i+1] if i+1<len(data) else ''
-                  if mode=='code':
-                      if c=='/' and nxt=='/': mode='line';i+=1
-                      elif c=='/' and nxt=='*': mode='comment';i+=1
-                      elif c=='"': mode='string'
-                      elif c=="'": mode='char'
-                      elif c=='{': depth+=1
-                      elif c=='}': depth-=1
-                  elif mode=='line':
-                      if c=='\n': mode='code'
-                  elif mode=='comment':
-                      if c=='*' and nxt=='/':mode='code';i+=1
-                  else:
-                      if c=='\\':i+=1
-                      elif (mode=='string' and c=='"') or (mode=='char' and c=="'"):mode='code'
-                  i+=1
-              if depth:raise SystemExit('FIX41 unbalanced function '+name)
-              return begin,i
-          
-          # Fix 1: FIX33 appended a *second* front-facade ornament set over the
-          # existing FIX28+FIX30 front. Keep the already working FIX30 version instead.
-          a,b=span(s,'vt_v241_building'); house=s[a:b]
-          mark='/* FIX33: beam work, deep windows, stone sills and a lintel over the door.'
-          anchor='if (inside) vt_v282_draw_house_npcs(x,z);'
-          if house.count(mark)!=1 or house.count(anchor)!=1:
-              raise SystemExit('FIX41 house facade/NPC anchors changed')
-          start=house.index(mark); end=house.index(anchor,start)
-          removed=house[start:end]
-          if removed.count('vt_v2822_quad(')<10 or 'if (!inside && !occluded)' not in removed:
-              raise SystemExit('FIX41 expected duplicate FIX33 geometry not found')
-          house=(house[:start]+ '/* LWOD_FIX41_VISUAL: duplicate FIX33 facade removed; FIX30 facade kept. */\n    '
-                 +house[end:])
-          # Limit the older front ornament mesh to the nearby street, not distant houses.
-          old='if (d>175 && d<750) vt_v2822_facade(x,z,s,roof,style);'
-          new='if (d>175 && d<440) vt_v2822_facade(x,z,s,roof,style);'
-          if house.count(old)!=1:raise SystemExit('FIX41 unexpected FIX30 facade distance')
-          house=house.replace(old,new,1)
-          s=s[:a]+house+s[b:]
-          
-          # Fix 2: soften the brown/green checker-block material without
-          # altering road geometry, triangle vertices, collision or map generation.
-          a,b=span(s,'vt_v31987_ground_rect'); ground=s[a:b]
-          changes={
-            'int tone=(cell-3)*2;':'int tone=(cell-3);',
-            'if (cell==0 || cell==4) {rr-=14;gg-=11;bb-=8;}':
-                'if (cell==0 || cell==4) {rr-=4;gg-=3;bb-=2;}',
-            'else if (cell==2 || cell==5) {rr+=10;gg+=7;bb+=5;}':
-                'else if (cell==2 || cell==5) {rr+=3;gg+=2;bb+=2;}',
-            'if (cell==1 || cell==6) {rr-=8;gg-=10;bb-=6;}':
-                'if (cell==1 || cell==6) {rr-=3;gg-=3;bb-=2;}',
-            'if (cell==3) {rr+=4;gg+=6;bb+=2;}':
-                'if (cell==3) {rr+=2;gg+=2;bb+=1;}',
-          }
-          for old,new in changes.items():
-              if ground.count(old)!=1:raise SystemExit('FIX41 ground palette anchor changed: '+old)
-              ground=ground.replace(old,new,1)
-          s=s[:a]+ground+s[b:]
-          
-          # Invariants: prevent accidental regressions to old 640-wide screen or gameplay.
-          for token in ('LWOD_FIX32_MESH','LWOD_FIX33_GEOMETRY','vt_v2822_facade(',
-           'vt_v281_resolve_movement();','vt_save_game(void)','vt_load_game(void)',
-           'LYDRA_FIX12_GLOBAL_PERCENT 75','vt_v282_draw_house_npcs(x,z)',
-           'no automatic region 0->1 from step count','no automatic region 1->2 from step count'):
-              if token not in s:raise SystemExit('FIX41 retained feature missing: '+token)
-          for dim,val in [('SCREEN_W','320'),('SCREEN_H','240')]:
-              if not re.search(r'(?m)^\s*#\s*define\s+'+dim+r'\s+'+val+r'\b',s):
-                  raise SystemExit('FIX41 resolution unexpectedly changed: '+dim)
-          if s.count('LWOD_FIX41_VISUAL')!=1:
-              raise SystemExit('FIX41 duplicated/missing visual patch')
-          src.write_text(s,encoding='utf-8')
-          report=Path('artifacts/FIX41_GRAFIK_DIAGNOSE.txt')
-          report.parent.mkdir(exist_ok=True)
-          report.write_text(
-              'LWOD FIX41 - gezielte Rendering-Korrektur\n'
-              'Haeuser: zusaetzliche FIX33-Fassadenpolygone entfernt, bestehende FIX30-Fassade bleibt.\n'
-              'FIX30-Fassaden-LOD 750 -> 440, weniger entfernte Ueberlagerungen.\n'
-              'Weg/Gras: Farbmodulation stark verringert, Geometrie unveraendert.\n'
-              'Kamera, NPC, Kollision, Speicher, Intro und Bildschirm 320x240 unveraendert.\n'
-              'Drachen/Spieler-Abstand und genaue Ursache blauer Bodenkanten noch nicht identifiziert.\n',
-              encoding='utf-8')
-          print(report.read_text(encoding='utf-8'))
-          LWOD_FIX41_PY
+        # FIX30 cell tint changed per terrain block. Remove the WHOLE per-cell modulation,
+        # not just weaken its coefficients as FIX41 did. Keep road/grass mesh and height.
+        a,b=span(s,'vt_v31987_ground_rect');g=s[a:b]
+        cellmark='/* FIX30: visible PS1 material breakup for paths and grass. */'
+        if g.count(cellmark)!=1:raise SystemExit('FIX42 modulated ground code missing')
+        pos=g.index(cellmark)
+        open_brace=g.find('{',pos+len(cellmark))
+        if open_brace<0:raise SystemExit('FIX42 ground color block missing')
+        depth=1;end=open_brace+1
+        while depth and end<len(g):
+            if g[end]=='{':depth+=1
+            elif g[end]=='}':depth-=1
+            end+=1
+        if depth:raise SystemExit('FIX42 ground color block not balanced')
+        mod=g[pos:end]
+        if 'int cell=' not in mod or 'if (road)' not in mod or 'rr+=' not in mod:
+            raise SystemExit('FIX42 ground cell tint unexpectedly different')
+        g=g[:pos]+'/* FIX42: uniform grass/road cell tint - no checkerboard modulation. */'+g[end:]
+        base='int rr=road?148:r,gg=road?134:g,bb=road?112:b;'
+        if g.count(base)!=1:raise SystemExit('FIX42 baseline road color not found')
+        g=g.replace(base,'int rr=road?155:r,gg=road?135:g,bb=road?108:b;',1)
+        s=s[:a]+g+s[b:]
 
-      - name: FIX42 Tatsächliche Haus- und Wegpolygone korrigieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY_FIX42'
-          #!/usr/bin/env python3
-          """FIX42: remove demonstrably overlapping ornamental house meshes and
-          cell-by-cell ground tint, preserving the older functional geometry and collision.
-          This intentionally does not claim to cure PS1 rasterization hairline cracks.
-          """
-          from pathlib import Path
-          import os,re
-          p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-          s=p.read_text(encoding='utf-8')
-          if 'LWOD_FIX42_RENDER' in s:
-              raise SystemExit('FIX42 already applied')
-          
-          def span(txt,fn):
-              rx=r'\bstatic\s+void\s+'+re.escape(fn)+r'\s*\([^;]*?\)\s*\{'
-              hits=list(re.finditer(rx,txt,re.S))
-              if len(hits)!=1:raise SystemExit('FIX42 function not unique: '+fn+': '+str(len(hits)))
-              a=hits[0].start();i=hits[0].end();depth=1;state='code'
-              while i<len(txt) and depth:
-                  c=txt[i]; nxt=txt[i+1] if i+1<len(txt) else ''
-                  if state=='code':
-                      if c=='/' and nxt=='/':state='line';i+=1
-                      elif c=='/' and nxt=='*':state='comment';i+=1
-                      elif c=='"':state='string'
-                      elif c=="'":state='char'
-                      elif c=='{':depth+=1
-                      elif c=='}':depth-=1
-                  elif state=='line':
-                      if c=='\n':state='code'
-                  elif state=='comment':
-                      if c=='*' and nxt=='/':state='code';i+=1
-                  else:
-                      if c=='\\':i+=1
-                      elif (state=='string' and c=='"') or (state=='char' and c=="'"):state='code'
-                  i+=1
-              if depth:raise SystemExit('FIX42 unbalanced C function: '+fn)
-              return a,i
-          
-          # The old FIX28 visual layer draws many big dark cuboids at almost the same
-          # depth as original walls and windows, and FIX30 adds still more flat ornaments.
-          # Remove only these decorative additions, never the base house body, NPCs,
-          # roof-hiding code, doors or collision.
-          a,b=span(s,'vt_v241_building');h=s[a:b]
-          mark28='/* FIX28 PS1: polygonal urban/fantasy architecture, original meshes.'
-          mark30='/* FIX30.4: facade accents only; single authoritative original roof. */'
-          mark32='/* FIX32: real faceted house corner timbers, depth-limited. */'
-          for marker in (mark28,mark30,mark32):
-              if h.count(marker)!=1:raise SystemExit('FIX42 missing expected house layer: '+marker)
-          pos28=h.index(mark28);pos30=h.index(mark30);pos32=h.index(mark32)
-          if not(pos28<pos30<pos32):raise SystemExit('FIX42 house layer order changed')
-          removed=h[pos28:pos32]
-          if removed.count('draw_box(')<15 or 'vt_v2822_facade(x,z,s,roof,style);' not in removed:
-              raise SystemExit('FIX42 overlap layer unexpectedly different')
-          # The original background walls/windows and roofs remain as drawn by vt_v241_building;
-          # the lower-cost FIX32 corner bevels remain as the one visual upgrade.
-          replacement='/* LWOD_FIX42_RENDER: remove FIX28 boxes and FIX30 facade. */\n    if (0) vt_v2822_facade(x,z,s,roof,style); /* keep symbol referenced */\n    '
-          h=h[:pos28]+replacement+h[pos32:]
-          for marker in ('vt_v282_wall(','if (inside) vt_v282_draw_house_npcs(x,z);','hide_roof'):
-              if marker not in h:raise SystemExit('FIX42 functional house piece missing: '+marker)
-          s=s[:a]+h+s[b:]
-          
-          # FIX30 cell tint changed per terrain block. Remove the WHOLE per-cell modulation,
-          # not just weaken its coefficients as FIX41 did. Keep road/grass mesh and height.
-          a,b=span(s,'vt_v31987_ground_rect');g=s[a:b]
-          cellmark='/* FIX30: visible PS1 material breakup for paths and grass. */'
-          if g.count(cellmark)!=1:raise SystemExit('FIX42 modulated ground code missing')
-          pos=g.index(cellmark)
-          open_brace=g.find('{',pos+len(cellmark))
-          if open_brace<0:raise SystemExit('FIX42 ground color block missing')
-          depth=1;end=open_brace+1
-          while depth and end<len(g):
-              if g[end]=='{':depth+=1
-              elif g[end]=='}':depth-=1
-              end+=1
-          if depth:raise SystemExit('FIX42 ground color block not balanced')
-          mod=g[pos:end]
-          if 'int cell=' not in mod or 'if (road)' not in mod or 'rr+=' not in mod:
-              raise SystemExit('FIX42 ground cell tint unexpectedly different')
-          g=g[:pos]+'/* FIX42: uniform grass/road cell tint - no checkerboard modulation. */'+g[end:]
-          base='int rr=road?148:r,gg=road?134:g,bb=road?112:b;'
-          if g.count(base)!=1:raise SystemExit('FIX42 baseline road color not found')
-          g=g.replace(base,'int rr=road?155:r,gg=road?135:g,bb=road?108:b;',1)
-          s=s[:a]+g+s[b:]
-          
-          # Assert no gameplay, saving or screen change.
-          for token in ('LWOD_FIX32_MESH','LWOD_FIX33_GEOMETRY','LWOD_FIX41_VISUAL',
-                        'vt_v281_resolve_movement();','vt_save_game(void)',
-                        'vt_load_game(void)','LYDRA_FIX12_GLOBAL_PERCENT 75',
-                        'vt_v282_draw_house_npcs(x,z)','vt_fix32_round_tree('):
-              if token not in s:raise SystemExit('FIX42 original feature missing: '+token)
-          for name,value in (('SCREEN_W','320'),('SCREEN_H','240')):
-              if not re.search(r'(?m)^\s*#\s*define\s+'+name+r'\s+'+value+r'\b',s):
-                  raise SystemExit('FIX42 screen dimensions changed: '+name)
-          if s.count('LWOD_FIX42_RENDER')!=1:
-              raise SystemExit('FIX42 marker duplicated')
-          p.write_text(s,encoding='utf-8')
-          report=Path('artifacts/FIX42_NACHWEIS.txt');report.parent.mkdir(exist_ok=True)
-          report.write_text(
-              'FIX42 Render-Nachweis\n'
-              'Haeuser: %s Zeichen aus zusaetzlichen FIX28/30-Fassaden entfernt; '# noqa
-              'Originalwand, Dach, NPC und Kollisionscode erhalten.\n'
-              'Weg/Gras: %s Zeichen Farb-Checker aus FIX30 entfernt; einheitliche Materialfarbe.\n'
-              'NICHT sicher gefixt: blaue Linien durch GPU-Polygonrisse (benoetigt Renderer-Test).\n'
-              'Aktive Aufloesung: 320x240; FIX33 Baum/Felsdetails erhalten.\n'
-              % (len(removed),len(mod)),encoding='utf-8'
-          )
-          print(report.read_text(),flush=True)
-          print('=== FIX42_GROUND_RECT_BEGIN ===',flush=True)
-          print(g,flush=True)
-          print('=== FIX42_GROUND_RECT_END ===',flush=True)
-          print('=== FIX42_HOUSE_RENDERER_BEGIN ===',flush=True)
-          print(h,flush=True)
-          print('=== FIX42_HOUSE_RENDERER_END ===',flush=True)
-          PY_FIX42
+        # Assert no gameplay, saving or screen change.
+        for token in ('LWOD_FIX32_MESH','LWOD_FIX33_GEOMETRY','LWOD_FIX41_VISUAL',
+                      'vt_v281_resolve_movement();','vt_save_game(void)',
+                      'vt_load_game(void)','LYDRA_FIX12_GLOBAL_PERCENT 75',
+                      'vt_v282_draw_house_npcs(x,z)','vt_fix32_round_tree('):
+            if token not in s:raise SystemExit('FIX42 original feature missing: '+token)
+        for name,value in (('SCREEN_W','320'),('SCREEN_H','240')):
+            if not re.search(r'(?m)^\s*#\s*define\s+'+name+r'\s+'+value+r'\b',s):
+                raise SystemExit('FIX42 screen dimensions changed: '+name)
+        if s.count('LWOD_FIX42_RENDER')!=1:
+            raise SystemExit('FIX42 marker duplicated')
+        p.write_text(s,encoding='utf-8')
+        report=Path('artifacts/FIX42_NACHWEIS.txt');report.parent.mkdir(exist_ok=True)
+        report.write_text(
+            'FIX42 Render-Nachweis\n'
+            'Haeuser: %s Zeichen aus zusaetzlichen FIX28/30-Fassaden entfernt; '# noqa
+            'Originalwand, Dach, NPC und Kollisionscode erhalten.\n'
+            'Weg/Gras: %s Zeichen Farb-Checker aus FIX30 entfernt; einheitliche Materialfarbe.\n'
+            'NICHT sicher gefixt: blaue Linien durch GPU-Polygonrisse (benoetigt Renderer-Test).\n'
+            'Aktive Aufloesung: 320x240; FIX33 Baum/Felsdetails erhalten.\n'
+            % (len(removed),len(mod)),encoding='utf-8'
+        )
+        print(report.read_text(),flush=True)
+        print('=== FIX42_GROUND_RECT_BEGIN ===',flush=True)
+        print(g,flush=True)
+        print('=== FIX42_GROUND_RECT_END ===',flush=True)
+        print('=== FIX42_HOUSE_RENDERER_BEGIN ===',flush=True)
+        print(h,flush=True)
+        print('=== FIX42_HOUSE_RENDERER_END ===',flush=True)
+        PY_FIX42
+    - name: FIX43 Geometrie und Zeichenreihenfolge reparieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'LWOD_FIX43_PY'
+        #!/usr/bin/env python3
+        # FIX43: grounded polygon repair; preserve gameplay and screen mode.
+        from pathlib import Path
+        import os,re
+        src=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=src.read_text(encoding='utf-8')
+        if 'LWOD_FIX43_GEOMETRY' in s:
+            raise SystemExit('FIX43 is already applied')
 
-      - name: Sichere Bildschirmaufteilung verifizieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY_SCREEN'
-          from pathlib import Path
-          import re,os
-          p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
-          s=p.read_text(encoding='utf-8')
-          for symbol,value in [('SCREEN_W','320'),('SCREEN_H','240')]:
-              assert re.search(r'(?m)^\s*#\s*define\s+'+symbol+r'\s+'+value+r'\b',s), symbol+' falsch'
-          assert 'LWOD_FIX33_GEOMETRY' in s, 'FIX33 Modelle fehlen'
-          print('320x240 und FIX33 aktiv; kein 640er-Displaymodus')
-          PY_SCREEN
+        def span(txt,fn):
+            pattern=r'\bstatic\s+void\s+'+re.escape(fn)+r'\s*\([^;]*?\)\s*\{'
+            matches=list(re.finditer(pattern,txt,re.S))
+            if len(matches)!=1:
+                raise SystemExit('FIX43 expected exactly one '+fn+', found '+str(len(matches)))
+            begin=matches[0].start();i=matches[0].end();depth=1;state='code'
+            while i<len(txt) and depth:
+                c=txt[i];nxt=txt[i+1] if i+1<len(txt) else ''
+                if state=='code':
+                    if c=='/' and nxt=='/':state='line';i+=1
+                    elif c=='/' and nxt=='*':state='comment';i+=1
+                    elif c=='"':state='string'
+                    elif c=="'":state='char'
+                    elif c=='{':depth+=1
+                    elif c=='}':depth-=1
+                elif state=='line':
+                    if c=='\n':state='code'
+                elif state=='comment':
+                    if c=='*' and nxt=='/':state='code';i+=1
+                else:
+                    if c=='\\':i+=1
+                    elif (state=='string' and c=='"') or (state=='char' and c=="'"):state='code'
+                i+=1
+            if depth:raise SystemExit('FIX43 unbalanced function '+fn)
+            return begin,i
 
-      - name: PS1 Compiler installieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "$RUNNER_TEMP/lwod_run.py" 55
-          grep -q '^PSN00BSDK_CMAKE=' "$GITHUB_ENV"
+        def one(text,old,new,context):
+            count=text.count(old)
+            if count!=1:
+                raise SystemExit('FIX43 '+context+' expected exactly once, found '+str(count))
+            return text.replace(old,new,1)
 
-      - name: PS1 Spiel kompilieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          : "${PSN00BSDK_CMAKE:?PS1 SDK Variable fehlt}"
-          test -f "$PSN00BSDK_CMAKE"
-          python3 "$RUNNER_TEMP/lwod_run.py" 56
+        # 1. Houses: remove overlapping ornamental boxes and extra roofs.
+        a,b=span(s,'vt_v241_building')
+        h=s[a:b]
+        old_boxes=h.count('draw_box(')
+        old_roofs=h.count('vt_pyramid(')
+        # Two almost co-planar stone floors flicker at far distances; retain the upper.
+        h=one(h,'vt_v241_flat(x-s+3,z-s+3,x+s-3,z+s-3,31,176,141,99);',
+              '/* FIX43: lower duplicate stone floor removed. */','double floor')
+        # Windows and beams were deep boxes sharing the front wall's plane.
+        begin='/* Half-timber facade beams well clear of the open 64-unit doorway. */'
+        end='/* Furniture is visible from above only when this house is entered. */'
+        if h.count(begin)!=1 or h.count(end)!=1 or h.index(begin)>=h.index(end):
+            raise SystemExit('FIX43 house front mesh anchors changed')
+        h=h[:h.index(begin)]+'''/* FIX43: no intersecting front-wall boxes. Keep the two open-door wall segments. */
+                '''+h[h.index(end):]
+        # A single main pyramid provides a consistent roof silhouette.
+        roof2='''vt_pyramid(x,-80,z,s-15,20,r0+18,g0+23,b0+14);
+                draw_box(x+s/2,-86,z+s/3,7,140,125,103);'''
+        h=one(h,roof2,'/* FIX43: duplicate pyramid and floating chimney removed. */','overlapping roof')
+        # V29 decoration reintroduced posts over door/walls and a third small roof.
+        begin='/* V29.1: better material separation with only a few local polygons. */'
+        end='/* LWOD_FIX42_RENDER: remove FIX28 boxes and FIX30 facade. */'
+        if h.count(begin)!=1 or h.count(end)!=1 or h.index(begin)>=h.index(end):
+            raise SystemExit('FIX43 older overlay anchors changed')
+        h=h[:h.index(begin)]+'/* FIX43: V29 facade overlay disabled (one authoritative wall and roof). */\n    '+h[h.index(end):]
+        # FIX32 outer corner ornaments also extend through the base side walls.
+        begin='/* FIX32: real faceted house corner timbers, depth-limited. */'
+        end='/* LWOD_FIX41_VISUAL: duplicate FIX33 facade removed; FIX30 facade kept. */'
+        if h.count(begin)!=1 or h.count(end)!=1 or h.index(begin)>=h.index(end):
+            raise SystemExit('FIX43 extra polygon anchors changed')
+        h=h[:h.index(begin)]+'/* FIX43: optional wall-crossing corner prisms disabled. */\n    '+h[h.index(end):]
+        # Four last V31 external posts were still drawn after all other building geometry.
+        begin='/* V31: richer walls without modifying doors, collisions or roof logic. */'
+        if h.count(begin)!=1:
+            raise SystemExit('FIX43 trailing posts anchor missing')
+        start=h.index(begin)
+        if h[start:].count('draw_box(')!=4:
+            raise SystemExit('FIX43 expected 4 trailing posts')
+        h=h[:start]+'/* LWOD_FIX43_GEOMETRY: remove four overlaid V31 box posts. */\n\n}'
+        if h.count('vt_v282_wall(')!=5 or h.count('vt_pyramid(')!=1:
+            raise SystemExit('FIX43 house base walls or single roof missing')
+        if 'if (inside) vt_v282_draw_house_npcs(x,z);' not in h or 'hide_roof=inside || occluded;' not in h:
+            raise SystemExit('FIX43 house interior or occlusion logic lost')
+        if h.count('draw_box(')>old_boxes-9:
+            raise SystemExit('FIX43 box overlap not reduced sufficiently')
+        s=s[:a]+h+s[b:]
 
-      - name: Fehlerdiagnose hochladen
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: LWOD_FIX41_BUILD_LOG
-          path: |
-            artifacts/FIX25_BUILD_LOG.txt
-            artifacts/FIX25_ERSTE_FEHLER.txt
-          if-no-files-found: warn
-          retention-days: 14
+        # 2. Ground: eliminate diagonal dual-colour split and cover tiny road raster cracks.
+        a,b=span(s,'vt_v31987_ground_rect')
+        g=s[a:b]
+        for channel in ('rr','gg','bb'):
+            old='int '+channel+'2=(!road && dark_second)?'+channel+'*4/5:'+channel+';'
+            new='int '+channel+'2='+channel+';'
+            g=one(g,old,new,'triangle colour '+channel)
+        # Protect C builds with -Wunused-parameter.
+        g=one(g,'if(x0>=x1 || z0>=z1)return;',
+              '(void)dark_second;\n    if(x0>=x1 || z0>=z1)return;', 'dark_second flag')
+        # Underlay is a few world units BELOW the road (PS1: positive y downwards),
+        # with slight lateral overlap. It fills sub-pixel cracks; it is NOT a new mesh
+        # for houses, mountains or the rest of the landscape.
+        anchor='SVECTOR a={xs[i]-px,y,zs[j]-pz,0};'
+        if g.count(anchor)!=1:raise SystemExit('FIX43 ground triangle anchor unexpected')
+        underlay='''/* FIX43: small road-colour seam underlay; geometry is below walkable surface.
+                   Limit to nearby cells so the PS1 polygon budget stays bounded. */
+                if (road && vt_v281_abs(((zs[j]+zs[j+1])/2)-pz)<720 &&
+                            vt_v281_abs(((xs[i]+xs[i+1])/2)-px)<480) {
+                    SVECTOR ua={xs[i]-px-2,y+3,zs[j]-pz-2,0};
+                    SVECTOR uc={xs[i]-px-2,y+3,zs[j+1]-pz+2,0};
+                    SVECTOR ud={xs[i+1]-px+2,y+3,zs[j+1]-pz+2,0};
+                    SVECTOR ue={xs[i+1]-px+2,y+3,zs[j]-pz-2,0};
+                    draw_triangle3(&ua,&uc,&ue,155,135,108);
+                    draw_triangle3(&ue,&uc,&ud,155,135,108);
+                }
+                '''
+        g=one(g,anchor,underlay+anchor,'seam underlay insertion')
+        # Preserve original road/grass border geometry and collision positions.
+        for token in ('xs[nx++]=x1;','zs[nz++]=z1;','if(x0< 85 && x1> 85)',
+                      'draw_triangle3(&a,&c,&e,rr,gg,bb);',
+                      'draw_triangle3(&e,&c,&d,rr2,gg2,bb2);'):
+            if token not in g:
+                raise SystemExit('FIX43 ground renderer changed unexpectedly: '+token)
+        s=s[:a]+g+s[b:]
 
-      - name: PS1 BIN und CUE erstellen
-        shell: bash
-        run: |
-          set -euo pipefail
-          for i in 58 59 60 61; do
-            python3 "$RUNNER_TEMP/lwod_run.py" "$i"
-          done
-          folder="$RUNNER_TEMP/lydra_ps1_spiel"
-          test -s "$folder/LWOD_FIX32.bin"
-          test -s "$folder/LWOD_FIX32.cue"
-          mv "$folder/LWOD_FIX32.bin" "$folder/LWOD_FIX42.bin"
-          sed 's/LWOD_FIX32[.]bin/LWOD_FIX42.bin/g' "$folder/LWOD_FIX32.cue" > "$folder/LWOD_FIX42.cue"
-          rm "$folder/LWOD_FIX32.cue"
-          grep -qi 'LWOD_FIX42.bin' "$folder/LWOD_FIX42.cue"
+        # Never change the PS1 display dimensions, gameplay, or working save system.
+        for token in ('LWOD_FIX32_MESH','LWOD_FIX33_GEOMETRY','LWOD_FIX42_RENDER',
+                      'LYDRA_FIX12_GLOBAL_PERCENT 75','vt_save_game(void)',
+                      'vt_load_game(void)','vt_v281_resolve_movement();',
+                      'vt_v282_draw_house_npcs(x,z)'):
+            if token not in s:
+                raise SystemExit('FIX43 existing feature lost: '+token)
+        for symbol,value in (('SCREEN_W','320'),('SCREEN_H','240')):
+            if not re.search(r'(?m)^\s*#\s*define\s+'+symbol+r'\s+'+value+r'\b',s):
+                raise SystemExit('FIX43 must not change the display resolution: '+symbol)
+        if s.count('LWOD_FIX43_GEOMETRY')!=1:
+            raise SystemExit('FIX43 patch is not unique')
+        src.write_text(s,encoding='utf-8')
+        Path('artifacts').mkdir(exist_ok=True)
+        (Path('artifacts')/'FIX43_RENDER_NACHWEIS.txt').write_text(
+            'FIX43 Geometry-only patch\n'
+            'Houses: duplicate floor and 2 extra roofs, front overlapping boxes, '
+            'V29/FIX32/V31 decorative overlays removed.\n'
+            'Base walls, doorway gap, single roof, roof hiding and NPCs preserved.\n'
+            'Ground: two equally coloured triangles; nearby 3-unit-below road seam underlay.\n'
+            'UNCHANGED: terrain height, buildings positions, collisions, dragon position, '
+            'screen 320x240, movement and saves.\n',encoding='utf-8')
+        print('FIX43 applied: house boxes',old_boxes,'->',h.count('draw_box('),
+              'roof pyramids',old_roofs,'->',h.count('vt_pyramid('),flush=True)
+        print((Path('artifacts')/'FIX43_RENDER_NACHWEIS.txt').read_text(),flush=True)
 
-      - name: LWOD FIX42 herunterladen
-        uses: actions/upload-artifact@v4
-        with:
-          name: LWOD_FIX42_GRAFIKFIX
-          path: ${{ runner.temp }}/lydra_ps1_spiel/
-          if-no-files-found: error
-          retention-days: 14
+        LWOD_FIX43_PY
+    - name: Sichere Bildschirmaufteilung verifizieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY_SCREEN'
+        from pathlib import Path
+        import re,os
+        p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+        s=p.read_text(encoding='utf-8')
+        for symbol,value in [('SCREEN_W','320'),('SCREEN_H','240')]:
+            assert re.search(r'(?m)^\s*#\s*define\s+'+symbol+r'\s+'+value+r'\b',s), symbol+' falsch'
+        assert 'LWOD_FIX33_GEOMETRY' in s, 'FIX33 Modelle fehlen'
+        print('320x240 und FIX33 aktiv; kein 640er-Displaymodus')
+        PY_SCREEN
+    - name: PS1 Compiler installieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$RUNNER_TEMP/lwod_run.py" 55
+        grep -q '^PSN00BSDK_CMAKE=' "$GITHUB_ENV"
+    - name: PS1 Spiel kompilieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        : "${PSN00BSDK_CMAKE:?PS1 SDK Variable fehlt}"
+        test -f "$PSN00BSDK_CMAKE"
+        python3 "$RUNNER_TEMP/lwod_run.py" 56
+    - name: Fehlerdiagnose hochladen
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: LWOD_FIX41_BUILD_LOG
+        path: |
+          artifacts/FIX25_BUILD_LOG.txt
+          artifacts/FIX25_ERSTE_FEHLER.txt
+        if-no-files-found: warn
+        retention-days: 14
+    - name: PS1 BIN und CUE erstellen
+      shell: bash
+      run: |
+        set -euo pipefail
+        for i in 58 59 60 61; do
+          python3 "$RUNNER_TEMP/lwod_run.py" "$i"
+        done
+        folder="$RUNNER_TEMP/lydra_ps1_spiel"
+        test -s "$folder/LWOD_FIX32.bin"
+        test -s "$folder/LWOD_FIX32.cue"
+        mv "$folder/LWOD_FIX32.bin" "$folder/LWOD_FIX43.bin"
+        sed 's/LWOD_FIX32[.]bin/LWOD_FIX43.bin/g' "$folder/LWOD_FIX32.cue" > "$folder/LWOD_FIX43.cue"
+        rm "$folder/LWOD_FIX32.cue"
+        grep -qi 'LWOD_FIX43.bin' "$folder/LWOD_FIX43.cue"
+    - name: LWOD FIX43 herunterladen
+      uses: actions/upload-artifact@v4
+      with:
+        name: LWOD_FIX43_RENDERFIX
+        path: ${{ runner.temp }}/lydra_ps1_spiel/
+        if-no-files-found: error
+        retention-days: 14
