@@ -1,25 +1,19 @@
-
-# Lydra World Of Dragon FIX40
-# Stabiler PS1-Build mit 320x240
-# Technischen Code nicht automatisch uebersetzen!
-
-name: LWOD FIX40 STABIL - PS1 Build Reparatur
-
+# Lydra World Of Dragon FIX41 - stabile 320x240-Ausgabe
+# Die hochaufgeloesten 640x240-Koordinaten werden NICHT angewendet.
+# NICHT vom Browser uebersetzen lassen.
+name: LWOD FIX41 - Haus und Boden Grafikfix
 'on':
   workflow_dispatch: {}
   push:
     branches: [main]
     paths:
       - .github/workflows/blank-ps1.yml
-
 permissions:
   contents: read
-
 jobs:
   build:
-    name: FIX40 PS1 Spiel erstellen
+    name: FIX41 PS1 Spiel erstellen
     runs-on: ubuntu-latest
-
     steps:
       - name: Projekt laden
         uses: actions/checkout@v4
@@ -38,46 +32,28 @@ jobs:
           curl --fail --location --silent --show-error --retry 3 \
             'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/efb8cdbb05262caf1a714bae16fccaa5984b719a/.github/workflows/blank-ps1.yml' \
             -o "$RUNNER_TEMP/lwod_fix36.yml"
-
           python3 - <<'PY_BASE'
           from pathlib import Path
           import os,hashlib,yaml
-
           p=Path(os.environ['RUNNER_TEMP'])/'lwod_fix36.yml'
           data=p.read_bytes()
-          h=hashlib.sha1(
-              b'blob '+str(len(data)).encode()+b'\0'+data
-          ).hexdigest()
-
+          h=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
           assert h=='3f40dc4623f5fe438329b12c33e8453c9177e1f0', 'FIX36 Vorlagendatei unvollstaendig'
-
           steps=yaml.safe_load(data)['jobs']['build']['steps']
           assert len(steps)==68, 'FIX36 Vorlagenschritte unerwartet'
           print('FIX36 Original-Vorlage geprueft')
           PY_BASE
-
           cat > "$RUNNER_TEMP/lwod_fix40_step.py" <<'PY_REPLAY'
           import os,sys,yaml,subprocess
           from pathlib import Path
-
           p=Path(os.environ['RUNNER_TEMP'])/'lwod_fix36.yml'
           steps=yaml.safe_load(p.read_bytes())['jobs']['build']['steps']
           name=sys.argv[1]
-
-          found=[
-              s for s in steps
-              if s.get('name')==name
-              and isinstance(s.get('run'),str)
-          ]
-
+          found=[s for s in steps if s.get('name')==name and isinstance(s.get('run'),str)]
           if len(found)!=1:
-              raise SystemExit('FIX40 Schritt nicht eindeutig: '+name)
-
-          print('FIX40 Replay:',name,flush=True)
-          subprocess.run(
-              ['bash','-euo','pipefail','-c',found[0]['run']],
-              check=True
-          )
+              raise SystemExit('FIX41 Schritt nicht eindeutig: '+name)
+          print('FIX41 Replay:',name,flush=True)
+          subprocess.run(['bash','-euo','pipefail','-c',found[0]['run']],check=True)
           PY_REPLAY
 
       - name: Vorgaenger-Workflow vorbereiten
@@ -88,73 +64,279 @@ jobs:
           test -s "$RUNNER_TEMP/lwod_fix36_replay.py"
           python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX32 Basis vorbereiten'
           test -s "$RUNNER_TEMP/lwod_run.py"
-          echo 'FIX40 Basis vollstaendig vorbereitet'
+          echo 'FIX41 Basis vollstaendig vorbereitet'
 
-      # Wichtig: Jeder Basisschritt wird einzeln ausgefuehrt.
-      # GitHub uebernimmt dadurch die Umgebungsvariablen.
-
-      - {name: Basis 03, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 3'}
-      - {name: Basis 04, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 4'}
-      - {name: Basis 05, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 5'}
-      - {name: Basis 06, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 6'}
-      - {name: Basis 07, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 7'}
-      - {name: Basis 08, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 8'}
-      - {name: Basis 09, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 9'}
-      - {name: Basis 10, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 10'}
-      - {name: Basis 11, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 11'}
-      - {name: Basis 12, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 12'}
-      - {name: Basis 13, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 13'}
-      - {name: Basis 14, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 14'}
-      - {name: Basis 15, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 15'}
-      - {name: Basis 16, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 16'}
-      - {name: Basis 17, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 17'}
-      - {name: Basis 18, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 18'}
-      - {name: Basis 19, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 19'}
-      - {name: Basis 20, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 20'}
-      - {name: Basis 21, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 21'}
-      - {name: Basis 22, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 22'}
-      - {name: Basis 23, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 23'}
-      - {name: Basis 24, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 24'}
-      - {name: Basis 25, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 25'}
-      - {name: Basis 26, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 26'}
-      - {name: Basis 27, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 27'}
-      - {name: Basis 28, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 28'}
-      - {name: Basis 29, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 29'}
-      - {name: Basis 30, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 30'}
-      - {name: Basis 31, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 31'}
-      - {name: Basis 32, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 32'}
-      - {name: Basis 33, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 33'}
-      - {name: Basis 34, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 34'}
-      - {name: Basis 35, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 35'}
-      - {name: Basis 36, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 36'}
-      - {name: Basis 37, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 37'}
-      - {name: Basis 38, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 38'}
-      - {name: Basis 39, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 39'}
-      - {name: Basis 40, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 40'}
-      - {name: Basis 41, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 41'}
-      - {name: Basis 42, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 42'}
-      - {name: Basis 43, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 43'}
-      - {name: Basis 44, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 44'}
-      - {name: Basis 45, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 45'}
-      - {name: Basis 46, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 46'}
-      - {name: Basis 47, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 47'}
-      - {name: Basis 48, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 48'}
-      - {name: Basis 49, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 49'}
-      - {name: Basis 50, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 50'}
-      - {name: Basis 51, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 51'}
-      - {name: Basis 52, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 52'}
-      - {name: Basis 53, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 53'}
-      - {name: Basis 54, shell: bash, run: 'python3 "$RUNNER_TEMP/lwod_run.py" 54'}
+      # JEDER Schritt einzeln: GitHub muss $GITHUB_ENV dazwischen einlesen.
+      - name: Basis 03
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 3
+      - name: Basis 04
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 4
+      - name: Basis 05
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 5
+      - name: Basis 06
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 6
+      - name: Basis 07
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 7
+      - name: Basis 08
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 8
+      - name: Basis 09
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 9
+      - name: Basis 10
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 10
+      - name: Basis 11
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 11
+      - name: Basis 12
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 12
+      - name: Basis 13
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 13
+      - name: Basis 14
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 14
+      - name: Basis 15
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 15
+      - name: Basis 16
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 16
+      - name: Basis 17
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 17
+      - name: Basis 18
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 18
+      - name: Basis 19
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 19
+      - name: Basis 20
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 20
+      - name: Basis 21
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 21
+      - name: Basis 22
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 22
+      - name: Basis 23
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 23
+      - name: Basis 24
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 24
+      - name: Basis 25
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 25
+      - name: Basis 26
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 26
+      - name: Basis 27
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 27
+      - name: Basis 28
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 28
+      - name: Basis 29
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 29
+      - name: Basis 30
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 30
+      - name: Basis 31
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 31
+      - name: Basis 32
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 32
+      - name: Basis 33
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 33
+      - name: Basis 34
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 34
+      - name: Basis 35
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 35
+      - name: Basis 36
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 36
+      - name: Basis 37
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 37
+      - name: Basis 38
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 38
+      - name: Basis 39
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 39
+      - name: Basis 40
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 40
+      - name: Basis 41
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 41
+      - name: Basis 42
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 42
+      - name: Basis 43
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 43
+      - name: Basis 44
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 44
+      - name: Basis 45
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 45
+      - name: Basis 46
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 46
+      - name: Basis 47
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 47
+      - name: Basis 48
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 48
+      - name: Basis 49
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 49
+      - name: Basis 50
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 50
+      - name: Basis 51
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 51
+      - name: Basis 52
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 52
+      - name: Basis 53
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 53
+      - name: Basis 54
+        shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_run.py" 54
 
       - name: Verfeinerte FIX33-Modelle anwenden
         shell: bash
-        run: |
-          python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX33 Geometrie verbessern'
+        run: python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX33 Geometrie verbessern'
 
       - name: FIX33 Grafikverifikation
         shell: bash
+        run: python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX33 pruefen'
+
+      - name: FIX41 Hauspolygone und Bodenfarben korrigieren
+        shell: bash
         run: |
-          python3 "$RUNNER_TEMP/lwod_fix40_step.py" 'FIX33 pruefen'
+          set -euo pipefail
+          python3 - <<'LWOD_FIX41_PY'
+          #!/usr/bin/env python3
+          """LWOD FIX41: reduce near-house mesh overlap and road/grass checker tint.
+          No physics, world positions, camera, video resolution or game saves are touched.
+          """
+          from pathlib import Path
+          import os,re
+          src=Path(os.environ['PROJECT_DIR'])/'src/main.c'
+          s=src.read_text(encoding='utf-8')
+          if 'LWOD_FIX41_VISUAL' in s:
+              raise SystemExit('FIX41 already applied')
+          
+          def span(data,name):
+              rx=r'\bstatic\s+void\s+'+re.escape(name)+r'\s*\([^;]*?\)\s*\{'
+              m=list(re.finditer(rx,data,re.S))
+              if len(m)!=1:
+                  raise SystemExit('FIX41 expected one function '+name+', found '+str(len(m)))
+              begin=m[0].start(); i=m[0].end(); depth=1; mode='code'
+              while i<len(data) and depth:
+                  c=data[i]; nxt=data[i+1] if i+1<len(data) else ''
+                  if mode=='code':
+                      if c=='/' and nxt=='/': mode='line';i+=1
+                      elif c=='/' and nxt=='*': mode='comment';i+=1
+                      elif c=='"': mode='string'
+                      elif c=="'": mode='char'
+                      elif c=='{': depth+=1
+                      elif c=='}': depth-=1
+                  elif mode=='line':
+                      if c=='\n': mode='code'
+                  elif mode=='comment':
+                      if c=='*' and nxt=='/':mode='code';i+=1
+                  else:
+                      if c=='\\':i+=1
+                      elif (mode=='string' and c=='"') or (mode=='char' and c=="'"):mode='code'
+                  i+=1
+              if depth:raise SystemExit('FIX41 unbalanced function '+name)
+              return begin,i
+          
+          # Fix 1: FIX33 appended a *second* front-facade ornament set over the
+          # existing FIX28+FIX30 front. Keep the already working FIX30 version instead.
+          a,b=span(s,'vt_v241_building'); house=s[a:b]
+          mark='/* FIX33: beam work, deep windows, stone sills and a lintel over the door.'
+          anchor='if (inside) vt_v282_draw_house_npcs(x,z);'
+          if house.count(mark)!=1 or house.count(anchor)!=1:
+              raise SystemExit('FIX41 house facade/NPC anchors changed')
+          start=house.index(mark); end=house.index(anchor,start)
+          removed=house[start:end]
+          if removed.count('vt_v2822_quad(')<10 or 'if (!inside && !occluded)' not in removed:
+              raise SystemExit('FIX41 expected duplicate FIX33 geometry not found')
+          house=(house[:start]+ '/* LWOD_FIX41_VISUAL: duplicate FIX33 facade removed; FIX30 facade kept. */\n    '
+                 +house[end:])
+          # Limit the older front ornament mesh to the nearby street, not distant houses.
+          old='if (d>175 && d<750) vt_v2822_facade(x,z,s,roof,style);'
+          new='if (d>175 && d<440) vt_v2822_facade(x,z,s,roof,style);'
+          if house.count(old)!=1:raise SystemExit('FIX41 unexpected FIX30 facade distance')
+          house=house.replace(old,new,1)
+          s=s[:a]+house+s[b:]
+          
+          # Fix 2: soften the brown/green checker-block material without
+          # altering road geometry, triangle vertices, collision or map generation.
+          a,b=span(s,'vt_v31987_ground_rect'); ground=s[a:b]
+          changes={
+            'int tone=(cell-3)*2;':'int tone=(cell-3);',
+            'if (cell==0 || cell==4) {rr-=14;gg-=11;bb-=8;}':
+                'if (cell==0 || cell==4) {rr-=4;gg-=3;bb-=2;}',
+            'else if (cell==2 || cell==5) {rr+=10;gg+=7;bb+=5;}':
+                'else if (cell==2 || cell==5) {rr+=3;gg+=2;bb+=2;}',
+            'if (cell==1 || cell==6) {rr-=8;gg-=10;bb-=6;}':
+                'if (cell==1 || cell==6) {rr-=3;gg-=3;bb-=2;}',
+            'if (cell==3) {rr+=4;gg+=6;bb+=2;}':
+                'if (cell==3) {rr+=2;gg+=2;bb+=1;}',
+          }
+          for old,new in changes.items():
+              if ground.count(old)!=1:raise SystemExit('FIX41 ground palette anchor changed: '+old)
+              ground=ground.replace(old,new,1)
+          s=s[:a]+ground+s[b:]
+          
+          # Invariants: prevent accidental regressions to old 640-wide screen or gameplay.
+          for token in ('LWOD_FIX32_MESH','LWOD_FIX33_GEOMETRY','vt_v2822_facade(',
+           'vt_v281_resolve_movement();','vt_save_game(void)','vt_load_game(void)',
+           'LYDRA_FIX12_GLOBAL_PERCENT 75','vt_v282_draw_house_npcs(x,z)',
+           'no automatic region 0->1 from step count','no automatic region 1->2 from step count'):
+              if token not in s:raise SystemExit('FIX41 retained feature missing: '+token)
+          for dim,val in [('SCREEN_W','320'),('SCREEN_H','240')]:
+              if not re.search(r'(?m)^\s*#\s*define\s+'+dim+r'\s+'+val+r'\b',s):
+                  raise SystemExit('FIX41 resolution unexpectedly changed: '+dim)
+          if s.count('LWOD_FIX41_VISUAL')!=1:
+              raise SystemExit('FIX41 duplicated/missing visual patch')
+          src.write_text(s,encoding='utf-8')
+          report=Path('artifacts/FIX41_GRAFIK_DIAGNOSE.txt')
+          report.parent.mkdir(exist_ok=True)
+          report.write_text(
+              'LWOD FIX41 - gezielte Rendering-Korrektur\n'
+              'Haeuser: zusaetzliche FIX33-Fassadenpolygone entfernt, bestehende FIX30-Fassade bleibt.\n'
+              'FIX30-Fassaden-LOD 750 -> 440, weniger entfernte Ueberlagerungen.\n'
+              'Weg/Gras: Farbmodulation stark verringert, Geometrie unveraendert.\n'
+              'Kamera, NPC, Kollision, Speicher, Intro und Bildschirm 320x240 unveraendert.\n'
+              'Drachen/Spieler-Abstand und genaue Ursache blauer Bodenkanten noch nicht identifiziert.\n',
+              encoding='utf-8')
+          print(report.read_text(encoding='utf-8'))
+          LWOD_FIX41_PY
 
       - name: Sichere Bildschirmaufteilung verifizieren
         shell: bash
@@ -163,20 +345,10 @@ jobs:
           python3 - <<'PY_SCREEN'
           from pathlib import Path
           import re,os
-
           p=Path(os.environ['PROJECT_DIR'])/'src/main.c'
           s=p.read_text(encoding='utf-8')
-
-          for symbol,value in [
-              ('SCREEN_W','320'),
-              ('SCREEN_H','240')
-          ]:
-              pattern=(
-                  r'(?m)^\s*#\s*define\s+'
-                  +symbol+r'\s+'+value+r'\b'
-              )
-              assert re.search(pattern,s), symbol+' falsch'
-
+          for symbol,value in [('SCREEN_W','320'),('SCREEN_H','240')]:
+              assert re.search(r'(?m)^\s*#\s*define\s+'+symbol+r'\s+'+value+r'\b',s), symbol+' falsch'
           assert 'LWOD_FIX33_GEOMETRY' in s, 'FIX33 Modelle fehlen'
           print('320x240 und FIX33 aktiv; kein 640er-Displaymodus')
           PY_SCREEN
@@ -200,7 +372,7 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_FIX40_BUILD_LOG
+          name: LWOD_FIX41_BUILD_LOG
           path: |
             artifacts/FIX25_BUILD_LOG.txt
             artifacts/FIX25_ERSTE_FEHLER.txt
@@ -214,23 +386,18 @@ jobs:
           for i in 58 59 60 61; do
             python3 "$RUNNER_TEMP/lwod_run.py" "$i"
           done
-
           folder="$RUNNER_TEMP/lydra_ps1_spiel"
           test -s "$folder/LWOD_FIX32.bin"
           test -s "$folder/LWOD_FIX32.cue"
-
-          mv "$folder/LWOD_FIX32.bin" "$folder/LWOD_FIX40.bin"
-
-          sed 's/LWOD_FIX32[.]bin/LWOD_FIX40.bin/g' \
-            "$folder/LWOD_FIX32.cue" > "$folder/LWOD_FIX40.cue"
-
+          mv "$folder/LWOD_FIX32.bin" "$folder/LWOD_FIX41.bin"
+          sed 's/LWOD_FIX32[.]bin/LWOD_FIX41.bin/g' "$folder/LWOD_FIX32.cue" > "$folder/LWOD_FIX41.cue"
           rm "$folder/LWOD_FIX32.cue"
-          grep -qi 'LWOD_FIX40.bin' "$folder/LWOD_FIX40.cue"
+          grep -qi 'LWOD_FIX41.bin' "$folder/LWOD_FIX41.cue"
 
-      - name: LWOD FIX40 herunterladen
+      - name: LWOD FIX41 herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_FIX40_STABIL
+          name: LWOD_FIX41_GRAFIKFIX
           path: ${{ runner.temp }}/lydra_ps1_spiel/
           if-no-files-found: error
           retention-days: 14
