@@ -1,8 +1,8 @@
-# LWOD Android V19 - Kamera, Gebirgs-Kollision und natuerlichere Bergketten
+# LWOD Android V20 - stabile Kamera, flachere Berge und Hausdaecher
 # V18 wird aus unveraenderlichem GitHub-Stand geholt (Pruefsumme verifiziert).
-# Ein einziges kurzes Workflow-Skript. Keine 120-KB-Bilder erneut kopieren.
+# Kompakter Workflow. Die funktionierende V18-Basis bleibt unangetastet.
 # Als .github/workflows/lwod-android.yml speichern; PS1-Datei nicht ersetzen.
-name: LWOD Android V19 Kamera Gebirge Fix
+name: LWOD Android V20 Kamera Landschaft Fix
 
 'on':
   workflow_dispatch: {}
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   android:
-    name: Android V19 APK erstellen
+    name: Android V20 APK erstellen
     runs-on: ubuntu-latest
     timeout-minutes: 50
     container:
@@ -278,6 +278,233 @@ jobs:
           sed -i 's@version/name="1.8"@version/name="1.9"@' android/export_presets.cfg
           grep -Fqx 'version/code=19' android/export_presets.cfg
           echo 'V19: Gebirgskollision, Weltgrenzen und Kamera eingebaut'
+      - name: V20 Kamera Bergsilhouette und Hausdaecher
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > android/scripts/V20CameraTerrain.gd <<'LWOD_V20_TERRAIN'
+          extends Node
+
+          # LWOD V20: nur Landschaft und Kamera. V19-Spielwelt und Menues bleiben erhalten.
+          # Die Berge stehen hinter der bisherigen Weltgrenze. Kamerakollision als Kugel.
+
+          var game: Node3D
+          var ball: SphereShape3D
+          var roofs: Array[MeshInstance3D] = []
+          var roof_centers: Array[Vector3] = []
+          var previous_camera_option: int = 0
+          var seen_time: float = 0.0
+
+          func setup(root: Node3D) -> void:
+              game = root
+              process_priority = 100
+              ball = SphereShape3D.new()
+              ball.radius = 0.36
+              var old_safety := game.get_node_or_null("V19TerrainSafety")
+              if old_safety == null:
+                  for node in game.get_children():
+                      if node.get_script() is Script and str(node.get_script().resource_path).ends_with("V19TerrainSafety.gd"):
+                          old_safety = node
+                          break
+              if old_safety != null:
+                  old_safety.set_physics_process(false)
+              # Die V19-Felsfassade direkt hinter der Kartengrenze ausblenden.
+              var old_visual := game.get_node_or_null("V19Felsgebirge")
+              if old_visual is VisualInstance3D:
+                  old_visual.visible = false
+              var old_collision := game.get_node_or_null("V19GebirgsKollision")
+              if old_collision is StaticBody3D:
+                  old_collision.collision_layer = 0
+                  old_collision.collision_mask = 0
+              # Alte einzelne weit entfernte Kegelberge aus der V6-Landschaft ausblenden.
+              for child in game.get_children():
+                  if child is MeshInstance3D:
+                      var instance := child as MeshInstance3D
+                      if instance.mesh is CylinderMesh:
+                          var cyl := instance.mesh as CylinderMesh
+                          if cyl.height >= 14.0 and cyl.bottom_radius >= 7.0:
+                              instance.visible = false
+              _build_mountain_slope()
+              _find_house_roofs()
+              print("LWOD V20: Kamerakugel, flache Bergkette und Haus-Dachsicht aktiv")
+
+          func _add_tri(st: SurfaceTool, collision_vertices: PackedVector3Array, a: Vector3, b: Vector3, c: Vector3, shade: Color) -> void:
+              st.set_color(shade)
+              st.add_vertex(a)
+              st.add_vertex(b)
+              st.add_vertex(c)
+              collision_vertices.append_array(PackedVector3Array([a, b, c]))
+
+          func _build_mountain_slope() -> void:
+              # Kein hoher senkrechter Abschluss direkt am Spieler mehr.
+              # 5 Hoehenprofile, nur hinter z=-93; die Weltgrenze liegt bei z=-82.
+              var points: Array[PackedVector3Array] = []
+              var rows_z := [-96.0, -106.0, -116.0, -128.0, -142.0]
+              for row in range(rows_z.size()):
+                  var line := PackedVector3Array()
+                  for i in range(51):
+                      var f: float = float(i)
+                      var x: float = -100.0 + f * 4.0
+                      var wave: float = sin(f * 0.28) * 1.6 + sin(f * 0.71) * 0.65 + cos(f * 0.13) * 1.2
+                      var height: float = 0.0
+                      if row == 1:
+                          height = 2.2 + wave * 0.25
+                      elif row == 2:
+                          height = 8.7 + wave * 1.2
+                      elif row == 3:
+                          height = 10.0 + wave * 0.9
+                      elif row == 4:
+                          height = 4.0 + wave * 0.4
+                      line.append(Vector3(x, height, rows_z[row] + sin(f * 0.29) * 1.1))
+                  points.append(line)
+              var colors := [Color("#6f8e85"), Color("#687d7c"), Color("#768892"), Color("#526878")]
+              var st := SurfaceTool.new()
+              st.begin(Mesh.PRIMITIVE_TRIANGLES)
+              var faces := PackedVector3Array()
+              for row in range(4):
+                  for i in range(50):
+                      var a: Vector3 = points[row][i]
+                      var b: Vector3 = points[row][i + 1]
+                      var c: Vector3 = points[row + 1][i]
+                      var d: Vector3 = points[row + 1][i + 1]
+                      var tone: Color = colors[row].lightened(0.035 * float(i % 4))
+                      _add_tri(st, faces, a, c, d, tone)
+                      _add_tri(st, faces, a, d, b, tone)
+              st.generate_normals()
+              var visual := MeshInstance3D.new()
+              visual.name = "V20Berglandschaft"
+              visual.mesh = st.commit()
+              var rock := StandardMaterial3D.new()
+              rock.vertex_color_use_as_albedo = true
+              rock.roughness = 0.96
+              rock.cull_mode = BaseMaterial3D.CULL_DISABLED
+              visual.material_override = rock
+              game.add_child(visual)
+
+              # Dieselbe sichtbare Geometrie erhaelt Kollision (statisch, ausserhalb der Karte).
+              var solid := StaticBody3D.new()
+              solid.name = "V20Bergkollision"
+              var shape := ConcavePolygonShape3D.new()
+              shape.set_faces(faces)
+              shape.backface_collision = true
+              var collider := CollisionShape3D.new()
+              collider.shape = shape
+              solid.add_child(collider)
+              game.add_child(solid)
+
+          func _find_house_roofs() -> void:
+              for node in game.get_children():
+                  if not (node is Node3D) or node == game.hero:
+                      continue
+                  var root := node as Node3D
+                  var is_house := false
+                  var roof: MeshInstance3D = null
+                  for child in root.get_children():
+                      if child is StaticBody3D:
+                          is_house = true
+                      elif child is MeshInstance3D:
+                          var visual := child as MeshInstance3D
+                          if visual.mesh is ArrayMesh:
+                              roof = visual
+                  if is_house and roof != null:
+                      roofs.append(roof)
+                      roof_centers.append(root.global_position)
+
+          func _update_roofs() -> void:
+              var pos: Vector3 = game.hero.global_position
+              for i in range(roofs.size()):
+                  if not is_instance_valid(roofs[i]):
+                      continue
+                  var dist: float = Vector2(pos.x, pos.z).distance_to(Vector2(roof_centers[i].x, roof_centers[i].z))
+                  # Die groessere Grenze beim Wiedereinblenden vermeidet Flackern.
+                  if dist < 5.7:
+                      roofs[i].visible = false
+                  elif dist > 7.0:
+                      roofs[i].visible = true
+
+          func _clearance(from_pos: Vector3, to_pos: Vector3) -> Dictionary:
+              var motion: Vector3 = to_pos - from_pos
+              var query := PhysicsShapeQueryParameters3D.new()
+              query.shape = ball
+              query.transform = Transform3D(Basis(), from_pos)
+              query.motion = motion
+              query.exclude = [game.hero.get_rid()]
+              query.collision_mask = 1
+              query.collide_with_bodies = true
+              var fractions: PackedFloat32Array = game.get_world_3d().direct_space_state.cast_motion(query)
+              var fraction: float = 1.0
+              if fractions.size() > 0:
+                  fraction = clampf(fractions[0], 0.0, 1.0)
+              # Sicherheitsabstand zum Hindernis, auch bei schnellen Schwenks.
+              var length: float = motion.length()
+              var distance: float = maxf(0.0, length * fraction - 0.18)
+              return {"pos": from_pos + motion.normalized() * distance, "fraction": fraction, "distance": distance}
+
+          func _physics_process(delta: float) -> void:
+              if game == null or game.hero == null or game.camera_node == null:
+                  return
+              if game.state != 2:
+                  return
+              var current_pos: Vector3 = game.hero.global_position
+              var safe_x: float = clampf(current_pos.x, -75.0, 75.0)
+              var safe_z: float = clampf(current_pos.z, -77.0, 60.0)
+              if absf(current_pos.x - safe_x) > 0.1 or absf(current_pos.z - safe_z) > 0.1:
+                  game.hero.global_position = Vector3(safe_x, maxf(current_pos.y, 0.1), safe_z)
+              _update_roofs()
+              var center: Vector3 = game.hero.global_position + Vector3(0, 1.5, 0)
+              var heading: float = game.hero.rotation.y
+              var back := Vector3(sin(heading), 0.0, cos(heading))
+              var side := Vector3(cos(heading), 0.0, -sin(heading))
+              var candidates: Array[Vector3] = [
+                  center + back * 6.7 + Vector3.UP * 2.8,
+                  center + back * 5.8 + side * 2.7 + Vector3.UP * 4.4,
+                  center + back * 5.8 - side * 2.7 + Vector3.UP * 4.4,
+                  center + back * 4.2 + Vector3.UP * 6.3
+              ]
+              var best: Vector3 = candidates[0]
+              var best_index: int = 0
+              var best_score: float = -10000.0
+              for i in range(candidates.size()):
+                  var info: Dictionary = _clearance(center, candidates[i])
+                  var amount: float = float(info["distance"])
+                  var score: float = amount - (0.0 if i == 0 else 0.85)
+                  if float(info["fraction"]) < 0.55:
+                      score -= 2.0
+                  if i == previous_camera_option:
+                      score += 0.55
+                  if score > best_score:
+                      best_score = score
+                      best = info["pos"]
+                      best_index = i
+              previous_camera_option = best_index
+              var current: Vector3 = game.camera_node.global_position
+              var speed: float = 11.0 if center.distance_to(best) < center.distance_to(current) else 4.6
+              var smooth: Vector3 = current.lerp(best, minf(1.0, delta * speed))
+              # Noch ein Kugel-Test nach der Glaettung: keine Kamera-Durchdringung.
+              var safety: Dictionary = _clearance(center, smooth)
+              game.camera_node.global_position = safety["pos"]
+              game.camera_node.look_at(center)
+          LWOD_V20_TERRAIN
+          test -s android/scripts/V20CameraTerrain.gd
+          printf '%s  %s\n' 'd2a0adf1c358658fe4b803723ac19a8d591e08c162ed2a34be12655327d5f638' 'android/scripts/V20CameraTerrain.gd' | sha256sum -c -
+          test "$(grep -Fxc '    v19_safety.setup(self)' android/scripts/Main.gd)" -eq 1
+          awk '
+            { print }
+            $0 == "    v19_safety.setup(self)" {
+              print "    var v20_camera = load(\"res://scripts/V20CameraTerrain.gd\").new()"
+              print "    v20_camera.name = \"V20CameraTerrain\""
+              print "    add_child(v20_camera)"
+              print "    v20_camera.setup(self)"
+              n++
+            }
+            END { if (n != 1) exit 43 }
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/Main_v20.gd"
+          mv "$RUNNER_TEMP/Main_v20.gd" android/scripts/Main.gd
+          grep -Fqx '    v20_camera.setup(self)' android/scripts/Main.gd
+          sed -i 's@version/code=19@version/code=20@' android/export_presets.cfg
+          sed -i 's@version/name="1.9"@version/name="2.0"@' android/export_presets.cfg
+          grep -Fqx 'version/code=20' android/export_presets.cfg
+          echo 'V20: Kugelkamera, weiter entferntes Gebirge und Dach-Ausblendung installiert'
       - name: Godot Ressourcen importieren
         shell: bash
         run: |
@@ -288,38 +515,39 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          godot --headless --path android --quit-after 6 > "$RUNNER_TEMP/lwod_v19_test.log" 2>&1 || {
-            cat "$RUNNER_TEMP/lwod_v19_test.log"
+          godot --headless --path android --quit-after 6 > "$RUNNER_TEMP/lwod_v20_test.log" 2>&1 || {
+            cat "$RUNNER_TEMP/lwod_v20_test.log"
             exit 1
           }
-          cat "$RUNNER_TEMP/lwod_v19_test.log"
-          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v19_test.log"; then
-            echo '::error::Godot-Skriptfehler im V19-Laufzeittest'
+          cat "$RUNNER_TEMP/lwod_v20_test.log"
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v20_test.log"; then
+            echo '::error::Godot-Skriptfehler im V20-Laufzeittest'
             exit 1
           fi
-      - name: LWOD Android V19 APK erstellen
+      - name: LWOD Android V20 APK erstellen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V19.apk"
-          test -s build/android/LWOD-Android-V19.apk
-          unzip -t build/android/LWOD-Android-V19.apk >/dev/null
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V20.apk"
+          test -s build/android/LWOD-Android-V20.apk
+          unzip -t build/android/LWOD-Android-V20.apk >/dev/null
       - name: Fehlerdiagnose speichern
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_V19_DIAGNOSE
+          name: LWOD_V20_DIAGNOSE
           path: |
-            ${{ runner.temp }}/lwod_v19_test.log
+            ${{ runner.temp }}/lwod_v20_test.log
             android/scripts/V19TerrainSafety.gd
+            android/scripts/V20CameraTerrain.gd
           if-no-files-found: warn
           retention-days: 14
-      - name: V19 APK bereitstellen
+      - name: V20 APK bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V19_PHOENIX_APK
-          path: build/android/LWOD-Android-V19.apk
+          name: LWOD_ANDROID_V20_PHOENIX_APK
+          path: build/android/LWOD-Android-V20.apk
           if-no-files-found: error
           retention-days: 14
