@@ -1,8 +1,8 @@
-# LWOD Android V11 - Phoenix-Vollbild-Menue und Originalvideo
+# LWOD Android V12 - korrigierter Vollstaendigkeitscheck
 # EINZIGE GitHub-Datei: .github/workflows/lwod-android.yml
 # Enthaelt Phoenix-Menue-Grafik kompakt direkt als WebP-Asset. Vollstaendig unter 128 kB kopierbar.
 # Originalintro 37617.mp4 ist identisch mit der schon auf GitHub gespeicherten MP4.
-name: LWOD Android V11 Phoenix Full HD
+name: LWOD Android V12 Phoenix Prueffix
 
 'on':
   workflow_dispatch: {}
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   android:
-    name: Android V10 APK erstellen
+    name: Android V12 APK erstellen
     runs-on: ubuntu-latest
     timeout-minutes: 50
     container:
@@ -83,14 +83,12 @@ jobs:
             workflow=".github/workflows/blank-ps1.yml"
           fi
           test -s "$workflow"
-          grep -Fq 'LWOD_V11_MENU_IMAGE' "$workflow"
-          grep -Fq 'LWOD_V11_SKIN_GZ' "$workflow"
-          grep -Fq 'LWOD_ANDROID_V11' "$workflow"
-          # Marker muessen je exakt zweimal vorkommen: Start und Ende.
-          test "$(grep -Fc 'LWOD_V11_MENU_IMAGE' "$workflow")" -eq 2
-          test "$(grep -Fc 'LWOD_V11_SKIN_GZ' "$workflow")" -eq 2
-          echo 'V11: eingebettete Grafik und Menuecode vollstaendig vorhanden'
-
+          # Die vorherige Pruefung zaehlte auch ihre eigenen Suchbefehle.
+          # Nur das Vorhandensein der echten Abschlussmarker ist entscheidend.
+          grep -Eq '^[[:space:]]{10}LWOD_V11_MENU_IMAGE$' "$workflow"
+          grep -Eq '^[[:space:]]{10}LWOD_V11_SKIN_GZ$' "$workflow"
+          grep -Fq 'LWOD_ANDROID_V12_PHOENIX_APK' "$workflow"
+          echo 'V12: beide Bild- und Script-Bloecke sind vollstaendig'
       - name: Original 37617 Intro mit Ton einbinden
         shell: bash
         run: |
@@ -1078,8 +1076,8 @@ jobs:
           mv "$RUNNER_TEMP/lwod_main_v10.gd" android/scripts/Main.gd
           grep -Fq 'phoenix_menu.setup(self, addon)' android/scripts/Main.gd
           # Neue Android-Version, aber dieselbe Paket-ID (bestehende App aktualisierbar).
-          sed -i 's@version/code=7@version/code=11@' android/export_presets.cfg
-          sed -i 's@version/name="0.7"@version/name="1.1"@' android/export_presets.cfg
+          sed -i 's@version/code=7@version/code=12@' android/export_presets.cfg
+          sed -i 's@version/name="0.7"@version/name="1.2"@' android/export_presets.cfg
       - name: Godot Ressourcen importieren
         shell: bash
         run: |
@@ -1100,19 +1098,19 @@ jobs:
             echo '::error::GDScript oder UI-Fehler im Laufzeittest'
             exit 1
           fi
-      - name: Android V11 APK bauen
+      - name: Android V12 APK bauen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V11.apk"
-          test -s build/android/LWOD-Android-V11.apk
-          unzip -t build/android/LWOD-Android-V11.apk >/dev/null
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V12.apk"
+          test -s build/android/LWOD-Android-V12.apk
+          unzip -t build/android/LWOD-Android-V12.apk >/dev/null
       - name: APK zum Download bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V11_PHOENIX_APK
-          path: build/android/LWOD-Android-V11.apk
+          name: LWOD_ANDROID_V12_PHOENIX_APK
+          path: build/android/LWOD-Android-V12.apk
           if-no-files-found: error
           retention-days: 14
