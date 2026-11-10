@@ -1,9 +1,14 @@
-# LWOD Android V2 – reparierter APK-Build, unabhaengig vom PS1-Spiel
-# Als NEUE Datei: .github/workflows/lwod-android.yml
-name: LWOD Android V2 APK Fix
+
+# LWOD Android V3 - APK-Build repariert
+# Neue Datei: .github/workflows/lwod-android.yml
+name: LWOD Android V3 APK Fix
 
 'on':
   workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/lwod-android.yml'
 
 permissions:
   contents: read
@@ -23,51 +28,66 @@ jobs:
       - name: Projekt laden
         uses: actions/checkout@v4
 
-      - name: Vorhandene Godot-Vorlagen und SDK freigeben
+      - name: Godot-Vorlagen und Android-SDK vorbereiten
         shell: bash
         run: |
           set -euo pipefail
-          # GitHub nutzt HOME=/github/home; Docker-Vorlagen liegen unter /root.
-          mkdir -p "$HOME/.config/godot" "$HOME/.local/share/godot/export_templates"
+          mkdir -p "$HOME/.config/godot"
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+
           cp -a /root/.config/godot/. "$HOME/.config/godot/"
-          cp -a /root/.local/share/godot/export_templates/. "$HOME/.local/share/godot/export_templates/"
+          cp -a /root/.local/share/godot/export_templates/. \
+            "$HOME/.local/share/godot/export_templates/"
+
           test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_debug.apk"
           test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_release.apk"
           test -x "$JAVA_HOME/bin/java"
           test -x "$ANDROID_HOME/platform-tools/adb"
           test -s /root/debug.keystore
-          grep -q 'export/android/java_sdk_path' "$HOME/.config/godot/editor_settings-4.7.tres"
-          grep -q 'export/android/android_sdk_path' "$HOME/.config/godot/editor_settings-4.7.tres"
-          echo 'Exportvorlagen, Java 17, Android-SDK und Debug-Schluessel vorhanden.'
+
+          grep -q 'export/android/java_sdk_path' \
+            "$HOME/.config/godot/editor_settings-4.7.tres"
+          grep -q 'export/android/android_sdk_path' \
+            "$HOME/.config/godot/editor_settings-4.7.tres"
 
       - name: Android-SDK 35 bereitstellen
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager --sdk_root="$ANDROID_HOME" 'platforms;android-35' 'build-tools;35.0.1'
+          sdkmanager --sdk_root="$ANDROID_HOME" \
+            'platforms;android-35' 'build-tools;35.0.1'
+
           test -d "$ANDROID_HOME/platforms/android-35"
           test -x "$ANDROID_HOME/build-tools/35.0.1/aapt2"
 
-      - name: Android-Spielwelt V1 unveraendert vorbereiten
+      - name: Android-Spielwelt mit wget vorbereiten
         shell: bash
         run: |
           set -euo pipefail
-          # Gepruefte alte Projektquelle aus dem eigenen Repository.
-          curl -fL --retry 3 --silent --show-error \
-            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/d57c0d3d3fa45d6ccf508e0918414c80862d2362/.github/workflows/blank-ps1.yml' \
-            -o "$RUNNER_TEMP/lwod_android_v1.yml"
-          test "$(git hash-object "$RUNNER_TEMP/lwod_android_v1.yml")" = '639c4582341edf0c3685aa348f2e9497443746fa'
+
+          wget -q --tries=3 --timeout=30 \
+            -O "$RUNNER_TEMP/lwod_android_v1.yml" \
+            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/d57c0d3d3fa45d6ccf508e0918414c80862d2362/.github/workflows/blank-ps1.yml'
+
+          test -s "$RUNNER_TEMP/lwod_android_v1.yml"
+          test "$(git hash-object "$RUNNER_TEMP/lwod_android_v1.yml")" = \
+            '639c4582341edf0c3685aa348f2e9497443746fa'
+
           awk '
             /^      - name: Godot-Projekt und 3D-Welt erstellen$/ {phase=1; next}
             phase==1 && /^        run: \|$/ {phase=2; next}
             phase==2 && /^      - name: Godot-Projekt importieren$/ {exit}
             phase==2 && /^          / {sub(/^          /, ""); print; next}
             phase==2 && /^$/ {print; next}
-          ' "$RUNNER_TEMP/lwod_android_v1.yml" > "$RUNNER_TEMP/create_game.sh"
+          ' "$RUNNER_TEMP/lwod_android_v1.yml" \
+            > "$RUNNER_TEMP/create_game.sh"
+
           test -s "$RUNNER_TEMP/create_game.sh"
           grep -q 'android/scripts/Main.gd' "$RUNNER_TEMP/create_game.sh"
+
           bash -n "$RUNNER_TEMP/create_game.sh"
           bash "$RUNNER_TEMP/create_game.sh"
+
           test -s android/project.godot
           test -s android/scripts/Main.gd
           test -s android/export_presets.cfg
@@ -76,23 +96,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          godot --headless --path android --editor --import --quit
+          godot --headless --path android \
+            --editor --import --quit
 
       - name: Android APK erstellen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
-          godot --headless --path android --export-debug Android \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V2-Test.apk"
-          test -s build/android/LWOD-Android-V2-Test.apk
-          unzip -t build/android/LWOD-Android-V2-Test.apk >/dev/null
-          echo 'APK erfolgreich erstellt.'
 
-      - name: APK zum Herunterladen anbieten
+          godot --headless --path android \
+            --export-debug Android \
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V3-Test.apk"
+
+          test -s build/android/LWOD-Android-V3-Test.apk
+          unzip -t build/android/LWOD-Android-V3-Test.apk >/dev/null
+
+          echo "Android APK erfolgreich erstellt."
+
+      - name: APK herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V2_APK
-          path: build/android/LWOD-Android-V2-Test.apk
+          name: LWOD_ANDROID_V3_APK
+          path: build/android/LWOD-Android-V3-Test.apk
           if-no-files-found: error
           retention-days: 14
