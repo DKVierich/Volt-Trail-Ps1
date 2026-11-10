@@ -1,4 +1,7 @@
-name: LWOD Android V6 Intro Menu Phoenix
+# Lydra World Of Dragon - Android V7
+# Als Datei .github/workflows/lwod-android.yml speichern.
+# Die PS1-Datei blank-ps1.yml NICHT ersetzen.
+name: LWOD Android V7 - Menues Phoenix und Steuerfix
 
 'on':
   workflow_dispatch: {}
@@ -6,755 +9,222 @@ name: LWOD Android V6 Intro Menu Phoenix
     branches: [main]
     paths:
       - '.github/workflows/lwod-android.yml'
+      - '.github/workflows/blank-ps1.yml'
 
 permissions:
   contents: read
 
 jobs:
   android:
-    name: LWOD Android APK bauen
+    name: Android V7 APK erstellen
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 40
     container:
       image: barichello/godot-ci:4.7.2
     env:
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       ANDROID_HOME: /usr/lib/android-sdk
-
     steps:
-      - name: Projekt laden
+      - name: Repository laden
         uses: actions/checkout@v4
-
-      - name: Godot Vorlagen und SDK freigeben
+      - name: Godot Android Entwicklungsumgebung
         shell: bash
         run: |
           set -euo pipefail
-
           mkdir -p "$HOME/.config/godot"
           mkdir -p "$HOME/.local/share/godot/export_templates"
-
           cp -a /root/.config/godot/. "$HOME/.config/godot/"
           cp -a /root/.local/share/godot/export_templates/. "$HOME/.local/share/godot/export_templates/"
-
           test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_debug.apk"
-          test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_release.apk"
           test -x "$JAVA_HOME/bin/java"
-          test -x "$ANDROID_HOME/platform-tools/adb"
           test -s /root/debug.keystore
-
-      - name: Android SDK 35 bereitstellen
-        shell: bash
-        run: |
-          set -euo pipefail
-          sdkmanager --sdk_root="$ANDROID_HOME" \
-            'platforms;android-35' 'build-tools;35.0.1'
-
+          sdkmanager --sdk_root="$ANDROID_HOME" 'platforms;android-35' 'build-tools;35.0.1'
           test -d "$ANDROID_HOME/platforms/android-35"
-          test -x "$ANDROID_HOME/build-tools/35.0.1/aapt2"
-
-      - name: Godot Android Projekt erstellen
+      - name: Funktionierende V6 Spielwelt erstellen
         shell: bash
         run: |
           set -euo pipefail
-
-          mkdir -p android/scenes android/scripts
-
-          cat > android/project.godot <<'EOF_PROJECT'
-          config_version=5
-
-          [application]
-          config/name="Lydra World Of Dragon"
-          run/main_scene="res://scenes/Main.tscn"
-
-          [display]
-          window/size/viewport_width=1280
-          window/size/viewport_height=720
-          window/stretch/mode="canvas_items"
-          window/handheld/orientation=0
-
-          [rendering]
-          renderer/rendering_method="gl_compatibility"
-          renderer/rendering_method.mobile="gl_compatibility"
-          textures/vram_compression/import_etc2_astc=true
-          EOF_PROJECT
-
-          cat > android/scenes/Main.tscn <<'EOF_SCENE'
-          [gd_scene load_steps=3 format=3]
-
-          [ext_resource type="Script" path="res://scripts/Main.gd" id="1_main"]
-          [ext_resource type="Script" path="res://scripts/TouchOverlay.gd" id="2_touch"]
-
-          [node name="LydraWorld" type="Node3D"]
-          script = ExtResource("1_main")
-          EOF_SCENE
-
-          cat > android/scripts/TouchOverlay.gd <<'EOF_TOUCH'
-          extends Control
-
-          signal axis_changed(axis: Vector2)
-
-          var move_axis := Vector2.ZERO
-          var _touch_id := -1
-          var _origin := Vector2.ZERO
-          var _current := Vector2.ZERO
-
-          func _ready() -> void:
-              set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-              mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-          func _input(event: InputEvent) -> void:
-              if not visible:
-                  return
-
-              if event is InputEventScreenTouch:
-                  var e := event as InputEventScreenTouch
-                  if e.pressed:
-                      if e.position.x <= get_viewport_rect().size.x * 0.55 and _touch_id == -1:
-                          _touch_id = e.index
-                          _origin = e.position
-                          _current = e.position
-                          move_axis = Vector2.ZERO
-                          axis_changed.emit(move_axis)
-                          queue_redraw()
-                  else:
-                      if e.index == _touch_id:
-                          _touch_id = -1
-                          move_axis = Vector2.ZERO
-                          axis_changed.emit(move_axis)
-                          queue_redraw()
-
-              elif event is InputEventScreenDrag:
-                  var d := event as InputEventScreenDrag
-                  if d.index == _touch_id:
-                      _current = d.position
-                      move_axis = (_current - _origin).limit_length(95.0) / 95.0
-                      axis_changed.emit(move_axis)
-                      queue_redraw()
-
-          func _draw() -> void:
-              if _touch_id == -1:
-                  return
-
-              draw_circle(_origin, 90.0, Color(0.0, 0.0, 0.0, 0.18))
-              draw_arc(_origin, 90.0, 0.0, TAU, 48, Color(1.0, 1.0, 1.0, 0.55), 4.0)
-
-              var knob_pos := _origin + move_axis * 72.0
-              draw_circle(knob_pos, 34.0, Color(0.9, 0.9, 1.0, 0.45))
-              draw_arc(knob_pos, 34.0, 0.0, TAU, 32, Color(1.0, 1.0, 1.0, 0.85), 3.0)
-          EOF_TOUCH
-
-          cat > android/scripts/Main.gd <<'EOF_MAIN'
-          extends Node3D
-
-          enum GameState { INTRO, MAIN_MENU, PLAYING, OPTIONS }
-
-          const SAVE_PATH := "user://lwod_android_v6.save"
-          const WALK_SPEED := 5.0
-          const TURN_SPEED := 2.2
-          const GRAVITY := 22.0
-
-          var state := GameState.INTRO
-          var intro_timer := 0.0
-          var heading := 0.0
-          var elapsed := 0.0
-
-          var hero: CharacterBody3D
-          var phoenix: Node3D
-          var phoenix_left_wing: MeshInstance3D
-          var phoenix_right_wing: MeshInstance3D
-          var camera_node: Camera3D
-
-          var ui_layer: CanvasLayer
-          var intro_root: Control
-          var main_menu_root: Control
-          var option_root: Control
-          var play_hud_root: Control
-          var backpack_menu_root: Panel
-          var top_area_label: Label
-          var status_label: Label
-          var backpack_button: Button
-          var touch_overlay: Control
-
-          var joystick_axis := Vector2.ZERO
-
-          func _ready() -> void:
-              _build_environment()
-              _build_ground()
-              _build_village()
-              _build_player()
-              _build_phoenix()
-              _build_camera()
-              _build_ui()
-              _show_intro()
-
-          func _material(color: Color) -> StandardMaterial3D:
-              var m := StandardMaterial3D.new()
-              m.albedo_color = color
-              m.roughness = 0.88
-              m.cull_mode = BaseMaterial3D.CULL_DISABLED
-              return m
-
-          func _box(parent: Node3D, pos: Vector3, size: Vector3, color: Color, solid: bool = false) -> MeshInstance3D:
-              var mesh := MeshInstance3D.new()
-              var box := BoxMesh.new()
-              box.size = size
-              mesh.mesh = box
-              mesh.position = pos
-              mesh.material_override = _material(color)
-              parent.add_child(mesh)
-
-              if solid:
-                  var body := StaticBody3D.new()
-                  var col := CollisionShape3D.new()
-                  var shape := BoxShape3D.new()
-                  shape.size = size
-                  col.shape = shape
-                  body.position = pos
-                  body.add_child(col)
-                  parent.add_child(body)
-              return mesh
-
-          func _sphere(parent: Node3D, pos: Vector3, radius: float, color: Color) -> MeshInstance3D:
-              var mesh := MeshInstance3D.new()
-              var s := SphereMesh.new()
-              s.radius = radius
-              s.height = radius * 2.0
-              s.radial_segments = 14
-              s.rings = 8
-              mesh.mesh = s
-              mesh.position = pos
-              mesh.material_override = _material(color)
-              parent.add_child(mesh)
-              return mesh
-
-          func _cone(parent: Node3D, pos: Vector3, radius: float, height: float, color: Color, segments: int = 8) -> MeshInstance3D:
-              var mesh := MeshInstance3D.new()
-              var c := CylinderMesh.new()
-              c.top_radius = 0.04
-              c.bottom_radius = radius
-              c.height = height
-              c.radial_segments = segments
-              mesh.mesh = c
-              mesh.position = pos
-              mesh.material_override = _material(color)
-              parent.add_child(mesh)
-              return mesh
-
-          func _build_environment() -> void:
-              var env_node := WorldEnvironment.new()
-              var env := Environment.new()
-              env.background_mode = Environment.BG_COLOR
-              env.background_color = Color("#8ec6ee")
-              env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-              env.ambient_light_color = Color("#d2def2")
-              env.ambient_light_energy = 0.72
-              env_node.environment = env
-              add_child(env_node)
-
-              var sun := DirectionalLight3D.new()
-              sun.rotation_degrees = Vector3(-44, -32, 0)
-              sun.light_energy = 1.35
-              add_child(sun)
-
-          func _build_ground() -> void:
-              _box(self, Vector3(0, -0.45, -14), Vector3(160, 0.9, 160), Color("#6ea06f"), true)
-              _box(self, Vector3(0, 0.03, -18), Vector3(5.0, 0.06, 88), Color("#b9a07b"))
-              _box(self, Vector3(0, 0.03, -58), Vector3(18.0, 0.06, 6.5), Color("#b9a07b"))
-
-              for i in 16:
-                  _cone(self, Vector3(-84 + i * 11, 9.5, -85), 8.5, 20.0, Color("#78939a"), 7)
-
-              var rng := RandomNumberGenerator.new()
-              rng.seed = 12491
-              for i in 42:
-                  var x := rng.randf_range(-70.0, 70.0)
-                  var z := rng.randf_range(-72.0, 48.0)
-                  if absf(x) < 13.0 and z < 18.0 and z > -70.0:
-                      continue
-                  _tree(Vector3(x, 0, z), rng.randf_range(0.8, 1.35))
-
-          func _tree(pos: Vector3, scale_factor: float) -> void:
-              _box(self, pos + Vector3(0, 1.0 * scale_factor, 0), Vector3(0.42, 2.1, 0.42) * scale_factor, Color("#754e35"))
-              _cone(self, pos + Vector3(0, 3.0 * scale_factor, 0), 1.45 * scale_factor, 2.7 * scale_factor, Color("#2d7758"), 9)
-              _cone(self, pos + Vector3(0, 4.1 * scale_factor, 0), 1.05 * scale_factor, 2.0 * scale_factor, Color("#3a9368"), 9)
-
-          func _roof(parent: Node3D, width: float, depth: float, color: Color) -> void:
-              var st := SurfaceTool.new()
-              st.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-              var y := 3.0
-              var ridge := 4.3
-              var a := Vector3(-width * 0.55, y, -depth * 0.55)
-              var b := Vector3(width * 0.55, y, -depth * 0.55)
-              var c := Vector3(-width * 0.55, y, depth * 0.55)
-              var d := Vector3(width * 0.55, y, depth * 0.55)
-              var e := Vector3(0, ridge, -depth * 0.55)
-              var f := Vector3(0, ridge, depth * 0.55)
-
-              var tris := [
-                  a, e, f, a, f, c,
-                  e, b, d, e, d, f,
-                  a, b, e,
-                  c, f, d
-              ]
-
-              for v in tris:
-                  st.add_vertex(v)
-
-              st.generate_normals()
-
-              var mesh := MeshInstance3D.new()
-              mesh.mesh = st.commit()
-              mesh.material_override = _material(color)
-              parent.add_child(mesh)
-
-          func _house(pos: Vector3, index: int) -> void:
-              var root := Node3D.new()
-              root.position = pos
-              add_child(root)
-
-              var wall_color := Color("#e2d0b7") if index % 2 == 0 else Color("#d8d8cf")
-              _box(root, Vector3(0, 1.5, 0), Vector3(5.0, 3.0, 5.0), wall_color, true)
-              _roof(root, 5.0, 5.0, Color("#725661") if index % 2 == 0 else Color("#655457"))
-
-              _box(root, Vector3(0, 1.0, 2.55), Vector3(1.1, 2.0, 0.10), Color("#744d35"))
-              _box(root, Vector3(-1.6, 1.85, 2.58), Vector3(0.85, 0.90, 0.09), Color("#73b5db"))
-              _box(root, Vector3(1.6, 1.85, 2.58), Vector3(0.85, 0.90, 0.09), Color("#73b5db"))
-              _box(root, Vector3(-2.35, 1.5, 2.56), Vector3(0.14, 2.9, 0.11), Color("#805d40"))
-              _box(root, Vector3(2.35, 1.5, 2.56), Vector3(0.14, 2.9, 0.11), Color("#805d40"))
-
-          func _build_village() -> void:
-              for i in 5:
-                  _house(Vector3(-9.5, 0, -12.0 - float(i) * 10.5), i)
-                  _house(Vector3(9.5, 0, -12.0 - float(i) * 10.5), i + 5)
-
-              _box(self, Vector3(0, 0.9, 2.2), Vector3(4.3, 1.8, 0.25), Color("#6e5037"))
-              _box(self, Vector3(0, 1.35, 2.38), Vector3(3.8, 0.65, 0.08), Color("#c29d65"))
-
-          func _build_player() -> void:
-              hero = CharacterBody3D.new()
-              hero.position = Vector3(0, 0.1, 10)
-              add_child(hero)
-
-              var col := CollisionShape3D.new()
-              var shape := CapsuleShape3D.new()
-              shape.radius = 0.34
-              shape.height = 1.85
-              col.shape = shape
-              col.position.y = 0.95
-              hero.add_child(col)
-
-              _box(hero, Vector3(0, 1.12, 0), Vector3(0.65, 0.96, 0.38), Color("#4d75d4"))
-              _sphere(hero, Vector3(0, 1.90, 0), 0.30, Color("#e5b995"))
-
-              # violette Haare
-              _box(hero, Vector3(0, 2.15, -0.02), Vector3(0.62, 0.18, 0.52), Color("#8c4fe0"))
-              _box(hero, Vector3(0, 1.98, 0.16), Vector3(0.50, 0.24, 0.24), Color("#7a3ad0"))
-
-              # Beine
-              _box(hero, Vector3(-0.19, 0.45, 0), Vector3(0.22, 0.84, 0.22), Color("#434968"))
-              _box(hero, Vector3(0.19, 0.45, 0), Vector3(0.22, 0.84, 0.22), Color("#434968"))
-
-              # Arme
-              _box(hero, Vector3(-0.43, 1.06, 0), Vector3(0.18, 0.72, 0.20), Color("#e1b18d"))
-              _box(hero, Vector3(0.43, 1.06, 0), Vector3(0.18, 0.72, 0.20), Color("#e1b18d"))
-
-          func _build_phoenix() -> void:
-              phoenix = Node3D.new()
-              phoenix.position = Vector3(1.6, 1.8, 11.0)
-              add_child(phoenix)
-
-              _sphere(phoenix, Vector3(0, 0, 0), 0.42, Color("#934ae0"))
-              _sphere(phoenix, Vector3(0, 0.22, -0.42), 0.28, Color("#bc76ff"))
-              _cone(phoenix, Vector3(0, 0.28, -0.67), 0.12, 0.28, Color("#ffd58f"), 6)
-
-              phoenix_left_wing = _box(phoenix, Vector3(-0.62, 0.10, 0.0), Vector3(0.96, 0.07, 0.62), Color("#b06bff"))
-              phoenix_right_wing = _box(phoenix, Vector3(0.62, 0.10, 0.0), Vector3(0.96, 0.07, 0.62), Color("#b06bff"))
-
-              _cone(phoenix, Vector3(0, -0.04, 0.60), 0.14, 0.76, Color("#934ae0"), 6)
-
-              # Schweiffedern
-              _cone(phoenix, Vector3(-0.10, -0.02, 0.82), 0.08, 0.95, Color("#c88cff"), 6)
-              _cone(phoenix, Vector3(0.10, -0.02, 0.82), 0.08, 0.95, Color("#c88cff"), 6)
-
-          func _build_camera() -> void:
-              camera_node = Camera3D.new()
-              camera_node.current = true
-              camera_node.fov = 66.0
-              camera_node.position = Vector3(0, 4.6, 17.5)
-              add_child(camera_node)
-              camera_node.look_at(hero.position + Vector3(0, 1.25, 0))
-
-          func _fullscreen_panel() -> Control:
-              var c := Control.new()
-              c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-              return c
-
-          func _make_button(text_value: String, pos: Vector2, size_value: Vector2) -> Button:
-              var b := Button.new()
-              b.text = text_value
-              b.position = pos
-              b.size = size_value
-              b.add_theme_font_size_override("font_size", 28)
-              b.focus_mode = Control.FOCUS_NONE
-              return b
-
-          func _build_ui() -> void:
-              ui_layer = CanvasLayer.new()
-              add_child(ui_layer)
-
-              # Intro
-              intro_root = _fullscreen_panel()
-              ui_layer.add_child(intro_root)
-
-              var intro_bg := ColorRect.new()
-              intro_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-              intro_bg.color = Color(0, 0, 0, 1)
-              intro_root.add_child(intro_bg)
-
-              var intro_title := Label.new()
-              intro_title.text = "DKVierich"
-              intro_title.position = Vector2(420, 260)
-              intro_title.add_theme_font_size_override("font_size", 64)
-              intro_root.add_child(intro_title)
-
-              var intro_sub := Label.new()
-              intro_sub.text = "Produktion"
-              intro_sub.position = Vector2(470, 340)
-              intro_sub.add_theme_font_size_override("font_size", 42)
-              intro_root.add_child(intro_sub)
-
-              # Hauptmenü
-              main_menu_root = _fullscreen_panel()
-              ui_layer.add_child(main_menu_root)
-
-              var menu_bg := ColorRect.new()
-              menu_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-              menu_bg.color = Color(0.02, 0.03, 0.06, 0.82)
-              main_menu_root.add_child(menu_bg)
-
-              var game_title := Label.new()
-              game_title.text = "Lydra World Of Dragon"
-              game_title.position = Vector2(290, 120)
-              game_title.add_theme_font_size_override("font_size", 52)
-              main_menu_root.add_child(game_title)
-
-              var start_panel := Panel.new()
-              start_panel.position = Vector2(430, 250)
-              start_panel.size = Vector2(420, 260)
-              main_menu_root.add_child(start_panel)
-
-              var new_game_btn := _make_button("Neues Spiel", Vector2(70, 40), Vector2(280, 48))
-              start_panel.add_child(new_game_btn)
-              new_game_btn.pressed.connect(_on_new_game_pressed)
-
-              var load_btn := _make_button("Spiel Laden", Vector2(70, 110), Vector2(280, 48))
-              start_panel.add_child(load_btn)
-              load_btn.pressed.connect(_on_main_load_pressed)
-
-              var option_btn := _make_button("Option", Vector2(70, 180), Vector2(280, 48))
-              start_panel.add_child(option_btn)
-              option_btn.pressed.connect(_on_option_pressed)
-
-              # Optionen
-              option_root = _fullscreen_panel()
-              ui_layer.add_child(option_root)
-
-              var opt_bg := ColorRect.new()
-              opt_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-              opt_bg.color = Color(0.0, 0.0, 0.0, 0.78)
-              option_root.add_child(opt_bg)
-
-              var opt_panel := Panel.new()
-              opt_panel.position = Vector2(360, 220)
-              opt_panel.size = Vector2(560, 260)
-              option_root.add_child(opt_panel)
-
-              var opt_title := Label.new()
-              opt_title.text = "Option"
-              opt_title.position = Vector2(230, 20)
-              opt_title.add_theme_font_size_override("font_size", 34)
-              opt_panel.add_child(opt_title)
-
-              var opt_info1 := Label.new()
-              opt_info1.text = "Lautstaerke: 100%"
-              opt_info1.position = Vector2(120, 90)
-              opt_info1.add_theme_font_size_override("font_size", 24)
-              opt_panel.add_child(opt_info1)
-
-              var opt_info2 := Label.new()
-              opt_info2.text = "Textgeschwindigkeit: 2"
-              opt_info2.position = Vector2(120, 135)
-              opt_info2.add_theme_font_size_override("font_size", 24)
-              opt_panel.add_child(opt_info2)
-
-              var opt_back := _make_button("Zurueck", Vector2(180, 190), Vector2(200, 42))
-              opt_panel.add_child(opt_back)
-              opt_back.pressed.connect(_show_main_menu)
-
-              # Spiel HUD
-              play_hud_root = _fullscreen_panel()
-              ui_layer.add_child(play_hud_root)
-
-              top_area_label = Label.new()
-              top_area_label.text = "SONNENTAL-PFAD"
-              top_area_label.position = Vector2(20, 18)
-              top_area_label.add_theme_font_size_override("font_size", 28)
-              play_hud_root.add_child(top_area_label)
-
-              status_label = Label.new()
-              status_label.text = "Erkunde die Welt"
-              status_label.position = Vector2(20, 62)
-              status_label.add_theme_font_size_override("font_size", 22)
-              play_hud_root.add_child(status_label)
-
-              backpack_button = Button.new()
-              backpack_button.text = "🎒"
-              backpack_button.position = Vector2(1180, 26)
-              backpack_button.size = Vector2(72, 72)
-              backpack_button.modulate = Color(1, 1, 1, 0.48)
-              backpack_button.add_theme_font_size_override("font_size", 34)
-              backpack_button.focus_mode = Control.FOCUS_NONE
-              play_hud_root.add_child(backpack_button)
-              backpack_button.pressed.connect(_toggle_backpack_menu)
-
-              backpack_menu_root = Panel.new()
-              backpack_menu_root.position = Vector2(840, 120)
-              backpack_menu_root.size = Vector2(360, 470)
-              play_hud_root.add_child(backpack_menu_root)
-
-              var entries := [
-                  "Drachen Kodex",
-                  "Drachen Team",
-                  "Ausruestung",
-                  "Inventar",
-                  "Spiel Speichern",
-                  "Spiel Laden",
-                  "Spiel Beenden",
-                  "Option"
-              ]
-
-              for i in entries.size():
-                  var btn := _make_button(entries[i], Vector2(28, 20 + i * 52), Vector2(300, 40))
-                  backpack_menu_root.add_child(btn)
-                  btn.pressed.connect(func():
-                      _on_backpack_entry(entries[i])
-                  )
-
-              touch_overlay = Control.new()
-              touch_overlay.set_script(load("res://scripts/TouchOverlay.gd"))
-              play_hud_root.add_child(touch_overlay)
-              touch_overlay.axis_changed.connect(_on_touch_axis_changed)
-
-              backpack_menu_root.visible = false
-
-              _show_main_menu()
-
-          func _show_intro() -> void:
-              state = GameState.INTRO
-              intro_timer = 2.6
-              intro_root.visible = true
-              main_menu_root.visible = false
-              option_root.visible = false
-              play_hud_root.visible = false
-
-          func _show_main_menu() -> void:
-              state = GameState.MAIN_MENU
-              intro_root.visible = false
-              main_menu_root.visible = true
-              option_root.visible = false
-              play_hud_root.visible = false
-              backpack_menu_root.visible = false
-
-          func _show_options() -> void:
-              state = GameState.OPTIONS
-              intro_root.visible = false
-              main_menu_root.visible = false
-              option_root.visible = true
-              play_hud_root.visible = false
-              backpack_menu_root.visible = false
-
-          func _show_playing() -> void:
-              state = GameState.PLAYING
-              intro_root.visible = false
-              main_menu_root.visible = false
-              option_root.visible = false
-              play_hud_root.visible = true
-              backpack_menu_root.visible = false
-              status_label.text = "Violetter Phoenix an deiner Seite"
-
-          func _on_new_game_pressed() -> void:
-              hero.position = Vector3(0, 0.1, 10)
-              heading = 0.0
-              hero.rotation.y = heading
-              _show_playing()
-
-          func _on_main_load_pressed() -> void:
-              _load_game()
-              _show_playing()
-
-          func _on_option_pressed() -> void:
-              _show_options()
-
-          func _toggle_backpack_menu() -> void:
-              if state != GameState.PLAYING:
-                  return
-              backpack_menu_root.visible = not backpack_menu_root.visible
-
-          func _on_backpack_entry(entry: String) -> void:
-              match entry:
-                  "Drachen Kodex":
-                      status_label.text = "Drachen Kodex geoeffnet"
-                  "Drachen Team":
-                      status_label.text = "Drachen Team geoeffnet"
-                  "Ausruestung":
-                      status_label.text = "Ausruestung geoeffnet"
-                  "Inventar":
-                      status_label.text = "Inventar geoeffnet"
-                  "Spiel Speichern":
-                      _save_game()
-                  "Spiel Laden":
-                      _load_game()
-                      status_label.text = "Spiel geladen"
-                  "Spiel Beenden":
-                      _show_main_menu()
-                  "Option":
-                      _show_options()
-
-          func _save_game() -> void:
-              var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
-              if f != null:
-                  f.store_var(hero.position)
-                  f.store_float(heading)
-                  status_label.text = "Spiel gespeichert"
-
-          func _load_game() -> void:
-              if not FileAccess.file_exists(SAVE_PATH):
-                  status_label.text = "Noch kein Spielstand vorhanden"
-                  return
-
-              var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
-              if f != null:
-                  var pos = f.get_var()
-                  if pos is Vector3:
-                      hero.position = pos
-                  heading = f.get_float()
-                  hero.rotation.y = heading
-
-          func _on_touch_axis_changed(axis: Vector2) -> void:
-              joystick_axis = axis
-
-          func _physics_process(delta: float) -> void:
-              elapsed += delta
-
-              if state == GameState.INTRO:
-                  intro_timer -= delta
-                  if intro_timer <= 0.0:
-                      _show_main_menu()
-
-              var side_motion := sin(elapsed * 5.8) * 0.32
-              phoenix_left_wing.rotation.z = -0.25 - side_motion
-              phoenix_right_wing.rotation.z = 0.25 + side_motion
-
-              if state != GameState.PLAYING:
-                  var idle_target := hero.position + Vector3(1.5, 1.7 + sin(elapsed * 2.4) * 0.15, 1.3)
-                  phoenix.position = phoenix.position.lerp(idle_target, minf(1.0, delta * 2.4))
-                  camera_node.look_at(hero.position + Vector3(0, 1.25, 0))
-                  return
-
-              var turn_amount := joystick_axis.x
-              var drive_amount := -joystick_axis.y
-
-              if Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A):
-                  turn_amount -= 1.0
-              if Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D):
-                  turn_amount += 1.0
-              if Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_W):
-                  drive_amount += 1.0
-              if Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_S):
-                  drive_amount -= 1.0
-
-              heading += clampf(turn_amount, -1.0, 1.0) * TURN_SPEED * delta
-              hero.rotation.y = heading
-
-              var direction := Vector3(-sin(heading), 0, -cos(heading))
-              hero.velocity.x = direction.x * clampf(drive_amount, -1.0, 1.0) * WALK_SPEED
-              hero.velocity.z = direction.z * clampf(drive_amount, -1.0, 1.0) * WALK_SPEED
-
-              if not hero.is_on_floor():
-                  hero.velocity.y -= GRAVITY * delta
-              else:
-                  hero.velocity.y = -0.05
-
-              hero.move_and_slide()
-
-              var side := Vector3(cos(heading), 0, -sin(heading))
-              var behind := Vector3(sin(heading), 0, cos(heading))
-
-              var phoenix_target := hero.position + side * 1.9 + behind * 1.2 + Vector3(0, 1.75 + sin(elapsed * 3.0) * 0.20, 0)
-              phoenix.position = phoenix.position.lerp(phoenix_target, minf(1.0, delta * 4.0))
-              phoenix.rotation.y = heading
-
-              var cam_target := hero.position + behind * 6.8 + Vector3(0, 4.6, 0)
-              camera_node.global_position = camera_node.global_position.lerp(cam_target, minf(1.0, delta * 5.0))
-              camera_node.look_at(hero.position + Vector3(0, 1.35, 0))
-          EOF_MAIN
-
-          cat > android/export_presets.cfg <<'EOF_EXPORT'
-          [preset.0]
-
-          name="Android"
-          platform="Android"
-          runnable=true
-          advanced_options=false
-          dedicated_server=false
-          custom_features=""
-          export_filter="all_resources"
-          include_filter=""
-          exclude_filter=""
-          export_path=""
-          patches=PackedStringArray()
-          script_export_mode=2
-
-          [preset.0.options]
-          custom_template/debug=""
-          custom_template/release=""
-          gradle_build/use_gradle_build=false
-          architectures/armeabi-v7a=false
-          architectures/arm64-v8a=true
-          architectures/x86=false
-          architectures/x86_64=false
-          version/code=6
-          version/name="0.6"
-          package/unique_name="org.dkvierich.lydraworld"
-          package/name="Lydra World Of Dragon"
-          package/signed=true
-          EOF_EXPORT
-
-      - name: Godot Projekt importieren
+          wget -q --tries=3 --timeout=40 -O "$RUNNER_TEMP/lwod_v6.yml" \
+            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/f9ee20ef7eb39d9923712709d9113343f4a0ba8d/.github/workflows/blank-ps1.yml'
+          test -s "$RUNNER_TEMP/lwod_v6.yml"
+          test "$(git hash-object "$RUNNER_TEMP/lwod_v6.yml")" = 'be0bc2274b23129b4dc7999d79af36703d2ef192'
+          awk '
+            /^      - name: Godot Android Projekt erstellen$/ {found=1; next}
+            found==1 && /^        run: \|$/ {part=1; next}
+            part==1 && /^      - name: Godot Projekt importieren$/ {exit}
+            part==1 && /^          / {sub(/^          /, ""); print; next}
+            part==1 && /^$/ {print; next}
+          ' "$RUNNER_TEMP/lwod_v6.yml" > "$RUNNER_TEMP/build_world.sh"
+          test -s "$RUNNER_TEMP/build_world.sh"
+          grep -q 'android/scripts/Main.gd' "$RUNNER_TEMP/build_world.sh"
+          bash -n "$RUNNER_TEMP/build_world.sh"
+          bash "$RUNNER_TEMP/build_world.sh"
+          test -s android/scripts/Main.gd
+          test -s android/scripts/TouchOverlay.gd
+          test -s android/project.godot
+      - name: V7 Spielfigur Steuerung und Menues
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/assets
+          base64 -d <<'LWOD_ADDON_B64' | gzip -d > android/scripts/V7Addon.gd
+          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
+          LWOD_ADDON_B64
+          echo 'e3d810ed12ed2b31bff82a5f342095daaf3f475c45f8d44420113098590f1191  android/scripts/V7Addon.gd' | sha256sum -c -
+          cat > android/assets/backpack.svg <<'LWOD_BAG_SVG'
+          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+           <g fill="none" stroke="#f1dec2" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.7" opacity=".92">
+            <path d="M23 19V14c0-6 18-6 18 0v5"/>
+            <rect x="13" y="18" width="38" height="40" rx="10" fill="#39495e" fill-opacity=".46"/>
+            <path d="M13 28h-4c-2 0-3 2-3 5v14c0 3 1 5 4 5h3M51 28h4c2 0 3 2 3 5v14c0 3-1 5-4 5h-3"/>
+            <path d="M24 35h16v15H24z" fill="#627084" fill-opacity=".32"/>
+            <path d="M31 34v6"/>
+           </g>
+          </svg>
+          LWOD_BAG_SVG
+          # Change the V6 camera/player turn direction: right now turns RIGHT.
+          grep -Fq 'heading += clampf(turn_amount, -1.0, 1.0) * TURN_SPEED * delta' android/scripts/Main.gd
+          sed -i 's/heading += clampf(turn_amount, -1.0, 1.0) \* TURN_SPEED \* delta/heading -= clampf(turn_amount, -1.0, 1.0) * TURN_SPEED * delta/' android/scripts/Main.gd
+          grep -Fq 'heading -= clampf(turn_amount, -1.0, 1.0) * TURN_SPEED * delta' android/scripts/Main.gd
+          # Attach the V7 menus AFTER V6 has constructed its nodes.
+          awk '
+            {print}
+            $0 == "    _show_intro()" {
+              print "    var addon = load(\"res://scripts/V7Addon.gd\").new()"
+              print "    add_child(addon)"
+              print "    addon.setup(self)"
+              n++
+            }
+            END {if(n != 1) exit 19}
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/LWOD_main_v7.gd"
+          mv "$RUNNER_TEMP/LWOD_main_v7.gd" android/scripts/Main.gd
+          cat >> android/scripts/TouchOverlay.gd <<'LWOD_RESET'
+
+          func reset_touch() -> void:
+              _touch_id = -1
+              move_axis = Vector2.ZERO
+              queue_redraw()
+          LWOD_RESET
+          # Keep the already working Android export settings and unique app id.
+          sed -i 's/version\/code=6/version\/code=7/' android/export_presets.cfg
+          sed -i 's/version\/name="0.6"/version\/name="0.7"/' android/export_presets.cfg
+      - name: Godot GDScript importieren und pruefen
         shell: bash
         run: |
           set -euo pipefail
           godot --headless --path android --editor --import --quit
-
-      - name: Android APK erstellen
+          test -s android/scripts/V7Addon.gd
+      - name: V7 Spielskript testen
         shell: bash
         run: |
           set -euo pipefail
-
+          godot --headless --path android --quit-after 4 > "$RUNNER_TEMP/lwod_v7_runtime.log" 2>&1 || {
+            cat "$RUNNER_TEMP/lwod_v7_runtime.log"
+            exit 1
+          }
+          cat "$RUNNER_TEMP/lwod_v7_runtime.log"
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.' "$RUNNER_TEMP/lwod_v7_runtime.log"; then
+            echo '::error::GDScript Problem im Laufzeittest'
+            exit 1
+          fi
+      - name: APK V7 exportieren
+        shell: bash
+        run: |
+          set -euo pipefail
           mkdir -p build/android
-
-          godot --headless --path android \
-            --export-debug Android \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V6.apk"
-
-          test -s "$GITHUB_WORKSPACE/build/android/LWOD-Android-V6.apk"
-          unzip -t "$GITHUB_WORKSPACE/build/android/LWOD-Android-V6.apk" >/dev/null
-
-      - name: APK als Artefakt hochladen
+          godot --headless --path android --export-debug 'Android' \
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V7.apk"
+          test -s build/android/LWOD-Android-V7.apk
+          unzip -t build/android/LWOD-Android-V7.apk >/dev/null
+      - name: Android APK herunterladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V6_APK
-          path: build/android/LWOD-Android-V6.apk
+          name: LWOD_ANDROID_V7_APK
+          path: build/android/LWOD-Android-V7.apk
           if-no-files-found: error
           retention-days: 14
