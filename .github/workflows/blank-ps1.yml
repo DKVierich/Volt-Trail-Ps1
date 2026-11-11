@@ -1,6 +1,8 @@
+# LWOD V36: V35-Basis, Sonne und Mond hinter den 96 3D-Wolkenbaenken.
+# Vollstaendiger Workflow; in .github/workflows/blank-ps1.yml einfuegen.
 # LWOD V35: Vollstaendiger GitHub-Workflow, keine ZIP-Datei.
 # LINKS Bewegung, RECHTS Kamera (wie in V34). Nur Wolken werden geaendert.
-name: LWOD Android V35 Natuerliche Wolken
+name: LWOD Android V36 Sonne hinter Wolken
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +15,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V35 APK
+    name: LWOD Android V36 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -1612,6 +1614,40 @@ jobs:
         \ bleiben unveraendert.\ngrep -Fq 'sun_node.scale = Vector3.ONE * 24.0' \"$file\"\ngrep -Fq 'moon_node.scale = Vector3.ONE * 19.0' \"$file\"\nsed -i 's@version/code=34@version/code=35@'\
         \ android/export_presets.cfg\nsed -i 's@version/name=\"3.4\"@version/name=\"3.5\"@' android/export_presets.cfg\ngrep -Fqx 'version/code=35' android/export_presets.cfg\n\
         echo 'V35: 96 verteilte Wolkenbaenke erzeugt, Sonne und Mond erhalten'\n"
+    - name: V36 Sonne und Mond korrekt hinter Wolken rendern
+      shell: bash
+      run: |
+        set -euo pipefail
+        file="android/scripts/V26SkyWorldMap.gd"
+        test -s "$file"
+        # V35-Wolken als blickdichte 3D-Koerper zeichnen: sie schreiben in den Tiefenpuffer.
+        # Sonne und Mond werden auf eine weiter entfernte Umlaufbahn verschoben.
+        # Die Skalierung erfolgt proportional, damit ihre sichtbare Groesse gleich bleibt.
+        grep -Fqx '    cloud_material.albedo_color = Color(0.96, 0.97, 1.0, 0.83)' "$file"
+        grep -Fqx '    cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA' "$file"
+        grep -Fqx '    sun_node.scale = Vector3.ONE * 24.0' "$file"
+        grep -Fqx '    moon_node.scale = Vector3.ONE * 19.0' "$file"
+        grep -Fqx '        sun_node.position = Vector3(cos(angle)*290.0, 14.0 + elevation*185.0, -18.0)' "$file"
+        grep -Fqx '        moon_node.position = Vector3(cos(moon_angle)*285.0, 16.0 + sin(moon_angle)*185.0, 24.0)' "$file"
+        awk '
+          $0 == "    cloud_material.albedo_color = Color(0.96, 0.97, 1.0, 0.83)" {print "    cloud_material.albedo_color = Color(0.96, 0.97, 1.0, 1.0)"; a++; next}
+          $0 == "    cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA" {print "    cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED"; b++; next}
+          $0 == "    sun_node.scale = Vector3.ONE * 24.0" {print "    sun_node.scale = Vector3.ONE * 264.0"; c++; next}
+          $0 == "    moon_node.scale = Vector3.ONE * 19.0" {print "    moon_node.scale = Vector3.ONE * 209.0"; d++; next}
+          $0 == "        sun_node.position = Vector3(cos(angle)*290.0, 14.0 + elevation*185.0, -18.0)" {print "        sun_node.position = Vector3(cos(angle)*3190.0, 154.0 + elevation*2035.0, -198.0)"; e++; next}
+          $0 == "        moon_node.position = Vector3(cos(moon_angle)*285.0, 16.0 + sin(moon_angle)*185.0, 24.0)" {print "        moon_node.position = Vector3(cos(moon_angle)*3135.0, 176.0 + sin(moon_angle)*2035.0, 264.0)"; f++; next}
+          {print}
+          END { if(a!=1 || b!=1 || c!=1 || d!=1 || e!=1 || f!=1) exit 36 }
+        ' "$file" > "$RUNNER_TEMP/lwod_v36_sky.gd"
+        mv "$RUNNER_TEMP/lwod_v36_sky.gd" "$file"
+        # Vor der Sonne liegende Wolken verdecken sie ab jetzt physikalisch korrekt.
+        test "$(grep -Fc 'cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED' "$file")" -eq 1
+        grep -Fq 'sun_node.position = Vector3(cos(angle)*3190.0' "$file"
+        grep -Fq 'moon_node.position = Vector3(cos(moon_angle)*3135.0' "$file"
+        grep -Fq 'for cloud_i in range(96):' "$file"
+        sed -i 's@version/code=35@version/code=36@; s@version/name="3.5"@version/name="3.6"@' android/export_presets.cfg
+        grep -Fqx 'version/code=36' android/export_presets.cfg
+        echo 'V36 SKY DEPTH OK: 96 Wolkenbaenke verdecken Sonne und Mond bei Ueberlappung'
     - name: Godot Ressourcen importieren
       shell: bash
       run: 'set -euo pipefail
@@ -1665,16 +1701,16 @@ jobs:
       shell: bash
       run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V34TouchSmoke.gd > \"$RUNNER_TEMP/lwod_v34_touch.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/lwod_v34_touch.log\"\
         \n  exit 1\n}\ncat \"$RUNNER_TEMP/lwod_v34_touch.log\"\ngrep -Fq 'V34_TEST_OK:' \"$RUNNER_TEMP/lwod_v34_touch.log\""
-    - name: LWOD Android V35 APK erstellen
+    - name: LWOD Android V36 APK erstellen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/android\ngodot --headless --path android --export-debug 'Android' \\\n  \"$GITHUB_WORKSPACE/build/android/LWOD-Android-V35-WOLKEN.apk\"\
-        \ntest -s build/android/LWOD-Android-V35-WOLKEN.apk\nunzip -t build/android/LWOD-Android-V35-WOLKEN.apk > /dev/null\n\necho \"APK wurde erzeugt:\"\nls -lh\
-        \ build/android/LWOD-Android-V35-WOLKEN.apk\n"
+      run: "set -euo pipefail\nmkdir -p build/android\ngodot --headless --path android --export-debug 'Android' \\\n  \"$GITHUB_WORKSPACE/build/android/LWOD-Android-V36-HIMMEL.apk\"\
+        \ntest -s build/android/LWOD-Android-V36-HIMMEL.apk\nunzip -t build/android/LWOD-Android-V36-HIMMEL.apk > /dev/null\n\necho \"APK wurde erzeugt:\"\nls -lh\
+        \ build/android/LWOD-Android-V36-HIMMEL.apk\n"
     - name: Fehlerdiagnose bereitstellen
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V35_DIAGNOSE
+        name: LWOD_V36_DIAGNOSE
         path: '${{ runner.temp }}/lwod_v29_run.log
 
           android/scripts/V24Regions.gd
@@ -1720,7 +1756,7 @@ jobs:
     - name: Android V35 APK hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V35_APK
-        path: build/android/LWOD-Android-V35-WOLKEN.apk
+        name: LWOD_ANDROID_V36_APK
+        path: build/android/LWOD-Android-V36-HIMMEL.apk
         if-no-files-found: error
         retention-days: 14
