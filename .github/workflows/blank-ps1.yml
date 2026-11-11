@@ -1,7 +1,7 @@
 # LWOD Android V26: V25 FIX1 Basis mit hoeheren Biomen, dynamischem Himmel und klickbarer Weltkarte.
 # Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
 # Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V26 FIX1 Himmel Weltkarte
+name: LWOD Android V27 Terrain Kamera Weltkarte
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V26 FIX1 APK
+    name: LWOD Android V27 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -885,6 +885,541 @@ jobs:
           sed -i 's@version/name="2.5"@version/name="2.6"@' android/export_presets.cfg
           grep -Fqx '    features_v26.setup(self)' android/scripts/Main.gd
           grep -Fqx 'version/code=26' android/export_presets.cfg
+      - name: V27 natuerliche Huegellandschaft Weltkarte und freie Touchkamera
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/scripts
+          cat > android/scripts/V27Terrain.gd <<'V27_V27TERRAIN'
+          extends Node3D
+
+          # V27: zusammenhaengendes, begehbares Hoehengelaende mit Chunk-Streaming.
+          # Alte aufgesetzte V25/V26-Plateaubloecke werden entfernt.
+          const EDGE: float = 15930.0
+          const CHUNK: float = 192.0
+          const RESOLUTION: int = 12
+          const RADIUS: int = 2
+
+          var biomes: Array = [
+              {"name": "Vulkanland", "pos": Vector2(8300.0, -7800.0), "radius": 2100.0, "color": Color("#77564f")},
+              {"name": "Eisregion", "pos": Vector2(-8700.0, 7900.0), "radius": 2200.0, "color": Color("#dbeef5")},
+              {"name": "Wuestenmeer", "pos": Vector2(8650.0, 8700.0), "radius": 2400.0, "color": Color("#d8c17d")},
+              {"name": "Hochgebirge", "pos": Vector2(-9100.0, -8300.0), "radius": 2600.0, "color": Color("#84919a")},
+              {"name": "Mammutwald", "pos": Vector2(-2100.0, 11300.0), "radius": 2300.0, "color": Color("#3f7150")},
+              {"name": "Huegelland", "pos": Vector2(2700.0, -4900.0), "radius": 1900.0, "color": Color("#98b47c")},
+          ]
+
+          var game: Node3D
+          var old_world: Node
+          var noise_large: FastNoiseLite
+          var noise_small: FastNoiseLite
+          var chunks: Dictionary = {}
+          var current_cell: Vector2i = Vector2i(999999,999999)
+          var material_ground: StandardMaterial3D
+          var lava_mat: StandardMaterial3D
+          var elapsed: float = 0.0
+          var stream_clock: float = 0.0
+
+          func setup(root: Node3D, world: Node, old_biomes: Node, sky_features: Node) -> void:
+              game = root
+              old_world = world
+              name = "V27ContinuousTerrain"
+              noise_large = FastNoiseLite.new()
+              noise_large.seed = 271024
+              noise_large.frequency = 0.0026
+              noise_large.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+              noise_small = FastNoiseLite.new()
+              noise_small.seed = 271025
+              noise_small.frequency = 0.009
+              noise_small.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+              material_ground = StandardMaterial3D.new()
+              material_ground.vertex_color_use_as_albedo = true
+              material_ground.roughness = 0.93
+              material_ground.cull_mode = BaseMaterial3D.CULL_DISABLED
+              # Entferne nur die alten, aufgesetzten Region-Modelle, nicht die Spielwelt.
+              if old_biomes != null:
+                  old_biomes.set_process(false)
+                  old_biomes.set("loaded", false)
+                  var prior_roots: Array = old_biomes.get("roots")
+                  for item in prior_roots:
+                      if is_instance_valid(item):
+                          item.queue_free()
+              if sky_features != null:
+                  var blocks: Node3D = sky_features.get("region_root") as Node3D
+                  if is_instance_valid(blocks):
+                      blocks.queue_free()
+              _create_lava_visuals()
+              _stream(true)
+              set_process(true)
+              print("LWOD V27: Boden aus verbundenen Hoehenmeshes statt Bloecken und Kegeln")
+
+          func biome_weight(p: Vector2, index: int) -> float:
+              var item: Dictionary = biomes[index]
+              var distance_fraction: float = p.distance_to(item["pos"]) / float(item["radius"])
+              return 1.0 - smoothstep(0.64, 1.12, distance_fraction)
+
+          func height_at(x: float, z: float) -> float:
+              var p := Vector2(x,z)
+              var n: float = noise_large.get_noise_2d(x,z)
+              var f: float = noise_small.get_noise_2d(x,z)
+              var y: float = maxf(0.0, 6.0 + n * 9.0 + f * 3.5)
+              y += biome_weight(p,0) * (60.0 + 33.0 * n)
+              y += biome_weight(p,1) * (36.0 + 18.0 * n)
+              y += biome_weight(p,2) * (21.0 + 9.0 * n)
+              y += biome_weight(p,3) * (130.0 + 70.0 * n)
+              y += biome_weight(p,4) * (20.0 + 13.0 * n)
+              y += biome_weight(p,5) * (27.0 + 13.0 * n)
+              # Der alte Startbereich bleibt sanft begehbar; ausserhalb wird der Boden wellig.
+              var from_start: float = p.length()
+              y *= smoothstep(115.0, 430.0, from_start)
+              return maxf(0.04, y)
+
+          func color_at(x: float, z: float, height: float) -> Color:
+              var p := Vector2(x,z)
+              var c: Color = Color("#719d70")
+              var n: float = noise_small.get_noise_2d(x,z)
+              c = c.lerp(Color("#83ad79"), clampf(0.5+n*0.5, 0.0, 1.0))
+              for i in range(biomes.size()):
+                  c = c.lerp(biomes[i]["color"], clampf(biome_weight(p,i),0.0,1.0))
+              if height > 115.0:
+                  c = c.lerp(Color("#b1b5b1"), clampf((height-115.0)/115.0,0.0,0.8))
+              return c
+
+          func _emit_vertex(tool: SurfaceTool, world_x: float, world_z: float, origin: Vector2) -> void:
+              var elev: float = height_at(world_x, world_z)
+              tool.set_color(color_at(world_x,world_z,elev))
+              tool.add_vertex(Vector3(world_x-origin.x, elev, world_z-origin.y))
+
+          func _make_chunk(cx: int, cz: int) -> Node3D:
+              var root := Node3D.new()
+              root.name = "Hoehenfeld_%d_%d" % [cx,cz]
+              root.position = Vector3(float(cx)*CHUNK,0.0,float(cz)*CHUNK)
+              add_child(root)
+              var origin := Vector2(float(cx)*CHUNK, float(cz)*CHUNK)
+              var st := SurfaceTool.new()
+              st.begin(Mesh.PRIMITIVE_TRIANGLES)
+              var step_size: float = CHUNK / float(RESOLUTION)
+              for iz in range(RESOLUTION):
+                  for ix in range(RESOLUTION):
+                      var x0: float = origin.x + float(ix)*step_size
+                      var x1: float = x0 + step_size
+                      var z0: float = origin.y + float(iz)*step_size
+                      var z1: float = z0 + step_size
+                      # Aufwaerts gerichtete Dreiecke, ohne offene Kanten zwischen Chunks.
+                      _emit_vertex(st,x0,z0,origin)
+                      _emit_vertex(st,x0,z1,origin)
+                      _emit_vertex(st,x1,z0,origin)
+                      _emit_vertex(st,x1,z0,origin)
+                      _emit_vertex(st,x0,z1,origin)
+                      _emit_vertex(st,x1,z1,origin)
+              st.generate_normals()
+              var terrain_mesh: ArrayMesh = st.commit()
+              var view := MeshInstance3D.new()
+              view.name = "Gelande"
+              view.mesh = terrain_mesh
+              view.material_override = material_ground
+              root.add_child(view)
+              var collision := StaticBody3D.new()
+              collision.name = "GelaendeKollision"
+              var shape_node := CollisionShape3D.new()
+              shape_node.shape = terrain_mesh.create_trimesh_shape()
+              collision.add_child(shape_node)
+              root.add_child(collision)
+              _place_region_details(root,cx,cz)
+              return root
+
+          func _place_region_details(root: Node3D,cx: int,cz: int) -> void:
+              var center: Vector2 = Vector2((float(cx)+0.5)*CHUNK,(float(cz)+0.5)*CHUNK)
+              if biome_weight(center,4) < 0.35:
+                  return
+              var rng := RandomNumberGenerator.new()
+              rng.seed = int(abs(cx*47933+cz*21341+8731))
+              for i in range(3):
+                  var x: float = (float(cx)+rng.randf())*CHUNK
+                  var z: float = (float(cz)+rng.randf())*CHUNK
+                  var p := Vector2(x,z)
+                  if biome_weight(p,4) < 0.50:
+                      continue
+                  var height: float = height_at(x,z)
+                  var trunk_scale: float = rng.randf_range(0.9,1.5)
+                  # Mammutbaum: unverwechselbar hoeher und breiter als normale Spielbaeume.
+                  var stem := MeshInstance3D.new()
+                  var stem_mesh := CylinderMesh.new()
+                  stem_mesh.top_radius = 2.3*trunk_scale
+                  stem_mesh.bottom_radius = 3.3*trunk_scale
+                  stem_mesh.height = 25.0*trunk_scale
+                  stem_mesh.radial_segments = 9
+                  stem.mesh = stem_mesh
+                  stem.position = Vector3(x-float(cx)*CHUNK,height+12.5*trunk_scale,z-float(cz)*CHUNK)
+                  var wood := StandardMaterial3D.new()
+                  wood.albedo_color = Color("#6d4935")
+                  stem.material_override = wood
+                  root.add_child(stem)
+                  for j in range(3):
+                      var crown := MeshInstance3D.new()
+                      var crown_mesh := SphereMesh.new()
+                      crown_mesh.radius = 9.0 * trunk_scale
+                      crown_mesh.height = 13.0 * trunk_scale
+                      crown_mesh.radial_segments = 12
+                      crown_mesh.rings = 7
+                      crown.mesh = crown_mesh
+                      crown.position = stem.position + Vector3(0, (14.0+float(j)*4.0)*trunk_scale, 0)
+                      crown.scale = Vector3(1.15-float(j)*0.16,0.7,1.15-float(j)*0.16)
+                      var leaf := StandardMaterial3D.new()
+                      leaf.albedo_color = Color("#285e3b").lerp(Color("#4b9351"),float(j)*0.25)
+                      crown.material_override = leaf
+                      root.add_child(crown)
+
+          func _create_lava_visuals() -> void:
+              # Die Fluesse folgen dem kontinuierlichen Vulkanboden statt schwebender Quader.
+              lava_mat = StandardMaterial3D.new()
+              lava_mat.albedo_color = Color("#ff5d22")
+              lava_mat.emission_enabled = true
+              lava_mat.emission = Color("#ff782e")
+              lava_mat.emission_energy_multiplier = 2.2
+              lava_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+              lava_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+              var start: Vector2 = biomes[0]["pos"]
+              for arm in range(3):
+                  var ang: float = 0.35 + float(arm)*2.05
+                  var st := SurfaceTool.new()
+                  st.begin(Mesh.PRIMITIVE_TRIANGLES)
+                  for i in range(20):
+                      var d0: float = float(i)*30.0
+                      var d1: float = float(i+1)*30.0
+                      var p0: Vector2 = start + Vector2(cos(ang),sin(ang))*d0
+                      var p1: Vector2 = start + Vector2(cos(ang),sin(ang))*d1
+                      var across := Vector2(-sin(ang),cos(ang))
+                      var w: float = 8.0+float(arm)*2.5
+                      var a := p0-across*w
+                      var b := p0+across*w
+                      var c := p1-across*w
+                      var d := p1+across*w
+                      var aa := Vector3(a.x,height_at(a.x,a.y)+0.25,a.y)
+                      var bb := Vector3(b.x,height_at(b.x,b.y)+0.25,b.y)
+                      var cc := Vector3(c.x,height_at(c.x,c.y)+0.25,c.y)
+                      var dd := Vector3(d.x,height_at(d.x,d.y)+0.25,d.y)
+                      for v in [aa,bb,cc,bb,dd,cc]:
+                          st.add_vertex(v)
+                  st.generate_normals()
+                  var lava := MeshInstance3D.new()
+                  lava.mesh = st.commit()
+                  lava.material_override = lava_mat
+                  add_child(lava)
+
+          func _stream(force: bool = false) -> void:
+              if game == null or game.hero == null:
+                  return
+              var pos: Vector3 = game.hero.global_position
+              var cell := Vector2i(int(floor(pos.x/CHUNK)),int(floor(pos.z/CHUNK)))
+              if cell == current_cell and not force:
+                  return
+              current_cell = cell
+              var want := {}
+              for ix in range(cell.x-RADIUS,cell.x+RADIUS+1):
+                  for iz in range(cell.y-RADIUS,cell.y+RADIUS+1):
+                      if absf(float(ix)*CHUNK) > EDGE or absf(float(iz)*CHUNK) > EDGE:
+                          continue
+                      var id := Vector2i(ix,iz)
+                      want[id] = true
+                      if not chunks.has(id):
+                          chunks[id] = _make_chunk(ix,iz)
+              for id in chunks.keys():
+                  if not want.has(id):
+                      chunks[id].queue_free()
+                      chunks.erase(id)
+
+          func _process(delta: float) -> void:
+              elapsed += delta
+              if lava_mat != null:
+                  lava_mat.emission_energy_multiplier = 2.0+0.6*sin(elapsed*2.4)
+              if game == null or game.state != 2:
+                  return
+              stream_clock += delta
+              if stream_clock >= 0.5:
+                  stream_clock=0.0
+                  _stream()
+          V27_V27TERRAIN
+          printf '%s  %s\n' '786e0015cf7eab481151c3407c39d8428473c57fedd7375bb24fbfc7a409e942' 'android/scripts/V27Terrain.gd' | sha256sum -c -
+          cat > android/scripts/V27WorldMap.gd <<'V27_V27WORLDMAP'
+          extends Control
+
+          # Skalierbare, farbige Gesamtkarte statt kleiner 520x300-Karte im grossen Panel.
+          const WORLD_EDGE: float = 16000.0
+          var region_colors: Array = [
+              {"title":"Vulkan", "pos":Vector2(8300,-7800), "radius":2100.0, "color":Color("#a95732")},
+              {"title":"Eiswelt", "pos":Vector2(-8700,7900), "radius":2200.0, "color":Color("#deeff6")},
+              {"title":"Wueste", "pos":Vector2(8650,8700), "radius":2400.0, "color":Color("#d9bd6d")},
+              {"title":"Hochgebirge", "pos":Vector2(-9100,-8300), "radius":2600.0, "color":Color("#909ba1")},
+              {"title":"Mammutwald", "pos":Vector2(-2100,11300), "radius":2300.0, "color":Color("#295a3c")},
+              {"title":"Huegelland", "pos":Vector2(2700,-4900), "radius":1900.0, "color":Color("#9bb878")}
+          ]
+          var game: Node3D
+          var world: Node
+
+          func setup(root: Node3D, source: Node) -> void:
+              game = root
+              world = source
+              mouse_filter = Control.MOUSE_FILTER_IGNORE
+              resized.connect(queue_redraw)
+              queue_redraw()
+
+          func _point(world_pos: Vector2) -> Vector2:
+              var u: float = clampf(0.5+world_pos.x/(WORLD_EDGE*2.0),0.0,1.0)
+              var v: float = clampf(0.5+world_pos.y/(WORLD_EDGE*2.0),0.0,1.0)
+              return Vector2(u*size.x,v*size.y)
+
+          func _draw() -> void:
+              if size.x < 100.0 or size.y < 70.0:
+                  return
+              draw_rect(Rect2(Vector2.ZERO,size),Color("#416d56"))
+              # Leicht unterschiedliche gruene Landschaftsflaechen.
+              for x in range(12):
+                  for z in range(8):
+                      var v: float = 0.5+0.5*sin(float(x)*1.73+float(z)*2.31)
+                      var col := Color("#4d785b").lerp(Color("#72976c"),v*0.6)
+                      var a := Vector2(float(x)/12.0*size.x,float(z)/8.0*size.y)
+                      draw_rect(Rect2(a,Vector2(size.x/12.0+1.0,size.y/8.0+1.0)),col)
+              # Seen/Fluss als Kartenorientierung (rein gezeichnet, keine neue Kollision).
+              draw_circle(_point(Vector2(-6400.0,-7500.0)),minf(size.x,size.y)*0.038,Color("#367da0"))
+              draw_circle(_point(Vector2(700.0,2600.0)),minf(size.x,size.y)*0.026,Color("#478cbd"))
+              for i in range(11):
+                  var px: float = -3500.0+float(i)*720.0
+                  var pz: float = 1200.0+sin(float(i)*0.7)*1450.0
+                  if i>0:
+                      var last_x: float = -3500.0+float(i-1)*720.0
+                      var last_z: float = 1200.0+sin(float(i-1)*0.7)*1450.0
+                      draw_line(_point(Vector2(last_x,last_z)),_point(Vector2(px,pz)),Color("#3d92b7"),maxf(2.0,size.y*0.006),true)
+              for r in region_colors:
+                  var c: Vector2 = _point(r["pos"])
+                  var radius: float = float(r["radius"])*minf(size.x,size.y)/(WORLD_EDGE*2.0)
+                  draw_circle(c,radius*1.25,Color(r["color"],0.55))
+                  draw_circle(c,radius,Color(r["color"]))
+                  draw_string(ThemeDB.fallback_font,c+Vector2(4.0,-radius-6.0),String(r["title"]),HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("#fff5df"))
+              # Verbindungswege und Siedlungen aus V23 zeichnen.
+              if world != null:
+                  var routes_value = world.get("routes")
+                  if routes_value is Array:
+                      for route in routes_value:
+                          for i in range(route.size()-1):
+                              draw_line(_point(route[i]),_point(route[i+1]),Color("#dbbc84"),maxf(1.5,size.y*0.0026),true)
+                  var settlements_value = world.get("settlements")
+                  if settlements_value is Array:
+                      for town in settlements_value:
+                          var tp: Vector2 = _point(town["pos"])
+                          draw_circle(tp,3.2,Color("#fff3c2"))
+                          draw_arc(tp,5.0,0.0,TAU,16,Color("#483d28"),1.3)
+              # Positionspfeil (violett) aktualisiert sich mit dem Spieler.
+              if game != null and game.hero != null:
+                  var hp: Vector3 = game.hero.global_position
+                  var p: Vector2 = _point(Vector2(hp.x,hp.z))
+                  var angle: float = game.hero.rotation.y
+                  var forward := Vector2(-sin(angle),-cos(angle))
+                  var side := Vector2(-forward.y,forward.x)
+                  var arrow := PackedVector2Array([p+forward*12.0,p-forward*8.0+side*6.0,p-forward*8.0-side*6.0])
+                  draw_colored_polygon(arrow,Color("#df8dff"))
+                  draw_arc(p,15.0,0.0,TAU,32,Color("#f4e2ff"),2.0)
+              # Nord oben, Sued unten, Westen links, Osten rechts.
+              draw_string(ThemeDB.fallback_font,Vector2(size.x*0.5-12,23),"N",HORIZONTAL_ALIGNMENT_LEFT,-1,21,Color.WHITE)
+              draw_string(ThemeDB.fallback_font,Vector2(size.x*0.5-12,size.y-10),"S",HORIZONTAL_ALIGNMENT_LEFT,-1,21,Color.WHITE)
+              draw_string(ThemeDB.fallback_font,Vector2(10,size.y*0.5),"W",HORIZONTAL_ALIGNMENT_LEFT,-1,21,Color.WHITE)
+              draw_string(ThemeDB.fallback_font,Vector2(size.x-28,size.y*0.5),"O",HORIZONTAL_ALIGNMENT_LEFT,-1,21,Color.WHITE)
+              draw_rect(Rect2(Vector2.ZERO,size),Color("#e7c690"),false,3.0)
+          V27_V27WORLDMAP
+          printf '%s  %s\n' '3d6cd507d5b0344ba5eacabb209286d1925c3f916aad219f460ede893390f28c' 'android/scripts/V27WorldMap.gd' | sha256sum -c -
+          cat > android/scripts/V27CameraMap.gd <<'V27_V27CAMERAMAP'
+          extends Node
+
+          # Oben links wischen = Kamera, unten links bleibt der Bewegungsstick.
+          # Die Mini-Map oeffnet eine proportional an den Bildschirm angepasste Weltkarte.
+          var game: Node3D
+          var world: Node
+          var terrain: Node
+          var v26: Node
+          var look_touch_id: int = -1
+          var mouse_look: bool = false
+          var yaw_offset: float = 0.0
+          var pitch: float = 0.32
+          var camera_distance: float = 7.3
+          var map_open: bool = false
+          var map_layer: CanvasLayer
+          var map_screen: Control
+          var map_view: Control
+
+          func setup(root: Node3D, expanded_world: Node, new_terrain: Node, old_features: Node) -> void:
+              game = root
+              world = expanded_world
+              terrain = new_terrain
+              v26 = old_features
+              name = "V27CameraWorldMap"
+              process_physics_priority = 380  # nach der bisherigen Kamera-/Kollisionsberechnung
+              _create_map_screen()
+              _connect_old_minimap()
+              set_physics_process(true)
+              set_process(true)
+              print("LWOD V27: Kamera-Wischen oben links, Steuerstick unten links, grosse Weltkarte")
+
+          func _connect_old_minimap() -> void:
+              if v26 == null:
+                  return
+              var old_panel: Control = v26.get("world_panel") as Control
+              if old_panel != null:
+                  old_panel.hide()
+              var old_button: Button = v26.get("mini_button") as Button
+              if old_button != null:
+                  for connection_info in old_button.pressed.get_connections():
+                      old_button.pressed.disconnect(connection_info["callable"])
+                  old_button.pressed.connect(_toggle_map)
+                  old_button.tooltip_text = "Gesamte Weltkarte oeffnen"
+
+          func _create_map_screen() -> void:
+              map_layer = CanvasLayer.new()
+              map_layer.layer = 40
+              game.add_child(map_layer)
+              map_screen = Control.new()
+              map_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+              map_screen.mouse_filter = Control.MOUSE_FILTER_STOP
+              map_layer.add_child(map_screen)
+              var shade := ColorRect.new()
+              shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+              shade.color = Color(0.005,0.015,0.035,0.87)
+              shade.mouse_filter = Control.MOUSE_FILTER_STOP
+              map_screen.add_child(shade)
+              var panel := Panel.new()
+              panel.anchor_left = 0.06
+              panel.anchor_top = 0.045
+              panel.anchor_right = 0.94
+              panel.anchor_bottom = 0.955
+              map_screen.add_child(panel)
+              var style := StyleBoxFlat.new()
+              style.bg_color = Color("#11152a")
+              style.border_color = Color("#dbb97c")
+              style.set_border_width_all(3)
+              style.set_corner_radius_all(14)
+              panel.add_theme_stylebox_override("panel",style)
+              var headline := Label.new()
+              headline.text = "LYDRA - FARBIGE WELTKARTE"
+              headline.position = Vector2(20,12)
+              headline.add_theme_font_size_override("font_size",23)
+              panel.add_child(headline)
+              map_view = load("res://scripts/V27WorldMap.gd").new() as Control
+              map_view.anchor_left = 0.0
+              map_view.anchor_top = 0.0
+              map_view.anchor_right = 1.0
+              map_view.anchor_bottom = 1.0
+              map_view.offset_left = 18.0
+              map_view.offset_top = 52.0
+              map_view.offset_right = -18.0
+              map_view.offset_bottom = -54.0
+              panel.add_child(map_view)
+              map_view.call("setup",game,world)
+              var close := Button.new()
+              close.text = "Zurueck zum Spiel"
+              close.anchor_left = 1.0
+              close.anchor_top = 1.0
+              close.anchor_right = 1.0
+              close.anchor_bottom = 1.0
+              close.offset_left = -200.0
+              close.offset_top = -48.0
+              close.offset_right = -18.0
+              close.offset_bottom = -10.0
+              close.focus_mode = Control.FOCUS_NONE
+              close.pressed.connect(_toggle_map)
+              panel.add_child(close)
+              map_screen.hide()
+
+          func _toggle_map() -> void:
+              map_open = not map_open
+              map_screen.visible = map_open
+              look_touch_id = -1
+              mouse_look = false
+              if map_open and map_view != null:
+                  map_view.queue_redraw()
+
+          func _can_look_here(p: Vector2) -> bool:
+              if game == null or game.state != 2 or map_open:
+                  return false
+              var s: Vector2 = get_viewport().get_visible_rect().size
+              # Bereich links oben (0..70% Hoehe), links unten fuer den Joystick freihalten.
+              return p.x >= 0.0 and p.x < s.x * 0.52 and p.y >= 0.0 and p.y < s.y * 0.67
+
+          func _input(event: InputEvent) -> void:
+              if event is InputEventScreenTouch:
+                  var t := event as InputEventScreenTouch
+                  if t.pressed and look_touch_id == -1 and _can_look_here(t.position):
+                      look_touch_id = t.index
+                  elif not t.pressed and t.index == look_touch_id:
+                      look_touch_id = -1
+              elif event is InputEventScreenDrag:
+                  var drag := event as InputEventScreenDrag
+                  if drag.index == look_touch_id and not map_open:
+                      _rotate_camera(drag.relative)
+              elif event is InputEventMouseButton:
+                  var e := event as InputEventMouseButton
+                  if e.button_index == MOUSE_BUTTON_LEFT:
+                      if e.pressed:
+                          mouse_look = _can_look_here(e.position)
+                      else:
+                          mouse_look = false
+              elif event is InputEventMouseMotion:
+                  if mouse_look and not map_open:
+                      _rotate_camera((event as InputEventMouseMotion).relative)
+
+          func _rotate_camera(delta: Vector2) -> void:
+              yaw_offset = wrapf(yaw_offset-delta.x*0.0055,-PI,PI)
+              pitch = clampf(pitch+delta.y*0.0042,-0.45,1.02)
+
+          func _physics_process(delta: float) -> void:
+              if game == null or game.state != 2 or game.hero == null or game.camera_node == null:
+                  return
+              var hero: Node3D = game.hero
+              var center: Vector3 = hero.global_position+Vector3(0.0,1.50,0.0)
+              var orbit_yaw: float = hero.rotation.y+yaw_offset
+              var flat_back := Vector3(sin(orbit_yaw),0.0,cos(orbit_yaw))
+              var horizontal: float = camera_distance*cos(pitch)
+              var desired: Vector3 = center+flat_back*horizontal+Vector3(0.0,sin(pitch)*camera_distance+0.65,0.0)
+              # Kamera bleibt oberhalb der neuen Huegel und hinter keiner Felswand.
+              if terrain != null:
+                  var ground: float = float(terrain.call("height_at",desired.x,desired.z))
+                  desired.y = maxf(desired.y,ground+1.25)
+              if world != null and world.has_method("_clearance"):
+                  var info: Dictionary = world.call("_clearance",center,desired)
+                  if info.has("pos"):
+                      desired = info["pos"]
+              if desired.distance_to(center) < 0.25:
+                  desired = center+Vector3(0,2.4,0.5)
+              var current: Vector3 = game.camera_node.global_position
+              game.camera_node.global_position = current.lerp(desired,minf(1.0,delta*11.0))
+              if game.camera_node.global_position.distance_to(center) > 0.1:
+                  game.camera_node.look_at(center)
+
+          func _process(_delta: float) -> void:
+              if map_open and (game == null or game.state != 2):
+                  _toggle_map()
+              if map_open and map_view != null:
+                  map_view.queue_redraw()
+          V27_V27CAMERAMAP
+          printf '%s  %s\n' 'c1fbae84d7b9871d451b14a6316f14c85ebdf43bc0a2a934ba5c220300152527' 'android/scripts/V27CameraMap.gd' | sha256sum -c -
+          test "$(grep -Fxc '    features_v26.setup(self)' android/scripts/Main.gd)" -eq 1
+          awk '
+            {print}
+            $0 == "    features_v26.setup(self)" {
+              print "    var terrain_v27 = load(\"res://scripts/V27Terrain.gd\").new()"
+              print "    add_child(terrain_v27)"
+              print "    terrain_v27.setup(self, expanded_world, biome_v25, features_v26)"
+              print "    var camera_map_v27 = load(\"res://scripts/V27CameraMap.gd\").new()"
+              print "    add_child(camera_map_v27)"
+              print "    camera_map_v27.setup(self, expanded_world, terrain_v27, features_v26)"
+              done++
+            }
+            END { if (done != 1) exit 67 }
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v27_main.gd"
+          mv "$RUNNER_TEMP/lwod_v27_main.gd" android/scripts/Main.gd
+          sed -i 's@version/code=26@version/code=27@' android/export_presets.cfg
+          sed -i 's@version/name="2.6"@version/name="2.7"@' android/export_presets.cfg
+          grep -Fqx 'version/code=27' android/export_presets.cfg
+          grep -Fqx '    camera_map_v27.setup(self, expanded_world, terrain_v27, features_v26)' android/scripts/Main.gd
+          echo 'V27: Terrain, Vollbildkarte und Touchkamera eingebaut'
       - name: Godot Ressourcen importieren
         shell: bash
         run: |
@@ -893,42 +1428,48 @@ jobs:
           test -s android/scripts/V24Regions.gd
           test -s android/scripts/V25BiomeWorld.gd
           test -s android/scripts/V26SkyWorldMap.gd
+          test -s android/scripts/V27Terrain.gd
+          test -s android/scripts/V27WorldMap.gd
+          test -s android/scripts/V27CameraMap.gd
       - name: Godot Start und Scriptfehler testen
         shell: bash
         run: |
           set -euo pipefail
-          godot --headless --path android --quit-after 8 > "$RUNNER_TEMP/lwod_v26_run.log" 2>&1 || {
-            cat "$RUNNER_TEMP/lwod_v26_run.log"
+          godot --headless --path android --quit-after 8 > "$RUNNER_TEMP/lwod_v27_run.log" 2>&1 || {
+            cat "$RUNNER_TEMP/lwod_v27_run.log"
             exit 1
           }
-          cat "$RUNNER_TEMP/lwod_v26_run.log"
-          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v26_run.log"; then
-            echo '::error::V26 Godot-Skriptfehler gefunden'
+          cat "$RUNNER_TEMP/lwod_v27_run.log"
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v27_run.log"; then
+            echo '::error::V27 Godot-Skriptfehler gefunden'
             exit 1
           fi
-      - name: LWOD Android V26 FIX1 APK erstellen
+      - name: LWOD Android V27 APK erstellen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V26-FIX1.apk"
-          test -s build/android/LWOD-Android-V26-FIX1.apk
-          unzip -t build/android/LWOD-Android-V26-FIX1.apk > /dev/null
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V27.apk"
+          test -s build/android/LWOD-Android-V27.apk
+          unzip -t build/android/LWOD-Android-V27.apk > /dev/null
       - name: Fehlerdiagnose bereitstellen
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_V26_FIX1_DIAGNOSE
+          name: LWOD_V27_DIAGNOSE
           path: |
-            ${{ runner.temp }}/lwod_v26_run.log
+            ${{ runner.temp }}/lwod_v27_run.log
             android/scripts/V24Regions.gd
+            android/scripts/V27Terrain.gd
+            android/scripts/V27CameraMap.gd
+            android/scripts/V27WorldMap.gd
           if-no-files-found: warn
           retention-days: 14
-      - name: Android V26 FIX1 APK hochladen
+      - name: Android V27 APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V26_FIX1_APK
-          path: build/android/LWOD-Android-V26-FIX1.apk
+          name: LWOD_ANDROID_V27_APK
+          path: build/android/LWOD-Android-V27.apk
           if-no-files-found: error
           retention-days: 14
