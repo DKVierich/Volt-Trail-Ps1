@@ -1,7 +1,7 @@
-# Lydra World Of Dragon - Android V24: lebendige Regionen und grosse 3D-Welt.
+# LWOD Android V24 FIX1: korrigierter Quellstand der erfolgreichen V23-Regionen-Basis.
 # Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
 # Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V24 Landschaft Regionen
+name: LWOD Android V24 FIX1 Regionen
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V24 APK
+    name: LWOD Android V24 FIX1 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -36,7 +36,7 @@ jobs:
           test -s /root/debug.keystore
           sdkmanager --sdk_root="$ANDROID_HOME" 'platforms;android-35' 'build-tools;35.0.1'
           test -d "$ANDROID_HOME/platforms/android-35"
-      - name: Erfolgreiche V23-Basis pruefsicher laden
+      - name: V23-Quelle herunterladen und richtige Pruefsumme pruefen
         shell: bash
         run: |
           set -euo pipefail
@@ -44,7 +44,12 @@ jobs:
             -O "$RUNNER_TEMP/lwod_v23.yml" \
             'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/2b1332ef7b51655427065cd8ec8371af1e7773dc/.github/workflows/blank-ps1.yml'
           test -s "$RUNNER_TEMP/lwod_v23.yml"
-          test "$(git hash-object "$RUNNER_TEMP/lwod_v23.yml")" = '1b7b542c86b05f4bc8fc4652732af857ce37fa77'
+          source_hash="$(git hash-object "$RUNNER_TEMP/lwod_v23.yml")"
+          if [ "$source_hash" != "f2417eca21fc0e9ac53a9e678b139a68e26ccdc8" ]; then
+            echo "::error::V23-Quellversion passt nicht. Erwartet: f2417eca21fc0e9ac53a9e678b139a68e26ccdc8, erhalten: $source_hash"
+            exit 22
+          fi
+          echo "V23-Quelle korrekt: $source_hash"
           cat > "$RUNNER_TEMP/replay_v23.sh" <<'REPLAY_V23'
           #!/bin/bash
           set -euo pipefail
@@ -63,10 +68,21 @@ jobs:
           bash "$RUNNER_TEMP/v23_step.sh"
           REPLAY_V23
           chmod +x "$RUNNER_TEMP/replay_v23.sh"
-      - name: V23 Spielwelt Menues und Rucksack wiederherstellen
+      - name: V23-Spielwelt und Menues vollstaendig wiederherstellen
         shell: bash
         run: |
           set -euo pipefail
+          # Pruefen, ob alle benötigten Schritte in der gepinnten V23-Datei vorliegen.
+          grep -Fqx '    - name: Bewaehrte V18-Quelle fest herunterladen' "$RUNNER_TEMP/lwod_v23.yml"
+          grep -Fqx '    - name: V18 Spielweltbasis vorbereiten' "$RUNNER_TEMP/lwod_v23.yml"
+          grep -Fqx '    - name: V18 Spielwelt und Menues erstellen' "$RUNNER_TEMP/lwod_v23.yml"
+          grep -Fqx '    - name: Originalintro 37617 mit Ton integrieren' "$RUNNER_TEMP/lwod_v23.yml"
+          grep -Fqx '    - name: Phönix-Hauptmenue und Funktionen behalten' "$RUNNER_TEMP/lwod_v23.yml"
+          grep -Fqx '    - name: V18 Modelle und Landschaft uebernehmen' "$RUNNER_TEMP/lwod_v23.yml"
+          grep -Fqx '    - name: V19 Bergkollision Kameraschutz Bergformen' "$RUNNER_TEMP/lwod_v23.yml"
+          grep -Fqx '    - name: V20 Kamera Bergsilhouette und Hausdaecher' "$RUNNER_TEMP/lwod_v23.yml"
+          grep -Fqx '    - name: V21 Weltkarte Minimap Tag Nacht und Rucksackposition' "$RUNNER_TEMP/lwod_v23.yml"
+          grep -Fqx '    - name: V23 32000 Welt 36 Siedlungen eigener Rucksack Button' "$RUNNER_TEMP/lwod_v23.yml"
           bash "$RUNNER_TEMP/replay_v23.sh" 'Bewaehrte V18-Quelle fest herunterladen'
           bash "$RUNNER_TEMP/replay_v23.sh" 'V18 Spielweltbasis vorbereiten'
           bash "$RUNNER_TEMP/replay_v23.sh" 'V18 Spielwelt und Menues erstellen'
@@ -403,29 +419,29 @@ jobs:
             echo '::error::V24 Godot-Skriptfehler gefunden'
             exit 1
           fi
-      - name: LWOD Android V24 APK erstellen
+      - name: LWOD Android V24 FIX1 APK erstellen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V24.apk"
-          test -s build/android/LWOD-Android-V24.apk
-          unzip -t build/android/LWOD-Android-V24.apk > /dev/null
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V24-FIX1.apk"
+          test -s build/android/LWOD-Android-V24-FIX1.apk
+          unzip -t build/android/LWOD-Android-V24-FIX1.apk > /dev/null
       - name: Fehlerdiagnose bereitstellen
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_V24_FEHLERDIAGNOSE
+          name: LWOD_V24_FIX1_DIAGNOSE
           path: |
             ${{ runner.temp }}/lwod_v24_run.log
             android/scripts/V24Regions.gd
           if-no-files-found: warn
           retention-days: 14
-      - name: Android V24 APK hochladen
+      - name: Android V24 FIX1 APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V24_REGIONEN_APK
-          path: build/android/LWOD-Android-V24.apk
+          name: LWOD_ANDROID_V24_FIX1_APK
+          path: build/android/LWOD-Android-V24-FIX1.apk
           if-no-files-found: error
           retention-days: 14
