@@ -1,7 +1,7 @@
 # LWOD Android V30: Figurenbewegung rechts / unabhängige Kamera links, aufgebaut auf V28.
 # Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
 # Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V30 Steuerung Physik Fix
+name: LWOD Android V31 Begehbares Hoehengelaende
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V30 APK
+    name: LWOD Android V31 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -1949,6 +1949,104 @@ jobs:
           grep -Fqx 'version/code=30' android/export_presets.cfg
           test -s android/scripts/V30MovementRepair.gd
           echo 'V30: rechter Stick = Fortbewegung, linker = Kamera, Boden-Kollisionen bereinigt'
+      - name: V31 Terrainkollision und Bewegung dauerhaft reparieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/scripts
+          cat > android/scripts/V31TerrainMotion.gd <<'LWOD_V31_MOTION'
+          extends Node
+
+          # Vermeidet das Festhaengen an Trimesh-Kanten zwischen Hoehen-Chunks.
+          # Hoehen werden exakt aus demselben Terrain-Generator gelesen.
+          # Haeuser, Mauern und andere feste Hindernisse behalten ihre Kollision.
+          var game: Node3D
+          var terrain: Node3D
+          var disabled_chunks: int = 0
+
+          func setup(root: Node3D) -> void:
+              game = root
+              name = "V31TerrainMotion"
+              terrain = game.get_node_or_null("V27ContinuousTerrain") as Node3D
+              if terrain == null or not terrain.has_method("height_at"):
+                  push_error("V31: V27-Hoehengelaende nicht gefunden")
+                  return
+              # Auch die bereits vor diesem Script erzeugten Chunks bereinigen.
+              for node in terrain.find_children("GelaendeKollision", "StaticBody3D", true, false):
+                  var body: StaticBody3D = node as StaticBody3D
+                  if body != null:
+                      body.collision_layer = 0
+                      body.collision_mask = 0
+                      disabled_chunks += 1
+              align_to_ground(game.hero)
+              print("V31_TERRAIN_READY initial_chunks_disabled=", disabled_chunks,
+                  " floor_height=", _floor_at(game.hero.global_position))
+
+          func _floor_at(p: Vector3) -> float:
+              if not is_instance_valid(terrain):
+                  return 0.04
+              return float(terrain.call("height_at", p.x, p.z))
+
+          func align_to_ground(hero: CharacterBody3D) -> void:
+              if not is_instance_valid(hero) or not is_instance_valid(terrain):
+                  return
+              var p: Vector3 = hero.global_position
+              # Hero-Origin sitzt an der Fusssohle; Original-Kapsel hat Unterkante
+              # bei ca. 0.025 ueber dem Origin. Keine Schwebebewegung der Kamera.
+              p.y = _floor_at(p) + 0.085
+              hero.global_position = p
+              hero.velocity.y = 0.0
+          LWOD_V31_MOTION
+          # Kollisionen neu erzeugter Chunks bereits bei der Erstellung deaktivieren;
+          # damit keine 0.5s-Zeitfenster fuer haengende Bewegung bestehen.
+          test "$(grep -Fxc '    collision.add_child(shape_node)' android/scripts/V27Terrain.gd)" -eq 1
+          sed -i '/^    collision.add_child(shape_node)$/a\    collision.collision_layer = 0' android/scripts/V27Terrain.gd
+          sed -i '/^    collision.add_child(shape_node)$/a\    collision.collision_mask = 0' android/scripts/V27Terrain.gd
+          grep -Fqx '    collision.collision_layer = 0' android/scripts/V27Terrain.gd
+          # Die Hauptbewegung soll nicht mit Schwerkraft durch die komplexe
+          # Grafikoberflaeche fallen. Horizontalkollisionen von Haeusern bleiben.
+          test "$(grep -Fxc '    if not hero.is_on_floor():' android/scripts/Main.gd)" -eq 1
+          awk '
+            $0 == "    if not hero.is_on_floor():" {
+              print "    var terrain_motion: Node = get_node_or_null(\"V31TerrainMotion\")"
+              print "    if terrain_motion != null:"
+              print "        terrain_motion.align_to_ground(hero)"
+              print "    elif not hero.is_on_floor():"
+              print "        hero.velocity.y -= GRAVITY * delta"
+              print "    else:"
+              print "        hero.velocity.y = -0.05"
+              replacing=1; count++; next
+            }
+            replacing && $0 == "    hero.move_and_slide()" {
+              print $0
+              print "    if terrain_motion != null:"
+              print "        terrain_motion.align_to_ground(hero)"
+              replacing=0; next
+            }
+            replacing {next}
+            {print}
+            END {if (count!=1 || replacing) exit 85}
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/v31_main_a.gd"
+          mv "$RUNNER_TEMP/v31_main_a.gd" android/scripts/Main.gd
+          test "$(grep -Fxc '    repair_v30.setup(self)' android/scripts/Main.gd)" -eq 1
+          awk '
+            {print}
+            $0 == "    repair_v30.setup(self)" {
+              print "    var motion_v31 = load(\"res://scripts/V31TerrainMotion.gd\").new()"
+              print "    add_child(motion_v31)"
+              print "    motion_v31.setup(self)"
+              found++
+            }
+            END {if (found!=1) exit 86}
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/v31_main_b.gd"
+          mv "$RUNNER_TEMP/v31_main_b.gd" android/scripts/Main.gd
+          sed -i 's@version/code=30@version/code=31@' android/export_presets.cfg
+          sed -i 's@version/name="3.0"@version/name="3.1"@' android/export_presets.cfg
+          grep -Fqx 'version/code=31' android/export_presets.cfg
+          grep -Fqx '    motion_v31.setup(self)' android/scripts/Main.gd
+          grep -Fq 'terrain_motion.align_to_ground(hero)' android/scripts/Main.gd
+          test -s android/scripts/V31TerrainMotion.gd
+          echo 'V31_TERRAIN_PATCH_OK: rechts Figur, links Kamera; Chunk-Kollisionskanten entfernt'
       - name: Godot Ressourcen importieren
         shell: bash
         run: |
@@ -1963,6 +2061,7 @@ jobs:
           test -s android/scripts/V28DualStick.gd
           test -s android/scripts/V29IndependentSticks.gd
           test -s android/scripts/V30MovementRepair.gd
+          test -s android/scripts/V31TerrainMotion.gd
       - name: Godot Start und Scriptfehler testen
         shell: bash
         run: |
@@ -1973,10 +2072,10 @@ jobs:
           }
           cat "$RUNNER_TEMP/lwod_v29_run.log"
           if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v29_run.log"; then
-            echo '::error::V30 Godot-Skriptfehler gefunden'
+            echo '::error::V31 Godot-Skriptfehler gefunden'
             exit 1
           fi
-      - name: V30 Bewegung und Multitouch - Physiktest
+      - name: V31 Bewegung und Multitouch - Physiktest
         shell: bash
         run: |
           set -euo pipefail
@@ -2003,11 +2102,12 @@ jobs:
               var hero: CharacterBody3D = game.get("hero") as CharacterBody3D
               var sticks: Node = game.find_child("LWOD_V29_STEUERUNG",true,false)
               var repair: Node = game.get_node_or_null("V30MovementRepair")
-              if hero == null or sticks == null or repair == null:
+              var terrain_motion: Node = game.get_node_or_null("V31TerrainMotion")
+              if hero == null or sticks == null or repair == null or terrain_motion == null:
                   push_error("V30_TEST: Spieler, Controller oder Reparatur fehlen")
                   quit(32)
                   return
-              print("V30_TEST_INITIAL state=", game.get("state"), " position=",hero.global_position,
+              print("V31_TEST_INITIAL state=", game.get("state"), " position=",hero.global_position,
                   " old_floors_disabled=", repair.get("removed_floor_colliders"))
               var initial: Vector3 = hero.global_position
               var start_right := Vector2(980.0,540.0)
@@ -2022,7 +2122,7 @@ jobs:
                           " slide_collisions=",hero.get_slide_collision_count())
               var moved: float = Vector2(hero.global_position.x-initial.x,hero.global_position.z-initial.z).length()
               sticks.call("_end_finger",24)
-              print("V30_TEST_DISTANCE=",moved)
+              print("V31_TEST_DISTANCE=",moved)
               if moved < 1.25:
                   if hero.get_slide_collision_count()>0:
                       var impact: KinematicCollision3D = hero.get_slide_collision(0)
@@ -2049,7 +2149,7 @@ jobs:
                   push_error("V30_TEST_FAIL: Linker Kamerastick schwenkt nicht")
                   quit(35)
                   return
-              print("V30_TEST_OK: Rechts Figur bewegt, links Kamera unabhaengig")
+              print("V31_TEST_OK: Rechts Figur bewegt, links Kamera unabhaengig")
               quit(0)
           LWOD_V30_SMOKE
           godot --headless --path android --script res://tests/V30Smoke.gd > "$RUNNER_TEMP/lwod_v30_movement_test.log" 2>&1 || {
@@ -2057,21 +2157,21 @@ jobs:
             exit 1
           }
           cat "$RUNNER_TEMP/lwod_v30_movement_test.log"
-          grep -Fq 'V30_TEST_OK:' "$RUNNER_TEMP/lwod_v30_movement_test.log"
-      - name: LWOD Android V30 APK erstellen
+          grep -Fq 'V31_TEST_OK:' "$RUNNER_TEMP/lwod_v30_movement_test.log"
+      - name: LWOD Android V31 APK erstellen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V30-Steuerfix.apk"
-          test -s build/android/LWOD-Android-V30-Steuerfix.apk
-          unzip -t build/android/LWOD-Android-V30-Steuerfix.apk > /dev/null
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V31-Bewegung.apk"
+          test -s build/android/LWOD-Android-V31-Bewegung.apk
+          unzip -t build/android/LWOD-Android-V31-Bewegung.apk > /dev/null
       - name: Fehlerdiagnose bereitstellen
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_V30_DIAGNOSE
+          name: LWOD_V31_DIAGNOSE
           path: |
             ${{ runner.temp }}/lwod_v29_run.log
             android/scripts/V24Regions.gd
@@ -2083,14 +2183,15 @@ jobs:
             android/scripts/Main.gd
             android/tests/V30Smoke.gd
             android/scripts/V30MovementRepair.gd
+            android/scripts/V31TerrainMotion.gd
             ${{ runner.temp }}/lwod_v30_movement_test.log
             android/scripts/TouchOverlay.gd
           if-no-files-found: warn
           retention-days: 14
-      - name: Android V30 APK hochladen
+      - name: Android V31 APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V30_STEUERFIX_APK
-          path: build/android/LWOD-Android-V30-Steuerfix.apk
+          name: LWOD_ANDROID_V31_BEWEGUNG_APK
+          path: build/android/LWOD-Android-V31-Bewegung.apk
           if-no-files-found: error
           retention-days: 14
