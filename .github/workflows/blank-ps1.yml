@@ -1,7 +1,7 @@
 # LWOD Android V25: korrigierter Quellstand der erfolgreichen V23-Regionen-Basis.
 # Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
 # Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V25 Regionen
+name: LWOD Android V25 FIX1 Biome
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V25 APK
+    name: LWOD Android V25 FIX1 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -445,14 +445,9 @@ jobs:
               return m
 
           func _extend_world_limits() -> void:
-              if world == null:
-                  return
-              if world.has_variable("EDGE_LIMIT"):
-                  world.EDGE_LIMIT = max(float(world.EDGE_LIMIT), WORLD_EDGE)
-              if world.has_method("set"):
-                  world.set("edge_limit", WORLD_EDGE)
-              if game != null and game.has_variable("world_edge"):
-                  game.world_edge = WORLD_EDGE
+              # V23 besitzt bereits die begehbare Grenze bei +/-15950.
+              # Keine Eigenschaften dynamisch ueberschreiben.
+              print("V25: V23-Kartengrenze +/-15950 bleibt aktiv")
 
           func _root_at(p: Vector2) -> Node3D:
               var n := Node3D.new()
@@ -509,9 +504,9 @@ jobs:
               for i in range(8):
                   var ang := float(i) * TAU / 8.0
                   _spike(root, Vector3(cos(ang)*260.0, 8.0, sin(ang)*260.0), 26.0, 44.0, "#5b4544")
-              _lava_strip(root, c + Vector2(-40, 10), c + Vector2(360, 220), 22.0)
-              _lava_strip(root, c + Vector2(25, 0), c + Vector2(-340, 350), 18.0)
-              _lava_strip(root, c + Vector2(10, -30), c + Vector2(260, -320), 16.0)
+              _lava_strip(root, Vector2(-40, 10), Vector2(360, 220), 22.0)
+              _lava_strip(root, Vector2(25, 0), Vector2(-340, 350), 18.0)
+              _lava_strip(root, Vector2(10, -30), Vector2(260, -320), 16.0)
 
           func _eis_region() -> void:
               var c := Vector2(-3050.0, 2380.0)
@@ -586,22 +581,21 @@ jobs:
                   if mesh == null:
                       continue
                   mesh.position.y = 1.15 + sin(t * 1.7 + float(i)) * 0.05
-                  if mesh.material_override is StandardMaterial3D:
-                      mesh.material_override.emission_energy_multiplier = 2.6 + 0.5 * sin(t * 2.5 + float(i) * 0.8)
+                  var lava_mat: StandardMaterial3D = mesh.material_override as StandardMaterial3D
+                  if lava_mat != null:
+                      lava_mat.emission_energy_multiplier = 2.6 + 0.5 * sin(t * 2.5 + float(i) * 0.8)
           LWOD_V25_BIOMES
-          python3 - <<'PYV25'
-from pathlib import Path
-p = Path('android/scripts/V25BiomeWorld.gd')
-text = p.read_text()
-assert 'LWOD V25' in text
-assert '_vulkan_region' in text and '_eis_region' in text and '_wueste_region' in text
-assert '_berge_region' in text and '_mammutwald_region' in text and '_huegel_region' in text
-print('V25 Biome script ok:', p)
-PYV25
+          test -s android/scripts/V25BiomeWorld.gd
+          grep -Fq '_vulkan_region()' android/scripts/V25BiomeWorld.gd
+          grep -Fq '_eis_region()' android/scripts/V25BiomeWorld.gd
+          grep -Fq '_wueste_region()' android/scripts/V25BiomeWorld.gd
+          grep -Fq '_berge_region()' android/scripts/V25BiomeWorld.gd
+          grep -Fq '_mammutwald_region()' android/scripts/V25BiomeWorld.gd
+          grep -Fq '_huegel_region()' android/scripts/V25BiomeWorld.gd
           awk '
             {print}
             $0 == "    new_regions.setup(self, expanded_world)" {
-              print "    var biome_v25 = load("res://scripts/V25BiomeWorld.gd").new()"
+              print "    var biome_v25 = load(\"res://scripts/V25BiomeWorld.gd\").new()"
               print "    add_child(biome_v25)"
               print "    biome_v25.setup(self, expanded_world)"
               count++
@@ -633,15 +627,15 @@ PYV25
             echo '::error::V25 Godot-Skriptfehler gefunden'
             exit 1
           fi
-      - name: LWOD Android V25 APK erstellen
+      - name: LWOD Android V25 FIX1 APK erstellen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V25-Biome.apk"
-          test -s build/android/LWOD-Android-V25-Biome.apk
-          unzip -t build/android/LWOD-Android-V25-Biome.apk > /dev/null
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V25-FIX1.apk"
+          test -s build/android/LWOD-Android-V25-FIX1.apk
+          unzip -t build/android/LWOD-Android-V25-FIX1.apk > /dev/null
       - name: Fehlerdiagnose bereitstellen
         if: failure()
         uses: actions/upload-artifact@v4
@@ -655,7 +649,7 @@ PYV25
       - name: Android V25 APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V25_APK
-          path: build/android/LWOD-Android-V25-Biome.apk
+          name: LWOD_ANDROID_V25_FIX1_APK
+          path: build/android/LWOD-Android-V25-FIX1.apk
           if-no-files-found: error
           retention-days: 14
