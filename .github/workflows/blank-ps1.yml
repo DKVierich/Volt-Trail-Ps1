@@ -1,7 +1,7 @@
-# LWOD Android V25: korrigierter Quellstand der erfolgreichen V23-Regionen-Basis.
+# LWOD Android V26: V25 FIX1 Basis mit hoeheren Biomen, dynamischem Himmel und klickbarer Weltkarte.
 # Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
 # Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V25 FIX1 Biome
+name: LWOD Android V26 Himmel Weltkarte
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V25 FIX1 APK
+    name: LWOD Android V26 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -586,6 +586,7 @@ jobs:
                       lava_mat.emission_energy_multiplier = 2.6 + 0.5 * sin(t * 2.5 + float(i) * 0.8)
           LWOD_V25_BIOMES
           test -s android/scripts/V25BiomeWorld.gd
+          test -s android/scripts/V26SkyWorldMap.gd
           grep -Fq '_vulkan_region()' android/scripts/V25BiomeWorld.gd
           grep -Fq '_eis_region()' android/scripts/V25BiomeWorld.gd
           grep -Fq '_wueste_region()' android/scripts/V25BiomeWorld.gd
@@ -607,6 +608,272 @@ jobs:
           sed -i 's@version/name="2.4"@version/name="2.5"@' android/export_presets.cfg
           grep -Fqx '    biome_v25.setup(self, expanded_world)' android/scripts/Main.gd
           grep -Fqx 'version/code=25' android/export_presets.cfg
+      - name: V26 Regionen hoeher Himmel Wolken Sonne Mond und klickbare Weltkarte
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/scripts
+          cat > android/scripts/V26SkyWorldMap.gd <<'LWOD_V26'
+          extends Node
+
+          var game: Node = null
+          var loaded := false
+          var sky_root: Node3D = null
+          var cloud_root: Node3D = null
+          var sun_node: MeshInstance3D = null
+          var moon_node: MeshInstance3D = null
+          var ui_layer: CanvasLayer = null
+          var mini_button: Button = null
+          var world_panel: Panel = null
+          var time_label: Label = null
+          var day_clock := 0.22
+          var region_root: Node3D = null
+
+          func setup(root: Node) -> void:
+              game = root
+              name = "V26SkyWorldMap"
+              _build_height_expansion()
+              _build_sky()
+              _build_world_map_ui()
+              loaded = true
+              set_process(true)
+              print("LWOD V26: hohe Regionen, dynamischer Himmel und klickbare Weltkarte aktiv")
+
+          func _build_height_expansion() -> void:
+              region_root = Node3D.new()
+              game.add_child(region_root)
+              _raise_plateau(Vector3(2900, 25, -2150), Vector3(1100, 45, 1100), Color("#4d3836"))
+              for p in [Vector3(2880,110,-2160), Vector3(2960,90,-2050), Vector3(2780,82,-2280)]:
+                  _spike(p, 140, 260, Color("#5d4441"))
+              _raise_plateau(Vector3(-3050, 18, 2380), Vector3(1300, 35, 1300), Color("#e6f4ff"))
+              for p in [Vector3(-3140,60,2320), Vector3(-2920,72,2460), Vector3(-3230,48,2540), Vector3(-2980,55,2240)]:
+                  _spike(p, 120, 180, Color("#f2fbff"))
+              _raise_plateau(Vector3(3180, 14, 2280), Vector3(1450, 28, 1450), Color("#d9c17d"))
+              for p in [Vector3(3020,28,2400), Vector3(3340,24,2110), Vector3(3250,22,2490), Vector3(3090,26,2150)]:
+                  _dune(p, 180, 55, Color("#ead38f"))
+              _raise_plateau(Vector3(-3380, 36, -2700), Vector3(1500, 72, 1500), Color("#76827c"))
+              for p in [Vector3(-3520,150,-2840), Vector3(-3300,180,-2640), Vector3(-3180,140,-2860), Vector3(-3460,210,-2510)]:
+                  _spike(p, 160, 320, Color("#8a8f93"))
+              _raise_plateau(Vector3(-300, 16, 3280), Vector3(1320, 32, 1320), Color("#3b5a3e"))
+              for p in [Vector3(-280,22,3300), Vector3(-40,18,3160), Vector3(220,20,3400), Vector3(-420,18,3440)]:
+                  _dune(p, 150, 45, Color("#55714f"))
+              _raise_plateau(Vector3(820, 10, 1760), Vector3(1180, 24, 1180), Color("#8fb06f"))
+              for p in [Vector3(620,22,1650), Vector3(760,18,1880), Vector3(980,24,1690), Vector3(1050,15,1860), Vector3(860,28,1770)]:
+                  _dune(p, 120, 65, Color("#9ebe80"))
+
+          func _raise_plateau(p: Vector3, size: Vector3, color: Color) -> void:
+              if game.has_method("_box"):
+                  game._box(region_root, p, size, color, true)
+
+          func _spike(p: Vector3, radius: float, height: float, color: Color) -> void:
+              if game.has_method("_cone"):
+                  game._cone(region_root, p + Vector3(0, height * 0.5, 0), radius, height, color, 10)
+
+          func _dune(p: Vector3, radius: float, height: float, color: Color) -> void:
+              if game.has_method("_cone"):
+                  game._cone(region_root, p + Vector3(0, height * 0.5, 0), radius, height, color, 12)
+
+          func _build_sky() -> void:
+              sky_root = Node3D.new()
+              sky_root.name = "V26SkyRoot"
+              game.add_child(sky_root)
+              cloud_root = Node3D.new()
+              cloud_root.name = "CloudRoot"
+              sky_root.add_child(cloud_root)
+              for i in range(8):
+                  var cloud := MeshInstance3D.new()
+                  cloud.mesh = SphereMesh.new()
+                  cloud.scale = Vector3(8.0 + float(i % 3) * 3.0, 2.4, 4.6 + float(i % 2) * 2.2)
+                  cloud.position = Vector3(-120 + i * 34, 120 + (i % 3) * 12, -240 + (i % 4) * 70)
+                  var m := StandardMaterial3D.new()
+                  m.albedo_color = Color(1,1,1,0.85)
+                  m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+                  m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+                  cloud.material_override = m
+                  cloud_root.add_child(cloud)
+              sun_node = MeshInstance3D.new()
+              sun_node.mesh = SphereMesh.new()
+              sun_node.scale = Vector3.ONE * 6.0
+              var sm := StandardMaterial3D.new()
+              sm.albedo_color = Color("#ffd86b")
+              sm.emission_enabled = true
+              sm.emission = Color("#ffd86b")
+              sm.emission_energy_multiplier = 3.2
+              sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+              sun_node.material_override = sm
+              sky_root.add_child(sun_node)
+              moon_node = MeshInstance3D.new()
+              moon_node.mesh = SphereMesh.new()
+              moon_node.scale = Vector3.ONE * 4.5
+              var mm := StandardMaterial3D.new()
+              mm.albedo_color = Color("#dde8ff")
+              mm.emission_enabled = true
+              mm.emission = Color("#b5c9ff")
+              mm.emission_energy_multiplier = 1.6
+              mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+              moon_node.material_override = mm
+              sky_root.add_child(moon_node)
+              _apply_day_night()
+
+          func _build_world_map_ui() -> void:
+              ui_layer = CanvasLayer.new()
+              game.add_child(ui_layer)
+              var mini_panel := Panel.new()
+              mini_panel.anchor_left = 1.0
+              mini_panel.anchor_top = 0.0
+              mini_panel.anchor_right = 1.0
+              mini_panel.anchor_bottom = 0.0
+              mini_panel.offset_left = -210
+              mini_panel.offset_top = 12
+              mini_panel.offset_right = -12
+              mini_panel.offset_bottom = 116
+              ui_layer.add_child(mini_panel)
+              var mini_bg := ColorRect.new()
+              mini_bg.anchor_right = 1.0
+              mini_bg.anchor_bottom = 1.0
+              mini_bg.color = Color(0.05, 0.08, 0.12, 0.82)
+              mini_panel.add_child(mini_bg)
+              var title := Label.new()
+              title.text = "Mini-Map"
+              title.position = Vector2(8, 6)
+              mini_panel.add_child(title)
+              var mini_map := ColorRect.new()
+              mini_map.position = Vector2(10, 26)
+              mini_map.size = Vector2(118, 74)
+              mini_map.color = Color("#36526c")
+              mini_panel.add_child(mini_map)
+              _add_map_patch(mini_map, Rect2(72, 6, 28, 18), Color("#bb5d2b"))
+              _add_map_patch(mini_map, Rect2(8, 8, 26, 18), Color("#dfefff"))
+              _add_map_patch(mini_map, Rect2(74, 48, 34, 18), Color("#dec36b"))
+              _add_map_patch(mini_map, Rect2(7, 45, 34, 22), Color("#54655e"))
+              _add_map_patch(mini_map, Rect2(44, 44, 22, 20), Color("#355f39"))
+              _add_map_patch(mini_map, Rect2(44, 12, 20, 18), Color("#86a76b"))
+              var rose := Label.new()
+              rose.text = "N\nW + O\nS"
+              rose.position = Vector2(136, 28)
+              mini_panel.add_child(rose)
+              time_label = Label.new()
+              time_label.text = "Tag"
+              time_label.position = Vector2(132, 78)
+              mini_panel.add_child(time_label)
+              mini_button = Button.new()
+              mini_button.text = "Karte"
+              mini_button.anchor_left = 1.0
+              mini_button.anchor_top = 0.0
+              mini_button.anchor_right = 1.0
+              mini_button.anchor_bottom = 0.0
+              mini_button.offset_left = -74
+              mini_button.offset_top = 120
+              mini_button.offset_right = -12
+              mini_button.offset_bottom = 150
+              mini_button.pressed.connect(_toggle_world_map)
+              ui_layer.add_child(mini_button)
+              world_panel = Panel.new()
+              world_panel.anchor_left = 0.12
+              world_panel.anchor_top = 0.10
+              world_panel.anchor_right = 0.88
+              world_panel.anchor_bottom = 0.84
+              world_panel.visible = false
+              ui_layer.add_child(world_panel)
+              var world_bg := ColorRect.new()
+              world_bg.anchor_right = 1.0
+              world_bg.anchor_bottom = 1.0
+              world_bg.color = Color(0.04,0.05,0.08,0.95)
+              world_panel.add_child(world_bg)
+              var head := Label.new()
+              head.text = "Weltkarte – Lydra World Of Dragon"
+              head.position = Vector2(16, 12)
+              world_panel.add_child(head)
+              var map_frame := ColorRect.new()
+              map_frame.position = Vector2(18, 42)
+              map_frame.size = Vector2(520, 300)
+              map_frame.color = Color("#27405b")
+              world_panel.add_child(map_frame)
+              _add_map_patch(map_frame, Rect2(356, 58, 92, 70), Color("#8d3529"))
+              _add_label(map_frame, "Vulkan", Vector2(374, 82))
+              _add_map_patch(map_frame, Rect2(42, 50, 100, 72), Color("#dcedff"))
+              _add_label(map_frame, "Eisregion", Vector2(52, 78))
+              _add_map_patch(map_frame, Rect2(364, 212, 112, 62), Color("#e2c46e"))
+              _add_label(map_frame, "Wueste", Vector2(390, 234))
+              _add_map_patch(map_frame, Rect2(38, 200, 122, 76), Color("#6a766e"))
+              _add_label(map_frame, "Bergregion", Vector2(50, 230))
+              _add_map_patch(map_frame, Rect2(202, 210, 92, 60), Color("#345f3d"))
+              _add_label(map_frame, "Mammutwald", Vector2(206, 232))
+              _add_map_patch(map_frame, Rect2(208, 60, 76, 56), Color("#8db074"))
+              _add_label(map_frame, "Huegel", Vector2(224, 80))
+              _add_map_patch(map_frame, Rect2(245, 132, 36, 26), Color("#4f77a2"))
+              _add_label(map_frame, "Start", Vector2(245, 160))
+              var close_btn := Button.new()
+              close_btn.text = "Schliessen"
+              close_btn.position = Vector2(426, 352)
+              close_btn.pressed.connect(_toggle_world_map)
+              world_panel.add_child(close_btn)
+
+          func _add_map_patch(parent: Control, rect: Rect2, color: Color) -> void:
+              var r := ColorRect.new()
+              r.position = rect.position
+              r.size = rect.size
+              r.color = color
+              parent.add_child(r)
+
+          func _add_label(parent: Control, txt: String, pos: Vector2) -> void:
+              var l := Label.new()
+              l.text = txt
+              l.position = pos
+              parent.add_child(l)
+
+          func _toggle_world_map() -> void:
+              if world_panel != null:
+                  world_panel.visible = not world_panel.visible
+
+          func _apply_day_night() -> void:
+              var angle := day_clock * TAU
+              var sun_height := sin(angle)
+              var x := cos(angle) * 260.0
+              var z := -sin(angle) * 160.0
+              if sun_node != null:
+                  sun_node.position = Vector3(x, 110.0 + sun_height * 95.0, z)
+                  sun_node.visible = sun_height > -0.10
+              if moon_node != null:
+                  var moon_angle := angle + PI
+                  moon_node.position = Vector3(cos(moon_angle) * 240.0, 106.0 + sin(moon_angle) * 90.0, -sin(moon_angle) * 150.0)
+                  moon_node.visible = sun_height < 0.06
+              if time_label != null:
+                  time_label.text = "Tag" if sun_height >= 0.0 else "Nacht"
+
+          func _process(delta: float) -> void:
+              if not loaded:
+                  return
+              day_clock = fmod(day_clock + delta * 0.015, 1.0)
+              _apply_day_night()
+              if cloud_root != null:
+                  var idx := 0
+                  for c in cloud_root.get_children():
+                      if c is Node3D:
+                          c.position.x += delta * (3.0 + float(idx % 3))
+                          if c.position.x > 165.0:
+                              c.position.x = -165.0
+                          idx += 1
+          LWOD_V26
+          test -s android/scripts/V26SkyWorldMap.gd
+          grep -Fq '_build_height_expansion()' android/scripts/V26SkyWorldMap.gd
+          grep -Fq '_build_sky()' android/scripts/V26SkyWorldMap.gd
+          grep -Fq '_build_world_map_ui()' android/scripts/V26SkyWorldMap.gd
+          awk '
+            {print}
+            $0 == "    biome_v25.setup(self, expanded_world)" {
+              print "    var features_v26 = load(\"res://scripts/V26SkyWorldMap.gd\").new()"
+              print "    add_child(features_v26)"
+              print "    features_v26.setup(self)"
+              count++
+            }
+            END { if(count!=1) exit 63 }
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v26_main.gd"
+          mv "$RUNNER_TEMP/lwod_v26_main.gd" android/scripts/Main.gd
+          sed -i 's@version/code=25@version/code=26@' android/export_presets.cfg
+          sed -i 's@version/name="2.5"@version/name="2.6"@' android/export_presets.cfg
+          grep -Fqx '    features_v26.setup(self)' android/scripts/Main.gd
+          grep -Fqx 'version/code=26' android/export_presets.cfg
       - name: Godot Ressourcen importieren
         shell: bash
         run: |
@@ -614,20 +881,21 @@ jobs:
           godot --headless --path android --editor --import --quit
           test -s android/scripts/V24Regions.gd
           test -s android/scripts/V25BiomeWorld.gd
+          test -s android/scripts/V26SkyWorldMap.gd
       - name: Godot Start und Scriptfehler testen
         shell: bash
         run: |
           set -euo pipefail
-          godot --headless --path android --quit-after 8 > "$RUNNER_TEMP/lwod_v25_run.log" 2>&1 || {
-            cat "$RUNNER_TEMP/lwod_v25_run.log"
+          godot --headless --path android --quit-after 8 > "$RUNNER_TEMP/lwod_v26_run.log" 2>&1 || {
+            cat "$RUNNER_TEMP/lwod_v26_run.log"
             exit 1
           }
-          cat "$RUNNER_TEMP/lwod_v25_run.log"
-          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v25_run.log"; then
+          cat "$RUNNER_TEMP/lwod_v26_run.log"
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v26_run.log"; then
             echo '::error::V25 Godot-Skriptfehler gefunden'
             exit 1
           fi
-      - name: LWOD Android V25 FIX1 APK erstellen
+      - name: LWOD Android V26 APK erstellen
         shell: bash
         run: |
           set -euo pipefail
@@ -640,7 +908,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_V25_DIAGNOSE
+          name: LWOD_V26_DIAGNOSE
           path: |
             ${{ runner.temp }}/lwod_v25_run.log
             android/scripts/V24Regions.gd
@@ -649,7 +917,7 @@ jobs:
       - name: Android V25 APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V25_FIX1_APK
+          name: LWOD_ANDROID_V26_APK
           path: build/android/LWOD-Android-V25-FIX1.apk
           if-no-files-found: error
           retention-days: 14
