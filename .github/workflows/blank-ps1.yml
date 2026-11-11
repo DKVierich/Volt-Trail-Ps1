@@ -1,1715 +1,431 @@
-# LWOD Android V23: Welt 32000x32000, 36 Siedlungen, eigener Rucksack.
-# Als .github/workflows/lwod-android.yml speichern (PS1-Workflow separat behalten).
-name: LWOD Android V23 Riesenwelt und Rucksack FIX
+# Lydra World Of Dragon - Android V24: lebendige Regionen und grosse 3D-Welt.
+# Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
+# Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
+name: LWOD Android V24 Landschaft Regionen
 'on':
   workflow_dispatch: {}
   push:
-    branches:
-    - main
+    branches: [main]
     paths:
-    - .github/workflows/lwod-android.yml
-    - .github/workflows/blank-ps1.yml
+      - '.github/workflows/lwod-android.yml'
+      - '.github/workflows/blank-ps1.yml'
 permissions:
   contents: read
 jobs:
   android:
-    name: Android V23 APK erstellen
+    name: LWOD Android V24 APK
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 55
     container:
       image: barichello/godot-ci:4.7.2
     env:
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       ANDROID_HOME: /usr/lib/android-sdk
     steps:
-    - name: Repository laden
-      uses: actions/checkout@v4
-    - name: Android SDK und Godot vorbereiten
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p "$HOME/.config/godot" "$HOME/.local/share/godot/export_templates"
-        cp -a /root/.config/godot/. "$HOME/.config/godot/"
-        cp -a /root/.local/share/godot/export_templates/. "$HOME/.local/share/godot/export_templates/"
-        test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_debug.apk"
-        test -x "$JAVA_HOME/bin/java"
-        test -s /root/debug.keystore
-        sdkmanager --sdk_root="$ANDROID_HOME" 'platforms;android-35' 'build-tools;35.0.1'
-        test -d "$ANDROID_HOME/platforms/android-35"
-    - name: Bewaehrte V18-Quelle fest herunterladen
-      shell: bash
-      run: |
-        set -euo pipefail
-        wget -q --tries=3 --timeout=45 \
-          -O "$RUNNER_TEMP/lwod_v18.yml" \
-          'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/d30dd9c5727420b12b26ff167cd5ed1313b95f39/.github/workflows/blank-ps1.yml'
-        test -s "$RUNNER_TEMP/lwod_v18.yml"
-        test "$(git hash-object "$RUNNER_TEMP/lwod_v18.yml")" = \
-          '2d2309c00cd95184cecfe21f38095d42ca0179f3'
-        cat > "$RUNNER_TEMP/v18_replay.sh" <<'LWOD_REPLAY'
-        #!/bin/bash
-        set -euo pipefail
-        wanted="$1"
-        sourcefile="$RUNNER_TEMP/lwod_v18.yml"
-        target="$RUNNER_TEMP/lwod_step.sh"
-        awk -v name="$wanted" '  $0 == "      - name: " name { found=1; next }
-          found && $0 == "        run: |" { active=1; next }
-          active && /^      - name:/ { exit }
-          active && /^          / { sub(/^          /, ""); print; next }
-          active && /^$/ { print ""; next }
-          END { if (active != 1) exit 57 }
-        ' "$sourcefile" > "$target"
-        test -s "$target"
-        bash -n "$target"
-        echo "V18 Buildschritt: $wanted"
-        bash "$target"
-        LWOD_REPLAY
-        chmod +x "$RUNNER_TEMP/v18_replay.sh"
-    - name: V18 Spielweltbasis vorbereiten
-      shell: bash
-      run: |
-        set -euo pipefail
-        bash "$RUNNER_TEMP/v18_replay.sh" 'V7 Buildquelle laden und Pruefsumme kontrollieren'
-    - name: V18 Spielwelt und Menues erstellen
-      shell: bash
-      run: |
-        set -euo pipefail
-        bash "$RUNNER_TEMP/v18_replay.sh" 'Funktionsfaehige V7 Spielwelt und Menues erstellen'
-        test -s android/scripts/Main.gd
-    - name: Originalintro 37617 mit Ton integrieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        bash "$RUNNER_TEMP/v18_replay.sh" 'Original 37617 Intro mit Ton einbinden'
-        test -s android/assets/dkvierich_intro.ogv
-    - name: Phönix-Hauptmenue und Funktionen behalten
-      shell: bash
-      run: |
-        set -euo pipefail
-        bash "$RUNNER_TEMP/v18_replay.sh" 'Bestaetigtes Phoenix Menue und klickbare Aktionen einbauen'
-        test -s android/assets/phoenix_menu.webp
-        test -s android/scripts/PhoenixMenu.gd
-    - name: V18 Modelle und Landschaft uebernehmen
-      shell: bash
-      run: |
-        set -euo pipefail
-        bash "$RUNNER_TEMP/v18_replay.sh" 'V18 Phoenix Kamera Gebirge Haeuser und Boden repariert'
-        test -s android/scripts/V17Visual.gd
-        grep -Fqx '    graphic_upgrade.setup(self)' android/scripts/Main.gd
-    - name: V19 Bergkollision Kameraschutz Bergformen
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p android/scripts
-        cat > android/scripts/V19TerrainSafety.gd <<'LWOD_V19_TERRAIN'
-        extends Node
+      - name: Repository laden
+        uses: actions/checkout@v4
+      - name: Godot und Android SDK vorbereiten
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.config/godot" "$HOME/.local/share/godot/export_templates"
+          cp -a /root/.config/godot/. "$HOME/.config/godot/"
+          cp -a /root/.local/share/godot/export_templates/. "$HOME/.local/share/godot/export_templates/"
+          test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_debug.apk"
+          test -x "$JAVA_HOME/bin/java"
+          test -s /root/debug.keystore
+          sdkmanager --sdk_root="$ANDROID_HOME" 'platforms;android-35' 'build-tools;35.0.1'
+          test -d "$ANDROID_HOME/platforms/android-35"
+      - name: Erfolgreiche V23-Basis pruefsicher laden
+        shell: bash
+        run: |
+          set -euo pipefail
+          wget -q --tries=3 --timeout=45 \
+            -O "$RUNNER_TEMP/lwod_v23.yml" \
+            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/2b1332ef7b51655427065cd8ec8371af1e7773dc/.github/workflows/blank-ps1.yml'
+          test -s "$RUNNER_TEMP/lwod_v23.yml"
+          test "$(git hash-object "$RUNNER_TEMP/lwod_v23.yml")" = '1b7b542c86b05f4bc8fc4652732af857ce37fa77'
+          cat > "$RUNNER_TEMP/replay_v23.sh" <<'REPLAY_V23'
+          #!/bin/bash
+          set -euo pipefail
+          name="$1"
+          awk -v name="$name" '
+            $0 == "    - name: " name { found=1; next }
+            found && $0 == "      run: |" { active=1; next }
+            active && /^    - name:/ { exit }
+            active && /^        / { sub(/^        /, ""); print; next }
+            active && /^$/ { print ""; next }
+            END { if (active != 1) exit 57 }
+          ' "$RUNNER_TEMP/lwod_v23.yml" > "$RUNNER_TEMP/v23_step.sh"
+          test -s "$RUNNER_TEMP/v23_step.sh"
+          bash -n "$RUNNER_TEMP/v23_step.sh"
+          echo "V23 Basis: $name"
+          bash "$RUNNER_TEMP/v23_step.sh"
+          REPLAY_V23
+          chmod +x "$RUNNER_TEMP/replay_v23.sh"
+      - name: V23 Spielwelt Menues und Rucksack wiederherstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash "$RUNNER_TEMP/replay_v23.sh" 'Bewaehrte V18-Quelle fest herunterladen'
+          bash "$RUNNER_TEMP/replay_v23.sh" 'V18 Spielweltbasis vorbereiten'
+          bash "$RUNNER_TEMP/replay_v23.sh" 'V18 Spielwelt und Menues erstellen'
+          bash "$RUNNER_TEMP/replay_v23.sh" 'Originalintro 37617 mit Ton integrieren'
+          bash "$RUNNER_TEMP/replay_v23.sh" 'Phönix-Hauptmenue und Funktionen behalten'
+          bash "$RUNNER_TEMP/replay_v23.sh" 'V18 Modelle und Landschaft uebernehmen'
+          bash "$RUNNER_TEMP/replay_v23.sh" 'V19 Bergkollision Kameraschutz Bergformen'
+          bash "$RUNNER_TEMP/replay_v23.sh" 'V20 Kamera Bergsilhouette und Hausdaecher'
+          bash "$RUNNER_TEMP/replay_v23.sh" 'V21 Weltkarte Minimap Tag Nacht und Rucksackposition'
+          bash "$RUNNER_TEMP/replay_v23.sh" 'V23 32000 Welt 36 Siedlungen eigener Rucksack Button'
+          test -s android/scripts/V21World.gd
+          test -s android/scripts/V23Backpack.gd
+          test -s android/scripts/Main.gd
+      - name: V24 Seen Fluesse Hoehlen und regionale Vegetation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/scripts
+          cat > android/scripts/V24Regions.gd <<'LWOD_V24_REGIONS'
+          extends Node
 
-        # LWOD V19: echte Gebirgskollision, stabile Verfolgungskamera und weichere Gebirgsformen.
-        # Aendert keine Spielstaende, Menues, Figurenmodelle oder Hauskollisionen.
+          # LWOD Android V24 - regionale Vielfalt ohne staendig tausende Einzelobjekte.
+          # Die Weltgroesse, Kamera, UI, Spielstaende und Kollisionen aus V23 bleiben erhalten.
+          # Wiesen, Blumen und Steine werden in 240x240-Chunks dynamisch erstellt/entladen.
 
-        var game: Node3D
-        var ridge_body: StaticBody3D
-        const LIMIT_X := 77.0
-        const LIMIT_Z_NEAR := 63.0
-        const LIMIT_Z_FAR := -80.0
-        const CAM_MARGIN := 0.52
+          const CELL := 240.0
+          const VIEW_RADIUS := 1
+          const EDGE_LIMIT := 15800.0
 
-        func setup(root: Node3D) -> void:
-            game = root
-            _create_mountain_range()
-            _create_world_boundaries()
-            print("LWOD V19: Gebirge und Kamera-Kollisionsschutz aktiv")
+          var game: Node3D
+          var world: Node
+          var spawned: Dictionary = {}
+          var previous_cell := Vector2i(999999, 999999)
+          var timer := 0.0
+          var landmarks := []
 
-        func _vertex(st: SurfaceTool, faces: PackedVector3Array, p: Vector3, col: Color) -> void:
-            st.set_color(col)
-            st.add_vertex(p)
-            faces.append(p)
+          func setup(root: Node3D, expanded_world: Node) -> void:
+              game = root
+              world = expanded_world
+              name = "V24Regionen"
+              _make_landmarks()
+              _load_nearby(true)
+              set_process(true)
+              print("LWOD V24: Regionen, Seen, Fluss, Hoehlen und Chunk-Details aktiviert")
 
-        func _triangle(st: SurfaceTool, faces: PackedVector3Array, a: Vector3, b: Vector3, c: Vector3, col: Color) -> void:
-            _vertex(st, faces, a, col)
-            _vertex(st, faces, b, col)
-            _vertex(st, faces, c, col)
+          func _mat(hex_color: String) -> StandardMaterial3D:
+              var material := StandardMaterial3D.new()
+              material.albedo_color = Color(hex_color)
+              material.roughness = 0.84
+              material.cull_mode = BaseMaterial3D.CULL_DISABLED
+              return material
 
-        func _quad(st: SurfaceTool, faces: PackedVector3Array, a: Vector3, b: Vector3, c: Vector3, d: Vector3, col: Color) -> void:
-            _triangle(st, faces, a, b, c, col)
-            _triangle(st, faces, a, c, d, col)
+          func _disc(center: Vector2, radius_x: float, radius_z: float, level: float, tint: String, segments: int = 28) -> void:
+              var disc := MeshInstance3D.new()
+              var shape := CylinderMesh.new()
+              shape.top_radius = radius_x
+              shape.bottom_radius = radius_x
+              shape.height = 0.025
+              shape.radial_segments = segments
+              disc.mesh = shape
+              disc.position = Vector3(center.x, level, center.y)
+              disc.scale.z = radius_z / radius_x
+              disc.material_override = _mat(tint)
+              game.add_child(disc)
 
-        func _create_mountain_range() -> void:
-            # Die alte V17-Bergfassade besass keine Kollision. Ihr Ersetzen
-            # vermeidet doppelte Berge und haessliche grosse Dreiecksflächen.
-            var old_ridge := game.get_node_or_null("V17Gebirgszuege")
-            if old_ridge is Node3D:
-                (old_ridge as Node3D).visible = false
+          func _waterbody(center: Vector2, sx: float, sz: float) -> void:
+              _disc(center, sx + 5.0, sz + 4.0, 0.016, "#b1a27d")
+              _disc(center, sx, sz, 0.044, "#3e89a3")
+              _disc(center + Vector2(-0.12 * sx, -0.14 * sz), sx * 0.68, sz * 0.59, 0.062, "#66afc0")
 
-            var front: PackedVector3Array = PackedVector3Array()
-            var lower: PackedVector3Array = PackedVector3Array()
-            var ridge: PackedVector3Array = PackedVector3Array()
-            var back: PackedVector3Array = PackedVector3Array()
-            var n: int = 41
+          func _river_section(a: Vector2, b: Vector2, width: float = 11.0) -> void:
+              var dx: float = b.x - a.x
+              var dz: float = b.y - a.y
+              var segment_length: float = sqrt(dx * dx + dz * dz)
+              if segment_length < 0.5:
+                  return
+              var mesh: MeshInstance3D = game._box(game, Vector3((a.x+b.x)*0.5, 0.052, (a.y+b.y)*0.5), Vector3(width, 0.018, segment_length+2.0), Color("#488eac")) as MeshInstance3D
+              mesh.rotation.y = atan2(dx, dz)
 
-            for i in range(n):
-                var f: float = float(i)
-                var x: float = -100.0 + f * 5.0
-                var variation: float = sin(f * 0.40) * 2.8 + sin(f * 0.93) * 1.3
-                var height: float = 12.7 + variation + 1.5 * cos(f * 0.18)
-                front.append(Vector3(x, -0.10, -76.0 - sin(f * 0.29) * 0.9))
-                lower.append(Vector3(x + sin(f * 0.30) * 0.9, height * 0.42, -82.3))
-                ridge.append(Vector3(x + sin(f * 0.43) * 1.1, height, -91.5 - cos(f * 0.37) * 1.3))
-                back.append(Vector3(x, height * 0.50, -101.0))
+          func _tower(p: Vector2) -> void:
+              var base := Node3D.new()
+              base.position = Vector3(p.x, 0, p.y)
+              game.add_child(base)
+              game._box(base, Vector3(0, 3.8, 0), Vector3(4.5, 7.6, 4.5), Color("#999eaa"), true)
+              game._box(base, Vector3(0, 7.9, 0), Vector3(6.2, 0.9, 6.2), Color("#656579"))
+              game._cone(base, Vector3(0, 9.7, 0), 3.9, 3.3, Color("#605377"), 8)
+              game._box(base, Vector3(0, 3.2, 2.36), Vector3(1.6, 2.6, 0.1), Color("#403f59"))
+              game._box(base, Vector3(0, 6.6, 2.38), Vector3(1.1, 1.6, 0.1), Color("#6bb2cd"))
 
-            var st := SurfaceTool.new()
-            st.begin(Mesh.PRIMITIVE_TRIANGLES)
-            var faces := PackedVector3Array()
-            var stone := [Color("#647787"), Color("#708390"), Color("#566d7b"), Color("#84959d")]
-            for i in range(n - 1):
-                _quad(st, faces, front[i], front[i + 1], lower[i + 1], lower[i], stone[i % stone.size()])
-                _quad(st, faces, lower[i], lower[i + 1], ridge[i + 1], ridge[i], stone[(i + 2) % stone.size()])
-                _quad(st, faces, ridge[i], ridge[i + 1], back[i + 1], back[i], Color("#526b7d"))
-                # Helle Gipfel als schmale Schicht, keine einzeln schwebenden Dreiecke.
-                if i % 3 != 1:
-                    var u: Vector3 = lower[i].lerp(ridge[i], 0.78) + Vector3(0.0, 0.05, 0.04)
-                    var v: Vector3 = lower[i + 1].lerp(ridge[i + 1], 0.78) + Vector3(0.0, 0.05, 0.04)
-                    _quad(st, faces, u, v, ridge[i + 1] + Vector3(0, 0.02, 0), ridge[i] + Vector3(0, 0.02, 0), Color("#c2cdd1"))
+          func _cave(p: Vector2) -> void:
+              var root := Node3D.new()
+              root.position = Vector3(p.x, 0, p.y)
+              game.add_child(root)
+              # Begehbarer steinerner Eingang, ohne Teleport oder neues Innenlevel.
+              game._box(root, Vector3(-5.4, 2.9, 0), Vector3(3.3, 5.8, 5.4), Color("#77787f"), true)
+              game._box(root, Vector3(5.4, 2.9, 0), Vector3(3.3, 5.8, 5.4), Color("#676b73"), true)
+              game._box(root, Vector3(0, 6.9, 0), Vector3(13.0, 2.2, 5.4), Color("#636a71"), true)
+              game._box(root, Vector3(0, 2.3, -2.8), Vector3(6.4, 4.5, 0.14), Color("#1b2332"))
+              for i in range(6):
+                  var pos := Vector3(-7.0 + float(i) * 2.8, 0, 6.0)
+                  game._cone(root, pos + Vector3(0, 0.85, 0), 0.55, 1.65, Color("#8e81ac"), 6)
 
-            st.generate_normals()
-            var mesh := st.commit()
-            var mountain_visual := MeshInstance3D.new()
-            mountain_visual.name = "V19Felsgebirge"
-            mountain_visual.mesh = mesh
-            var rock := StandardMaterial3D.new()
-            rock.vertex_color_use_as_albedo = true
-            rock.roughness = 0.96
-            rock.cull_mode = BaseMaterial3D.CULL_DISABLED
-            mountain_visual.material_override = rock
-            game.add_child(mountain_visual)
+          func _shrine(p: Vector2, color: String) -> void:
+              var root := Node3D.new()
+              root.position = Vector3(p.x, 0, p.y)
+              game.add_child(root)
+              game._box(root, Vector3(0,0.5,0), Vector3(9.0,1.0,9.0), Color("#8f91a3"))
+              for dx in [-3.1, 3.1]:
+                  for dz in [-3.1, 3.1]:
+                      game._box(root, Vector3(dx, 2.5, dz), Vector3(0.85, 5.0, 0.85), Color("#bcbac2"))
+              game._box(root, Vector3(0, 5.15, 0), Vector3(8.5, 0.75, 8.5), Color("#7f7896"))
+              game._cone(root, Vector3(0, 7.4, 0), 1.75, 3.6, Color(color), 8)
 
-            # Dieselben Dreiecke werden als statische Kollision genutzt.
-            ridge_body = StaticBody3D.new()
-            ridge_body.name = "V19GebirgsKollision"
-            var shape := ConcavePolygonShape3D.new()
-            shape.set_faces(faces)
-            shape.backface_collision = true
-            var collision := CollisionShape3D.new()
-            collision.shape = shape
-            ridge_body.add_child(collision)
-            game.add_child(ridge_body)
+          func _crystal_field(p: Vector2) -> void:
+              var rng := RandomNumberGenerator.new()
+              rng.seed = 84211
+              for i in range(18):
+                  var phi: float = float(i) * TAU / 18.0
+                  var r: float = rng.randf_range(7.0, 21.0)
+                  var x: float = p.x + cos(phi) * r
+                  var z: float = p.y + sin(phi) * r
+                  var height: float = rng.randf_range(1.4, 4.2)
+                  game._cone(game, Vector3(x, height * 0.50, z), rng.randf_range(0.5, 1.2), height, Color("#a477ce") if i%2==0 else Color("#6ab4c8"), 6)
 
-        func _add_invisible_wall(parent: StaticBody3D, pos: Vector3, dims: Vector3) -> void:
-            var col := CollisionShape3D.new()
-            var box := BoxShape3D.new()
-            box.size = dims
-            col.shape = box
-            col.position = pos
-            parent.add_child(col)
+          func _bridge(p: Vector2, direction: float = 0.0) -> void:
+              var root := Node3D.new()
+              root.position = Vector3(p.x, 0, p.y)
+              root.rotation.y = direction
+              game.add_child(root)
+              game._box(root, Vector3(0, 0.34, 0), Vector3(6.4, 0.5, 15.0), Color("#916848"))
+              for side in [-2.8, 2.8]:
+                  for z in [-6.0, -2.0, 2.0, 6.0]:
+                      game._box(root, Vector3(side, 1.1, z), Vector3(0.35, 1.5, 0.35), Color("#6f4e38"))
+                  game._box(root, Vector3(side, 1.9, 0), Vector3(0.25, 0.24, 14.0), Color("#74513b"))
 
-        func _create_world_boundaries() -> void:
-            # Ein Backup-Schutz hinter der Felsflanke verhindert das Verlassen
-            # der bisherigen Karte selbst bei sehr schnellen Bewegungen.
-            var perimeter := StaticBody3D.new()
-            perimeter.name = "V19Weltgrenzen"
-            game.add_child(perimeter)
-            _add_invisible_wall(perimeter, Vector3(0, 13, -82.0), Vector3(210, 26, 1.2))
-            _add_invisible_wall(perimeter, Vector3(0, 13, LIMIT_Z_NEAR), Vector3(156, 26, 1.2))
-            _add_invisible_wall(perimeter, Vector3(-LIMIT_X, 13, -9), Vector3(1.2, 26, 148))
-            _add_invisible_wall(perimeter, Vector3(LIMIT_X, 13, -9), Vector3(1.2, 26, 148))
+          func _waterfall(p: Vector2) -> void:
+              var root := Node3D.new()
+              root.position = Vector3(p.x, 0, p.y)
+              game.add_child(root)
+              game._box(root, Vector3(-6.0, 5.1, 0), Vector3(6.0, 10.0, 5.0), Color("#798c96"), true)
+              game._box(root, Vector3(6.0, 5.1, 0), Vector3(6.0, 10.0, 5.0), Color("#657b84"), true)
+              game._box(root, Vector3(0, 5.0, 1.0), Vector3(5.8, 9.0, 0.15), Color("#79c5d5"))
+              _waterbody(p + Vector2(0, 12), 17.0, 11.0)
 
-        func _ray_clipped(start: Vector3, desired: Vector3) -> Vector3:
-            var direction: Vector3 = desired - start
-            var total: float = direction.length()
-            if total < 0.5:
-                return desired
-            var query := PhysicsRayQueryParameters3D.create(start, desired)
-            var excluded: Array[RID] = [game.hero.get_rid()]
-            query.exclude = excluded
-            query.hit_back_faces = true
-            var result: Dictionary = game.get_world_3d().direct_space_state.intersect_ray(query)
-            if result.is_empty():
-                return desired
-            var hit_point: Vector3 = result["position"]
-            var allowed: float = maxf(1.0, start.distance_to(hit_point) - CAM_MARGIN)
-            allowed = minf(total, allowed)
-            return start + direction.normalized() * allowed
+          func _make_landmarks() -> void:
+              # Markante Ziele schon wenige Gehminuten nach Verlassen des Startdorfs.
+              _crystal_field(Vector2(55, 82))
+              _shrine(Vector2(-98, 95), "#b377db")
+              _waterbody(Vector2(-105, 238), 65.0, 44.0)
+              _waterbody(Vector2(345, 1050), 95.0, 60.0)
+              _waterbody(Vector2(1850, 740), 75.0, 55.0)
+              _waterbody(Vector2(-850, -1020), 65.0, 53.0)
+              _cave(Vector2(285, -210))
+              _cave(Vector2(-740, 830))
+              _tower(Vector2(285, 250))
+              _tower(Vector2(-1120, -630))
+              _waterfall(Vector2(550, 420))
+              _bridge(Vector2(-420, 625), 0.5)
+              _shrine(Vector2(1230, -840), "#a4cbf0")
+              _crystal_field(Vector2(1790, -1510))
+              _shrine(Vector2(-2500, 2500), "#c187e8")
 
-        func _physics_process(delta: float) -> void:
-            if game == null or game.hero == null or game.camera_node == null:
-                return
-            if game.state != 2:
-                return
+              # Der Fluss ist ein sichtbares Oberflaechendetail; Schwimmphysik folgt spaeter.
+              var river: PackedVector2Array = PackedVector2Array([
+                  Vector2(-580,-1100), Vector2(-480,-750), Vector2(-430,-380),
+                  Vector2(-390,-50), Vector2(-450,280), Vector2(-420,625),
+                  Vector2(-470,900), Vector2(-630,1280), Vector2(-790,1580)
+              ])
+              for i in range(river.size()-1):
+                  _river_section(river[i], river[i+1], 12.0)
 
-            # Alte Speicherpositionen ausserhalb der bisherigen Kartenkollision
-            # einmal auf den sicheren Bereich korrigieren.
-            var current: Vector3 = game.hero.global_position
-            var safe_x: float = clampf(current.x, -LIMIT_X + 1.7, LIMIT_X - 1.7)
-            var safe_z: float = clampf(current.z, LIMIT_Z_FAR + 3.0, LIMIT_Z_NEAR - 2.0)
-            if not is_equal_approx(safe_x, current.x) or not is_equal_approx(safe_z, current.z):
-                game.hero.global_position = Vector3(safe_x, maxf(current.y, 0.1), safe_z)
+          func _biome(p: Vector2) -> int:
+              # 0 gruener Wald, 1 Bluetenwiese, 2 Purpurheide, 3 Felsland, 4 Feuchtgebiet.
+              if p.distance_to(Vector2(-105.0, 238.0)) < 105.0:
+                  return 4
+              if p.distance_to(Vector2(345.0, 1050.0)) < 130.0:
+                  return 4
+              var v: float = sin(p.x * 0.0032) + cos(p.y * 0.0027) + sin((p.x + p.y) * 0.0019)
+              if v < -0.75:
+                  return 3
+              if v < -0.10:
+                  return 2
+              if v < 0.65:
+                  return 1
+              return 0
 
-            var center: Vector3 = game.hero.global_position + Vector3(0, 1.40, 0)
-            var a: float = game.hero.rotation.y
-            var behind: Vector3 = Vector3(sin(a), 0.0, cos(a))
-            var wanted: Vector3 = game.hero.global_position + behind * 6.8 + Vector3(0, 4.6, 0)
-            var corrected: Vector3 = _ray_clipped(center, wanted)
-            var smoothed: Vector3 = game.camera_node.global_position.lerp(corrected, minf(1.0, delta * 9.0))
-            # Zweite Pruefung nach dem Glaetten verhindert Durchdringen
-            # bei engen Hausecken oder schneller Kameradrehung.
-            smoothed = _ray_clipped(center, smoothed)
-            game.camera_node.global_position = smoothed
-            game.camera_node.look_at(center)
-        LWOD_V19_TERRAIN
-        test -s android/scripts/V19TerrainSafety.gd
-        test "$(grep -Fxc '    graphic_upgrade.setup(self)' android/scripts/Main.gd)" -eq 1
-        awk '
-          { print }
-          $0 == "    graphic_upgrade.setup(self)" {
-            print "    var v19_safety = load(\"res://scripts/V19TerrainSafety.gd\").new()"
-            print "    add_child(v19_safety)"
-            print "    v19_safety.setup(self)"
-            n++
+          func _multimesh(mesh: Mesh, color: String, owner: Node3D, count: int) -> MultiMesh:
+              var item := MultiMeshInstance3D.new()
+              item.material_override = _mat(color)
+              var mm := MultiMesh.new()
+              mm.transform_format = MultiMesh.TRANSFORM_3D
+              mm.mesh = mesh
+              mm.instance_count = count
+              item.multimesh = mm
+              owner.add_child(item)
+              return mm
+
+          func _near_important(p: Vector2) -> bool:
+              if p.length_squared() < 115.0 * 115.0:
+                  return true
+              for entry in world.settlements:
+                  var city: Vector2 = entry["pos"]
+                  if p.distance_squared_to(city) < 54.0 * 54.0:
+                      return true
+              return false
+
+          func _chunk(cx: int, cz: int) -> Node3D:
+              var node := Node3D.new()
+              node.name = "V24Dekoration_%d_%d" % [cx, cz]
+              game.add_child(node)
+              var rng := RandomNumberGenerator.new()
+              rng.seed = int(2103111 + cx * 10007 + cz * 21341)
+
+              var grass_mesh := CylinderMesh.new()
+              grass_mesh.top_radius = 0.02
+              grass_mesh.bottom_radius = 0.35
+              grass_mesh.height = 1.25
+              grass_mesh.radial_segments = 5
+              var flower_mesh := SphereMesh.new()
+              flower_mesh.radius = 0.31
+              flower_mesh.height = 0.46
+              flower_mesh.radial_segments = 6
+              flower_mesh.rings = 3
+              var pebble_mesh := SphereMesh.new()
+              pebble_mesh.radius = 0.62
+              pebble_mesh.height = 0.8
+              pebble_mesh.radial_segments = 7
+              pebble_mesh.rings = 4
+
+              var center := Vector2((float(cx)+0.5)*CELL, (float(cz)+0.5)*CELL)
+              var biome: int = _biome(center)
+              var plant_color: String = ["#3b8258", "#66a162", "#795aa1", "#9a9588", "#3e9c85"][biome]
+              var blossom_color: String = ["#e2e68f", "#d9a3d1", "#b581ed", "#c5bab1", "#b7def0"][biome]
+              var stone_color := "#81888d" if biome == 3 else "#888e7e"
+              var stems: MultiMesh = _multimesh(grass_mesh, plant_color, node, 75)
+              var blossoms: MultiMesh = _multimesh(flower_mesh, blossom_color, node, 75)
+              var stones: MultiMesh = _multimesh(pebble_mesh, stone_color, node, 75)
+              var stem_count := 0
+              var blossom_count := 0
+              var stone_count := 0
+              for i in range(75):
+                  var x: float = (float(cx) + rng.randf()) * CELL
+                  var z: float = (float(cz) + rng.randf()) * CELL
+                  var pos := Vector2(x,z)
+                  if absf(x) > EDGE_LIMIT or absf(z) > EDGE_LIMIT:
+                      continue
+                  if _near_important(pos) or world._near_road(pos):
+                      continue
+                  var s: float = rng.randf_range(0.65,1.45)
+                  if biome==3 and i%2==0:
+                      var stone_base := Basis().scaled(Vector3(s, s * 0.65, s))
+                      stones.set_instance_transform(stone_count, Transform3D(stone_base, Vector3(x,0.30*s,z)))
+                      stone_count += 1
+                  else:
+                      var stem_basis := Basis().scaled(Vector3(s,s,s))
+                      stems.set_instance_transform(stem_count, Transform3D(stem_basis, Vector3(x,0.61*s,z)))
+                      stem_count += 1
+                      if i%3==0:
+                          blossoms.set_instance_transform(blossom_count, Transform3D(Basis().scaled(Vector3(s,s,s)), Vector3(x,1.20*s,z)))
+                          blossom_count += 1
+              stems.visible_instance_count = stem_count
+              blossoms.visible_instance_count = blossom_count
+              stones.visible_instance_count = stone_count
+              return node
+
+          func _load_nearby(force: bool = false) -> void:
+              if game == null or game.hero == null:
+                  return
+              var p: Vector3 = game.hero.global_position
+              var center := Vector2i(int(floor(p.x / CELL)), int(floor(p.z / CELL)))
+              if center == previous_cell and not force:
+                  return
+              previous_cell = center
+              var required: Dictionary = {}
+              for x in range(center.x-VIEW_RADIUS,center.x+VIEW_RADIUS+1):
+                  for z in range(center.y-VIEW_RADIUS,center.y+VIEW_RADIUS+1):
+                      var middle := Vector2((float(x)+0.5)*CELL,(float(z)+0.5)*CELL)
+                      if absf(middle.x) > EDGE_LIMIT + CELL or absf(middle.y) > EDGE_LIMIT + CELL:
+                          continue
+                      var key: String = "%d:%d" % [x,z]
+                      required[key] = true
+                      if not spawned.has(key):
+                          spawned[key] = _chunk(x,z)
+              for key in spawned.keys():
+                  if not required.has(key):
+                      var node: Node3D = spawned[key]
+                      node.queue_free()
+                      spawned.erase(key)
+
+          func _process(delta: float) -> void:
+              if game == null or game.state != 2:
+                  return
+              timer += delta
+              if timer > 0.75:
+                  timer = 0.0
+                  _load_nearby()
+          LWOD_V24_REGIONS
+          printf '%s  %s\n' 'eacdf8280ed2e3ec971bffdb4d6e24791a3b8d9a4fa0f3d2fd3111856af9a394' 'android/scripts/V24Regions.gd' | sha256sum -c -
+          # Einmaliger Aufruf NACH Einrichtung der V23-MiniMap und des Rucksackbuttons.
+          test "$(grep -Fxc '    bag_v23.setup(self)' android/scripts/Main.gd)" -eq 1
+          awk '
+            {print}
+            $0 == "    bag_v23.setup(self)" {
+              print "    var new_regions = load(\"res://scripts/V24Regions.gd\").new()"
+              print "    add_child(new_regions)"
+              print "    new_regions.setup(self, expanded_world)"
+              count++
+            }
+            END { if(count!=1) exit 61 }
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v24_main.gd"
+          mv "$RUNNER_TEMP/lwod_v24_main.gd" android/scripts/Main.gd
+          sed -i 's@version/code=23@version/code=24@' android/export_presets.cfg
+          sed -i 's@version/name="2.3"@version/name="2.4"@' android/export_presets.cfg
+          grep -Fqx 'version/code=24' android/export_presets.cfg
+          grep -Fqx '    new_regions.setup(self, expanded_world)' android/scripts/Main.gd
+          # Der vorhandene separate V23-Rucksackcontroller bleibt unangetastet.
+          test -s android/scripts/V23Backpack.gd
+      - name: Godot Ressourcen importieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path android --editor --import --quit
+          test -s android/scripts/V24Regions.gd
+      - name: Godot Start und Scriptfehler testen
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path android --quit-after 8 > "$RUNNER_TEMP/lwod_v24_run.log" 2>&1 || {
+            cat "$RUNNER_TEMP/lwod_v24_run.log"
+            exit 1
           }
-          END { if (n != 1) exit 44 }
-        ' android/scripts/Main.gd > "$RUNNER_TEMP/Main_v19.gd"
-        mv "$RUNNER_TEMP/Main_v19.gd" android/scripts/Main.gd
-        grep -Fqx '    v19_safety.setup(self)' android/scripts/Main.gd
-        sed -i 's@version/code=18@version/code=19@' android/export_presets.cfg
-        sed -i 's@version/name="1.8"@version/name="1.9"@' android/export_presets.cfg
-        grep -Fqx 'version/code=19' android/export_presets.cfg
-        echo 'V19: Gebirgskollision, Weltgrenzen und Kamera eingebaut'
-    - name: V20 Kamera Bergsilhouette und Hausdaecher
-      shell: bash
-      run: |
-        set -euo pipefail
-        cat > android/scripts/V20CameraTerrain.gd <<'LWOD_V20_TERRAIN'
-        extends Node
-
-        # LWOD V20: nur Landschaft und Kamera. V19-Spielwelt und Menues bleiben erhalten.
-        # Die Berge stehen hinter der bisherigen Weltgrenze. Kamerakollision als Kugel.
-
-        var game: Node3D
-        var ball: SphereShape3D
-        var roofs: Array[MeshInstance3D] = []
-        var roof_centers: Array[Vector3] = []
-        var previous_camera_option: int = 0
-        var seen_time: float = 0.0
-
-        func setup(root: Node3D) -> void:
-            game = root
-            process_priority = 100
-            ball = SphereShape3D.new()
-            ball.radius = 0.36
-            var old_safety := game.get_node_or_null("V19TerrainSafety")
-            if old_safety == null:
-                for node in game.get_children():
-                    if node.get_script() is Script and str(node.get_script().resource_path).ends_with("V19TerrainSafety.gd"):
-                        old_safety = node
-                        break
-            if old_safety != null:
-                old_safety.set_physics_process(false)
-            # Die V19-Felsfassade direkt hinter der Kartengrenze ausblenden.
-            var old_visual := game.get_node_or_null("V19Felsgebirge")
-            if old_visual is VisualInstance3D:
-                old_visual.visible = false
-            var old_collision := game.get_node_or_null("V19GebirgsKollision")
-            if old_collision is StaticBody3D:
-                old_collision.collision_layer = 0
-                old_collision.collision_mask = 0
-            # Alte einzelne weit entfernte Kegelberge aus der V6-Landschaft ausblenden.
-            for child in game.get_children():
-                if child is MeshInstance3D:
-                    var instance := child as MeshInstance3D
-                    if instance.mesh is CylinderMesh:
-                        var cyl := instance.mesh as CylinderMesh
-                        if cyl.height >= 14.0 and cyl.bottom_radius >= 7.0:
-                            instance.visible = false
-            _build_mountain_slope()
-            _find_house_roofs()
-            print("LWOD V20: Kamerakugel, flache Bergkette und Haus-Dachsicht aktiv")
-
-        func _add_tri(st: SurfaceTool, collision_vertices: PackedVector3Array, a: Vector3, b: Vector3, c: Vector3, shade: Color) -> void:
-            st.set_color(shade)
-            st.add_vertex(a)
-            st.add_vertex(b)
-            st.add_vertex(c)
-            collision_vertices.append_array(PackedVector3Array([a, b, c]))
-
-        func _build_mountain_slope() -> void:
-            # Kein hoher senkrechter Abschluss direkt am Spieler mehr.
-            # 5 Hoehenprofile, nur hinter z=-93; die Weltgrenze liegt bei z=-82.
-            var points: Array[PackedVector3Array] = []
-            var rows_z := [-96.0, -106.0, -116.0, -128.0, -142.0]
-            for row in range(rows_z.size()):
-                var line := PackedVector3Array()
-                for i in range(51):
-                    var f: float = float(i)
-                    var x: float = -100.0 + f * 4.0
-                    var wave: float = sin(f * 0.28) * 1.6 + sin(f * 0.71) * 0.65 + cos(f * 0.13) * 1.2
-                    var height: float = 0.0
-                    if row == 1:
-                        height = 2.2 + wave * 0.25
-                    elif row == 2:
-                        height = 8.7 + wave * 1.2
-                    elif row == 3:
-                        height = 10.0 + wave * 0.9
-                    elif row == 4:
-                        height = 4.0 + wave * 0.4
-                    line.append(Vector3(x, height, rows_z[row] + sin(f * 0.29) * 1.1))
-                points.append(line)
-            var colors := [Color("#6f8e85"), Color("#687d7c"), Color("#768892"), Color("#526878")]
-            var st := SurfaceTool.new()
-            st.begin(Mesh.PRIMITIVE_TRIANGLES)
-            var faces := PackedVector3Array()
-            for row in range(4):
-                for i in range(50):
-                    var a: Vector3 = points[row][i]
-                    var b: Vector3 = points[row][i + 1]
-                    var c: Vector3 = points[row + 1][i]
-                    var d: Vector3 = points[row + 1][i + 1]
-                    var tone: Color = colors[row].lightened(0.035 * float(i % 4))
-                    _add_tri(st, faces, a, c, d, tone)
-                    _add_tri(st, faces, a, d, b, tone)
-            st.generate_normals()
-            var visual := MeshInstance3D.new()
-            visual.name = "V20Berglandschaft"
-            visual.mesh = st.commit()
-            var rock := StandardMaterial3D.new()
-            rock.vertex_color_use_as_albedo = true
-            rock.roughness = 0.96
-            rock.cull_mode = BaseMaterial3D.CULL_DISABLED
-            visual.material_override = rock
-            game.add_child(visual)
-
-            # Dieselbe sichtbare Geometrie erhaelt Kollision (statisch, ausserhalb der Karte).
-            var solid := StaticBody3D.new()
-            solid.name = "V20Bergkollision"
-            var shape := ConcavePolygonShape3D.new()
-            shape.set_faces(faces)
-            shape.backface_collision = true
-            var collider := CollisionShape3D.new()
-            collider.shape = shape
-            solid.add_child(collider)
-            game.add_child(solid)
-
-        func _find_house_roofs() -> void:
-            for node in game.get_children():
-                if not (node is Node3D) or node == game.hero:
-                    continue
-                var root := node as Node3D
-                var is_house := false
-                var roof: MeshInstance3D = null
-                for child in root.get_children():
-                    if child is StaticBody3D:
-                        is_house = true
-                    elif child is MeshInstance3D:
-                        var visual := child as MeshInstance3D
-                        if visual.mesh is ArrayMesh:
-                            roof = visual
-                if is_house and roof != null:
-                    roofs.append(roof)
-                    roof_centers.append(root.global_position)
-
-        func _update_roofs() -> void:
-            var pos: Vector3 = game.hero.global_position
-            for i in range(roofs.size()):
-                if not is_instance_valid(roofs[i]):
-                    continue
-                var dist: float = Vector2(pos.x, pos.z).distance_to(Vector2(roof_centers[i].x, roof_centers[i].z))
-                # Die groessere Grenze beim Wiedereinblenden vermeidet Flackern.
-                if dist < 5.7:
-                    roofs[i].visible = false
-                elif dist > 7.0:
-                    roofs[i].visible = true
-
-        func _clearance(from_pos: Vector3, to_pos: Vector3) -> Dictionary:
-            var motion: Vector3 = to_pos - from_pos
-            var query := PhysicsShapeQueryParameters3D.new()
-            query.shape = ball
-            query.transform = Transform3D(Basis(), from_pos)
-            query.motion = motion
-            query.exclude = [game.hero.get_rid()]
-            query.collision_mask = 1
-            query.collide_with_bodies = true
-            var fractions: PackedFloat32Array = game.get_world_3d().direct_space_state.cast_motion(query)
-            var fraction: float = 1.0
-            if fractions.size() > 0:
-                fraction = clampf(fractions[0], 0.0, 1.0)
-            # Sicherheitsabstand zum Hindernis, auch bei schnellen Schwenks.
-            var length: float = motion.length()
-            var distance: float = maxf(0.0, length * fraction - 0.18)
-            return {"pos": from_pos + motion.normalized() * distance, "fraction": fraction, "distance": distance}
-
-        func _physics_process(delta: float) -> void:
-            if game == null or game.hero == null or game.camera_node == null:
-                return
-            if game.state != 2:
-                return
-            var current_pos: Vector3 = game.hero.global_position
-            var safe_x: float = clampf(current_pos.x, -75.0, 75.0)
-            var safe_z: float = clampf(current_pos.z, -77.0, 60.0)
-            if absf(current_pos.x - safe_x) > 0.1 or absf(current_pos.z - safe_z) > 0.1:
-                game.hero.global_position = Vector3(safe_x, maxf(current_pos.y, 0.1), safe_z)
-            _update_roofs()
-            var center: Vector3 = game.hero.global_position + Vector3(0, 1.5, 0)
-            var heading: float = game.hero.rotation.y
-            var back := Vector3(sin(heading), 0.0, cos(heading))
-            var side := Vector3(cos(heading), 0.0, -sin(heading))
-            var candidates: Array[Vector3] = [
-                center + back * 6.7 + Vector3.UP * 2.8,
-                center + back * 5.8 + side * 2.7 + Vector3.UP * 4.4,
-                center + back * 5.8 - side * 2.7 + Vector3.UP * 4.4,
-                center + back * 4.2 + Vector3.UP * 6.3
-            ]
-            var best: Vector3 = candidates[0]
-            var best_index: int = 0
-            var best_score: float = -10000.0
-            for i in range(candidates.size()):
-                var info: Dictionary = _clearance(center, candidates[i])
-                var amount: float = float(info["distance"])
-                var score: float = amount - (0.0 if i == 0 else 0.85)
-                if float(info["fraction"]) < 0.55:
-                    score -= 2.0
-                if i == previous_camera_option:
-                    score += 0.55
-                if score > best_score:
-                    best_score = score
-                    best = info["pos"]
-                    best_index = i
-            previous_camera_option = best_index
-            var current: Vector3 = game.camera_node.global_position
-            var speed: float = 11.0 if center.distance_to(best) < center.distance_to(current) else 4.6
-            var smooth: Vector3 = current.lerp(best, minf(1.0, delta * speed))
-            # Noch ein Kugel-Test nach der Glaettung: keine Kamera-Durchdringung.
-            var safety: Dictionary = _clearance(center, smooth)
-            game.camera_node.global_position = safety["pos"]
-            game.camera_node.look_at(center)
-        LWOD_V20_TERRAIN
-        test -s android/scripts/V20CameraTerrain.gd
-        printf '%s  %s\n' 'd2a0adf1c358658fe4b803723ac19a8d591e08c162ed2a34be12655327d5f638' 'android/scripts/V20CameraTerrain.gd' | sha256sum -c -
-        test "$(grep -Fxc '    v19_safety.setup(self)' android/scripts/Main.gd)" -eq 1
-        awk '
-          { print }
-          $0 == "    v19_safety.setup(self)" {
-            print "    var v20_camera = load(\"res://scripts/V20CameraTerrain.gd\").new()"
-            print "    v20_camera.name = \"V20CameraTerrain\""
-            print "    add_child(v20_camera)"
-            print "    v20_camera.setup(self)"
-            n++
-          }
-          END { if (n != 1) exit 43 }
-        ' android/scripts/Main.gd > "$RUNNER_TEMP/Main_v20.gd"
-        mv "$RUNNER_TEMP/Main_v20.gd" android/scripts/Main.gd
-        grep -Fqx '    v20_camera.setup(self)' android/scripts/Main.gd
-        sed -i 's@version/code=19@version/code=20@' android/export_presets.cfg
-        sed -i 's@version/name="1.9"@version/name="2.0"@' android/export_presets.cfg
-        grep -Fqx 'version/code=20' android/export_presets.cfg
-        echo 'V20: Kugelkamera, weiter entferntes Gebirge und Dach-Ausblendung installiert'
-    - name: V21 Weltkarte Minimap Tag Nacht und Rucksackposition
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p android/scripts
-        cat > android/scripts/V21World.gd <<'LWOD_V21_WORLD'
-        extends Node
-
-        # Android V21: große zusammenhängende Karte, Tag/Nacht und sichere Kamera.
-        # Die bewährten Menüs, Eingaben und Spielstände der V20-Basis bleiben erhalten.
-        const LIMIT := 288.0
-        const CYCLE_SECONDS := 480.0
-
-        var game: Node3D
-        var v20_camera: Node
-        var cam_shape: SphereShape3D
-        var sun: DirectionalLight3D
-        var sky: Environment
-        var day_clock := 0.0
-        var previous_camera_option := 0
-        var settlements: Array[Dictionary] = [
-            {"name": "Nordhafen", "pos": Vector2(-165.0, -155.0)},
-            {"name": "Kristallpass", "pos": Vector2(170.0, -170.0)},
-            {"name": "Dämmerwald", "pos": Vector2(-170.0, 160.0)},
-            {"name": "Südwacht", "pos": Vector2(175.0, 160.0)}
-        ]
-        var routes: Array[PackedVector2Array] = []
-
-        func setup(root: Node3D) -> void:
-            game = root
-            process_priority = 170
-            cam_shape = SphereShape3D.new()
-            cam_shape.radius = 0.40
-            v20_camera = game.get_node_or_null("V20CameraTerrain")
-            if v20_camera != null:
-                v20_camera.set_physics_process(false)  # Alte 150x150-Begrenzung aus V20 deaktivieren
-            _disable_old_perimeter()
-            _build_extended_ground()
-            _build_roads()
-            _build_outposts()
-            _build_forests()
-            _build_outer_mountains()
-            _build_new_perimeter()
-            _find_sun_and_sky()
-            print("LWOD V21: Karte 600x600, vier Siedlungen, Kompass und Tag/Nacht eingerichtet")
-
-        func _disable_old_perimeter() -> void:
-            for label in ["V19Weltgrenzen", "V19GebirgsKollision", "V20Bergkollision"]:
-                var body := game.get_node_or_null(label)
-                if body is CollisionObject3D:
-                    body.collision_layer = 0
-                    body.collision_mask = 0
-            for label in ["V19Felsgebirge", "V20Berglandschaft"]:
-                var visual := game.get_node_or_null(label)
-                if visual is Node3D:
-                    visual.visible = false
-            var old_v17 := game.get_node_or_null("V17Gebirgszuege")
-            if old_v17 is Node3D:
-                old_v17.visible = false
-
-        func _build_extended_ground() -> void:
-            # Alte Dorfmitte behält ihren Boden; neue Fläche liegt 2cm tiefer.
-            game._box(game, Vector3(0.0, -0.51, 0.0), Vector3(600.0, 1.0, 600.0), Color("#729d6e"), true)
-            var rng := RandomNumberGenerator.new()
-            rng.seed = 20261121
-            for i in range(100):
-                var x: float = rng.randf_range(-280.0, 280.0)
-                var z: float = rng.randf_range(-280.0, 280.0)
-                if absf(x) < 86.0 and z > -90.0 and z < 72.0:
-                    continue
-                var scale_x: float = rng.randf_range(5.0, 16.0)
-                var scale_z: float = rng.randf_range(4.0, 12.0)
-                var shade := Color("#76a874") if i % 3 == 0 else Color("#699667")
-                game._box(game, Vector3(x, -0.001, z), Vector3(scale_x, 0.01, scale_z), shade)
-
-        func _road(a: Vector2, b: Vector2, width: float = 5.5) -> void:
-            var dx: float = b.x - a.x
-            var dz: float = b.y - a.y
-            var length: float = sqrt(dx * dx + dz * dz)
-            if length < 0.1:
-                return
-            var center := Vector3((a.x + b.x) * 0.5, 0.026, (a.y + b.y) * 0.5)
-            var mesh := game._box(game, center, Vector3(width, 0.035, length + 1.0), Color("#b9a37d")) as MeshInstance3D
-            mesh.rotation.y = atan2(dx, dz)
-
-        func _route(points: PackedVector2Array) -> void:
-            routes.append(points)
-            for i in range(points.size() - 1):
-                _road(points[i], points[i + 1])
-
-        func _build_roads() -> void:
-            # Bestehender Sonnental-Pfad bleibt im Startdorf unverändert.
-            _route(PackedVector2Array([Vector2(0,-62), Vector2(-32,-83), Vector2(-105,-123), Vector2(-165,-155)]))
-            _route(PackedVector2Array([Vector2(0,-62), Vector2(44,-104), Vector2(104,-143), Vector2(170,-170)]))
-            _route(PackedVector2Array([Vector2(0,52), Vector2(-35,91), Vector2(-100,119), Vector2(-170,160)]))
-            _route(PackedVector2Array([Vector2(0,52), Vector2(39,94), Vector2(105,133), Vector2(175,160)]))
-            _route(PackedVector2Array([Vector2(-170,160), Vector2(-209,30), Vector2(-165,-155)]))
-            _route(PackedVector2Array([Vector2(175,160), Vector2(216,25), Vector2(170,-170)]))
-
-        func _outpost_house(pos: Vector3, house_type: int) -> void:
-            var root := Node3D.new()
-            root.name = "V21Haus"
-            root.position = pos
-            game.add_child(root)
-            var stone: Color = [Color("#dacdb3"), Color("#bbc9c4"), Color("#cbb99e"), Color("#d6ceca")][house_type % 4]
-            game._box(root, Vector3(0,1.5,0), Vector3(5.0,3.0,5.0), stone, true)
-            if house_type % 3 == 0:
-                game._cone(root, Vector3(0,3.75,0), 3.6, 1.5, Color("#674a5d"), 8)
-            else:
-                game._roof(root, 5.0, 5.0, Color("#765762") if house_type % 2 == 0 else Color("#595872"))
-            game._box(root, Vector3(0,1.05,2.56), Vector3(1.0,2.05,0.12), Color("#6e513d"))
-            for x in [-1.45,1.45]:
-                game._box(root, Vector3(x,1.95,2.58), Vector3(0.75,0.78,0.12), Color("#64a3c4"))
-            if house_type % 2 == 0:
-                game._box(root, Vector3(1.7,4.05,-0.8), Vector3(0.43,1.7,0.43), Color("#6d6060"))
-
-        func _build_outposts() -> void:
-            for s in range(settlements.size()):
-                var center: Vector2 = settlements[s]["pos"]
-                for i in range(6):
-                    var side: float = -1.0 if i % 2 == 0 else 1.0
-                    var row: float = float(i / 2)
-                    _outpost_house(Vector3(center.x + side * (10.0 + float(s % 2)*1.5), 0, center.y + (row - 1.0) * 13.0), s + i)
-                game._box(game, Vector3(center.x, 0.70, center.y + 22.0), Vector3(3.0,1.4,0.25), Color("#75563e"))
-
-        func _build_forests() -> void:
-            var rng := RandomNumberGenerator.new()
-            rng.seed = 882007
-            for i in range(210):
-                var x: float = rng.randf_range(-275.0,275.0)
-                var z: float = rng.randf_range(-275.0,275.0)
-                if absf(x) < 18.0 and z > -75.0 and z < 70.0:
-                    continue
-                var near_settlement := false
-                for entry in settlements:
-                    var p: Vector2 = entry["pos"]
-                    if Vector2(x,z).distance_to(p) < 23.0:
-                        near_settlement = true
-                        break
-                if near_settlement:
-                    continue
-                game._tree(Vector3(x,0,z), rng.randf_range(0.75,1.55))
-            for i in range(80):
-                var x: float = rng.randf_range(-265.0,265.0)
-                var z: float = rng.randf_range(-265.0,265.0)
-                if absf(x) < 80.0 and absf(z) < 85.0:
-                    continue
-                game._box(game, Vector3(x,0.045,z), Vector3(0.8,0.10,0.7), Color("#808880") if i % 2 == 0 else Color("#9b9a82"))
-
-        func _build_outer_mountains() -> void:
-            # Gebirge sichtbar HINTER x/z=+/-300, nicht als Wand vor dem Spieler.
-            var surface := SurfaceTool.new()
-            surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-            var rock_colors := [Color("#778e8a"), Color("#607d83"), Color("#71858c"), Color("#5b7682")]
-            for side in range(4):
-                for i in range(45):
-                    var t: float = -350.0 + float(i) * (700.0/45.0)
-                    var u: float = -350.0 + float(i+1) * (700.0/45.0)
-                    var h0: float = 8.0 + 9.0 * absf(sin(float(i)*0.35+float(side))) + 4.0 * absf(cos(float(i)*0.51))
-                    var h1: float = 8.0 + 9.0 * absf(sin(float(i+1)*0.35+float(side))) + 4.0 * absf(cos(float(i+1)*0.51))
-                    var base0: Vector3
-                    var base1: Vector3
-                    var rise0: Vector3
-                    var rise1: Vector3
-                    var peak0: Vector3
-                    var peak1: Vector3
-                    if side <= 1:
-                        var sign_z: float = -1.0 if side == 0 else 1.0
-                        base0 = Vector3(t, -0.1, sign_z*304.0)
-                        base1 = Vector3(u, -0.1, sign_z*304.0)
-                        rise0 = Vector3(t, h0*0.35, sign_z*320.0)
-                        rise1 = Vector3(u, h1*0.35, sign_z*320.0)
-                        peak0 = Vector3(t, h0, sign_z*355.0)
-                        peak1 = Vector3(u, h1, sign_z*355.0)
-                    else:
-                        var sign_x: float = -1.0 if side == 2 else 1.0
-                        base0 = Vector3(sign_x*304.0,-0.1,t)
-                        base1 = Vector3(sign_x*304.0,-0.1,u)
-                        rise0 = Vector3(sign_x*320.0,h0*0.35,t)
-                        rise1 = Vector3(sign_x*320.0,h1*0.35,u)
-                        peak0 = Vector3(sign_x*355.0,h0,t)
-                        peak1 = Vector3(sign_x*355.0,h1,u)
-                    _quad(surface,base0,base1,rise1,rise0,rock_colors[(i+side)%4])
-                    _quad(surface,rise0,rise1,peak1,peak0,rock_colors[(i+side+2)%4])
-            surface.generate_normals()
-            var mesh := MeshInstance3D.new()
-            mesh.name = "V21AussenGebirge"
-            mesh.mesh = surface.commit()
-            var m := StandardMaterial3D.new()
-            m.vertex_color_use_as_albedo = true
-            m.roughness = 1.0
-            m.cull_mode = BaseMaterial3D.CULL_DISABLED
-            mesh.material_override = m
-            game.add_child(mesh)
-
-        func _quad(st: SurfaceTool,a: Vector3,b: Vector3,c: Vector3,d: Vector3,col: Color) -> void:
-            st.set_color(col)
-            st.add_vertex(a)
-            st.add_vertex(c)
-            st.add_vertex(b)
-            st.set_color(col)
-            st.add_vertex(a)
-            st.add_vertex(d)
-            st.add_vertex(c)
-
-        func _build_new_perimeter() -> void:
-            var wall := StaticBody3D.new()
-            wall.name = "V21AussenGrenze"
-            game.add_child(wall)
-            for item in [
-                [Vector3(0,15,-297),Vector3(595,30,1)],
-                [Vector3(0,15,297),Vector3(595,30,1)],
-                [Vector3(-297,15,0),Vector3(1,30,595)],
-                [Vector3(297,15,0),Vector3(1,30,595)]]:
-                var collider := CollisionShape3D.new()
-                var shape := BoxShape3D.new()
-                shape.size = item[1]
-                collider.shape = shape
-                collider.position = item[0]
-                wall.add_child(collider)
-
-        func _find_sun_and_sky() -> void:
-            for node in game.get_children():
-                if node is DirectionalLight3D and sun == null:
-                    sun = node as DirectionalLight3D
-                if node is WorldEnvironment and sky == null:
-                    sky = (node as WorldEnvironment).environment
-
-        func is_day() -> bool:
-            return fposmod(day_clock,1.0) < 0.5
-
-        func seconds_left_in_period() -> int:
-            var p: float = fposmod(day_clock,1.0)
-            var limit: float = 0.5 if p < 0.5 else 1.0
-            return int(ceil((limit-p)*CYCLE_SECONDS))
-
-        func _update_lighting(delta: float) -> void:
-            day_clock = fposmod(day_clock + delta/CYCLE_SECONDS, 1.0)
-            var phase: float = day_clock*TAU
-            var horizon: float = sin(phase)
-            var daylight: float = clampf((horizon+0.20)*2.0,0.0,1.0)
-            if sun != null:
-                sun.rotation = Vector3(-phase,-0.6,0)
-                sun.light_energy = lerpf(0.10,1.35,daylight)
-            if sky != null:
-                sky.background_color = Color("#101b39").lerp(Color("#88bce0"),daylight)
-                sky.ambient_light_energy = lerpf(0.26,0.75,daylight)
-
-        func _clearance(start: Vector3, destination: Vector3) -> Dictionary:
-            var move: Vector3 = destination - start
-            if move.length() < 0.01:
-                return {"pos":destination,"distance":0.0,"fraction":1.0}
-            var q := PhysicsShapeQueryParameters3D.new()
-            q.shape = cam_shape
-            q.transform = Transform3D(Basis(),start)
-            q.motion = move
-            q.exclude = [game.hero.get_rid()]
-            q.collision_mask = 1
-            q.collide_with_bodies = true
-            var result: PackedFloat32Array = game.get_world_3d().direct_space_state.cast_motion(q)
-            var fraction: float = 1.0
-            if result.size() > 0:
-                fraction = clampf(result[0],0.0,1.0)
-            var d: float = maxf(0.0,move.length()*fraction-0.20)
-            return {"pos":start+move.normalized()*d,"distance":d,"fraction":fraction}
-
-        func _physics_process(delta: float) -> void:
-            if game == null:
-                return
-            if game.state != 2 or game.hero == null or game.camera_node == null:
-                return
-            _update_lighting(delta)
-            var pos: Vector3 = game.hero.global_position
-            # Nur die neue äußere Kartenbegrenzung verwenden.
-            var x: float = clampf(pos.x,-LIMIT,LIMIT)
-            var z: float = clampf(pos.z,-LIMIT,LIMIT)
-            if absf(x-pos.x)>0.1 or absf(z-pos.z)>0.1:
-                game.hero.global_position = Vector3(x,maxf(pos.y,0.1),z)
-            if v20_camera != null:
-                v20_camera._update_roofs()
-            var center: Vector3 = game.hero.global_position + Vector3(0,1.5,0)
-            var facing: float = game.hero.rotation.y
-            var back: Vector3 = Vector3(sin(facing),0,cos(facing))
-            var side: Vector3 = Vector3(cos(facing),0,-sin(facing))
-            var targets: Array[Vector3] = [
-                center+back*6.6+Vector3.UP*2.8,
-                center+back*5.8+side*2.4+Vector3.UP*4.2,
-                center+back*5.8-side*2.4+Vector3.UP*4.2,
-                center+back*4.3+Vector3.UP*6.1
-            ]
-            var best: Vector3 = targets[0]
-            var chosen: int = 0
-            var best_score: float = -100000.0
-            for i in range(targets.size()):
-                var info: Dictionary = _clearance(center,targets[i])
-                var score: float = float(info["distance"])-(0.0 if i==0 else 0.9)
-                if float(info["fraction"]) < 0.55:
-                    score-=2.0
-                if previous_camera_option==i:
-                    score+=0.45
-                if score>best_score:
-                    best_score=score
-                    best=info["pos"]
-                    chosen=i
-            previous_camera_option=chosen
-            var current: Vector3 = game.camera_node.global_position
-            var speed: float = 10.0 if center.distance_to(best)<center.distance_to(current) else 4.7
-            var smoothed: Vector3 = current.lerp(best,minf(1.0,delta*speed))
-            var safe: Dictionary = _clearance(center,smoothed)
-            game.camera_node.global_position=safe["pos"]
-            game.camera_node.look_at(center)
-        LWOD_V21_WORLD
-        cat > android/scripts/V21Minimap.gd <<'LWOD_V21_MAP'
-        extends Control
-
-        # Dynamische Karte: Norden oben, Osten rechts. Rucksack direkt darunter.
-        var game: Node3D
-        var world: Node
-        var map_center := Vector2(118.0,118.0)
-        var radius := 91.0
-        var zoom := 1.10
-
-        func setup(root: Node3D, expansion: Node) -> void:
-            game = root
-            world = expansion
-            mouse_filter = Control.MOUSE_FILTER_IGNORE
-            anchor_left = 1.0
-            anchor_right = 1.0
-            anchor_top = 0.0
-            anchor_bottom = 0.0
-            offset_left = -252.0
-            offset_right = -16.0
-            offset_top = 10.0
-            offset_bottom = 292.0
-            clip_contents = true
-            _move_backpack()
-            set_process(true)
-            print("LWOD V21: Mini-Map, Kompass, Tag/Nacht rechts oben")
-
-        func _move_backpack() -> void:
-            if game.backpack_button == null:
-                return
-            var bag: Control = game.backpack_button
-            bag.anchor_left = 1.0
-            bag.anchor_right = 1.0
-            bag.anchor_top = 0.0
-            bag.anchor_bottom = 0.0
-            bag.offset_left = -164.0
-            bag.offset_right = -86.0
-            bag.offset_top = 301.0
-            bag.offset_bottom = 374.0
-
-        func _process(_delta: float) -> void:
-            if game != null and game.state == 2:
-                queue_redraw()
-
-        func _mappos(x: float,z: float) -> Vector2:
-            var p: Vector3 = game.hero.global_position
-            return map_center + Vector2((x-p.x)*zoom,(z-p.z)*zoom)
-
-        func _write(at: Vector2, text: String, color: Color, sz: int = 15) -> void:
-            draw_string(ThemeDB.fallback_font,at,text,HORIZONTAL_ALIGNMENT_LEFT,-1,sz,color)
-
-        func _draw() -> void:
-            if game == null or game.hero == null or world == null:
-                return
-            var gold := Color("#f8d79a")
-            draw_rect(Rect2(0,0,236,292),Color(0.025,0.04,0.09,0.72),true)
-            draw_rect(Rect2(0,0,236,292),Color(0.80,0.59,0.91,0.68),false,2.0)
-            _write(Vector2(13,22),"LYDRA  ·  KARTE",gold,16)
-            draw_circle(map_center,radius,Color(0.075,0.17,0.19,0.95))
-            draw_arc(map_center,radius,0,TAU,80,Color("#d9b87a"),3.0)
-            # Gitter folgt der Spielerposition und liefert ein Gefühl für Entfernungen.
-            var player: Vector3 = game.hero.global_position
-            for i in range(-4,5):
-                var x: float = float(i)*25.0
-                var px: float = map_center.x+(x-fposmod(player.x,25.0))*zoom
-                if px > 28.0 and px < 208.0:
-                    draw_line(Vector2(px,36),Vector2(px,200),Color(1,1,1,0.08),1.0)
-                var py: float = map_center.y+(x-fposmod(player.z,25.0))*zoom
-                if py > 28.0 and py < 208.0:
-                    draw_line(Vector2(35,py),Vector2(201,py),Color(1,1,1,0.08),1.0)
-            # Wege und Ortschaften, passend zu den tatsächlichen Weltkoordinaten.
-            for route in world.routes:
-                for i in range(route.size()-1):
-                    var a: Vector2 = _mappos(route[i].x,route[i].y)
-                    var b: Vector2 = _mappos(route[i+1].x,route[i+1].y)
-                    if a.distance_to(map_center)<radius*2.8 or b.distance_to(map_center)<radius*2.8:
-                        draw_line(a,b,Color("#ccb78e"),3.0,true)
-            for entry in world.settlements:
-                var location: Vector2 = entry["pos"]
-                var p: Vector2 = _mappos(location.x,location.y)
-                if p.distance_to(map_center)<radius-9.0:
-                    draw_circle(p,5.0,Color("#ffe5a5"))
-                    _write(p+Vector2(8,-7),str(entry["name"]),Color("#fff5d8"),11)
-            # Norden bleibt oben; der weiße Pfeil zeigt die Blickrichtung der Heldin.
-            var face: float = game.hero.rotation.y
-            var direction := Vector2(-sin(face),-cos(face))
-            var sideways := Vector2(-direction.y,direction.x)
-            draw_colored_polygon(PackedVector2Array([
-                map_center+direction*16.0,
-                map_center-direction*8.0+sideways*7.0,
-                map_center-direction*8.0-sideways*7.0
-            ]),Color("#f9f5ff"))
-            draw_circle(map_center,3.5,Color("#a458eb"))
-            _write(Vector2(113,38),"N",gold,18)
-            _write(Vector2(113,209),"S",gold,18)
-            _write(Vector2(30,123),"W",gold,16)
-            _write(Vector2(194,123),"O",gold,16)
-            # Tag-/Nachtanzeige zeigt die verbleibende Zeit bis zum Wechsel.
-            var daytime: bool = world.is_day()
-            var remain: int = world.seconds_left_in_period()
-            var minutes: int = remain/60
-            var seconds: int = remain%60
-            draw_circle(Vector2(24,240),7.0,Color("#ffd57b") if daytime else Color("#c8cff7"))
-            if not daytime:
-                draw_circle(Vector2(27,237),6.0,Color(0.025,0.04,0.09,1.0))
-            var label: String = "TAG" if daytime else "NACHT"
-            _write(Vector2(43,244),"%s  %02d:%02d" % [label,minutes,seconds],Color("#fff4dd"),16)
-            var phase: float = fposmod(world.day_clock,0.5)/0.5
-            draw_rect(Rect2(13,259,210,9),Color("#30364e"),true)
-            draw_rect(Rect2(13,259,210.0*phase,9),Color("#f4bb74") if daytime else Color("#7b77c9"),true)
-            draw_rect(Rect2(13,259,210,9),Color("#d6b982"),false,1.0)
-        LWOD_V21_MAP
-        printf '%s  %s\n' '0d7b9e48670cd27762503a699c1966a4c97a1a7c699d9d23506348d62ac04457' 'android/scripts/V21World.gd' | sha256sum -c -
-        printf '%s  %s\n' 'e0e509ec326f19e280fb9c4294fe4a38931dbee07fadd7399015d79120e86327' 'android/scripts/V21Minimap.gd' | sha256sum -c -
-        test "$(grep -Fxc '    v20_camera.setup(self)' android/scripts/Main.gd)" -eq 1
-        awk '
-          {print}
-          $0 == "    v20_camera.setup(self)" {
-            print "    var expanded_world = load(\"res://scripts/V21World.gd\").new()"
-            print "    expanded_world.name = \"V21World\""
-            print "    add_child(expanded_world)"
-            print "    expanded_world.setup(self)"
-            print "    var minimap = load(\"res://scripts/V21Minimap.gd\").new()"
-            print "    minimap.name = \"V21Minimap\""
-            print "    play_hud_root.add_child(minimap)"
-            print "    minimap.setup(self, expanded_world)"
-            n++
-          }
-          END {if(n != 1) exit 42}
-        ' android/scripts/Main.gd > "$RUNNER_TEMP/Main_v21.gd"
-        mv "$RUNNER_TEMP/Main_v21.gd" android/scripts/Main.gd
-        grep -Fqx '    minimap.setup(self, expanded_world)' android/scripts/Main.gd
-        sed -i 's@version/code=20@version/code=21@' android/export_presets.cfg
-        sed -i 's@version/name="2.0"@version/name="2.1"@' android/export_presets.cfg
-        grep -Fqx 'version/code=21' android/export_presets.cfg
-        echo 'V21 Basis fuer V22 erstellt'
-    - name: V23 32000 Welt 36 Siedlungen eigener Rucksack Button
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p android/scripts android/assets
-        cat > android/scripts/V21World.gd <<'LWOD_V22_WORLD'
-        extends Node
-
-        # Lydra World Of Dragon V23: 32000 x 32000 Welt, chunk-basiertes Wald-Streaming.
-        # Kamera, Spielstand, Menues, Figur und Tag/Nacht aus V21 bleiben erhalten.
-        const LIMIT := 15950.0
-        const WORLD_SIZE := 32000.0
-        const CYCLE_SECONDS := 480.0
-        const CHUNK_SIZE := 240.0
-        const CHUNK_RADIUS := 2
-
-        var game: Node3D
-        var v20_camera: Node
-        var cam_shape: SphereShape3D
-        var sun: DirectionalLight3D
-        var sky: Environment
-        var day_clock := 0.0
-        var previous_camera_option := 0
-        var chunk_timer := 0.0
-        var last_chunk := Vector2i(99999,99999)
-        var chunks: Dictionary = {}
-        var settlements: Array[Dictionary] = [
-            {"name":"Nordhafen", "pos":Vector2(-165.0,-155.0)},
-            {"name":"Kristallpass", "pos":Vector2(170.0,-170.0)},
-            {"name":"Daemmerwald", "pos":Vector2(-170.0,160.0)},
-            {"name":"Suedwacht", "pos":Vector2(175.0,160.0)},
-            {"name":"Windfelsen", "pos":Vector2(-1050.0,-650.0)},
-            {"name":"Mondtal", "pos":Vector2(990.0,-920.0)},
-            {"name":"Falkenrast", "pos":Vector2(-1720.0,550.0)},
-            {"name":"Sonnenhain", "pos":Vector2(1640.0,680.0)},
-            {"name":"Nebelhafen", "pos":Vector2(-620.0,1600.0)},
-            {"name":"Purpurwald", "pos":Vector2(760.0,1770.0)},
-            {"name":"Sternenbruch", "pos":Vector2(-1550.0,-1760.0)},
-            {"name":"Kristallbucht", "pos":Vector2(1590.0,-1640.0)},
-            {"name":"Tal der Blueten", "pos":Vector2(420.0,-340.0)},
-            {"name":"Westhain", "pos":Vector2(-480.0,-380.0)},
-            {"name":"Nordlicht", "pos":Vector2(-520.0,-880.0)},
-            {"name":"Ostfeste", "pos":Vector2(710.0,-620.0)},
-            {"name":"Adlerfels", "pos":Vector2(980.0,320.0)},
-            {"name":"Farnwald", "pos":Vector2(-820.0,960.0)},
-            {"name":"Blausee", "pos":Vector2(320.0,1080.0)},
-            {"name":"Daemmerbruch", "pos":Vector2(-1180.0,80.0)},
-            {"name":"Morgenwacht", "pos":Vector2(2120.0,-2240.0)},
-            {"name":"Sternenlicht", "pos":Vector2(-2540.0,-2140.0)},
-            {"name":"Nebelwald", "pos":Vector2(-2520.0,2500.0)},
-            {"name":"Wasserfall", "pos":Vector2(2450.0,2550.0)},
-            {"name":"Silberpass", "pos":Vector2(3800.0,-3800.0)},
-            {"name":"Lichttal", "pos":Vector2(-4200.0,-3450.0)},
-            {"name":"Nordburg", "pos":Vector2(-3200.0,4400.0)},
-            {"name":"Windstadt", "pos":Vector2(4550.0,3700.0)},
-            {"name":"Violetttal", "pos":Vector2(6500.0,-5200.0)},
-            {"name":"Perlenfurt", "pos":Vector2(-7200.0,5400.0)},
-            {"name":"Sonnenfeste", "pos":Vector2(7300.0,6800.0)},
-            {"name":"Mondstrand", "pos":Vector2(-6400.0,-7500.0)},
-            {"name":"Silberwald", "pos":Vector2(9900.0,-9300.0)},
-            {"name":"Drachenwacht", "pos":Vector2(-10500.0,8900.0)},
-            {"name":"Kristallstadt", "pos":Vector2(11600.0,9200.0)},
-            {"name":"Nebelkueste", "pos":Vector2(-11800.0,-11600.0)}
-        ]
-        var routes: Array[PackedVector2Array] = []
-
-        func setup(root: Node3D) -> void:
-            game = root
-            process_priority = 170
-            cam_shape = SphereShape3D.new()
-            cam_shape.radius = 0.4
-            v20_camera = game.get_node_or_null("V20CameraTerrain")
-            if v20_camera != null:
-                v20_camera.set_physics_process(false)
-            _disable_old_perimeter()
-            _build_extended_ground()
-            _build_roads()
-            _build_outposts()
-            _build_outer_mountains()
-            _build_new_perimeter()
-            _find_sun_and_sky()
-            if game.camera_node != null:
-                game.camera_node.far = 5800.0
-            print("LWOD V23: 32000x32000-Welt, Streaming, 36 Siedlungen")
-
-        func _disable_old_perimeter() -> void:
-            for label in ["V19Weltgrenzen", "V19GebirgsKollision", "V20Bergkollision"]:
-                var body := game.get_node_or_null(label)
-                if body is CollisionObject3D:
-                    body.collision_layer = 0
-                    body.collision_mask = 0
-            for label in ["V19Felsgebirge", "V20Berglandschaft", "V17Gebirgszuege"]:
-                var visual := game.get_node_or_null(label)
-                if visual is Node3D:
-                    visual.visible = false
-
-        func _build_extended_ground() -> void:
-            # 1 grosse Kollisionsflaeche statt tausender einzelner Boden-Collider.
-            # Liegt leicht unter dem Boden des Startdorfes (dessen Kollision bleibt erhalten).
-            game._box(game, Vector3(0.0,-0.52,0.0), Vector3(WORLD_SIZE,1.0,WORLD_SIZE), Color("#729c72"), true)
-
-        func _road(a: Vector2, b: Vector2, width: float = 6.0) -> void:
-            var dx: float = b.x-a.x
-            var dz: float = b.y-a.y
-            var length: float = sqrt(dx*dx+dz*dz)
-            if length < 0.1:
-                return
-            var center := Vector3((a.x+b.x)*0.5, 0.025, (a.y+b.y)*0.5)
-            var mesh := game._box(game,center,Vector3(width,0.035,length+1.0),Color("#bca584")) as MeshInstance3D
-            mesh.rotation.y = atan2(dx,dz)
-
-        func _route(points: PackedVector2Array) -> void:
-            routes.append(points)
-            for i in range(points.size()-1):
-                _road(points[i],points[i+1])
-
-        func _build_roads() -> void:
-            # Regionale Strassen verbinden Zentraldorf mit der 600er Startregion.
-            _route(PackedVector2Array([Vector2(0,-62),Vector2(-32,-83),Vector2(-105,-123),Vector2(-165,-155)]))
-            _route(PackedVector2Array([Vector2(0,-62),Vector2(44,-104),Vector2(104,-143),Vector2(170,-170)]))
-            _route(PackedVector2Array([Vector2(0,52),Vector2(-35,91),Vector2(-100,119),Vector2(-170,160)]))
-            _route(PackedVector2Array([Vector2(0,52),Vector2(39,94),Vector2(105,133),Vector2(175,160)]))
-            _route(PackedVector2Array([Vector2(-170,160),Vector2(-209,30),Vector2(-165,-155)]))
-            _route(PackedVector2Array([Vector2(175,160),Vector2(216,25),Vector2(170,-170)]))
-            # Fernwege: lang, aber aus wenigen renderbaren Segmenten zusammengesetzt.
-            _route(PackedVector2Array([Vector2(-165,-155),Vector2(-410,-320),Vector2(-730,-500),Vector2(-1050,-650),Vector2(-1290,-1120),Vector2(-1550,-1760)]))
-            _route(PackedVector2Array([Vector2(170,-170),Vector2(370,-430),Vector2(680,-690),Vector2(990,-920),Vector2(1320,-1210),Vector2(1590,-1640)]))
-            _route(PackedVector2Array([Vector2(-170,160),Vector2(-680,370),Vector2(-1180,480),Vector2(-1720,550)]))
-            _route(PackedVector2Array([Vector2(175,160),Vector2(570,380),Vector2(1130,500),Vector2(1640,680)]))
-            _route(PackedVector2Array([Vector2(-170,160),Vector2(-390,660),Vector2(-520,1100),Vector2(-620,1600)]))
-            _route(PackedVector2Array([Vector2(175,160),Vector2(390,620),Vector2(560,1230),Vector2(760,1770)]))
-            # Fernstrassen, die alle 36 Ortschaften verbinden.
-            # Nur zwei kostenguenstige Wegsegmente pro neuem Ort.
-            for i in range(12, settlements.size()):
-                var target: Vector2 = settlements[i]["pos"]
-                var nearest := Vector2.ZERO
-                var best_dist: float = INF
-                for j in range(i):
-                    var candidate: Vector2 = settlements[j]["pos"]
-                    var distance: float = target.distance_squared_to(candidate)
-                    if distance < best_dist:
-                        best_dist = distance
-                        nearest = candidate
-                var bend: Vector2 = (target + nearest) * 0.5 + Vector2(0.0, sin(float(i) * 1.9) * 65.0)
-                _route(PackedVector2Array([nearest, bend, target]))
-
-        func _outpost_house(pos: Vector3, house_type: int) -> void:
-            var root := Node3D.new()
-            root.name = "V22Haus"
-            root.position = pos
-            game.add_child(root)
-            var colors: Array[Color] = [Color("#dacdb3"),Color("#bbc9c4"),Color("#cbb99e"),Color("#d6ceca")]
-            var stone: Color = colors[house_type%4]
-            game._box(root,Vector3(0,1.5,0),Vector3(5.0,3.0,5.0),stone,true)
-            if house_type%3==0:
-                game._cone(root,Vector3(0,3.75,0),3.6,1.5,Color("#674a5d"),8)
-            else:
-                game._roof(root,5.0,5.0,Color("#765762") if house_type%2==0 else Color("#595872"))
-            game._box(root,Vector3(0,1.05,2.56),Vector3(1.0,2.05,0.12),Color("#6e513d"))
-            for x in [-1.45,1.45]:
-                game._box(root,Vector3(x,1.95,2.58),Vector3(0.75,0.78,0.12),Color("#64a3c4"))
-
-        func _build_outposts() -> void:
-            for s in range(settlements.size()):
-                var center: Vector2 = settlements[s]["pos"]
-                # 4 Haeuser pro Aussenposten, keine tausenden dauerhaft geladenen Objekte.
-                for i in range(4):
-                    var side: float = -1.0 if i%2==0 else 1.0
-                    var row: float = float(i/2)
-                    _outpost_house(Vector3(center.x+side*12.0,0,center.y+(row-0.5)*13.0),s+i)
-                game._box(game,Vector3(center.x,0.68,center.y+20),Vector3(3.0,1.36,0.25),Color("#75563e"))
-
-        func _quad(st: SurfaceTool,a: Vector3,b: Vector3,c: Vector3,d: Vector3,col: Color) -> void:
-            st.set_color(col)
-            st.add_vertex(a)
-            st.add_vertex(c)
-            st.add_vertex(b)
-            st.set_color(col)
-            st.add_vertex(a)
-            st.add_vertex(d)
-            st.add_vertex(c)
-
-        func _build_outer_mountains() -> void:
-            # Bergkette ausserhalb der begehbaren Grenze: keine graue Bergwand vor der Kamera.
-            var surface := SurfaceTool.new()
-            surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-            var rock_colors: Array[Color] = [Color("#778e8a"),Color("#607d83"),Color("#71858c"),Color("#5b7682")]
-            for side in range(4):
-                for i in range(120):
-                    var t: float = -16200.0+float(i)*(32400.0/120.0)
-                    var u: float = -16200.0+float(i+1)*(32400.0/120.0)
-                    var h0: float = 24.0+26.0*absf(sin(float(i)*0.19+float(side)))+11.0*absf(cos(float(i)*0.43))
-                    var h1: float = 24.0+26.0*absf(sin(float(i+1)*0.19+float(side)))+11.0*absf(cos(float(i+1)*0.43))
-                    var base0: Vector3
-                    var base1: Vector3
-                    var rise0: Vector3
-                    var rise1: Vector3
-                    var peak0: Vector3
-                    var peak1: Vector3
-                    if side<=1:
-                        var sign_z: float = -1.0 if side==0 else 1.0
-                        base0=Vector3(t,-0.1,sign_z*15985.0)
-                        base1=Vector3(u,-0.1,sign_z*15985.0)
-                        rise0=Vector3(t,h0*0.30,sign_z*16035.0)
-                        rise1=Vector3(u,h1*0.30,sign_z*16035.0)
-                        peak0=Vector3(t,h0,sign_z*16200.0)
-                        peak1=Vector3(u,h1,sign_z*16200.0)
-                    else:
-                        var sign_x: float = -1.0 if side==2 else 1.0
-                        base0=Vector3(sign_x*15985.0,-0.1,t)
-                        base1=Vector3(sign_x*15985.0,-0.1,u)
-                        rise0=Vector3(sign_x*16035.0,h0*0.30,t)
-                        rise1=Vector3(sign_x*16035.0,h1*0.30,u)
-                        peak0=Vector3(sign_x*16200.0,h0,t)
-                        peak1=Vector3(sign_x*16200.0,h1,u)
-                    _quad(surface,base0,base1,rise1,rise0,rock_colors[(i+side)%4])
-                    _quad(surface,rise0,rise1,peak1,peak0,rock_colors[(i+side+2)%4])
-            surface.generate_normals()
-            var mesh := MeshInstance3D.new()
-            mesh.name = "V22AussenGebirge"
-            mesh.mesh = surface.commit()
-            var m := StandardMaterial3D.new()
-            m.vertex_color_use_as_albedo = true
-            m.roughness = 1.0
-            m.cull_mode = BaseMaterial3D.CULL_DISABLED
-            mesh.material_override = m
-            game.add_child(mesh)
-
-        func _build_new_perimeter() -> void:
-            var wall := StaticBody3D.new()
-            wall.name = "V22AussenGrenze"
-            game.add_child(wall)
-            for item in [
-                [Vector3(0,18,-15964),Vector3(31900,36,2)],
-                [Vector3(0,18,15964),Vector3(31900,36,2)],
-                [Vector3(-15964,18,0),Vector3(2,36,31900)],
-                [Vector3(15964,18,0),Vector3(2,36,31900)]]:
-                var collider := CollisionShape3D.new()
-                var shape := BoxShape3D.new()
-                shape.size = item[1]
-                collider.shape = shape
-                collider.position = item[0]
-                wall.add_child(collider)
-
-        func _near_settlement(p: Vector2) -> bool:
-            if p.length() < 115.0:
-                return true
-            for entry in settlements:
-                var center: Vector2 = entry["pos"]
-                if p.distance_to(center)<44.0:
-                    return true
-            return false
-
-        func _near_road(p: Vector2) -> bool:
-            for route in routes:
-                for i in range(route.size()-1):
-                    var a: Vector2 = route[i]
-                    var b: Vector2 = route[i+1]
-                    var ab: Vector2 = b-a
-                    var d: float = maxf(ab.length_squared(),0.01)
-                    var t: float = clampf((p-a).dot(ab)/d,0.0,1.0)
-                    if p.distance_squared_to(a+ab*t) < 85.0:
-                        return true
-            return false
-
-        func _new_multi(mesh_resource: Mesh, material: Material, root: Node3D) -> MultiMesh:
-            var instance := MultiMeshInstance3D.new()
-            instance.material_override = material
-            var multimesh := MultiMesh.new()
-            multimesh.transform_format = MultiMesh.TRANSFORM_3D
-            multimesh.mesh = mesh_resource
-            multimesh.instance_count = 28
-            instance.multimesh = multimesh
-            root.add_child(instance)
-            return multimesh
-
-        func _make_chunk(cx: int, cz: int) -> Node3D:
-            var root := Node3D.new()
-            root.name = "V22Chunk_%d_%d" % [cx,cz]
-            game.add_child(root)
-            var trunk := CylinderMesh.new()
-            trunk.top_radius = 0.26
-            trunk.bottom_radius = 0.34
-            trunk.height = 2.1
-            trunk.radial_segments = 6
-            var leaves := CylinderMesh.new()
-            leaves.top_radius = 0.06
-            leaves.bottom_radius = 1.6
-            leaves.height = 3.1
-            leaves.radial_segments = 8
-            var rock_mesh := SphereMesh.new()
-            rock_mesh.radius = 0.65
-            rock_mesh.height = 1.05
-            rock_mesh.radial_segments = 8
-            rock_mesh.rings = 4
-            var tree_mat := StandardMaterial3D.new()
-            tree_mat.albedo_color = Color("#6b4e37")
-            var leaf_mat := StandardMaterial3D.new()
-            leaf_mat.albedo_color = Color("#397d57")
-            var stone_mat := StandardMaterial3D.new()
-            stone_mat.albedo_color = Color("#859089")
-            var trunks := _new_multi(trunk,tree_mat,root)
-            var crowns := _new_multi(leaves,leaf_mat,root)
-            var rocks := _new_multi(rock_mesh,stone_mat,root)
-            var rng := RandomNumberGenerator.new()
-            rng.seed = int(1000001+cx*7919+cz*104729)
-            var tree_count := 0
-            var rock_count := 0
-            for i in range(28):
-                var px: float = (float(cx)+rng.randf())*CHUNK_SIZE
-                var pz: float = (float(cz)+rng.randf())*CHUNK_SIZE
-                if absf(px)>LIMIT-30.0 or absf(pz)>LIMIT-30.0:
-                    continue
-                var point := Vector2(px,pz)
-                if _near_settlement(point) or _near_road(point):
-                    continue
-                var scale: float = rng.randf_range(0.8,1.5)
-                var basis := Basis().scaled(Vector3(scale,scale,scale))
-                if i%5==0:
-                    rocks.set_instance_transform(rock_count,Transform3D(basis,Vector3(px,0.4*scale,pz)))
-                    rock_count += 1
-                else:
-                    trunks.set_instance_transform(tree_count,Transform3D(basis,Vector3(px,1.05*scale,pz)))
-                    crowns.set_instance_transform(tree_count,Transform3D(basis,Vector3(px,3.1*scale,pz)))
-                    tree_count += 1
-            # Kleine lokale Bodenvariationen werden zusammen mit dem Chunk entladen.
-            for patch in range(5):
-                var patch_x: float = (float(cx)+rng.randf()) * CHUNK_SIZE
-                var patch_z: float = (float(cz)+rng.randf()) * CHUNK_SIZE
-                if absf(patch_x) > LIMIT-20.0 or absf(patch_z) > LIMIT-20.0:
-                    continue
-                var color: Color = Color("#769f73") if patch % 2 == 0 else Color("#699567")
-                game._box(root, Vector3(patch_x, 0.012, patch_z), Vector3(rng.randf_range(10.0, 25.0), 0.015, rng.randf_range(6.0, 19.0)), color)
-            trunks.visible_instance_count = tree_count
-            crowns.visible_instance_count = tree_count
-            rocks.visible_instance_count = rock_count
-            return root
-
-        func _stream_chunks(force: bool = false) -> void:
-            if game == null or game.hero == null:
-                return
-            var p: Vector3 = game.hero.global_position
-            var center := Vector2i(int(floor(p.x/CHUNK_SIZE)),int(floor(p.z/CHUNK_SIZE)))
-            if center == last_chunk and not force:
-                return
-            last_chunk = center
-            var wanted: Dictionary = {}
-            for x in range(center.x-CHUNK_RADIUS,center.x+CHUNK_RADIUS+1):
-                for z in range(center.y-CHUNK_RADIUS,center.y+CHUNK_RADIUS+1):
-                    var middle := Vector2((float(x)+0.5)*CHUNK_SIZE,(float(z)+0.5)*CHUNK_SIZE)
-                    if absf(middle.x)>LIMIT+CHUNK_SIZE or absf(middle.y)>LIMIT+CHUNK_SIZE:
-                        continue
-                    var key := "%d:%d" % [x,z]
-                    wanted[key] = true
-                    if not chunks.has(key):
-                        chunks[key] = _make_chunk(x,z)
-            for key in chunks.keys():
-                if not wanted.has(key):
-                    var item: Node3D = chunks[key]
-                    item.queue_free()
-                    chunks.erase(key)
-
-        func _find_sun_and_sky() -> void:
-            for node in game.get_children():
-                if node is DirectionalLight3D and sun == null:
-                    sun = node as DirectionalLight3D
-                if node is WorldEnvironment and sky == null:
-                    sky = (node as WorldEnvironment).environment
-
-        func is_day() -> bool:
-            return fposmod(day_clock,1.0) < 0.5
-
-        func seconds_left_in_period() -> int:
-            var p: float = fposmod(day_clock,1.0)
-            var limit: float = 0.5 if p < 0.5 else 1.0
-            return int(ceil((limit-p)*CYCLE_SECONDS))
-
-        func _update_lighting(delta: float) -> void:
-            day_clock = fposmod(day_clock + delta/CYCLE_SECONDS, 1.0)
-            var phase: float = day_clock*TAU
-            var horizon: float = sin(phase)
-            var daylight: float = clampf((horizon+0.20)*2.0,0.0,1.0)
-            if sun != null:
-                sun.rotation = Vector3(-phase,-0.6,0)
-                sun.light_energy = lerpf(0.10,1.35,daylight)
-            if sky != null:
-                sky.background_color = Color("#101b39").lerp(Color("#88bce0"),daylight)
-                sky.ambient_light_energy = lerpf(0.26,0.75,daylight)
-
-        func _clearance(start: Vector3, destination: Vector3) -> Dictionary:
-            var move: Vector3 = destination - start
-            if move.length() < 0.01:
-                return {"pos":destination,"distance":0.0,"fraction":1.0}
-            var q := PhysicsShapeQueryParameters3D.new()
-            q.shape = cam_shape
-            q.transform = Transform3D(Basis(),start)
-            q.motion = move
-            q.exclude = [game.hero.get_rid()]
-            q.collision_mask = 1
-            q.collide_with_bodies = true
-            var result: PackedFloat32Array = game.get_world_3d().direct_space_state.cast_motion(q)
-            var fraction: float = 1.0
-            if result.size() > 0:
-                fraction = clampf(result[0],0.0,1.0)
-            var d: float = maxf(0.0,move.length()*fraction-0.20)
-            return {"pos":start+move.normalized()*d,"distance":d,"fraction":fraction}
-
-        func _physics_process(delta: float) -> void:
-            if game == null:
-                return
-            if game.state != 2 or game.hero == null or game.camera_node == null:
-                return
-            _update_lighting(delta)
-            chunk_timer += delta
-            if chunk_timer >= 0.80:
-                chunk_timer = 0.0
-                _stream_chunks()
-            var pos: Vector3 = game.hero.global_position
-            # Nur die neue äußere Kartenbegrenzung verwenden.
-            var x: float = clampf(pos.x,-LIMIT,LIMIT)
-            var z: float = clampf(pos.z,-LIMIT,LIMIT)
-            if absf(x-pos.x)>0.1 or absf(z-pos.z)>0.1:
-                game.hero.global_position = Vector3(x,maxf(pos.y,0.1),z)
-            if v20_camera != null:
-                v20_camera._update_roofs()
-            var center: Vector3 = game.hero.global_position + Vector3(0,1.5,0)
-            var facing: float = game.hero.rotation.y
-            var back: Vector3 = Vector3(sin(facing),0,cos(facing))
-            var side: Vector3 = Vector3(cos(facing),0,-sin(facing))
-            var targets: Array[Vector3] = [
-                center+back*6.6+Vector3.UP*2.8,
-                center+back*5.8+side*2.4+Vector3.UP*4.2,
-                center+back*5.8-side*2.4+Vector3.UP*4.2,
-                center+back*4.3+Vector3.UP*6.1
-            ]
-            var best: Vector3 = targets[0]
-            var chosen: int = 0
-            var best_score: float = -100000.0
-            for i in range(targets.size()):
-                var info: Dictionary = _clearance(center,targets[i])
-                var score: float = float(info["distance"])-(0.0 if i==0 else 0.9)
-                if float(info["fraction"]) < 0.55:
-                    score-=2.0
-                if previous_camera_option==i:
-                    score+=0.45
-                if score>best_score:
-                    best_score=score
-                    best=info["pos"]
-                    chosen=i
-            previous_camera_option=chosen
-            var current: Vector3 = game.camera_node.global_position
-            var speed: float = 10.0 if center.distance_to(best)<center.distance_to(current) else 4.7
-            var smoothed: Vector3 = current.lerp(best,minf(1.0,delta*speed))
-            var safe: Dictionary = _clearance(center,smoothed)
-            game.camera_node.global_position=safe["pos"]
-            game.camera_node.look_at(center)
-        LWOD_V22_WORLD
-        printf '%s  %s\n' '7277eb826962a78df2aaad1b94593848e396747ab5d2217f87a169470e1669e2' 'android/scripts/V21World.gd' | sha256sum -c -
-        cat > android/scripts/V21Minimap.gd <<'LWOD_V22_MAP'
-        extends Control
-
-        # V22: kompakte Mini-Map (176x189), Tag/Nacht, wieder sichtbarer Rucksack.
-        var game: Node3D
-        var world: Node
-        var map_center := Vector2(88.0,86.0)
-        var radius := 56.0
-        var zoom := 0.48
-        var bag_button: Button
-
-        func setup(root: Node3D, expansion: Node) -> void:
-            game = root
-            world = expansion
-            mouse_filter = Control.MOUSE_FILTER_IGNORE
-            anchor_left = 1.0
-            anchor_right = 1.0
-            anchor_top = 0.0
-            anchor_bottom = 0.0
-            offset_left = -190.0
-            offset_right = -14.0
-            offset_top = 8.0
-            offset_bottom = 197.0
-            clip_contents = true
-            bag_button = null  # V23 benutzt eigenstaendige Rucksack-Ebene
-            set_process(true)
-            print("LWOD V23: kompakte MiniMap; separater Rucksack-Button")
-
-        func _process(_delta: float) -> void:
-            if game == null:
-                return
-            if game.state == 2:
-                queue_redraw()
-                # Eine andere alte UI-Routine darf das Symbol nicht erneut ausblenden.
-                if bag_button != null and not bag_button.visible:
-                    bag_button.visible = true
-
-        func _mappos(x: float, z: float) -> Vector2:
-            var p: Vector3 = game.hero.global_position
-            return map_center+Vector2((x-p.x)*zoom,(z-p.z)*zoom)
-
-        func _write(pos: Vector2, label: String, col: Color, size_px: int = 13) -> void:
-            draw_string(ThemeDB.fallback_font,pos,label,HORIZONTAL_ALIGNMENT_LEFT,-1,size_px,col)
-
-        func _draw() -> void:
-            if game == null or game.hero == null or world == null:
-                return
-            var gold := Color("#f2d29a")
-            draw_rect(Rect2(0,0,176,189),Color(0.025,0.04,0.09,0.73),true)
-            draw_rect(Rect2(0,0,176,189),Color(0.83,0.63,0.91,0.62),false,1.5)
-            _write(Vector2(12,17),"LYDRA - KARTE",gold,13)
-            draw_circle(map_center,radius,Color("#15332e"))
-            draw_arc(map_center,radius,0,TAU,72,gold,2.0)
-            var player: Vector3 = game.hero.global_position
-            for i in range(-3,4):
-                var step: float = float(i)*50.0
-                var px: float = map_center.x+(step-fposmod(player.x,50.0))*zoom
-                var py: float = map_center.y+(step-fposmod(player.z,50.0))*zoom
-                if px>map_center.x-radius and px<map_center.x+radius:
-                    draw_line(Vector2(px,45),Vector2(px,127),Color(1,1,1,0.07),1)
-                if py>map_center.y-radius and py<map_center.y+radius:
-                    draw_line(Vector2(47,py),Vector2(129,py),Color(1,1,1,0.07),1)
-            for route in world.routes:
-                for i in range(route.size()-1):
-                    var a: Vector2 = _mappos(route[i].x,route[i].y)
-                    var b: Vector2 = _mappos(route[i+1].x,route[i+1].y)
-                    if a.distance_to(map_center)<radius-4.0 and b.distance_to(map_center)<radius-4.0:
-                        draw_line(a,b,Color("#d8ba8f"),2.0,true)
-            for entry in world.settlements:
-                var location: Vector2 = entry["pos"]
-                var point: Vector2 = _mappos(location.x,location.y)
-                if point.distance_to(map_center)<radius-7.0:
-                    draw_circle(point,3.5,Color("#ffe2a8"))
-                    if point.distance_to(map_center)<radius-20.0:
-                        _write(point+Vector2(5,-5),str(entry["name"]),Color("#fff5dc"),10)
-            var face: float = game.hero.rotation.y
-            var direction := Vector2(-sin(face),-cos(face))
-            var sideways := Vector2(-direction.y,direction.x)
-            draw_colored_polygon(PackedVector2Array([
-                map_center+direction*11.0,
-                map_center-direction*5.5+sideways*5.0,
-                map_center-direction*5.5-sideways*5.0
-            ]),Color("#ffffff"))
-            draw_circle(map_center,2.2,Color("#a557e0"))
-            _write(Vector2(83,36),"N",gold,15)
-            _write(Vector2(84,147),"S",gold,15)
-            _write(Vector2(24,91),"W",gold,14)
-            _write(Vector2(144,91),"O",gold,14)
-            var daytime: bool = world.is_day()
-            var remain: int = world.seconds_left_in_period()
-            var minutes: int = int(remain/60)
-            var seconds: int = remain%60
-            draw_circle(Vector2(16,159),6.0,Color("#ffd57b") if daytime else Color("#c8cff7"))
-            if not daytime:
-                draw_circle(Vector2(19,156),5.0,Color(0.03,0.05,0.10))
-            _write(Vector2(29,163),"%s  %02d:%02d" % ["TAG" if daytime else "NACHT",minutes,seconds],Color("#fff4dd"),14)
-            var phase: float = fposmod(world.day_clock,0.5)/0.5
-            draw_rect(Rect2(10,173,156,7),Color("#2e304b"),true)
-            draw_rect(Rect2(10,173,156.0*phase,7),Color("#edbe79") if daytime else Color("#8e8bdb"),true)
-            draw_rect(Rect2(10,173,156,7),gold,false,1.0)
-            # Lokaler Ausschnitt; die gesamte Welt umfasst 32.000 x 32.000 Einheiten.
-            tooltip_text = "Welt 32000 x 32000 | X: %d Z: %d" % [int(player.x), int(player.z)]
-        LWOD_V22_MAP
-        printf '%s  %s\n' '999c869a98f1a6319ea8834b650e18909d0b2ebb0d1ba7fa772b40b5291106d3' 'android/scripts/V21Minimap.gd' | sha256sum -c -
-        base64 -d <<'LWOD_V22_BAG_PNG' > android/assets/v22_backpack.png
-        iVBORw0KGgoAAAANSUhEUgAAADoAAAA6CAYAAADhu0ooAAAABmJLR0QA/wD/AP+gvaeTAAAKbElEQVRoge1aa5AU1RX+TnfP
-        zs7szPQsuywPAYGwcRfEV0XLQKokQnxhLGNIKKyUVhQkPipV4I8QrTJYifmTQB5SJLqIFfK0jFUxiRqjprQKcQUUl4XdBSyU
-        hzz2OY+e7p7puffkxzx3ZpadcZtoVfj+zPTte78+555zzz3ndgMXcAEX8HkGnS/iWO/vmkg614N4EQHzGJgNhh+EBgAAIwFC
-        goBjEnyEmHZJ0H/0BauHz4c8riua6HtmupDypwSsBFBf43CbgedURXmkoe3eU27K5aqisb5ti0nyPwA0Vrh9FkAcQDR7rQMI
-        AphSoe8IE98aar9vl1uyuaao0d0xhVUcANAMAAwcI/A2JvWNYCD6Ac1cb1Uaxyc2++KGfgWxWMqg1QRcnL01CCe9IHj5/f1u
-        yKe5QQIArPADAOWU/EPQp62hOd+1xxuXnYB3ALzDJzZvMmLBbSDcCaAZmvYAgI1uyKe4QQIAIPpq9p9lc+r+apQso5i53rJV
-        5XsAMtYnLHFLPPcUBaZnfuhky4IHjU9LMrnt3jhAJ7OXM1yQC4CLihJIBQAwiwmTZTnynC7ATYt+rvF/o+iEoy4f+bU3aml+
-        Rs5lWUb2b620j9bCKgECg0Vk/9ZG3Zc2qfX7yYkwfqp99EzXjga/x34IoLUA5py3PDILBkCEo8z0VNAUW+hLa81aOWqWMXbo
-        qTYSyj8BfKG4ffiMjqTtqZXunPDWO5g0NVra/CETLw+133e4Fq6aFI0f2T4ZjtgH4CIAEAKsqhmO08f88siBcLoWvvHQunBE
-        mzbLUgBACrCSfRYYJ1mTV4YuWTtYLVdNa5QdsZmySn54JGlu39p/+pEfXzQ7EFDUxhYbH7xnx6R0x5EVBbj6+uQkADANKZ54
-        7JOP732gZdrceV4/CDMgaDOAu6rmq7Zj5PD2uQSsAoCRYeE8+fP+k4ODwunZb8UBoN4nlVlz0q757qw5jsfnkwoAdHdZ8YEB
-        4fzqZ/0nIxHhAACBVo30/mZ2tXxVK6oIuRKACgCv/ys2ZJlCAsDezkQ812fegqS3Wr7x0HppgWvPu0YcACxTyNdfiebqVU1l
-        z7er5ataUWK+AQAkE3fuNPLKdXeZpmFIAQDz2p06ReFqKccWSgHmtjl1QMZtD3ZZ+SjbuSsRkzLzDEJGpqo4q+nEzATgCgDo
-        P51KxeMin+YJCXbbfUvdVkjkZy8WEWLgbDq3p16VlW1cnDMYxbs72knFw0Zfx2KAwgAwOOikSvvt7UzEr1nUEAaAm1bEQ06S
-        ZJU6VYTHy3kDvPduYWnkMDDgpKZM83gBNBp9HT3xno6drMpNoUvW9o3FOaaixsGO7zDhWQY0FE9ahaja3WWapiGFP6Co9T6m
-        eh+7koybhhTdXWZZckDFuyJTG4A2EsrdRm/H3YH2NX+uxFVRUaOv4zKWeDZ/n2gIzE0AMDSUdkr7Cwl+/i/DZ5feqE8il9Ik
-        ZuCNV6PDxW6bw+Cg4wC+3OUQgCYAHmbsiPds6w7OX32gdExFRVny4wDllPwRIN8C6E0AMBOVy7C33zJib79lxD6NUrXCSsgi
-        GcQdYGUpiB4DoIGxEcCK0jFlwWig75kgQDdnrrgn0HbyJ5w5xAIAmLaY0PpzAwmL8zJIaMHA/FOPg5FZn8TLz3TtaCgdU6ao
-        V6QvB+DNjMGLRBulIjOBCAAsQ068sJ4gbEPmFVVZhok2SiJ6MdtU76+zLy8dU769KDSv8F85AABM0HNNxbPp86vK7SvCTYuv
-        C4Q0TXG9iNE0hRZfFwjdviLc5POreVlNqzDZRbIdzIsNpbWMq7RBYeiF1S+HAIAZei7ImEY6r+it3wg3fe2mYBMAfHOlSHfu
-        TETefCMe7T/rjApYREDTJMfjq0+PisamqYmhEU9ZcGuZ4vEsWRrUr/1KQzgQVDUA8HhV5fk/Dg0AQCJRmGwmRQcAAg/l5GbJ
-        eilnmaISqM+ZhkFJAFCIdc6GdMssBKNgsHCmEwiq2rKbQ83Lbg41nz6VSh7stozeA8mESI0oy5acnhIKVk4kRqKe1GuvTz/j
-        Dehov9TbsGChLzBtel1ZKln8rOJgpHDGopJg5uIzE/tKx5dHXSIqDejMFM5tXWZCVgxGTlrCo2W8a9r0Ou+06XXe65emmk4d
-        6YMUY1dvjbpTt2rl6VnTvjgbijJ6Loo5i5EwRZFFZbisA5VvctWVacVrdIxgtO4HB0T7JQG69ppJtHB+iOrqFNiJEUiRSaR8
-        +lR4/aFRY5KJCKxYP0Q6BdsYgT/UglRKorsnxp27h7n3kMFbNl1WlnwY8aLIz0qZm1ZCdYoywiCAmWFalbcXwxT80qv9/NKr
-        /fB6VVx5WZCWXJNSZrdkfEFvmQefPvo1ixU9CyuWeeOwd+8ZfnP3sNy3P87JZGYuW1oqF0OWJQUzZ5yPuNyiFVBd9ZK1aDLJ
-        kqvYRZNJgc49Ed77fqTqUmbv+xHu3BPJK3kusARSyYwkxKjKotWWaToA2LYLh9MuwU7mTx1ddF0gDAC2VTkQjYW4SXmLGsMn
-        kE6Nzs+TicI7X8OsrZC1TSl1XUWuqhoP1SqasahVm0X7jmpsJZPweQFj6BiMoWMV+6UcwqGP1JoUtbKTTnDJdXnvUx4AfqB2
-        i0bjhO1/rReWPXbSZCcJv/+bV4zEakusktllxEBDVsZzYlyLxoPQKWtHs0ZFAaD7sMYbNqnpuTME+f2j71k28PFJjc2aXzAC
-        plmQJd5QHyKUnQeMwriKyhR0NbuTFWdFtSCZIvQe1SZ+mFQEq2gZSVXo6jiSjeu6Hk3JL3bbrt2i5wu2Wci5PWln3IBUpqgC
-        zvsAMTxSFha7mfjsa9EcipeRVDSdGPl1WqxDoa0EgpVDuf9M9GWmwj5lWaPTP8cpZMV6UHO9TAuHCpzFzwIAy0ShVJMizIRF
-        uWtiKjskK7eoR9lNQCLDwD9USMkfSyTt0XnR4T47vzF+/Zapiuri21ZVAW5bPjXPeKjHGrUJFy8jhehbYGzIXhrSo+4p5SsL
-        RsHWewbivds2gPlJAPXMfGfu3qRmta647/59ViIWFemQrmrLlkymq68MawNDKVeCTkuzl0KhjHjRqHC69tmJ4vvNLQVZmDOv
-        SrLYEGy9Z6CUr6K7MTMl+jrWMdMTKPr6a6DfST368CdHi/vOX+j3P7iuZabHc34+t3Mc8JZNZ4/3HrRGfaf0xOYZcydP1oon
-        3ibiRxva1vyCiMom+5zCRXt+26pAuwvg9cgmDc//aeTMa69EI8X9Jrd4PLfdEW6aObuuvjGsemiCpyosGSMR4Rz/OGn//YXo
-        0ODA6BOLG27RwytWNU4FACIkmLFZMu3QF6z+cCzOqiSK9T69iJh2AiBmxu5dZuTfL0eHTxxPnXuXdhkzL/Z6b1wearz6Wn84
-        W1tLCSzW56/pHG9s1VNv9D69npk2FbfFoyI9OJhOCVF+yOwmVBXU3KzVBXV1VEwhYF1g/ppfVsNR2xvvgx0rQNiCyh8q/i9x
-        BsQPBdvve6HaATUvJv7o2fqELVYy8y0ArkLmI0V3P14oRwrAcQDvEfByg8d6bqJfqVzABVzABXwm+C98yI6CfHDqPgAAAABJ
-        RU5ErkJggg==
-        LWOD_V22_BAG_PNG
-        printf '%s  %s\n' 'e904915649f2260ecb395e041e7841ee5efef5181f3922835751783e3da6334b' 'android/assets/v22_backpack.png' | sha256sum -c -
-        test "$(grep -Fxc '    minimap.setup(self, expanded_world)' android/scripts/Main.gd)" -eq 1
-        sed -i 's@version/code=21@version/code=22@' android/export_presets.cfg
-        sed -i 's@version/name="2.1"@version/name="2.2"@' android/export_presets.cfg
-        grep -Fqx 'version/code=22' android/export_presets.cfg
-        test -s android/assets/v22_backpack.png
-        echo 'V22: 4800x4800 Welt, Wald-Streaming, kompakte MiniMap und Rucksack aktiv'
-
-        cat > android/scripts/V23Backpack.gd <<'LWOD_V23_BACKPACK'
-        extends CanvasLayer
-
-        # V23: eigener, sicher sichtbarer Rucksack-Button.
-        # Der Button verwendet die urspruengliche V7-Menuefunktion direkt.
-        var game: Node3D
-        var overlay: Control
-        var bag: Button
-        var addon: Node
-
-        func setup(root: Node3D) -> void:
-            game = root
-            layer = 30
-            overlay = Control.new()
-            overlay.name = "V23HUDOverlay"
-            overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-            add_child(overlay)
-            overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-            bag = Button.new()
-            bag.name = "RucksackButtonV23"
-            bag.anchor_left = 1.0
-            bag.anchor_right = 1.0
-            bag.offset_left = -171.0
-            bag.offset_right = -16.0
-            bag.offset_top = 211.0
-            bag.offset_bottom = 286.0
-            bag.focus_mode = Control.FOCUS_NONE
-            bag.mouse_filter = Control.MOUSE_FILTER_STOP
-            bag.text = "RUCKSACK"
-            bag.tooltip_text = "Rucksack und Spielmenue"
-            bag.add_theme_font_size_override("font_size", 18)
-            bag.add_theme_color_override("font_color", Color("#f7e2bd"))
-            bag.add_theme_color_override("font_hover_color", Color("#ffffff"))
-            var texture: Texture2D = load("res://assets/v22_backpack.png") as Texture2D
-            if texture != null:
-                bag.icon = texture
-                bag.expand_icon = true
-                bag.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-            var base := StyleBoxFlat.new()
-            base.bg_color = Color(0.09, 0.05, 0.17, 0.82)
-            base.border_color = Color("#d8b27b")
-            base.set_border_width_all(2)
-            base.set_corner_radius_all(13)
-            for state_name in ["normal", "hover", "pressed", "focus"]:
-                bag.add_theme_stylebox_override(state_name, base)
-            overlay.add_child(bag)
-            bag.pressed.connect(_open_bag)
-
-            # Alte Schaltflaeche nicht mehr zeichnen, Signal/Spielmenue bleiben vorhanden.
-            if game.backpack_button != null:
-                game.backpack_button.hide()
-            for child in game.get_children():
-                if child.has_method("_toggle_bag"):
-                    addon = child
-                    break
-            if addon != null:
-                # Menue nach links setzen, damit es nicht unter dem HUD-Button liegt.
-                var old_panel = addon.get("bag_panel")
-                if old_panel is Control:
-                    (old_panel as Control).position = Vector2(690, 116)
-            else:
-                push_warning("V23: V7-Menuecontroller fehlt. Rucksack nutzt Originalsignal.")
-            set_process(true)
-            print("V23: eigenstaendiger Rucksack-Button und 8 Eintraege aktiv")
-
-        func _open_bag() -> void:
-            if game == null or game.state != 2:
-                return
-            if addon != null and is_instance_valid(addon):
-                addon.call("_toggle_bag")
-            elif game.backpack_button != null:
-                game.backpack_button.pressed.emit()
-            else:
-                push_warning("V23: Rucksack-Menuecontroller nicht vorhanden")
-
-        func _process(_delta: float) -> void:
-            if game == null:
-                return
-            overlay.visible = game.state == 2
-            if game.backpack_button != null and game.backpack_button.visible:
-                game.backpack_button.hide()
-        LWOD_V23_BACKPACK
-        printf '%s  %s\n' '75c818ef434613ee174c29a1905bff2f56617380ab9031f4a3e8964e76f87202' 'android/scripts/V23Backpack.gd' | sha256sum -c -
-
-        test "$(grep -Fxc '    minimap.setup(self, expanded_world)' android/scripts/Main.gd)" -eq 1
-        awk '
-          {print}
-          $0 == "    minimap.setup(self, expanded_world)" {
-            print "    var bag_v23 = load(\"res://scripts/V23Backpack.gd\").new()"
-            print "    bag_v23.name = \"V23Backpack\""
-            print "    add_child(bag_v23)"
-            print "    bag_v23.setup(self)"
-            n++
-          }
-          END {if(n!=1) exit 51}
-        ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v23_main.gd"
-        mv "$RUNNER_TEMP/lwod_v23_main.gd" android/scripts/Main.gd
-        sed -i 's@version/code=22@version/code=23@' android/export_presets.cfg
-        sed -i 's@version/name="2.2"@version/name="2.3"@' android/export_presets.cfg
-        # Older export templates may not specify name; the version code is mandatory.
-        grep -Fqx 'version/code=23' android/export_presets.cfg
-        printf 'V23 fertig: Weltgroesse %s, Orte %s, unabhängiger Rucksack\n' '32000x32000' '36'
-    - name: Godot Ressourcen importieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        godot --headless --path android --editor --import --quit
-        test -s android/scripts/PhoenixMenu.gd
-    - name: Godot Skripte zur Laufzeit testen
-      shell: bash
-      run: |
-        set -euo pipefail
-        godot --headless --path android --quit-after 6 > "$RUNNER_TEMP/lwod_v21_test.log" 2>&1 || {
-          cat "$RUNNER_TEMP/lwod_v21_test.log"
-          exit 1
-        }
-        cat "$RUNNER_TEMP/lwod_v21_test.log"
-        if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v21_test.log"; then
-          echo '::error::Godot-Skriptfehler im V23-Laufzeittest'
-          exit 1
-        fi
-    - name: LWOD Android V23 APK erstellen
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p build/android
-        godot --headless --path android --export-debug 'Android' \
-          "$GITHUB_WORKSPACE/build/android/LWOD-Android-V23.apk"
-        test -s build/android/LWOD-Android-V23.apk
-        unzip -t build/android/LWOD-Android-V23.apk >/dev/null
-    - name: Fehlerdiagnose speichern
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: LWOD_V23_DIAGNOSE
-        path: '${{ runner.temp }}/lwod_v21_test.log
-
-          android/scripts/V19TerrainSafety.gd
-
-          android/scripts/V21World.gd
-          android/scripts/V21Minimap.gd
-
-          '
-        if-no-files-found: warn
-        retention-days: 14
-    - name: V23 APK bereitstellen
-      uses: actions/upload-artifact@v4
-      with:
-        name: LWOD_ANDROID_V23_RIESENWELT_APK
-        path: build/android/LWOD-Android-V23.apk
-        if-no-files-found: error
-        retention-days: 14
+          cat "$RUNNER_TEMP/lwod_v24_run.log"
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v24_run.log"; then
+            echo '::error::V24 Godot-Skriptfehler gefunden'
+            exit 1
+          fi
+      - name: LWOD Android V24 APK erstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/android
+          godot --headless --path android --export-debug 'Android' \
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V24.apk"
+          test -s build/android/LWOD-Android-V24.apk
+          unzip -t build/android/LWOD-Android-V24.apk > /dev/null
+      - name: Fehlerdiagnose bereitstellen
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LWOD_V24_FEHLERDIAGNOSE
+          path: |
+            ${{ runner.temp }}/lwod_v24_run.log
+            android/scripts/V24Regions.gd
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Android V24 APK hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: LWOD_ANDROID_V24_REGIONEN_APK
+          path: build/android/LWOD-Android-V24.apk
+          if-no-files-found: error
+          retention-days: 14
