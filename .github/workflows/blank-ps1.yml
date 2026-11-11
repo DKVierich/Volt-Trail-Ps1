@@ -1,7 +1,7 @@
-# LWOD Android V29: Figurenbewegung rechts / unabhängige Kamera links, aufgebaut auf V28.
+# LWOD Android V30: Figurenbewegung rechts / unabhängige Kamera links, aufgebaut auf V28.
 # Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
 # Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V29 Bewegungsfix
+name: LWOD Android V30 Steuerung Physik Fix
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V29 APK
+    name: LWOD Android V30 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -1875,6 +1875,80 @@ jobs:
           grep -Fqx '    hero.move_and_slide()' android/scripts/Main.gd
           grep -Fq 'var move_vec: Vector3 = sideways * input_axis.x + forward * (-input_axis.y)' android/scripts/Main.gd
           echo 'V29: LINKS Kamera, RECHTS Bewegung; eigene Weltbewegung implementiert'
+      - name: V30 Kollision und Startposition reparieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/scripts
+          cat > android/scripts/V30MovementRepair.gd <<'LWOD_V30_REPAIR'
+          extends Node
+
+          # Alte grosse ebene Boden-Kollisionskoerper liegen unter dem neuen
+          # Hoehenmesh und koennen die CharacterBody3D-Bewegung blockieren.
+          # Haus-, Baum- und Gebirgskollisionen bleiben unangetastet.
+          var game: Node3D
+          var removed_floor_colliders: int = 0
+
+          func setup(root: Node3D) -> void:
+              game = root
+              name = "V30MovementRepair"
+              _remove_old_flat_floor_colliders()
+              var hero: CharacterBody3D = game.hero
+              hero.floor_snap_length = 0.55
+              hero.safe_margin = 0.005
+              hero.max_slides = 8
+              print("V30_PHYSICS_READY old_duplicate_floors_disabled=", removed_floor_colliders)
+
+          func _remove_old_flat_floor_colliders() -> void:
+              for node in game.find_children("*", "StaticBody3D", true, false):
+                  var body: StaticBody3D = node as StaticBody3D
+                  if body == null or body.name == "GelaendeKollision":
+                      continue
+                  var obsolete_floor := false
+                  for shape_node in body.get_children():
+                      if shape_node is CollisionShape3D:
+                          var box_shape: BoxShape3D = (shape_node as CollisionShape3D).shape as BoxShape3D
+                          if box_shape != null:
+                              var sz: Vector3 = box_shape.size
+                              if sz.x >= 100.0 and sz.z >= 100.0 and sz.y <= 2.5:
+                                  obsolete_floor = true
+                  if obsolete_floor:
+                      body.collision_layer = 0
+                      body.collision_mask = 0
+                      removed_floor_colliders += 1
+          LWOD_V30_REPAIR
+          # Startposition auf freiem Weg, mit Sicherheitsabstand ueber Boden.
+          # Gespeicherte Spielstaende werden NICHT veraendert.
+          awk '
+            /^func _on_new_game_pressed\(\) -> void:$/ {in_new=1}
+            in_new && /^func / && !/^func _on_new_game_pressed\(\) -> void:$/ {in_new=0}
+            in_new && $0 == "    hero.position = Vector3(0, 0.1, 10)" {
+              print "    hero.position = Vector3(0.0, 1.2, 38.0)"
+              done++
+              next
+            }
+            {print}
+            END { if(done!=1) exit 71 }
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/v30_main_a.gd"
+          mv "$RUNNER_TEMP/v30_main_a.gd" android/scripts/Main.gd
+          # V30-Kollisionsreparatur NACH Initialisierung des V29-Controllers.
+          awk '
+            {print}
+            $0 == "    sticks_v29.setup(self, v28_sticks, camera_map_v27)" {
+              print "    var repair_v30 = load(\"res://scripts/V30MovementRepair.gd\").new()"
+              print "    add_child(repair_v30)"
+              print "    repair_v30.setup(self)"
+              done++
+            }
+            END { if(done!=1) exit 72 }
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/v30_main_b.gd"
+          mv "$RUNNER_TEMP/v30_main_b.gd" android/scripts/Main.gd
+          sed -i 's@version/code=29@version/code=30@' android/export_presets.cfg
+          sed -i 's@version/name="2.9"@version/name="3.0"@' android/export_presets.cfg
+          grep -Fqx '    repair_v30.setup(self)' android/scripts/Main.gd
+          grep -Fqx 'version/code=30' android/export_presets.cfg
+          test -s android/scripts/V30MovementRepair.gd
+          echo 'V30: rechter Stick = Fortbewegung, linker = Kamera, Boden-Kollisionen bereinigt'
       - name: Godot Ressourcen importieren
         shell: bash
         run: |
@@ -1888,6 +1962,7 @@ jobs:
           test -s android/scripts/V27CameraMap.gd
           test -s android/scripts/V28DualStick.gd
           test -s android/scripts/V29IndependentSticks.gd
+          test -s android/scripts/V30MovementRepair.gd
       - name: Godot Start und Scriptfehler testen
         shell: bash
         run: |
@@ -1898,80 +1973,105 @@ jobs:
           }
           cat "$RUNNER_TEMP/lwod_v29_run.log"
           if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v29_run.log"; then
-            echo '::error::V29 Godot-Skriptfehler gefunden'
+            echo '::error::V30 Godot-Skriptfehler gefunden'
             exit 1
           fi
-      - name: V29 Spielfigur wirklich bewegen - automatischer Smoke-Test
+      - name: V30 Bewegung und Multitouch - Physiktest
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p android/tests
-          cat > android/tests/V29Smoke.gd <<'LWOD_V29_SMOKE'
+          cat > android/tests/V30Smoke.gd <<'LWOD_V30_SMOKE'
           extends SceneTree
-          
-          # End-to-end check: fake a right-side drag and verify hero displacement.
+
           func _initialize() -> void:
-              call_deferred("_run_smoke")
-          
-          func _run_smoke() -> void:
-              var scene: PackedScene = load("res://scenes/Main.tscn") as PackedScene
-              if scene == null:
-                  push_error("V29_SMOKE: Main.tscn could not load")
-                  quit(21)
+              call_deferred("_run_test")
+
+          func _run_test() -> void:
+              var packed: PackedScene = load("res://scenes/Main.tscn") as PackedScene
+              if packed == null:
+                  push_error("V30_TEST: Hauptszene fehlt")
+                  quit(31)
                   return
-              var game: Node3D = scene.instantiate() as Node3D
+              var game: Node3D = packed.instantiate() as Node3D
               root.add_child(game)
-              for i in range(6):
+              for i in range(8):
                   await process_frame
-              if not game.has_method("_on_new_game_pressed"):
-                  push_error("V29_SMOKE: no new game function")
-                  quit(22)
-                  return
               game.call("_on_new_game_pressed")
-              for i in range(5):
+              for i in range(10):
                   await physics_frame
               var hero: CharacterBody3D = game.get("hero") as CharacterBody3D
-              var controller: Node = game.find_child("LWOD_V29_STEUERUNG", true, false)
-              if hero == null or controller == null:
-                  push_error("V29_SMOKE: hero or controller missing")
-                  quit(23)
+              var sticks: Node = game.find_child("LWOD_V29_STEUERUNG",true,false)
+              var repair: Node = game.get_node_or_null("V30MovementRepair")
+              if hero == null or sticks == null or repair == null:
+                  push_error("V30_TEST: Spieler, Controller oder Reparatur fehlen")
+                  quit(32)
                   return
-              var begin: Vector3 = hero.global_position
-              var stick_origin := Vector2(980.0, 530.0)
-              controller.call("_start_finger", 25, stick_origin)
-              controller.call("_move_finger", 25, stick_origin + Vector2(0.0, -92.0))
-              for i in range(35):
+              print("V30_TEST_INITIAL state=", game.get("state"), " position=",hero.global_position,
+                  " old_floors_disabled=", repair.get("removed_floor_colliders"))
+              var initial: Vector3 = hero.global_position
+              var start_right := Vector2(980.0,540.0)
+              sticks.call("_start_finger",24,start_right)
+              sticks.call("_move_finger",24,start_right+Vector2(0,-92))
+              print("V30_TEST_RIGHT_AXIS=",game.get("joystick_axis"))
+              for i in range(75):
                   await physics_frame
-              var moved: float = Vector2(hero.global_position.x - begin.x, hero.global_position.z - begin.z).length()
-              controller.call("_end_finger", 25)
-              print("V29_SMOKE_MOVED_METERS=", moved)
-              if moved < 0.30:
-                  push_error("V29_SMOKE: right movement stick did not move the hero")
-                  quit(24)
+                  if i == 30 or i == 60:
+                      print("V30_TEST_FRAME=",i," position=",hero.global_position,
+                          " axis=",game.get("joystick_axis")," state=",game.get("state"),
+                          " slide_collisions=",hero.get_slide_collision_count())
+              var moved: float = Vector2(hero.global_position.x-initial.x,hero.global_position.z-initial.z).length()
+              sticks.call("_end_finger",24)
+              print("V30_TEST_DISTANCE=",moved)
+              if moved < 1.25:
+                  if hero.get_slide_collision_count()>0:
+                      var impact: KinematicCollision3D = hero.get_slide_collision(0)
+                      print("V30_TEST_COLLISION with=",impact.get_collider()," normal=",impact.get_normal())
+                  push_error("V30_TEST_FAIL: Realer Figurenweg zu kurz; Eingabe/Physik weiterhin defekt")
+                  quit(33)
                   return
-              print("V29_SMOKE_OK: right stick moves hero, camera separate")
+              # Linker Stick steuert nur Kamera, nicht Figur.
+              var camera: Node = game.get_node_or_null("V27CameraWorldMap")
+              if camera == null:
+                  push_error("V30_TEST_FAIL: Kameracontroller fehlt")
+                  quit(34)
+                  return
+              var yaw0: float = float(camera.get("yaw_offset"))
+              var cam_start := Vector2(240,520)
+              sticks.call("_start_finger",11,cam_start)
+              sticks.call("_move_finger",11,cam_start+Vector2(85,0))
+              for i in range(14):
+                  await process_frame
+              sticks.call("_end_finger",11)
+              var yaw_delta: float = absf(wrapf(float(camera.get("yaw_offset"))-yaw0,-PI,PI))
+              print("V30_TEST_CAMERA_YAW_DELTA=",yaw_delta)
+              if yaw_delta < 0.02:
+                  push_error("V30_TEST_FAIL: Linker Kamerastick schwenkt nicht")
+                  quit(35)
+                  return
+              print("V30_TEST_OK: Rechts Figur bewegt, links Kamera unabhaengig")
               quit(0)
-          LWOD_V29_SMOKE
-          godot --headless --path android --script res://tests/V29Smoke.gd > "$RUNNER_TEMP/lwod_v29_movement_test.log" 2>&1 || {
-            cat "$RUNNER_TEMP/lwod_v29_movement_test.log"
+          LWOD_V30_SMOKE
+          godot --headless --path android --script res://tests/V30Smoke.gd > "$RUNNER_TEMP/lwod_v30_movement_test.log" 2>&1 || {
+            cat "$RUNNER_TEMP/lwod_v30_movement_test.log"
             exit 1
           }
-          cat "$RUNNER_TEMP/lwod_v29_movement_test.log"
-          grep -Fq 'V29_SMOKE_OK:' "$RUNNER_TEMP/lwod_v29_movement_test.log"
-      - name: LWOD Android V29 APK erstellen
+          cat "$RUNNER_TEMP/lwod_v30_movement_test.log"
+          grep -Fq 'V30_TEST_OK:' "$RUNNER_TEMP/lwod_v30_movement_test.log"
+      - name: LWOD Android V30 APK erstellen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V29-Bewegungsfix.apk"
-          test -s build/android/LWOD-Android-V29-Bewegungsfix.apk
-          unzip -t build/android/LWOD-Android-V29-Bewegungsfix.apk > /dev/null
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V30-Steuerfix.apk"
+          test -s build/android/LWOD-Android-V30-Steuerfix.apk
+          unzip -t build/android/LWOD-Android-V30-Steuerfix.apk > /dev/null
       - name: Fehlerdiagnose bereitstellen
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_V29_DIAGNOSE
+          name: LWOD_V30_DIAGNOSE
           path: |
             ${{ runner.temp }}/lwod_v29_run.log
             android/scripts/V24Regions.gd
@@ -1981,15 +2081,16 @@ jobs:
             android/scripts/V28DualStick.gd
             android/scripts/V29IndependentSticks.gd
             android/scripts/Main.gd
-            android/tests/V29Smoke.gd
-            ${{ runner.temp }}/lwod_v29_movement_test.log
+            android/tests/V30Smoke.gd
+            android/scripts/V30MovementRepair.gd
+            ${{ runner.temp }}/lwod_v30_movement_test.log
             android/scripts/TouchOverlay.gd
           if-no-files-found: warn
           retention-days: 14
-      - name: Android V29 APK hochladen
+      - name: Android V30 APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V29_BEWEGUNGSFIX_APK
-          path: build/android/LWOD-Android-V29-Bewegungsfix.apk
+          name: LWOD_ANDROID_V30_STEUERFIX_APK
+          path: build/android/LWOD-Android-V30-Steuerfix.apk
           if-no-files-found: error
           retention-days: 14
