@@ -1,9 +1,6 @@
-# LWOD ANDROID V34 - VOLLSTAENDIGES GITHUB-SKRIPT ZUM KOPIEREN
-# LINKS Bewegung, RECHTS Kamera; ohne Schrift an den Steuerkreisen.
-# Figuren und Kamera werden nur einmal pro Renderbild synchronisiert.
-# Sonne, Mond und Wolken vergroessert; APK inklusive Artifact-Upload.
-# Datei unter .github/workflows/blank-ps1.yml bzw. lwod-android.yml einsetzen.
-name: LWOD Android V34 Links Bewegen Rechts Kamera
+# LWOD V35: Vollstaendiger GitHub-Workflow, keine ZIP-Datei.
+# LINKS Bewegung, RECHTS Kamera (wie in V34). Nur Wolken werden geaendert.
+name: LWOD Android V35 Natuerliche Wolken
 'on':
   workflow_dispatch: {}
   push:
@@ -16,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V34 APK
+    name: LWOD Android V35 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -51,26 +48,21 @@ jobs:
     - name: V23-Quelle herunterladen und richtige Pruefsumme pruefen
       shell: bash
       run: "set -euo pipefail\nwget -q --tries=3 --timeout=45 \\\n  -O \"$RUNNER_TEMP/lwod_v23.yml\" \\\n  'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/2b1332ef7b51655427065cd8ec8371af1e7773dc/.github/workflows/blank-ps1.yml'\n\
-        test -s \"$RUNNER_TEMP/lwod_v23.yml\"\nsource_hash=\"$(git hash-object \"$RUNNER_TEMP/lwod_v23.yml\")\"\n\
-        if [ \"$source_hash\" != \"f2417eca21fc0e9ac53a9e678b139a68e26ccdc8\" ]; then\n  echo \"::error::V23-Quellversion\
-        \ passt nicht. Erwartet: f2417eca21fc0e9ac53a9e678b139a68e26ccdc8, erhalten: $source_hash\"\n  exit 22\n\
-        fi\necho \"V23-Quelle korrekt: $source_hash\"\ncat > \"$RUNNER_TEMP/replay_v23.sh\" <<'REPLAY_V23'\n#!/bin/bash\n\
-        set -euo pipefail\nname=\"$1\"\nawk -v name=\"$name\" '\n  $0 == \"    - name: \" name { found=1; next }\n\
-        \  found && $0 == \"      run: |\" { active=1; next }\n  active && /^    - name:/ { exit }\n  active &&\
-        \ /^        / { sub(/^        /, \"\"); print; next }\n  active && /^$/ { print \"\"; next }\n  END { if\
-        \ (active != 1) exit 57 }\n' \"$RUNNER_TEMP/lwod_v23.yml\" > \"$RUNNER_TEMP/v23_step.sh\"\ntest -s \"$RUNNER_TEMP/v23_step.sh\"\
-        \nbash -n \"$RUNNER_TEMP/v23_step.sh\"\necho \"V23 Basis: $name\"\nbash \"$RUNNER_TEMP/v23_step.sh\"\nREPLAY_V23\n\
-        chmod +x \"$RUNNER_TEMP/replay_v23.sh\"\n"
+        test -s \"$RUNNER_TEMP/lwod_v23.yml\"\nsource_hash=\"$(git hash-object \"$RUNNER_TEMP/lwod_v23.yml\")\"\nif [ \"$source_hash\" != \"f2417eca21fc0e9ac53a9e678b139a68e26ccdc8\"\
+        \ ]; then\n  echo \"::error::V23-Quellversion passt nicht. Erwartet: f2417eca21fc0e9ac53a9e678b139a68e26ccdc8, erhalten: $source_hash\"\n  exit 22\nfi\necho\
+        \ \"V23-Quelle korrekt: $source_hash\"\ncat > \"$RUNNER_TEMP/replay_v23.sh\" <<'REPLAY_V23'\n#!/bin/bash\nset -euo pipefail\nname=\"$1\"\nawk -v name=\"$name\"\
+        \ '\n  $0 == \"    - name: \" name { found=1; next }\n  found && $0 == \"      run: |\" { active=1; next }\n  active && /^    - name:/ { exit }\n  active\
+        \ && /^        / { sub(/^        /, \"\"); print; next }\n  active && /^$/ { print \"\"; next }\n  END { if (active != 1) exit 57 }\n' \"$RUNNER_TEMP/lwod_v23.yml\"\
+        \ > \"$RUNNER_TEMP/v23_step.sh\"\ntest -s \"$RUNNER_TEMP/v23_step.sh\"\nbash -n \"$RUNNER_TEMP/v23_step.sh\"\necho \"V23 Basis: $name\"\nbash \"$RUNNER_TEMP/v23_step.sh\"\
+        \nREPLAY_V23\nchmod +x \"$RUNNER_TEMP/replay_v23.sh\"\n"
     - name: FFmpeg statisch ohne apt und ohne xz bereitstellen
       shell: bash
-      run: "set -euo pipefail\nif command -v ffmpeg >/dev/null 2>&1; then\n  echo 'FFmpeg ist bereits im Container\
-        \ vorhanden'\nelse\n  echo 'Statische FFmpeg-Datei als gzip-Archiv von GitHub laden'\n  command -v gzip\
-        \ >/dev/null\n  command -v sha256sum >/dev/null\n  wget -q --show-progress --https-only --tries=3 --timeout=90\
-        \ \\\n    -O \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\" \\\n    'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz'\n\
-        \  test -s \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\"\n  printf '%s  %s\\n' \\\n    'bfe8a8fc511530457b528c48d77b5737527b504a3797a9bc4866aeca69c2dffa'\
-        \ \\\n    \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\" | sha256sum -c -\n  gzip -dc \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\"\
-        \ > /usr/local/bin/ffmpeg\n  chmod 0755 /usr/local/bin/ffmpeg\nfi\nffmpeg -hide_banner -version | head -n\
-        \ 1\ntest -x \"$(command -v ffmpeg)\"\n"
+      run: "set -euo pipefail\nif command -v ffmpeg >/dev/null 2>&1; then\n  echo 'FFmpeg ist bereits im Container vorhanden'\nelse\n  echo 'Statische FFmpeg-Datei\
+        \ als gzip-Archiv von GitHub laden'\n  command -v gzip >/dev/null\n  command -v sha256sum >/dev/null\n  wget -q --show-progress --https-only --tries=3 --timeout=90\
+        \ \\\n    -O \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\" \\\n    'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz'\n  test\
+        \ -s \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\"\n  printf '%s  %s\\n' \\\n    'bfe8a8fc511530457b528c48d77b5737527b504a3797a9bc4866aeca69c2dffa' \\\n    \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\"\
+        \ | sha256sum -c -\n  gzip -dc \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\" > /usr/local/bin/ffmpeg\n  chmod 0755 /usr/local/bin/ffmpeg\nfi\nffmpeg -hide_banner -version\
+        \ | head -n 1\ntest -x \"$(command -v ffmpeg)\"\n"
     - name: V23-Spielwelt und Menues vollstaendig wiederherstellen
       shell: bash
       run: 'set -euo pipefail
@@ -1593,6 +1585,33 @@ jobs:
         bash -n "$RUNNER_TEMP/lwod_v34_patch.sh"
 
         bash "$RUNNER_TEMP/lwod_v34_patch.sh"'
+    - name: V35 Wolken ueber gesamten Himmel - 96 mehrteilige Wolkenbaenke
+      shell: bash
+      run: "set -euo pipefail\nfile=android/scripts/V26SkyWorldMap.gd\ntest -s \"$file\"\ntest \"$(grep -Fxc '    for i in range(8):' \"$file\")\" -eq 1\ntest \"\
+        $(grep -Fxc '    sun_node = MeshInstance3D.new()' \"$file\")\" -eq 1\ncat > \"$RUNNER_TEMP/lwod_v35_clouds.gdpart\" <<'LWOD_V35_CLOUDS'\n    # Wolkenhimmel\
+        \ V35: 96 Wolkenbaenke auf dem ganzen Himmel, statt 8 Scheiben.\n    # Pro Wolkenbank eine MultiMesh-Instanz: viele weiche 3D-Teile, weniger Drawcalls.\n\
+        \    var cloud_rng := RandomNumberGenerator.new()\n    cloud_rng.seed = 202611350\n    var puff_mesh := SphereMesh.new()\n    puff_mesh.radius = 1.0\n   \
+        \ puff_mesh.height = 2.0\n    puff_mesh.radial_segments = 10\n    puff_mesh.rings = 6\n    var cloud_material := StandardMaterial3D.new()\n    cloud_material.albedo_color\
+        \ = Color(0.96, 0.97, 1.0, 0.83)\n    cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA\n    cloud_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED\n\
+        \    cloud_material.cull_mode = BaseMaterial3D.CULL_DISABLED\n    for cloud_i in range(96):\n        var bank := MultiMeshInstance3D.new()\n        bank.name\
+        \ = \"Wolkenbank_%03d\" % cloud_i\n        bank.material_override = cloud_material\n        var mm := MultiMesh.new()\n        mm.transform_format = MultiMesh.TRANSFORM_3D\n\
+        \        mm.mesh = puff_mesh\n        var puff_count: int = cloud_rng.randi_range(9, 14)\n        mm.instance_count = puff_count\n        var col: int = cloud_i\
+        \ % 12\n        var row: int = int(cloud_i / 12)\n        var x: float = (float(col) - 5.5) * 180.0 + cloud_rng.randf_range(-75.0, 75.0)\n        var z: float\
+        \ = (float(row) - 3.5) * 275.0 + cloud_rng.randf_range(-80.0, 80.0)\n        var height: float = cloud_rng.randf_range(155.0, 315.0)\n        bank.position\
+        \ = Vector3(x, height, z)\n        var bank_width: float = cloud_rng.randf_range(45.0, 125.0)\n        for puff_i in range(puff_count):\n            var a:\
+        \ float = cloud_rng.randf_range(0.0, TAU)\n            var distance: float = cloud_rng.randf_range(0.0, bank_width)\n            var ox: float = cos(a) *\
+        \ distance\n            var oz: float = sin(a) * distance * 0.85\n            var oy: float = cloud_rng.randf_range(-12.0, 21.0)\n            var size: float\
+        \ = cloud_rng.randf_range(17.0, 37.0)\n            var scale_vec := Vector3(size * cloud_rng.randf_range(0.9, 1.5),\n                size * cloud_rng.randf_range(0.78,\
+        \ 1.30),\n                size * cloud_rng.randf_range(0.85, 1.55))\n            mm.set_instance_transform(puff_i,\n                Transform3D(Basis().scaled(scale_vec),\
+        \ Vector3(ox, oy, oz)))\n        bank.multimesh = mm\n        cloud_root.add_child(bank)\nLWOD_V35_CLOUDS\nawk -v replacement=\"$RUNNER_TEMP/lwod_v35_clouds.gdpart\"\
+        \ '\n  $0 == \"    for i in range(8):\" && !found {\n    while ((getline line < replacement) > 0) print line\n    close(replacement)\n    skip=1; found=1;\
+        \ next\n  }\n  skip && $0 == \"    sun_node = MeshInstance3D.new()\" {\n    skip=0\n    print\n    next\n  }\n  !skip { print }\n  END { if (!found || skip)\
+        \ exit 22 }\n' \"$file\" > \"$RUNNER_TEMP/V26SkyWorldMap_v35.gd\"\nmv \"$RUNNER_TEMP/V26SkyWorldMap_v35.gd\" \"$file\"\n# 96 Wolkenbaenke statt zentraler\
+        \ Wolkenansammlung; weiter Ziehbereich.\nsed -i 's/c.position.x > 165.0/c.position.x > 1160.0/; s/c.position.x = -165.0/c.position.x = -1160.0/' \"$file\"\
+        \ntest \"$(grep -Fc 'range(96)' \"$file\")\" -eq 1\ngrep -Fq 'c.position.x > 1160.0' \"$file\"\n# Bestehende Himmelskoerper, Touch-Steuerung und Spielwelt\
+        \ bleiben unveraendert.\ngrep -Fq 'sun_node.scale = Vector3.ONE * 24.0' \"$file\"\ngrep -Fq 'moon_node.scale = Vector3.ONE * 19.0' \"$file\"\nsed -i 's@version/code=34@version/code=35@'\
+        \ android/export_presets.cfg\nsed -i 's@version/name=\"3.4\"@version/name=\"3.5\"@' android/export_presets.cfg\ngrep -Fqx 'version/code=35' android/export_presets.cfg\n\
+        echo 'V35: 96 verteilte Wolkenbaenke erzeugt, Sonne und Mond erhalten'\n"
     - name: Godot Ressourcen importieren
       shell: bash
       run: 'set -euo pipefail
@@ -1626,9 +1645,8 @@ jobs:
         '
     - name: Godot Start und Scriptfehler testen
       shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --quit-after 8 > \"$RUNNER_TEMP/lwod_v29_run.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/lwod_v29_run.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/lwod_v29_run.log\"\
-        \nif grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\\.|Failed to load script' \"$RUNNER_TEMP/lwod_v29_run.log\"\
+      run: "set -euo pipefail\ngodot --headless --path android --quit-after 8 > \"$RUNNER_TEMP/lwod_v29_run.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/lwod_v29_run.log\"\
+        \n  exit 1\n}\ncat \"$RUNNER_TEMP/lwod_v29_run.log\"\nif grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\\.|Failed to load script' \"$RUNNER_TEMP/lwod_v29_run.log\"\
         ; then\n  echo '::error::V31 Godot-Skriptfehler gefunden'\n  exit 1\nfi\n"
     - name: V31 Terrainphysik vorhanden
       shell: bash
@@ -1645,20 +1663,18 @@ jobs:
         '
     - name: V34 Echtes Links-Bewegen Rechts-Kamera Multitouch Test
       shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V34TouchSmoke.gd > \"$RUNNER_TEMP/lwod_v34_touch.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/lwod_v34_touch.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/lwod_v34_touch.log\"\
-        \ngrep -Fq 'V34_TEST_OK:' \"$RUNNER_TEMP/lwod_v34_touch.log\""
-    - name: LWOD Android V34 APK erstellen
+      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V34TouchSmoke.gd > \"$RUNNER_TEMP/lwod_v34_touch.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/lwod_v34_touch.log\"\
+        \n  exit 1\n}\ncat \"$RUNNER_TEMP/lwod_v34_touch.log\"\ngrep -Fq 'V34_TEST_OK:' \"$RUNNER_TEMP/lwod_v34_touch.log\""
+    - name: LWOD Android V35 APK erstellen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/android\ngodot --headless --path android --export-debug 'Android'\
-        \ \\\n  \"$GITHUB_WORKSPACE/build/android/LWOD-Android-V34-LINKS-FIGUR-RECHTS-KAMERA.apk\"\ntest -s build/android/LWOD-Android-V34-LINKS-FIGUR-RECHTS-KAMERA.apk\n\
-        unzip -t build/android/LWOD-Android-V34-LINKS-FIGUR-RECHTS-KAMERA.apk > /dev/null\n\necho \"APK wurde erzeugt:\"\
-        \nls -lh build/android/LWOD-Android-V34-LINKS-FIGUR-RECHTS-KAMERA.apk\n"
+      run: "set -euo pipefail\nmkdir -p build/android\ngodot --headless --path android --export-debug 'Android' \\\n  \"$GITHUB_WORKSPACE/build/android/LWOD-Android-V35-WOLKEN.apk\"\
+        \ntest -s build/android/LWOD-Android-V35-WOLKEN.apk\nunzip -t build/android/LWOD-Android-V35-WOLKEN.apk > /dev/null\n\necho \"APK wurde erzeugt:\"\nls -lh\
+        \ build/android/LWOD-Android-V35-WOLKEN.apk\n"
     - name: Fehlerdiagnose bereitstellen
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V34_DIAGNOSE
+        name: LWOD_V35_DIAGNOSE
         path: '${{ runner.temp }}/lwod_v29_run.log
 
           android/scripts/V24Regions.gd
@@ -1696,13 +1712,15 @@ jobs:
 
           ${{ runner.temp }}/lwod_v34_touch.log
 
-          android/tests/V34TouchSmoke.gd'
+          android/tests/V34TouchSmoke.gd
+
+          android/scripts/V26SkyWorldMap.gd'
         if-no-files-found: warn
         retention-days: 14
-    - name: Android V34 APK hochladen
+    - name: Android V35 APK hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V34_APK
-        path: build/android/LWOD-Android-V34-LINKS-FIGUR-RECHTS-KAMERA.apk
+        name: LWOD_ANDROID_V35_APK
+        path: build/android/LWOD-Android-V35-WOLKEN.apk
         if-no-files-found: error
         retention-days: 14
