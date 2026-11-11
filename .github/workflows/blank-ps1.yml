@@ -1,7 +1,7 @@
-# LWOD Android V24 FIX1: korrigierter Quellstand der erfolgreichen V23-Regionen-Basis.
+# LWOD Android V25: korrigierter Quellstand der erfolgreichen V23-Regionen-Basis.
 # Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
 # Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V24 FIX1 Regionen
+name: LWOD Android V25 Regionen
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V24 FIX1 APK
+    name: LWOD Android V25 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -400,48 +400,262 @@ jobs:
           grep -Fqx '    new_regions.setup(self, expanded_world)' android/scripts/Main.gd
           # Der vorhandene separate V23-Rucksackcontroller bleibt unangetastet.
           test -s android/scripts/V23Backpack.gd
+      - name: V25 Hoehenprofile Vulkan Eis Wueste Berge und Mammutwald
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/scripts
+          cat > android/scripts/V25BiomeWorld.gd <<'LWOD_V25_BIOMES'
+          extends Node3D
+
+          const WORLD_EDGE := 15800.0
+          var game: Node = null
+          var world: Node = null
+          var loaded := false
+          var roots: Array[Node3D] = []
+          var lava_surfaces: Array[MeshInstance3D] = []
+          var regions := [
+              {"name":"vulkan", "center":Vector2(2900.0,-2150.0), "radius":920.0},
+              {"name":"eis", "center":Vector2(-3050.0,2380.0), "radius":980.0},
+              {"name":"wueste", "center":Vector2(3180.0,2280.0), "radius":1060.0},
+              {"name":"berge", "center":Vector2(-3380.0,-2700.0), "radius":1180.0},
+              {"name":"mammutwald", "center":Vector2(-300.0,3280.0), "radius":940.0},
+              {"name":"huegel", "center":Vector2(820.0,1760.0), "radius":760.0}
+          ]
+
+          func setup(root: Node3D, expanded_world: Node) -> void:
+              game = root
+              world = expanded_world
+              name = "V25BiomeWorld"
+              _extend_world_limits()
+              _build_regions()
+              loaded = true
+              set_process(true)
+              print("LWOD V25: grosse Biome mit Huegeln, Vulkan, Eis, Wueste, Bergen und Mammutwald aktiviert")
+
+          func _mat(hex_color: String, emission: float = 0.0) -> StandardMaterial3D:
+              var m := StandardMaterial3D.new()
+              m.albedo_color = Color(hex_color)
+              m.roughness = 0.9
+              m.cull_mode = BaseMaterial3D.CULL_DISABLED
+              if emission > 0.0:
+                  m.emission_enabled = true
+                  m.emission = Color(hex_color)
+                  m.emission_energy_multiplier = emission
+              return m
+
+          func _extend_world_limits() -> void:
+              if world == null:
+                  return
+              if world.has_variable("EDGE_LIMIT"):
+                  world.EDGE_LIMIT = max(float(world.EDGE_LIMIT), WORLD_EDGE)
+              if world.has_method("set"):
+                  world.set("edge_limit", WORLD_EDGE)
+              if game != null and game.has_variable("world_edge"):
+                  game.world_edge = WORLD_EDGE
+
+          func _root_at(p: Vector2) -> Node3D:
+              var n := Node3D.new()
+              n.position = Vector3(p.x, 0, p.y)
+              game.add_child(n)
+              roots.append(n)
+              return n
+
+          func _plateau(root: Node3D, y: float, size: Vector3, color: String) -> void:
+              game._box(root, Vector3(0, y, 0), size, Color(color), true)
+
+          func _hill(root: Node3D, p: Vector3, radius: float, height: float, color: String) -> void:
+              game._cone(root, p + Vector3(0, height * 0.5, 0), radius, height, Color(color), 10)
+
+          func _spike(root: Node3D, p: Vector3, radius: float, height: float, color: String) -> void:
+              game._cone(root, p + Vector3(0, height * 0.5, 0), radius, height, Color(color), 7)
+
+          func _mammut_tree(root: Node3D, p: Vector3, scale: float = 1.0) -> void:
+              game._box(root, p + Vector3(0, 8.0 * scale, 0), Vector3(2.6 * scale, 16.0 * scale, 2.6 * scale), Color("#7a4f30"), true)
+              game._box(root, p + Vector3(0, 17.5 * scale, 0), Vector3(7.0 * scale, 3.0 * scale, 7.0 * scale), Color("#315b34"), true)
+              game._box(root, p + Vector3(0, 22.0 * scale, 0), Vector3(5.8 * scale, 3.4 * scale, 5.8 * scale), Color("#3f6e3a"), true)
+              for dx in [-3.4, 0.0, 3.4]:
+                  game._box(root, p + Vector3(dx * scale, 26.0 * scale, 0), Vector3(2.6 * scale, 2.0 * scale, 5.0 * scale), Color("#4a7a45"), true)
+
+          func _ice_tree(root: Node3D, p: Vector3, scale: float = 1.0) -> void:
+              game._box(root, p + Vector3(0, 2.8 * scale, 0), Vector3(0.7 * scale, 5.6 * scale, 0.7 * scale), Color("#6d7b91"), true)
+              for i in range(4):
+                  game._cone(root, p + Vector3(0, 4.6 * scale + i * 1.9 * scale, 0), (2.7 - i * 0.45) * scale, 2.7 * scale, Color("#d7f2ff"), 7)
+
+          func _cactus(root: Node3D, p: Vector3, scale: float = 1.0) -> void:
+              game._box(root, p + Vector3(0, 3.4 * scale, 0), Vector3(1.0 * scale, 6.8 * scale, 1.0 * scale), Color("#4f8a4e"), true)
+              game._box(root, p + Vector3(-1.1 * scale, 4.5 * scale, 0), Vector3(0.6 * scale, 3.2 * scale, 0.6 * scale), Color("#5e9d59"), true)
+              game._box(root, p + Vector3(1.1 * scale, 5.2 * scale, 0), Vector3(0.6 * scale, 2.7 * scale, 0.6 * scale), Color("#5e9d59"), true)
+
+          func _lava_strip(root: Node3D, a: Vector2, b: Vector2, width: float = 15.0) -> void:
+              var dx: float = b.x - a.x
+              var dz: float = b.y - a.y
+              var segment_length: float = sqrt(dx * dx + dz * dz)
+              if segment_length < 0.5:
+                  return
+              var mesh: MeshInstance3D = game._box(root, Vector3((a.x+b.x)*0.5, 1.2, (a.y+b.y)*0.5), Vector3(width, 0.18, segment_length + 2.0), Color("#ff5f17")) as MeshInstance3D
+              mesh.rotation.y = atan2(dx, dz)
+              mesh.material_override = _mat("#ff5f17", 2.8)
+              lava_surfaces.append(mesh)
+
+          func _vulkan_region() -> void:
+              var c := Vector2(2900.0, -2150.0)
+              var root := _root_at(c)
+              _plateau(root, 0.25, Vector3(1320, 0.5, 1320), "#47353a")
+              for r in [420.0, 290.0, 180.0]:
+                  _hill(root, Vector3(0, 0.0, 0), r, 105.0 - r * 0.12, "#5b4340")
+              _plateau(root, 82.0, Vector3(92.0, 9.0, 92.0), "#2c1f22")
+              _plateau(root, 90.5, Vector3(52.0, 1.5, 52.0), "#ff6a1a")
+              for i in range(8):
+                  var ang := float(i) * TAU / 8.0
+                  _spike(root, Vector3(cos(ang)*260.0, 8.0, sin(ang)*260.0), 26.0, 44.0, "#5b4544")
+              _lava_strip(root, c + Vector2(-40, 10), c + Vector2(360, 220), 22.0)
+              _lava_strip(root, c + Vector2(25, 0), c + Vector2(-340, 350), 18.0)
+              _lava_strip(root, c + Vector2(10, -30), c + Vector2(260, -320), 16.0)
+
+          func _eis_region() -> void:
+              var c := Vector2(-3050.0, 2380.0)
+              var root := _root_at(c)
+              _plateau(root, 0.2, Vector3(1440, 0.45, 1440), "#d8ecf7")
+              for p in [Vector3(-180,0,-120), Vector3(210,0,-40), Vector3(-40,0,220), Vector3(300,0,280), Vector3(-300,0,250)]:
+                  _hill(root, p, 170.0, 48.0, "#c8e3ef")
+              for i in range(24):
+                  var ang := float(i) * TAU / 24.0
+                  var r := 170.0 + float(i % 5) * 32.0
+                  _spike(root, Vector3(cos(ang)*r, 0, sin(ang)*r), 16.0, 36.0 + float(i % 3) * 10.0, "#eafcff")
+              for x in range(-2, 3):
+                  for z in range(-2, 3):
+                      if abs(x) + abs(z) < 4:
+                          _ice_tree(root, Vector3(x * 74.0, 0, z * 66.0), 1.2 + float((x+z)&1) * 0.2)
+
+          func _wueste_region() -> void:
+              var c := Vector2(3180.0, 2280.0)
+              var root := _root_at(c)
+              _plateau(root, 0.15, Vector3(1600, 0.35, 1600), "#d7bf77")
+              for p in [Vector3(-300,0,-180), Vector3(0,0,-240), Vector3(220,0,110), Vector3(-90,0,220), Vector3(370,0,-60)]:
+                  _hill(root, p, 190.0, 28.0, "#e1cc88")
+              for i in range(14):
+                  var ang := float(i) * TAU / 14.0
+                  _cactus(root, Vector3(cos(ang)*420.0, 0, sin(ang)*260.0), 1.0 + float(i % 3) * 0.35)
+              _plateau(root, 0.12, Vector3(190.0, 0.08, 140.0), "#6fbdcd")
+
+          func _berge_region() -> void:
+              var c := Vector2(-3380.0, -2700.0)
+              var root := _root_at(c)
+              _plateau(root, 0.18, Vector3(1680, 0.36, 1680), "#6d7a74")
+              for p in [Vector3(-320,0,-250), Vector3(0,0,0), Vector3(300,0,-120), Vector3(-120,0,310), Vector3(330,0,290), Vector3(-380,0,220)]:
+                  _hill(root, p, 210.0, 96.0, "#76837c")
+              for p in [Vector3(-150,0,-70), Vector3(150,0,-20), Vector3(10,0,180), Vector3(-260,0,170)]:
+                  _spike(root, p, 72.0, 180.0, "#737b7e")
+              _spike(root, Vector3(0,0,0), 96.0, 235.0, "#8a8f93")
+
+          func _mammutwald_region() -> void:
+              var c := Vector2(-300.0, 3280.0)
+              var root := _root_at(c)
+              _plateau(root, 0.12, Vector3(1480, 0.32, 1480), "#3f5e40")
+              for p in [Vector3(-280,0,-220), Vector3(-120,0,80), Vector3(100,0,-130), Vector3(280,0,190), Vector3(20,0,310), Vector3(-320,0,250), Vector3(270,0,-260)]:
+                  _mammut_tree(root, p, 2.0)
+              for p in [Vector3(-70,0,-340), Vector3(350,0,20), Vector3(-380,0,40), Vector3(190,0,350)]:
+                  _mammut_tree(root, p, 1.55)
+              for p in [Vector3(-360,0,-80), Vector3(330,0,-90), Vector3(0,0,0), Vector3(140,0,170)]:
+                  _hill(root, p, 110.0, 18.0, "#506f4f")
+
+          func _huegel_region() -> void:
+              var c := Vector2(820.0, 1760.0)
+              var root := _root_at(c)
+              _plateau(root, 0.10, Vector3(1220, 0.26, 1220), "#85a96d")
+              for i in range(10):
+                  var x := -350.0 + float(i % 5) * 160.0
+                  var z := -250.0 + float(i / 5) * 260.0
+                  _hill(root, Vector3(x, 0, z), 80.0 + float(i % 3) * 20.0, 16.0 + float(i % 4) * 9.0, "#95b57a")
+
+          func _build_regions() -> void:
+              _vulkan_region()
+              _eis_region()
+              _wueste_region()
+              _berge_region()
+              _mammutwald_region()
+              _huegel_region()
+
+          func _process(delta: float) -> void:
+              if not loaded:
+                  return
+              var t := Time.get_ticks_msec() * 0.001
+              for i in range(lava_surfaces.size()):
+                  var mesh: MeshInstance3D = lava_surfaces[i]
+                  if mesh == null:
+                      continue
+                  mesh.position.y = 1.15 + sin(t * 1.7 + float(i)) * 0.05
+                  if mesh.material_override is StandardMaterial3D:
+                      mesh.material_override.emission_energy_multiplier = 2.6 + 0.5 * sin(t * 2.5 + float(i) * 0.8)
+          LWOD_V25_BIOMES
+          python3 - <<'PYV25'
+from pathlib import Path
+p = Path('android/scripts/V25BiomeWorld.gd')
+text = p.read_text()
+assert 'LWOD V25' in text
+assert '_vulkan_region' in text and '_eis_region' in text and '_wueste_region' in text
+assert '_berge_region' in text and '_mammutwald_region' in text and '_huegel_region' in text
+print('V25 Biome script ok:', p)
+PYV25
+          awk '
+            {print}
+            $0 == "    new_regions.setup(self, expanded_world)" {
+              print "    var biome_v25 = load("res://scripts/V25BiomeWorld.gd").new()"
+              print "    add_child(biome_v25)"
+              print "    biome_v25.setup(self, expanded_world)"
+              count++
+            }
+            END { if(count!=1) exit 62 }
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v25_main.gd"
+          mv "$RUNNER_TEMP/lwod_v25_main.gd" android/scripts/Main.gd
+          sed -i 's@version/code=24@version/code=25@' android/export_presets.cfg
+          sed -i 's@version/name="2.4"@version/name="2.5"@' android/export_presets.cfg
+          grep -Fqx '    biome_v25.setup(self, expanded_world)' android/scripts/Main.gd
+          grep -Fqx 'version/code=25' android/export_presets.cfg
       - name: Godot Ressourcen importieren
         shell: bash
         run: |
           set -euo pipefail
           godot --headless --path android --editor --import --quit
           test -s android/scripts/V24Regions.gd
+          test -s android/scripts/V25BiomeWorld.gd
       - name: Godot Start und Scriptfehler testen
         shell: bash
         run: |
           set -euo pipefail
-          godot --headless --path android --quit-after 8 > "$RUNNER_TEMP/lwod_v24_run.log" 2>&1 || {
-            cat "$RUNNER_TEMP/lwod_v24_run.log"
+          godot --headless --path android --quit-after 8 > "$RUNNER_TEMP/lwod_v25_run.log" 2>&1 || {
+            cat "$RUNNER_TEMP/lwod_v25_run.log"
             exit 1
           }
-          cat "$RUNNER_TEMP/lwod_v24_run.log"
-          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v24_run.log"; then
-            echo '::error::V24 Godot-Skriptfehler gefunden'
+          cat "$RUNNER_TEMP/lwod_v25_run.log"
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v25_run.log"; then
+            echo '::error::V25 Godot-Skriptfehler gefunden'
             exit 1
           fi
-      - name: LWOD Android V24 FIX1 APK erstellen
+      - name: LWOD Android V25 APK erstellen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V24-FIX1.apk"
-          test -s build/android/LWOD-Android-V24-FIX1.apk
-          unzip -t build/android/LWOD-Android-V24-FIX1.apk > /dev/null
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V25-Biome.apk"
+          test -s build/android/LWOD-Android-V25-Biome.apk
+          unzip -t build/android/LWOD-Android-V25-Biome.apk > /dev/null
       - name: Fehlerdiagnose bereitstellen
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_V24_FIX1_DIAGNOSE
+          name: LWOD_V25_DIAGNOSE
           path: |
-            ${{ runner.temp }}/lwod_v24_run.log
+            ${{ runner.temp }}/lwod_v25_run.log
             android/scripts/V24Regions.gd
           if-no-files-found: warn
           retention-days: 14
-      - name: Android V24 FIX1 APK hochladen
+      - name: Android V25 APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V24_FIX1_APK
-          path: build/android/LWOD-Android-V24-FIX1.apk
+          name: LWOD_ANDROID_V25_APK
+          path: build/android/LWOD-Android-V25-Biome.apk
           if-no-files-found: error
           retention-days: 14
