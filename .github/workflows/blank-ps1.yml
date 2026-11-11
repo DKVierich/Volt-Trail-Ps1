@@ -1,7 +1,7 @@
 # LWOD Android V26: V25 FIX1 Basis mit hoeheren Biomen, dynamischem Himmel und klickbarer Weltkarte.
 # Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
 # Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V26 Himmel Weltkarte
+name: LWOD Android V26 FIX1 Himmel Weltkarte
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V26 APK
+    name: LWOD Android V26 FIX1 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -586,7 +586,6 @@ jobs:
                       lava_mat.emission_energy_multiplier = 2.6 + 0.5 * sin(t * 2.5 + float(i) * 0.8)
           LWOD_V25_BIOMES
           test -s android/scripts/V25BiomeWorld.gd
-          test -s android/scripts/V26SkyWorldMap.gd
           grep -Fq '_vulkan_region()' android/scripts/V25BiomeWorld.gd
           grep -Fq '_eis_region()' android/scripts/V25BiomeWorld.gd
           grep -Fq '_wueste_region()' android/scripts/V25BiomeWorld.gd
@@ -716,98 +715,94 @@ jobs:
               _apply_day_night()
 
           func _build_world_map_ui() -> void:
+              # Existing V23 minimap stays visible. This transparent button makes
+              # its complete rectangle tappable without covering the bag beneath.
               ui_layer = CanvasLayer.new()
+              ui_layer.layer = 29
               game.add_child(ui_layer)
-              var mini_panel := Panel.new()
-              mini_panel.anchor_left = 1.0
-              mini_panel.anchor_top = 0.0
-              mini_panel.anchor_right = 1.0
-              mini_panel.anchor_bottom = 0.0
-              mini_panel.offset_left = -210
-              mini_panel.offset_top = 12
-              mini_panel.offset_right = -12
-              mini_panel.offset_bottom = 116
-              ui_layer.add_child(mini_panel)
-              var mini_bg := ColorRect.new()
-              mini_bg.anchor_right = 1.0
-              mini_bg.anchor_bottom = 1.0
-              mini_bg.color = Color(0.05, 0.08, 0.12, 0.82)
-              mini_panel.add_child(mini_bg)
-              var title := Label.new()
-              title.text = "Mini-Map"
-              title.position = Vector2(8, 6)
-              mini_panel.add_child(title)
-              var mini_map := ColorRect.new()
-              mini_map.position = Vector2(10, 26)
-              mini_map.size = Vector2(118, 74)
-              mini_map.color = Color("#36526c")
-              mini_panel.add_child(mini_map)
-              _add_map_patch(mini_map, Rect2(72, 6, 28, 18), Color("#bb5d2b"))
-              _add_map_patch(mini_map, Rect2(8, 8, 26, 18), Color("#dfefff"))
-              _add_map_patch(mini_map, Rect2(74, 48, 34, 18), Color("#dec36b"))
-              _add_map_patch(mini_map, Rect2(7, 45, 34, 22), Color("#54655e"))
-              _add_map_patch(mini_map, Rect2(44, 44, 22, 20), Color("#355f39"))
-              _add_map_patch(mini_map, Rect2(44, 12, 20, 18), Color("#86a76b"))
-              var rose := Label.new()
-              rose.text = "N\nW + O\nS"
-              rose.position = Vector2(136, 28)
-              mini_panel.add_child(rose)
-              time_label = Label.new()
-              time_label.text = "Tag"
-              time_label.position = Vector2(132, 78)
-              mini_panel.add_child(time_label)
               mini_button = Button.new()
-              mini_button.text = "Karte"
+              mini_button.name = "WeltkarteMiniMapTouch"
+              mini_button.text = ""
+              mini_button.focus_mode = Control.FOCUS_NONE
               mini_button.anchor_left = 1.0
-              mini_button.anchor_top = 0.0
               mini_button.anchor_right = 1.0
+              mini_button.anchor_top = 0.0
               mini_button.anchor_bottom = 0.0
-              mini_button.offset_left = -74
-              mini_button.offset_top = 120
-              mini_button.offset_right = -12
-              mini_button.offset_bottom = 150
+              mini_button.offset_left = -190.0
+              mini_button.offset_right = -14.0
+              mini_button.offset_top = 8.0
+              mini_button.offset_bottom = 197.0
+              mini_button.mouse_filter = Control.MOUSE_FILTER_STOP
+              for kind in ["normal", "hover", "pressed", "focus", "disabled"]:
+                  mini_button.add_theme_stylebox_override(kind, StyleBoxEmpty.new())
               mini_button.pressed.connect(_toggle_world_map)
               ui_layer.add_child(mini_button)
+
               world_panel = Panel.new()
-              world_panel.anchor_left = 0.12
-              world_panel.anchor_top = 0.10
-              world_panel.anchor_right = 0.88
-              world_panel.anchor_bottom = 0.84
+              world_panel.anchor_left = 0.13
+              world_panel.anchor_top = 0.08
+              world_panel.anchor_right = 0.87
+              world_panel.anchor_bottom = 0.91
+              world_panel.mouse_filter = Control.MOUSE_FILTER_STOP
               world_panel.visible = false
               ui_layer.add_child(world_panel)
-              var world_bg := ColorRect.new()
-              world_bg.anchor_right = 1.0
-              world_bg.anchor_bottom = 1.0
-              world_bg.color = Color(0.04,0.05,0.08,0.95)
-              world_panel.add_child(world_bg)
-              var head := Label.new()
-              head.text = "Weltkarte – Lydra World Of Dragon"
-              head.position = Vector2(16, 12)
-              world_panel.add_child(head)
-              var map_frame := ColorRect.new()
-              map_frame.position = Vector2(18, 42)
-              map_frame.size = Vector2(520, 300)
-              map_frame.color = Color("#27405b")
-              world_panel.add_child(map_frame)
-              _add_map_patch(map_frame, Rect2(356, 58, 92, 70), Color("#8d3529"))
-              _add_label(map_frame, "Vulkan", Vector2(374, 82))
-              _add_map_patch(map_frame, Rect2(42, 50, 100, 72), Color("#dcedff"))
-              _add_label(map_frame, "Eisregion", Vector2(52, 78))
-              _add_map_patch(map_frame, Rect2(364, 212, 112, 62), Color("#e2c46e"))
-              _add_label(map_frame, "Wueste", Vector2(390, 234))
-              _add_map_patch(map_frame, Rect2(38, 200, 122, 76), Color("#6a766e"))
-              _add_label(map_frame, "Bergregion", Vector2(50, 230))
-              _add_map_patch(map_frame, Rect2(202, 210, 92, 60), Color("#345f3d"))
-              _add_label(map_frame, "Mammutwald", Vector2(206, 232))
-              _add_map_patch(map_frame, Rect2(208, 60, 76, 56), Color("#8db074"))
-              _add_label(map_frame, "Huegel", Vector2(224, 80))
-              _add_map_patch(map_frame, Rect2(245, 132, 36, 26), Color("#4f77a2"))
-              _add_label(map_frame, "Start", Vector2(245, 160))
-              var close_btn := Button.new()
-              close_btn.text = "Schliessen"
-              close_btn.position = Vector2(426, 352)
-              close_btn.pressed.connect(_toggle_world_map)
-              world_panel.add_child(close_btn)
+              var style := StyleBoxFlat.new()
+              style.bg_color = Color("#100f26")
+              style.border_color = Color("#d7a86f")
+              style.set_border_width_all(3)
+              style.set_corner_radius_all(12)
+              world_panel.add_theme_stylebox_override("panel", style)
+              var title := Label.new()
+              title.text = "LYDRA – WELTKARTE (N oben / O rechts)"
+              title.position = Vector2(16, 8)
+              title.add_theme_font_size_override("font_size", 20)
+              world_panel.add_child(title)
+              var map_bg := ColorRect.new()
+              map_bg.position = Vector2(20, 48)
+              map_bg.size = Vector2(520, 300)
+              map_bg.color = Color("#3e6549")
+              map_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+              world_panel.add_child(map_bg)
+              _add_map_patch(map_bg, Rect2(0,0,520,300), Color("#466e55"))
+              _map_zone(map_bg, Vector2(2900,-2150), Vector2(850,850), "Vulkan", Color("#b65d37"))
+              _map_zone(map_bg, Vector2(-3050,2380), Vector2(850,850), "Eis", Color("#dbeeff"))
+              _map_zone(map_bg, Vector2(3180,2280), Vector2(970,970), "Wueste", Color("#e5c36e"))
+              _map_zone(map_bg, Vector2(-3380,-2700), Vector2(1100,1100), "Hochgebirge", Color("#8c8d99"))
+              _map_zone(map_bg, Vector2(-300,3280), Vector2(820,820), "Mammutwald", Color("#224e37"))
+              _map_zone(map_bg, Vector2(820,1760), Vector2(650,650), "Huegel", Color("#a8c57f"))
+              var center_label := Label.new()
+              center_label.text = "START"
+              center_label.position = Vector2(247,139)
+              map_bg.add_child(center_label)
+              var world := game.get_node_or_null("V21World")
+              if world != null:
+                  for entry in world.settlements:
+                      var town_pos: Vector2 = entry["pos"]
+                      var dot := ColorRect.new()
+                      dot.position = _world_to_map(town_pos)
+                      dot.size = Vector2(3,3)
+                      dot.color = Color("#f5dba8")
+                      map_bg.add_child(dot)
+              var marker := ColorRect.new()
+              marker.name = "PlayerWorldMapMarker"
+              marker.size = Vector2(9,9)
+              marker.color = Color("#d389ff")
+              map_bg.add_child(marker)
+              var close := Button.new()
+              close.text = "Zurueck"
+              close.position = Vector2(420,356)
+              close.size = Vector2(110,36)
+              close.pressed.connect(_toggle_world_map)
+              world_panel.add_child(close)
+
+          func _world_to_map(p: Vector2) -> Vector2:
+              return Vector2(260.0 + p.x * 520.0 / 32000.0, 150.0 + p.y * 300.0 / 32000.0)
+
+          func _map_zone(parent: Control, center: Vector2, radius: Vector2, label: String, color: Color) -> void:
+              var pos: Vector2 = _world_to_map(center)
+              var size: Vector2 = Vector2(maxf(12.0, radius.x * 2.0 * 520.0 / 32000.0), maxf(12.0, radius.y * 2.0 * 300.0 / 32000.0))
+              _add_map_patch(parent, Rect2(pos-size*0.5,size),color)
+              _add_label(parent,label,pos+Vector2(5,-10))
 
           func _add_map_patch(parent: Control, rect: Rect2, color: Color) -> void:
               var r := ColorRect.new()
@@ -827,25 +822,41 @@ jobs:
                   world_panel.visible = not world_panel.visible
 
           func _apply_day_night() -> void:
-              var angle := day_clock * TAU
-              var sun_height := sin(angle)
-              var x := cos(angle) * 260.0
-              var z := -sin(angle) * 160.0
+              # V23 clock: [0,0.5) is day, rest is night.
+              # Positive X = east, negative X = west, north is negative Z.
+              var angle: float = day_clock * TAU
+              var elevation: float = sin(angle)
               if sun_node != null:
-                  sun_node.position = Vector3(x, 110.0 + sun_height * 95.0, z)
-                  sun_node.visible = sun_height > -0.10
+                  sun_node.position = Vector3(cos(angle)*290.0, 14.0 + elevation*185.0, -18.0)
+                  sun_node.visible = elevation > -0.07
               if moon_node != null:
-                  var moon_angle := angle + PI
-                  moon_node.position = Vector3(cos(moon_angle) * 240.0, 106.0 + sin(moon_angle) * 90.0, -sin(moon_angle) * 150.0)
-                  moon_node.visible = sun_height < 0.06
-              if time_label != null:
-                  time_label.text = "Tag" if sun_height >= 0.0 else "Nacht"
+                  var moon_angle: float = angle + PI
+                  moon_node.position = Vector3(cos(moon_angle)*285.0, 16.0 + sin(moon_angle)*185.0, 24.0)
+                  moon_node.visible = elevation < 0.07
 
           func _process(delta: float) -> void:
-              if not loaded:
+              if not loaded or game == null:
                   return
-              day_clock = fmod(day_clock + delta * 0.015, 1.0)
+              var world := game.get_node_or_null("V21World")
+              if world != null:
+                  day_clock = float(world.day_clock)
+              else:
+                  day_clock = fposmod(day_clock + delta / 480.0, 1.0)
+              if game.hero != null and sky_root != null:
+                  sky_root.global_position = game.hero.global_position
               _apply_day_night()
+              if ui_layer != null:
+                  ui_layer.visible = (game.state == 2)
+              if world_panel != null and world_panel.visible and game.hero != null:
+                  var marker := world_panel.get_node_or_null("ColorRect/PlayerWorldMapMarker")
+                  # Alternate robust child traversal (map is second-level control).
+                  for child in world_panel.get_children():
+                      if child is ColorRect and child.name == "ColorRect":
+                          marker = child.get_node_or_null("PlayerWorldMapMarker")
+                          break
+                  if marker is ColorRect:
+                      var p: Vector3 = game.hero.global_position
+                      marker.position = _world_to_map(Vector2(p.x,p.z)) - Vector2(4,4)
               if cloud_root != null:
                   var idx := 0
                   for c in cloud_root.get_children():
@@ -892,32 +903,32 @@ jobs:
           }
           cat "$RUNNER_TEMP/lwod_v26_run.log"
           if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v26_run.log"; then
-            echo '::error::V25 Godot-Skriptfehler gefunden'
+            echo '::error::V26 Godot-Skriptfehler gefunden'
             exit 1
           fi
-      - name: LWOD Android V26 APK erstellen
+      - name: LWOD Android V26 FIX1 APK erstellen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V25-FIX1.apk"
-          test -s build/android/LWOD-Android-V25-FIX1.apk
-          unzip -t build/android/LWOD-Android-V25-FIX1.apk > /dev/null
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V26-FIX1.apk"
+          test -s build/android/LWOD-Android-V26-FIX1.apk
+          unzip -t build/android/LWOD-Android-V26-FIX1.apk > /dev/null
       - name: Fehlerdiagnose bereitstellen
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_V26_DIAGNOSE
+          name: LWOD_V26_FIX1_DIAGNOSE
           path: |
-            ${{ runner.temp }}/lwod_v25_run.log
+            ${{ runner.temp }}/lwod_v26_run.log
             android/scripts/V24Regions.gd
           if-no-files-found: warn
           retention-days: 14
-      - name: Android V25 APK hochladen
+      - name: Android V26 FIX1 APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V26_APK
-          path: build/android/LWOD-Android-V25-FIX1.apk
+          name: LWOD_ANDROID_V26_FIX1_APK
+          path: build/android/LWOD-Android-V26-FIX1.apk
           if-no-files-found: error
           retention-days: 14
