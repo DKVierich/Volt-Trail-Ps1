@@ -1,7 +1,7 @@
-# LWOD Android V28: Dual-Touch-Fix - LINKS Kamera, RECHTS Figur; V27-Grafik bleibt erhalten.
+# LWOD Android V29: Figurenbewegung rechts / unabhängige Kamera links, aufgebaut auf V28.
 # Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
 # Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V28 DualStick Steuerfix
+name: LWOD Android V29 Bewegungsfix
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V28 APK
+    name: LWOD Android V29 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -1642,6 +1642,239 @@ jobs:
           grep -Fqx '    v28_sticks.setup(self, camera_map_v27)' android/scripts/Main.gd
           grep -Fqx 'version/code=28' android/export_presets.cfg
           echo 'V28: rechter Bewegungsstick und linker Kamerastick eingebaut'
+      - name: V29 echte Figurenbewegung rechts und freie Kamera links
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/scripts
+          cat > android/scripts/V29IndependentSticks.gd <<'LWOD_V29_DUAL'
+          extends Control
+
+          # V29: independent camera (left) and actual character movement (right).
+          # Input is sent into Main.gd movement physics, not used to rotate the camera.
+          const RADIUS: float = 92.0
+          const CAMERA_YAW_SPEED: float = 2.25
+          const CAMERA_PITCH_SPEED: float = 1.65
+
+          var game: Node3D
+          var look: Node
+          var old_stick: Control
+          var camera_id: int = -1
+          var movement_id: int = -1
+          var camera_start: Vector2 = Vector2.ZERO
+          var movement_start: Vector2 = Vector2.ZERO
+          var camera_axis: Vector2 = Vector2.ZERO
+          var movement_axis: Vector2 = Vector2.ZERO
+          var mouse_id: int = 910002
+
+          func setup(root: Node3D, old_controller: Control, camera_controller: Node) -> void:
+              game = root
+              old_stick = old_controller
+              look = camera_controller
+              name = "LWOD_V29_STEUERUNG"
+              set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+              mouse_filter = Control.MOUSE_FILTER_IGNORE
+              if is_instance_valid(old_stick):
+                  old_stick.set_process_input(false)
+                  old_stick.set_process(false)
+                  old_stick.visible = false
+              if is_instance_valid(look):
+                  look.set_process_input(false)
+                  look.set_process_unhandled_input(false)
+              game.set("joystick_axis", Vector2.ZERO)
+              set_process_input(true)
+              set_process(true)
+              print("V29 INPUT READY: LINKS KAMERA - RECHTS FIGUR - frei laufen")
+
+          func _playing() -> bool:
+              if not is_instance_valid(game) or int(game.get("state")) != 2:
+                  return false
+              if is_instance_valid(look) and bool(look.get("map_open")):
+                  return false
+              return true
+
+          func _touch_over_ui(pos: Vector2) -> bool:
+              var s: Vector2 = get_viewport().get_visible_rect().size
+              # Minimap, inventory and menu live in the upper-right corner.
+              return pos.x > s.x * 0.73 and pos.y < s.y * 0.34
+
+          func _start_finger(id: int, pos: Vector2) -> void:
+              if not _playing() or _touch_over_ui(pos):
+                  return
+              var s: Vector2 = get_viewport().get_visible_rect().size
+              if pos.x < s.x * 0.5:
+                  if camera_id == -1:
+                      camera_id = id
+                      camera_start = pos
+                      camera_axis = Vector2.ZERO
+              elif movement_id == -1:
+                  movement_id = id
+                  movement_start = pos
+                  movement_axis = Vector2.ZERO
+              queue_redraw()
+
+          func _move_finger(id: int, pos: Vector2) -> void:
+              if id == camera_id:
+                  camera_axis = (pos - camera_start).limit_length(RADIUS) / RADIUS
+              elif id == movement_id:
+                  movement_axis = (pos - movement_start).limit_length(RADIUS) / RADIUS
+                  _send_movement()
+              queue_redraw()
+
+          func _end_finger(id: int) -> void:
+              if id == camera_id:
+                  camera_id = -1
+                  camera_axis = Vector2.ZERO
+              if id == movement_id:
+                  movement_id = -1
+                  movement_axis = Vector2.ZERO
+                  _send_movement()
+              queue_redraw()
+
+          func _send_movement() -> void:
+              if is_instance_valid(game):
+                  game.set("joystick_axis", movement_axis)
+
+          func _reset() -> void:
+              if camera_id == -1 and movement_id == -1:
+                  return
+              camera_id = -1
+              movement_id = -1
+              camera_axis = Vector2.ZERO
+              movement_axis = Vector2.ZERO
+              _send_movement()
+              queue_redraw()
+
+          func _input(event: InputEvent) -> void:
+              if event is InputEventScreenTouch:
+                  var touch: InputEventScreenTouch = event as InputEventScreenTouch
+                  if touch.pressed:
+                      _start_finger(touch.index, touch.position)
+                  else:
+                      _end_finger(touch.index)
+              elif event is InputEventScreenDrag:
+                  var drag: InputEventScreenDrag = event as InputEventScreenDrag
+                  _move_finger(drag.index, drag.position)
+              elif not OS.has_feature("mobile") and event is InputEventMouseButton:
+                  var button: InputEventMouseButton = event as InputEventMouseButton
+                  if button.button_index == MOUSE_BUTTON_LEFT:
+                      if button.pressed:
+                          _start_finger(mouse_id, button.position)
+                      else:
+                          _end_finger(mouse_id)
+              elif not OS.has_feature("mobile") and event is InputEventMouseMotion:
+                  var motion: InputEventMouseMotion = event as InputEventMouseMotion
+                  if camera_id == mouse_id or movement_id == mouse_id:
+                      _move_finger(mouse_id, motion.position)
+
+          func _process(delta: float) -> void:
+              if not _playing():
+                  _reset()
+                  return
+              if movement_id != -1:
+                  _send_movement()
+              if camera_id != -1 and is_instance_valid(look):
+                  var yaw: float = float(look.get("yaw_offset"))
+                  var pitch: float = float(look.get("pitch"))
+                  yaw = wrapf(yaw - camera_axis.x * CAMERA_YAW_SPEED * delta, -PI, PI)
+                  pitch = clampf(pitch + camera_axis.y * CAMERA_PITCH_SPEED * delta, -0.55, 1.08)
+                  look.set("yaw_offset", yaw)
+                  look.set("pitch", pitch)
+
+          func _draw_joystick(center: Vector2, axis: Vector2, label_text: String, color: Color) -> void:
+              draw_circle(center, RADIUS, Color(0.04, 0.055, 0.12, 0.32))
+              draw_arc(center, RADIUS, 0.0, TAU, 50, color, 3.0, true)
+              var knob: Vector2 = center + axis * 66.0
+              draw_circle(knob, 32.0, Color(color.r, color.g, color.b, 0.3))
+              draw_arc(knob, 32.0, 0.0, TAU, 36, color, 3.0, true)
+              draw_string(ThemeDB.fallback_font, center + Vector2(-35, -108), label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, color)
+
+          func _draw() -> void:
+              if camera_id != -1:
+                  _draw_joystick(camera_start, camera_axis, "KAMERA", Color("#d9b7ff"))
+              if movement_id != -1:
+                  _draw_joystick(movement_start, movement_axis, "FIGUR", Color("#ffd395"))
+          LWOD_V29_DUAL
+          cat > "$RUNNER_TEMP/lwod_v29_movement.gd" <<'LWOD_V29_MOVE'
+              # V29: Right stick moves the hero in world space relative to camera heading.
+              # Camera yaw is independent of the hero's own rotation.
+              var input_axis: Vector2 = joystick_axis
+              if Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A):
+                  input_axis.x -= 1.0
+              if Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D):
+                  input_axis.x += 1.0
+              if Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_W):
+                  input_axis.y -= 1.0
+              if Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_S):
+                  input_axis.y += 1.0
+              input_axis = input_axis.limit_length(1.0)
+              var look_script: Node = get_node_or_null("V27CameraWorldMap")
+              var world_yaw: float = 0.0
+              if look_script != null:
+                  world_yaw = float(look_script.get("yaw_offset"))
+              var forward: Vector3 = Vector3(-sin(world_yaw), 0, -cos(world_yaw))
+              var sideways: Vector3 = Vector3(cos(world_yaw), 0, -sin(world_yaw))
+              var move_vec: Vector3 = sideways * input_axis.x + forward * (-input_axis.y)
+              if move_vec.length_squared() > 0.001:
+                  move_vec = move_vec.normalized()
+                  hero.velocity.x = move_vec.x * WALK_SPEED
+                  hero.velocity.z = move_vec.z * WALK_SPEED
+                  var target_heading: float = atan2(-move_vec.x, -move_vec.z)
+                  heading = lerp_angle(heading, target_heading, minf(1.0, delta * 11.0))
+                  hero.rotation.y = heading
+              else:
+                  hero.velocity.x = 0.0
+                  hero.velocity.z = 0.0
+              if not hero.is_on_floor():
+                  hero.velocity.y -= GRAVITY * delta
+              else:
+                  hero.velocity.y = -0.05
+              hero.move_and_slide()
+          LWOD_V29_MOVE
+          test -s android/scripts/V29IndependentSticks.gd
+          test -s "$RUNNER_TEMP/lwod_v29_movement.gd"
+          # Camera world yaw must not follow hero turn. Left stick alone orbits camera.
+          test "$(grep -Fxc '    var orbit_yaw: float = hero.rotation.y+yaw_offset' android/scripts/V27CameraMap.gd)" -eq 1
+          sed -i 's@var orbit_yaw: float = hero.rotation.y+yaw_offset@var orbit_yaw: float = yaw_offset@' android/scripts/V27CameraMap.gd
+          # Replace old V7 turn-in-place movement with camera-relative strafe+forward.
+          test "$(grep -Fxc '    var turn_amount := joystick_axis.x' android/scripts/Main.gd)" -eq 1
+          awk -v movefile="$RUNNER_TEMP/lwod_v29_movement.gd" '
+            BEGIN {
+              while ((getline ln < movefile) > 0) { repl = repl ln "\n" }
+              close(movefile)
+            }
+            $0 == "    var turn_amount := joystick_axis.x" {
+              printf "%s", repl
+              skipping=1
+              replaced++
+              next
+            }
+            skipping && $0 == "    hero.move_and_slide()" { skipping=0; next }
+            skipping { next }
+            { print }
+            END {if (replaced != 1 || skipping) exit 81}
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v29_main.gd"
+          mv "$RUNNER_TEMP/lwod_v29_main.gd" android/scripts/Main.gd
+          # Disable V28 input; new controller is exclusive owner of both touch halves.
+          test "$(grep -Fxc '    v28_sticks.setup(self, camera_map_v27)' android/scripts/Main.gd)" -eq 1
+          awk '
+            {print}
+            $0 == "    v28_sticks.setup(self, camera_map_v27)" {
+              print "    var sticks_v29 = load(\"res://scripts/V29IndependentSticks.gd\").new()"
+              print "    play_hud_root.add_child(sticks_v29)"
+              print "    sticks_v29.setup(self, v28_sticks, camera_map_v27)"
+              added++
+            }
+            END {if(added!=1) exit 82}
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v29_main2.gd"
+          mv "$RUNNER_TEMP/lwod_v29_main2.gd" android/scripts/Main.gd
+          sed -i 's@version/code=28@version/code=29@' android/export_presets.cfg
+          sed -i 's@version/name="2.8"@version/name="2.9"@' android/export_presets.cfg
+          grep -Fqx 'version/code=29' android/export_presets.cfg
+          grep -Fqx '    sticks_v29.setup(self, v28_sticks, camera_map_v27)' android/scripts/Main.gd
+          grep -Fqx '    hero.move_and_slide()' android/scripts/Main.gd
+          grep -Fq 'var move_vec: Vector3 = sideways * input_axis.x + forward * (-input_axis.y)' android/scripts/Main.gd
+          echo 'V29: LINKS Kamera, RECHTS Bewegung; eigene Weltbewegung implementiert'
       - name: Godot Ressourcen importieren
         shell: bash
         run: |
@@ -1654,47 +1887,109 @@ jobs:
           test -s android/scripts/V27WorldMap.gd
           test -s android/scripts/V27CameraMap.gd
           test -s android/scripts/V28DualStick.gd
+          test -s android/scripts/V29IndependentSticks.gd
       - name: Godot Start und Scriptfehler testen
         shell: bash
         run: |
           set -euo pipefail
-          godot --headless --path android --quit-after 8 > "$RUNNER_TEMP/lwod_v28_run.log" 2>&1 || {
-            cat "$RUNNER_TEMP/lwod_v28_run.log"
+          godot --headless --path android --quit-after 8 > "$RUNNER_TEMP/lwod_v29_run.log" 2>&1 || {
+            cat "$RUNNER_TEMP/lwod_v29_run.log"
             exit 1
           }
-          cat "$RUNNER_TEMP/lwod_v28_run.log"
-          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v28_run.log"; then
-            echo '::error::V28 Godot-Skriptfehler gefunden'
+          cat "$RUNNER_TEMP/lwod_v29_run.log"
+          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v29_run.log"; then
+            echo '::error::V29 Godot-Skriptfehler gefunden'
             exit 1
           fi
-      - name: LWOD Android V28 APK erstellen
+      - name: V29 Spielfigur wirklich bewegen - automatischer Smoke-Test
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/tests
+          cat > android/tests/V29Smoke.gd <<'LWOD_V29_SMOKE'
+          extends SceneTree
+          
+          # End-to-end check: fake a right-side drag and verify hero displacement.
+          func _initialize() -> void:
+              call_deferred("_run_smoke")
+          
+          func _run_smoke() -> void:
+              var scene: PackedScene = load("res://scenes/Main.tscn") as PackedScene
+              if scene == null:
+                  push_error("V29_SMOKE: Main.tscn could not load")
+                  quit(21)
+                  return
+              var game: Node3D = scene.instantiate() as Node3D
+              root.add_child(game)
+              for i in range(6):
+                  await process_frame
+              if not game.has_method("_on_new_game_pressed"):
+                  push_error("V29_SMOKE: no new game function")
+                  quit(22)
+                  return
+              game.call("_on_new_game_pressed")
+              for i in range(5):
+                  await physics_frame
+              var hero: CharacterBody3D = game.get("hero") as CharacterBody3D
+              var controller: Node = game.find_child("LWOD_V29_STEUERUNG", true, false)
+              if hero == null or controller == null:
+                  push_error("V29_SMOKE: hero or controller missing")
+                  quit(23)
+                  return
+              var begin: Vector3 = hero.global_position
+              var stick_origin := Vector2(980.0, 530.0)
+              controller.call("_start_finger", 25, stick_origin)
+              controller.call("_move_finger", 25, stick_origin + Vector2(0.0, -92.0))
+              for i in range(35):
+                  await physics_frame
+              var moved: float = Vector2(hero.global_position.x - begin.x, hero.global_position.z - begin.z).length()
+              controller.call("_end_finger", 25)
+              print("V29_SMOKE_MOVED_METERS=", moved)
+              if moved < 0.30:
+                  push_error("V29_SMOKE: right movement stick did not move the hero")
+                  quit(24)
+                  return
+              print("V29_SMOKE_OK: right stick moves hero, camera separate")
+              quit(0)
+          LWOD_V29_SMOKE
+          godot --headless --path android --script res://tests/V29Smoke.gd > "$RUNNER_TEMP/lwod_v29_movement_test.log" 2>&1 || {
+            cat "$RUNNER_TEMP/lwod_v29_movement_test.log"
+            exit 1
+          }
+          cat "$RUNNER_TEMP/lwod_v29_movement_test.log"
+          grep -Fq 'V29_SMOKE_OK:' "$RUNNER_TEMP/lwod_v29_movement_test.log"
+      - name: LWOD Android V29 APK erstellen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V28-Steuerfix.apk"
-          test -s build/android/LWOD-Android-V28-Steuerfix.apk
-          unzip -t build/android/LWOD-Android-V28-Steuerfix.apk > /dev/null
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V29-Bewegungsfix.apk"
+          test -s build/android/LWOD-Android-V29-Bewegungsfix.apk
+          unzip -t build/android/LWOD-Android-V29-Bewegungsfix.apk > /dev/null
       - name: Fehlerdiagnose bereitstellen
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_V28_DIAGNOSE
+          name: LWOD_V29_DIAGNOSE
           path: |
-            ${{ runner.temp }}/lwod_v28_run.log
+            ${{ runner.temp }}/lwod_v29_run.log
             android/scripts/V24Regions.gd
             android/scripts/V27Terrain.gd
             android/scripts/V27CameraMap.gd
             android/scripts/V27WorldMap.gd
             android/scripts/V28DualStick.gd
+            android/scripts/V29IndependentSticks.gd
+            android/scripts/Main.gd
+            android/tests/V29Smoke.gd
+            ${{ runner.temp }}/lwod_v29_movement_test.log
             android/scripts/TouchOverlay.gd
           if-no-files-found: warn
           retention-days: 14
-      - name: Android V28 APK hochladen
+      - name: Android V29 APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V28_STEUERUNG_APK
-          path: build/android/LWOD-Android-V28-Steuerfix.apk
+          name: LWOD_ANDROID_V29_BEWEGUNGSFIX_APK
+          path: build/android/LWOD-Android-V29-Bewegungsfix.apk
           if-no-files-found: error
           retention-days: 14
