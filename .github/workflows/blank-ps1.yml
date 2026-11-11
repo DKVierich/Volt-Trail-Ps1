@@ -1,7 +1,7 @@
 # LWOD Android V30: Figurenbewegung rechts / unabhängige Kamera links, aufgebaut auf V28.
 # Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
 # Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V32 Links Kamera Rechts Figur
+name: LWOD Android V33 Echte Kamerasicht Links und Bewegung Rechts
 'on':
   workflow_dispatch: {}
   push:
@@ -2327,88 +2327,153 @@ jobs:
           grep -Fq 'if pos.x < viewport_width * 0.5:' android/scripts/V32TouchRouter.gd
           grep -Fq 'game.set("joystick_axis", hero_axis)' android/scripts/V32TouchRouter.gd
           echo 'V32_TOUCH_PATCH_OK: LEFT=CAMERA RIGHT=HERO'
-      - name: Godot Ressourcen importieren
+      - name: V33 Blick in den Himmel und unabhängige Links-Rechts-Steuerung
         shell: bash
         run: |
           set -euo pipefail
-          godot --headless --path android --editor --import --quit
-          test -s android/scripts/V24Regions.gd
-          test -s android/scripts/V25BiomeWorld.gd
-          test -s android/scripts/V26SkyWorldMap.gd
-          test -s android/scripts/V27Terrain.gd
-          test -s android/scripts/V27WorldMap.gd
-          test -s android/scripts/V27CameraMap.gd
-          test -s android/scripts/V28DualStick.gd
-          test -s android/scripts/V29IndependentSticks.gd
-          test -s android/scripts/V30MovementRepair.gd
-          test -s android/scripts/V31TerrainMotion.gd
-          test -s android/scripts/V32TouchRouter.gd
-      - name: Godot Start und Scriptfehler testen
-        shell: bash
-        run: |
-          set -euo pipefail
-          godot --headless --path android --quit-after 8 > "$RUNNER_TEMP/lwod_v29_run.log" 2>&1 || {
-            cat "$RUNNER_TEMP/lwod_v29_run.log"
-            exit 1
-          }
-          cat "$RUNNER_TEMP/lwod_v29_run.log"
-          if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v29_run.log"; then
-            echo '::error::V31 Godot-Skriptfehler gefunden'
-            exit 1
-          fi
-      - name: V31 Terrainphysik vorhanden
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s android/scripts/V31TerrainMotion.gd
-          grep -Fq 'align_to_ground' android/scripts/Main.gd
-          test -s android/scripts/V32TouchRouter.gd
-          echo 'V31 terrain verified; V32 exclusive touch test follows'
-      - name: V32 Echte Links-Rechts-Multitouch Tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          godot --headless --path android --script res://tests/V32TouchSmoke.gd > "$RUNNER_TEMP/lwod_v32_touch_test.log" 2>&1 || {
-            cat "$RUNNER_TEMP/lwod_v32_touch_test.log"
-            exit 1
-          }
-          cat "$RUNNER_TEMP/lwod_v32_touch_test.log"
-          grep -Fq 'V32_TOUCH_TEST_OK:' "$RUNNER_TEMP/lwod_v32_touch_test.log"
-      - name: LWOD Android V32 APK erstellen
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p build/android
-          godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V32-Steuerung.apk"
-          test -s build/android/LWOD-Android-V32-Steuerung.apk
-          unzip -t build/android/LWOD-Android-V32-Steuerung.apk > /dev/null
-      - name: Fehlerdiagnose bereitstellen
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: LWOD_V32_DIAGNOSE
-          path: |
-            ${{ runner.temp }}/lwod_v29_run.log
-            android/scripts/V24Regions.gd
-            android/scripts/V27Terrain.gd
-            android/scripts/V27CameraMap.gd
-            android/scripts/V27WorldMap.gd
-            android/scripts/V28DualStick.gd
-            android/scripts/V29IndependentSticks.gd
-            android/scripts/Main.gd
-            android/scripts/V30MovementRepair.gd
-            android/scripts/V31TerrainMotion.gd
-            android/scripts/V32TouchRouter.gd
-            android/tests/V32TouchSmoke.gd
-            ${{ runner.temp }}/lwod_v30_movement_test.log
-            android/scripts/TouchOverlay.gd
-          if-no-files-found: warn
-          retention-days: 14
-      - name: Android V32 APK hochladen
-        uses: actions/upload-artifact@v4
-        with:
-          name: LWOD_ANDROID_V32_STEUERUNG_APK
-          path: build/android/LWOD-Android-V32-Steuerung.apk
-          if-no-files-found: error
-          retention-days: 14
+          mkdir -p android/scripts android/tests
+          cat > android/scripts/V33TouchCamera.gd <<'V33_TOUCH'
+          extends Control
+          
+          # Definitive split-screen controls. LEFT = camera yaw and pitch; RIGHT = movement.
+          # No other controller is allowed to modify joystick_axis or camera orientation.
+          const STICK_RADIUS: float = 94.0
+          const CAMERA_YAW_SPEED: float = 2.9
+          const CAMERA_PITCH_SPEED: float = 3.6
+          const MAX_UP: float = 1.43
+          const MAX_DOWN: float = -1.05
+          
+          var game: Node3D
+          var old_look: Node
+          var terrain: Node
+          var camera_id: int = -1
+          var move_id: int = -1
+          var camera_center: Vector2 = Vector2.ZERO
+          var move_center: Vector2 = Vector2.ZERO
+          var camera_axis: Vector2 = Vector2.ZERO
+          var move_axis: Vector2 = Vector2.ZERO
+          var camera_yaw: float = 0.0
+          var view_pitch: float = -0.31
+          var mouse_id: int = 93301
+          
+          func setup(root: Node3D) -> void:
+              game = root
+              name = "V33_LINKS_KAMERA_RECHTS_BEWEGUNG"
+              process_priority = 9000
+              process_physics_priority = 9000
+              set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+              mouse_filter = Control.MOUSE_FILTER_IGNORE
+              old_look = root.get_node_or_null("V27CameraWorldMap")
+              terrain = root.get_node_or_null("V27ContinuousTerrain")
+              if old_look != null:
+                  camera_yaw = float(old_look.get("yaw_offset"))
+                  old_look.set_physics_process(false)
+                  old_look.set_process_input(false)
+                  old_look.set_process_unhandled_input(false)
+                  old_look.set("look_touch_id", -1)
+                  old_look.set("mouse_look", false)
+              # Stop all earlier touch owners, including V32.
+              for nm in ["V32_TOUCH_LINKS_KAMERA_RECHTS_FIGUR", "LWOD_V29_STEUERUNG", "LWOD_V28_Dual_Stick"]:
+                  var previous: Node = root.find_child(nm, true, false)
+                  if previous != null and previous != self:
+                      previous.set_process_input(false)
+                      previous.set_process_unhandled_input(false)
+                      previous.set_process(false)
+                      previous.set_physics_process(false)
+                      if previous is Control:
+                          (previous as Control).hide()
+              if is_instance_valid(root.touch_overlay):
+                  root.touch_overlay.set_process_input(false)
+                  root.touch_overlay.set_process(false)
+                  root.touch_overlay.hide()
+              game.set("joystick_axis", Vector2.ZERO)
+              _sync_camera_yaw()
+              set_process_input(true)
+              set_physics_process(true)
+              set_process(true)
+              print("V33_READY: LEFT CAMERA RIGHT MOVEMENT; SKY_LOOK_ENABLED")
+          
+          func _playing() -> bool:
+              if not is_instance_valid(game) or int(game.get("state")) != 2:
+                  return false
+              if old_look != null and bool(old_look.get("map_open")):
+                  return false
+              return true
+          
+          func _on_ui(pos: Vector2) -> bool:
+              # Touching map, backpack or dialog buttons must not activate the joysticks.
+              for item in game.find_children("*", "Button", true, false):
+                  var b: Button = item as Button
+                  if b != null and b.is_visible_in_tree() and not b.disabled:
+                      if b.get_global_rect().has_point(pos):
+                          return true
+              return false
+          
+          func _start(id: int, pos: Vector2) -> void:
+              if not _playing() or _on_ui(pos):
+                  return
+              var width: float = get_viewport().get_visible_rect().size.x
+              if pos.x < width * 0.5:
+                  if camera_id == -1:
+                      camera_id = id
+                      camera_center = pos
+                      camera_axis = Vector2.ZERO
+              else:
+                  if move_id == -1:
+                      move_id = id
+                      move_center = pos
+                      move_axis = Vector2.ZERO
+                      _send_movement()
+              queue_redraw()
+          
+          func _drag(id: int, pos: Vector2) -> void:
+              if id == camera_id:
+                  camera_axis = (pos-camera_center).limit_length(STICK_RADIUS)/STICK_RADIUS
+              elif id == move_id:
+                  move_axis = (pos-move_center).limit_length(STICK_RADIUS)/STICK_RADIUS
+                  _send_movement()
+              queue_redraw()
+          
+          func _release(id: int) -> void:
+              if id == camera_id:
+                  camera_id = -1
+                  camera_axis = Vector2.ZERO
+              if id == move_id:
+                  move_id = -1
+                  move_axis = Vector2.ZERO
+                  _send_movement()
+              queue_redraw()
+          
+          func _send_movement() -> void:
+              if is_instance_valid(game):
+                  game.set("joystick_axis", move_axis)
+          
+          func _sync_camera_yaw() -> void:
+              # Main.gd movement is relative to this value, but right stick NEVER changes it.
+              if old_look != null:
+                  old_look.set("yaw_offset", camera_yaw)
+          
+          func _input(event: InputEvent) -> void:
+              if event is InputEventScreenTouch:
+                  var touch: InputEventScreenTouch = event as InputEventScreenTouch
+                  if touch.pressed:
+                      _start(touch.index, touch.position)
+                  else:
+                      _release(touch.index)
+              elif event is InputEventScreenDrag:
+                  var drag: InputEventScreenDrag = event as InputEventScreenDrag
+                  _drag(drag.index, drag.position)
+              elif not OS.has_feature("mobile") and event is InputEventMouseButton:
+                  var mb: InputEventMouseButton = event as InputEventMouseButton
+                  if mb.button_index == MOUSE_BUTTON_LEFT:
+                      if mb.pressed:
+                          _start(mouse_id, mb.position)
+                      else:
+                          _release(mouse_id)
+              elif not OS.has_feature("mobile") and event is InputEventMouseMotion:
+                  var motion: InputEventMouseMotion = event as InputEventMouseMotion
+                  if camera_id == mouse_id or move_id == mouse_id:
+                      _drag(mouse_id, motion.position)
+          
+          func _physics_process(delta: float) -> void:
+       
