@@ -1,7 +1,7 @@
 # LWOD Android V30: Figurenbewegung rechts / unabhängige Kamera links, aufgebaut auf V28.
 # Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
 # Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V31 Begehbares Hoehengelaende
+name: LWOD Android V32 Links Kamera Rechts Figur
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V31 APK
+    name: LWOD Android V32 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -2047,6 +2047,286 @@ jobs:
           grep -Fq 'terrain_motion.align_to_ground(hero)' android/scripts/Main.gd
           test -s android/scripts/V31TerrainMotion.gd
           echo 'V31_TERRAIN_PATCH_OK: rechts Figur, links Kamera; Chunk-Kollisionskanten entfernt'
+      - name: V32 Touchbereiche verbindlich trennen
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/scripts android/tests
+          cat > android/scripts/V32TouchRouter.gd <<'LWOD_V32_TOUCH'
+          extends Control
+
+          # V32: One authoritative touch router. LEFT = CAMERA, RIGHT = HERO.
+          const RADIUS: float = 92.0
+          const CAMERA_YAW_SPEED: float = 2.35
+          const CAMERA_PITCH_SPEED: float = 1.55
+
+          var game: Node3D
+          var look: Node
+          var camera_id: int = -1
+          var hero_id: int = -1
+          var camera_origin: Vector2 = Vector2.ZERO
+          var hero_origin: Vector2 = Vector2.ZERO
+          var camera_axis: Vector2 = Vector2.ZERO
+          var hero_axis: Vector2 = Vector2.ZERO
+          var mouse_id: int = 90932
+
+          func setup(root: Node3D) -> void:
+              game = root
+              name = "V32_TOUCH_LINKS_KAMERA_RECHTS_FIGUR"
+              look = root.get_node_or_null("V27CameraWorldMap")
+              set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+              mouse_filter = Control.MOUSE_FILTER_IGNORE
+              # Older input scripts are disabled; only V32 receives gameplay touch events.
+              for old_name in ["LWOD_V29_STEUERUNG", "LWOD_V28_Dual_Stick"]:
+                  var old: Node = root.find_child(old_name, true, false)
+                  if old != null:
+                      old.set_process_input(false)
+                      old.set_process_unhandled_input(false)
+                      old.set_process(false)
+                      if old is Control:
+                          (old as Control).visible = false
+              if is_instance_valid(root.touch_overlay):
+                  root.touch_overlay.set_process_input(false)
+                  root.touch_overlay.visible = false
+              if look != null:
+                  look.set_process_input(false)
+                  look.set_process_unhandled_input(false)
+                  look.set("look_touch_id", -1)
+                  look.set("mouse_look", false)
+              game.set("joystick_axis", Vector2.ZERO)
+              set_process_input(true)
+              set_process(true)
+              print("V32_TOUCH_READY LEFT_CAMERA RIGHT_HERO")
+
+          func _playing() -> bool:
+              if game == null or int(game.get("state")) != 2:
+                  return false
+              if look != null and bool(look.get("map_open")):
+                  return false
+              return true
+
+          func _blocked_by_ui(pos: Vector2) -> bool:
+              # Buttons always win, even where they overlap the two control zones.
+              for node in game.find_children("*", "Button", true, false):
+                  var button: Button = node as Button
+                  if button != null and button.is_visible_in_tree() and not button.disabled:
+                      if button.get_global_rect().has_point(pos):
+                          return true
+              return false
+
+          func _begin_finger(id: int, pos: Vector2) -> void:
+              if not _playing() or _blocked_by_ui(pos):
+                  return
+              var viewport_width: float = get_viewport().get_visible_rect().size.x
+              if pos.x < viewport_width * 0.5:
+                  if camera_id == -1:
+                      camera_id = id
+                      camera_origin = pos
+                      camera_axis = Vector2.ZERO
+              else:
+                  if hero_id == -1:
+                      hero_id = id
+                      hero_origin = pos
+                      hero_axis = Vector2.ZERO
+                      _send_hero_axis()
+              queue_redraw()
+
+          func _drag_finger(id: int, pos: Vector2) -> void:
+              if id == camera_id:
+                  camera_axis = (pos - camera_origin).limit_length(RADIUS) / RADIUS
+              elif id == hero_id:
+                  hero_axis = (pos - hero_origin).limit_length(RADIUS) / RADIUS
+                  _send_hero_axis()
+              queue_redraw()
+
+          func _release_finger(id: int) -> void:
+              if id == camera_id:
+                  camera_id = -1
+                  camera_axis = Vector2.ZERO
+              if id == hero_id:
+                  hero_id = -1
+                  hero_axis = Vector2.ZERO
+                  _send_hero_axis()
+              queue_redraw()
+
+          func _send_hero_axis() -> void:
+              if game != null:
+                  game.set("joystick_axis", hero_axis)
+
+          func _input(event: InputEvent) -> void:
+              if event is InputEventScreenTouch:
+                  var e: InputEventScreenTouch = event as InputEventScreenTouch
+                  if e.pressed:
+                      _begin_finger(e.index, e.position)
+                  else:
+                      _release_finger(e.index)
+              elif event is InputEventScreenDrag:
+                  var d: InputEventScreenDrag = event as InputEventScreenDrag
+                  _drag_finger(d.index, d.position)
+              elif not OS.has_feature("mobile") and event is InputEventMouseButton:
+                  var mb: InputEventMouseButton = event as InputEventMouseButton
+                  if mb.button_index == MOUSE_BUTTON_LEFT:
+                      if mb.pressed:
+                          _begin_finger(mouse_id, mb.position)
+                      else:
+                          _release_finger(mouse_id)
+              elif not OS.has_feature("mobile") and event is InputEventMouseMotion:
+                  var mm: InputEventMouseMotion = event as InputEventMouseMotion
+                  if camera_id == mouse_id or hero_id == mouse_id:
+                      _drag_finger(mouse_id, mm.position)
+
+          func _process(delta: float) -> void:
+              if not _playing():
+                  if camera_id != -1 or hero_id != -1:
+                      camera_id = -1
+                      hero_id = -1
+                      camera_axis = Vector2.ZERO
+                      hero_axis = Vector2.ZERO
+                      _send_hero_axis()
+                      queue_redraw()
+                  return
+              if hero_id != -1:
+                  _send_hero_axis()
+              if camera_id != -1 and look != null:
+                  var yaw: float = float(look.get("yaw_offset"))
+                  var pitch: float = float(look.get("pitch"))
+                  look.set("yaw_offset", wrapf(yaw - camera_axis.x * CAMERA_YAW_SPEED * delta, -PI, PI))
+                  look.set("pitch", clampf(pitch + camera_axis.y * CAMERA_PITCH_SPEED * delta, -0.55, 1.08))
+
+          func _draw_stick(center: Vector2, axis: Vector2, txt: String, col: Color) -> void:
+              draw_circle(center, RADIUS, Color(0.035, 0.045, 0.09, 0.29))
+              draw_arc(center, RADIUS, 0.0, TAU, 48, col, 3.0)
+              var knob: Vector2 = center + axis * 64.0
+              draw_circle(knob, 30.0, Color(col.r, col.g, col.b, 0.35))
+              draw_arc(knob, 30.0, 0.0, TAU, 36, col, 3.0)
+              draw_string(ThemeDB.fallback_font, center + Vector2(-40.0, -105.0), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, col)
+
+          func _draw() -> void:
+              if camera_id != -1:
+                  _draw_stick(camera_origin, camera_axis, "KAMERA", Color("#d2acff"))
+              if hero_id != -1:
+                  _draw_stick(hero_origin, hero_axis, "FIGUR", Color("#ffdb93"))
+          LWOD_V32_TOUCH
+          cat > android/tests/V32TouchSmoke.gd <<'LWOD_V32_TEST'
+          extends SceneTree
+
+          func _initialize() -> void:
+              call_deferred("_run")
+
+          func _touch(ctl: Node, id: int, pos: Vector2, down: bool) -> void:
+              var e := InputEventScreenTouch.new()
+              e.index = id
+              e.position = pos
+              e.pressed = down
+              ctl._input(e)
+
+          func _drag(ctl: Node, id: int, pos: Vector2) -> void:
+              var e := InputEventScreenDrag.new()
+              e.index = id
+              e.position = pos
+              ctl._input(e)
+
+          func _run() -> void:
+              var packed := load("res://scenes/Main.tscn") as PackedScene
+              if packed == null:
+                  push_error("V32 TEST: Scene missing")
+                  quit(40)
+                  return
+              var game: Node3D = packed.instantiate() as Node3D
+              root.add_child(game)
+              for i in range(10):
+                  await process_frame
+              game.call("_on_new_game_pressed")
+              for i in range(10):
+                  await physics_frame
+              var ctl: Node = game.find_child("V32_TOUCH_LINKS_KAMERA_RECHTS_FIGUR", true, false)
+              var hero: CharacterBody3D = game.get("hero") as CharacterBody3D
+              var camera: Node = game.get_node_or_null("V27CameraWorldMap")
+              if ctl == null or hero == null or camera == null:
+                  push_error("V32 TEST: missing input/hero/camera")
+                  quit(41)
+                  return
+              var w: float = root.get_visible_rect().size.x
+              var h: float = root.get_visible_rect().size.y
+              var left := Vector2(w*0.22, h*0.70)
+              var right := Vector2(w*0.78, h*0.70)
+              # Left input: camera only, with no character axis.
+              var yaw0: float = float(camera.get("yaw_offset"))
+              var pos0: Vector3 = hero.global_position
+              _touch(ctl, 4, left, true)
+              _drag(ctl, 4, left+Vector2(70.0,0.0))
+              for i in range(15):
+                  await process_frame
+              var yaw_delta: float = absf(wrapf(float(camera.get("yaw_offset"))-yaw0,-PI,PI))
+              var left_hero_axis: Vector2 = game.get("joystick_axis")
+              _touch(ctl, 4, left, false)
+              print("V32_LEFT yaw_change=",yaw_delta," hero_axis=",left_hero_axis)
+              if yaw_delta < 0.01 or left_hero_axis.length() > 0.01:
+                  push_error("V32 TEST FAIL: left side is not camera-only")
+                  quit(42)
+                  return
+              # Right input: movement only, independent from camera yaw.
+              var yaw1: float = float(camera.get("yaw_offset"))
+              pos0 = hero.global_position
+              _touch(ctl, 6, right, true)
+              _drag(ctl, 6, right+Vector2(0.0,-90.0))
+              var right_axis: Vector2 = game.get("joystick_axis")
+              if right_axis.y > -0.85:
+                  push_error("V32 TEST FAIL: right half did not drive hero axis")
+                  quit(43)
+                  return
+              for i in range(76):
+                  await physics_frame
+              var moved := Vector2(hero.global_position.x-pos0.x,hero.global_position.z-pos0.z).length()
+              var yaw_right := absf(wrapf(float(camera.get("yaw_offset"))-yaw1,-PI,PI))
+              _touch(ctl, 6, right, false)
+              print("V32_RIGHT moved=",moved," camera_yaw_delta=",yaw_right)
+              if moved < 1.25 or yaw_right > 0.02:
+                  push_error("V32 TEST FAIL: right stick does not control hero exclusively")
+                  quit(44)
+                  return
+              # Two independent touch IDs must work concurrently.
+              var yaw2: float = float(camera.get("yaw_offset"))
+              _touch(ctl, 8, left, true)
+              _touch(ctl, 9, right, true)
+              _drag(ctl, 8, left + Vector2(-80.0, 0.0))
+              _drag(ctl, 9, right + Vector2(0.0, -85.0))
+              var both_axis: Vector2 = game.get("joystick_axis")
+              for i in range(12):
+                  await process_frame
+              var both_yaw: float = absf(wrapf(float(camera.get("yaw_offset"))-yaw2,-PI,PI))
+              _touch(ctl, 8, left, false)
+              _touch(ctl, 9, right, false)
+              var stopped: Vector2 = game.get("joystick_axis")
+              print("V32_MULTITOUCH movement_axis=",both_axis," camera_yaw=",both_yaw," stopped=",stopped)
+              if both_axis.y > -0.75 or both_yaw < 0.01 or stopped.length() > 0.01:
+                  push_error("V32 TEST FAIL: multitouch or release failed")
+                  quit(45)
+                  return
+              print("V32_TOUCH_TEST_OK: LEFT CAMERA | RIGHT HERO | MULTITOUCH")
+              quit(0)
+          LWOD_V32_TEST
+          # Bind V32 last in the initialization: it supersedes V7, V27, V28 and V29 controls.
+          test "$(grep -Fxc '    motion_v31.setup(self)' android/scripts/Main.gd)" -eq 1
+          awk '
+            {print}
+            $0 == "    motion_v31.setup(self)" {
+              print "    var v32_touch = load(\"res://scripts/V32TouchRouter.gd\").new()"
+              print "    play_hud_root.add_child(v32_touch)"
+              print "    v32_touch.setup(self)"
+              count++
+            }
+            END {if(count!=1) exit 93}
+          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v32_main.gd"
+          mv "$RUNNER_TEMP/lwod_v32_main.gd" android/scripts/Main.gd
+          sed -i 's@version/code=31@version/code=32@' android/export_presets.cfg
+          sed -i 's@version/name="3.1"@version/name="3.2"@' android/export_presets.cfg
+          grep -Fqx 'version/code=32' android/export_presets.cfg
+          grep -Fqx '    v32_touch.setup(self)' android/scripts/Main.gd
+          # Ensure the route uses exclusive left/right ownership.
+          grep -Fq 'if pos.x < viewport_width * 0.5:' android/scripts/V32TouchRouter.gd
+          grep -Fq 'game.set("joystick_axis", hero_axis)' android/scripts/V32TouchRouter.gd
+          echo 'V32_TOUCH_PATCH_OK: LEFT=CAMERA RIGHT=HERO'
       - name: Godot Ressourcen importieren
         shell: bash
         run: |
@@ -2062,6 +2342,7 @@ jobs:
           test -s android/scripts/V29IndependentSticks.gd
           test -s android/scripts/V30MovementRepair.gd
           test -s android/scripts/V31TerrainMotion.gd
+          test -s android/scripts/V32TouchRouter.gd
       - name: Godot Start und Scriptfehler testen
         shell: bash
         run: |
@@ -2075,103 +2356,38 @@ jobs:
             echo '::error::V31 Godot-Skriptfehler gefunden'
             exit 1
           fi
-      - name: V31 Bewegung und Multitouch - Physiktest
+      - name: V31 Terrainphysik vorhanden
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p android/tests
-          cat > android/tests/V30Smoke.gd <<'LWOD_V30_SMOKE'
-          extends SceneTree
-
-          func _initialize() -> void:
-              call_deferred("_run_test")
-
-          func _run_test() -> void:
-              var packed: PackedScene = load("res://scenes/Main.tscn") as PackedScene
-              if packed == null:
-                  push_error("V30_TEST: Hauptszene fehlt")
-                  quit(31)
-                  return
-              var game: Node3D = packed.instantiate() as Node3D
-              root.add_child(game)
-              for i in range(8):
-                  await process_frame
-              game.call("_on_new_game_pressed")
-              for i in range(10):
-                  await physics_frame
-              var hero: CharacterBody3D = game.get("hero") as CharacterBody3D
-              var sticks: Node = game.find_child("LWOD_V29_STEUERUNG",true,false)
-              var repair: Node = game.get_node_or_null("V30MovementRepair")
-              var terrain_motion: Node = game.get_node_or_null("V31TerrainMotion")
-              if hero == null or sticks == null or repair == null or terrain_motion == null:
-                  push_error("V30_TEST: Spieler, Controller oder Reparatur fehlen")
-                  quit(32)
-                  return
-              print("V31_TEST_INITIAL state=", game.get("state"), " position=",hero.global_position,
-                  " old_floors_disabled=", repair.get("removed_floor_colliders"))
-              var initial: Vector3 = hero.global_position
-              var start_right := Vector2(980.0,540.0)
-              sticks.call("_start_finger",24,start_right)
-              sticks.call("_move_finger",24,start_right+Vector2(0,-92))
-              print("V30_TEST_RIGHT_AXIS=",game.get("joystick_axis"))
-              for i in range(75):
-                  await physics_frame
-                  if i == 30 or i == 60:
-                      print("V30_TEST_FRAME=",i," position=",hero.global_position,
-                          " axis=",game.get("joystick_axis")," state=",game.get("state"),
-                          " slide_collisions=",hero.get_slide_collision_count())
-              var moved: float = Vector2(hero.global_position.x-initial.x,hero.global_position.z-initial.z).length()
-              sticks.call("_end_finger",24)
-              print("V31_TEST_DISTANCE=",moved)
-              if moved < 1.25:
-                  if hero.get_slide_collision_count()>0:
-                      var impact: KinematicCollision3D = hero.get_slide_collision(0)
-                      print("V30_TEST_COLLISION with=",impact.get_collider()," normal=",impact.get_normal())
-                  push_error("V30_TEST_FAIL: Realer Figurenweg zu kurz; Eingabe/Physik weiterhin defekt")
-                  quit(33)
-                  return
-              # Linker Stick steuert nur Kamera, nicht Figur.
-              var camera: Node = game.get_node_or_null("V27CameraWorldMap")
-              if camera == null:
-                  push_error("V30_TEST_FAIL: Kameracontroller fehlt")
-                  quit(34)
-                  return
-              var yaw0: float = float(camera.get("yaw_offset"))
-              var cam_start := Vector2(240,520)
-              sticks.call("_start_finger",11,cam_start)
-              sticks.call("_move_finger",11,cam_start+Vector2(85,0))
-              for i in range(14):
-                  await process_frame
-              sticks.call("_end_finger",11)
-              var yaw_delta: float = absf(wrapf(float(camera.get("yaw_offset"))-yaw0,-PI,PI))
-              print("V30_TEST_CAMERA_YAW_DELTA=",yaw_delta)
-              if yaw_delta < 0.02:
-                  push_error("V30_TEST_FAIL: Linker Kamerastick schwenkt nicht")
-                  quit(35)
-                  return
-              print("V31_TEST_OK: Rechts Figur bewegt, links Kamera unabhaengig")
-              quit(0)
-          LWOD_V30_SMOKE
-          godot --headless --path android --script res://tests/V30Smoke.gd > "$RUNNER_TEMP/lwod_v30_movement_test.log" 2>&1 || {
-            cat "$RUNNER_TEMP/lwod_v30_movement_test.log"
+          test -s android/scripts/V31TerrainMotion.gd
+          grep -Fq 'align_to_ground' android/scripts/Main.gd
+          test -s android/scripts/V32TouchRouter.gd
+          echo 'V31 terrain verified; V32 exclusive touch test follows'
+      - name: V32 Echte Links-Rechts-Multitouch Tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path android --script res://tests/V32TouchSmoke.gd > "$RUNNER_TEMP/lwod_v32_touch_test.log" 2>&1 || {
+            cat "$RUNNER_TEMP/lwod_v32_touch_test.log"
             exit 1
           }
-          cat "$RUNNER_TEMP/lwod_v30_movement_test.log"
-          grep -Fq 'V31_TEST_OK:' "$RUNNER_TEMP/lwod_v30_movement_test.log"
-      - name: LWOD Android V31 APK erstellen
+          cat "$RUNNER_TEMP/lwod_v32_touch_test.log"
+          grep -Fq 'V32_TOUCH_TEST_OK:' "$RUNNER_TEMP/lwod_v32_touch_test.log"
+      - name: LWOD Android V32 APK erstellen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V31-Bewegung.apk"
-          test -s build/android/LWOD-Android-V31-Bewegung.apk
-          unzip -t build/android/LWOD-Android-V31-Bewegung.apk > /dev/null
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V32-Steuerung.apk"
+          test -s build/android/LWOD-Android-V32-Steuerung.apk
+          unzip -t build/android/LWOD-Android-V32-Steuerung.apk > /dev/null
       - name: Fehlerdiagnose bereitstellen
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_V31_DIAGNOSE
+          name: LWOD_V32_DIAGNOSE
           path: |
             ${{ runner.temp }}/lwod_v29_run.log
             android/scripts/V24Regions.gd
@@ -2181,17 +2397,18 @@ jobs:
             android/scripts/V28DualStick.gd
             android/scripts/V29IndependentSticks.gd
             android/scripts/Main.gd
-            android/tests/V30Smoke.gd
             android/scripts/V30MovementRepair.gd
             android/scripts/V31TerrainMotion.gd
+            android/scripts/V32TouchRouter.gd
+            android/tests/V32TouchSmoke.gd
             ${{ runner.temp }}/lwod_v30_movement_test.log
             android/scripts/TouchOverlay.gd
           if-no-files-found: warn
           retention-days: 14
-      - name: Android V31 APK hochladen
+      - name: Android V32 APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V31_BEWEGUNG_APK
-          path: build/android/LWOD-Android-V31-Bewegung.apk
+          name: LWOD_ANDROID_V32_STEUERUNG_APK
+          path: build/android/LWOD-Android-V32-Steuerung.apk
           if-no-files-found: error
           retention-days: 14
