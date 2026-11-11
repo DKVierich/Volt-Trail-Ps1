@@ -1,19 +1,21 @@
-# LWOD Android V30: Figurenbewegung rechts / unabhängige Kamera links, aufgebaut auf V28.
-# Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
-# Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V33 Echte Kamerasicht Links und Bewegung Rechts
+# LWOD Android V33 FIX: Vollstaendiges, kompaktes GitHub-Skript.
+# 22 Schritte, inklusive APK-Export und actions/upload-artifact@v4.
+# Quellcodeabschnitte liegen als gzip/base64 vor und werden waehrend des Builds entpackt.
+# Datei in .github/workflows/blank-ps1.yml komplett ersetzen.
+name: LWOD Android V33 FIX APK und Artefakt
 'on':
   workflow_dispatch: {}
   push:
-    branches: [main]
+    branches:
+    - main
     paths:
-      - '.github/workflows/lwod-android.yml'
-      - '.github/workflows/blank-ps1.yml'
+    - .github/workflows/lwod-android.yml
+    - .github/workflows/blank-ps1.yml
 permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V32 APK
+    name: LWOD Android V33 FIX APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -22,2458 +24,869 @@ jobs:
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       ANDROID_HOME: /usr/lib/android-sdk
     steps:
-      - name: Repository laden
-        uses: actions/checkout@v4
-      - name: Godot und Android SDK vorbereiten
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.config/godot" "$HOME/.local/share/godot/export_templates"
-          cp -a /root/.config/godot/. "$HOME/.config/godot/"
-          cp -a /root/.local/share/godot/export_templates/. "$HOME/.local/share/godot/export_templates/"
-          test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_debug.apk"
-          test -x "$JAVA_HOME/bin/java"
-          test -s /root/debug.keystore
-          sdkmanager --sdk_root="$ANDROID_HOME" 'platforms;android-35' 'build-tools;35.0.1'
-          test -d "$ANDROID_HOME/platforms/android-35"
-      - name: V23-Quelle herunterladen und richtige Pruefsumme pruefen
-        shell: bash
-        run: |
-          set -euo pipefail
-          wget -q --tries=3 --timeout=45 \
-            -O "$RUNNER_TEMP/lwod_v23.yml" \
-            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/2b1332ef7b51655427065cd8ec8371af1e7773dc/.github/workflows/blank-ps1.yml'
-          test -s "$RUNNER_TEMP/lwod_v23.yml"
-          source_hash="$(git hash-object "$RUNNER_TEMP/lwod_v23.yml")"
-          if [ "$source_hash" != "f2417eca21fc0e9ac53a9e678b139a68e26ccdc8" ]; then
-            echo "::error::V23-Quellversion passt nicht. Erwartet: f2417eca21fc0e9ac53a9e678b139a68e26ccdc8, erhalten: $source_hash"
-            exit 22
-          fi
-          echo "V23-Quelle korrekt: $source_hash"
-          cat > "$RUNNER_TEMP/replay_v23.sh" <<'REPLAY_V23'
-          #!/bin/bash
-          set -euo pipefail
-          name="$1"
-          awk -v name="$name" '
-            $0 == "    - name: " name { found=1; next }
-            found && $0 == "      run: |" { active=1; next }
-            active && /^    - name:/ { exit }
-            active && /^        / { sub(/^        /, ""); print; next }
-            active && /^$/ { print ""; next }
-            END { if (active != 1) exit 57 }
-          ' "$RUNNER_TEMP/lwod_v23.yml" > "$RUNNER_TEMP/v23_step.sh"
-          test -s "$RUNNER_TEMP/v23_step.sh"
-          bash -n "$RUNNER_TEMP/v23_step.sh"
-          echo "V23 Basis: $name"
-          bash "$RUNNER_TEMP/v23_step.sh"
-          REPLAY_V23
-          chmod +x "$RUNNER_TEMP/replay_v23.sh"
-      - name: FFmpeg statisch ohne apt und ohne xz bereitstellen
-        shell: bash
-        run: |
-          set -euo pipefail
-          if command -v ffmpeg >/dev/null 2>&1; then
-            echo 'FFmpeg ist bereits im Container vorhanden'
-          else
-            echo 'Statische FFmpeg-Datei als gzip-Archiv von GitHub laden'
-            command -v gzip >/dev/null
-            command -v sha256sum >/dev/null
-            wget -q --show-progress --https-only --tries=3 --timeout=90 \
-              -O "$RUNNER_TEMP/ffmpeg-linux-x64.gz" \
-              'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz'
-            test -s "$RUNNER_TEMP/ffmpeg-linux-x64.gz"
-            printf '%s  %s\n' \
-              'bfe8a8fc511530457b528c48d77b5737527b504a3797a9bc4866aeca69c2dffa' \
-              "$RUNNER_TEMP/ffmpeg-linux-x64.gz" | sha256sum -c -
-            gzip -dc "$RUNNER_TEMP/ffmpeg-linux-x64.gz" > /usr/local/bin/ffmpeg
-            chmod 0755 /usr/local/bin/ffmpeg
-          fi
-          ffmpeg -hide_banner -version | head -n 1
-          test -x "$(command -v ffmpeg)"
-      - name: V23-Spielwelt und Menues vollstaendig wiederherstellen
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Pruefen, ob alle benötigten Schritte in der gepinnten V23-Datei vorliegen.
-          grep -Fqx '    - name: Bewaehrte V18-Quelle fest herunterladen' "$RUNNER_TEMP/lwod_v23.yml"
-          grep -Fqx '    - name: V18 Spielweltbasis vorbereiten' "$RUNNER_TEMP/lwod_v23.yml"
-          grep -Fqx '    - name: V18 Spielwelt und Menues erstellen' "$RUNNER_TEMP/lwod_v23.yml"
-          grep -Fqx '    - name: Originalintro 37617 mit Ton integrieren' "$RUNNER_TEMP/lwod_v23.yml"
-          grep -Fqx '    - name: Phönix-Hauptmenue und Funktionen behalten' "$RUNNER_TEMP/lwod_v23.yml"
-          grep -Fqx '    - name: V18 Modelle und Landschaft uebernehmen' "$RUNNER_TEMP/lwod_v23.yml"
-          grep -Fqx '    - name: V19 Bergkollision Kameraschutz Bergformen' "$RUNNER_TEMP/lwod_v23.yml"
-          grep -Fqx '    - name: V20 Kamera Bergsilhouette und Hausdaecher' "$RUNNER_TEMP/lwod_v23.yml"
-          grep -Fqx '    - name: V21 Weltkarte Minimap Tag Nacht und Rucksackposition' "$RUNNER_TEMP/lwod_v23.yml"
-          grep -Fqx '    - name: V23 32000 Welt 36 Siedlungen eigener Rucksack Button' "$RUNNER_TEMP/lwod_v23.yml"
-          bash "$RUNNER_TEMP/replay_v23.sh" 'Bewaehrte V18-Quelle fest herunterladen'
-          bash "$RUNNER_TEMP/replay_v23.sh" 'V18 Spielweltbasis vorbereiten'
-          bash "$RUNNER_TEMP/replay_v23.sh" 'V18 Spielwelt und Menues erstellen'
-          bash "$RUNNER_TEMP/replay_v23.sh" 'Originalintro 37617 mit Ton integrieren'
-          bash "$RUNNER_TEMP/replay_v23.sh" 'Phönix-Hauptmenue und Funktionen behalten'
-          bash "$RUNNER_TEMP/replay_v23.sh" 'V18 Modelle und Landschaft uebernehmen'
-          bash "$RUNNER_TEMP/replay_v23.sh" 'V19 Bergkollision Kameraschutz Bergformen'
-          bash "$RUNNER_TEMP/replay_v23.sh" 'V20 Kamera Bergsilhouette und Hausdaecher'
-          bash "$RUNNER_TEMP/replay_v23.sh" 'V21 Weltkarte Minimap Tag Nacht und Rucksackposition'
-          bash "$RUNNER_TEMP/replay_v23.sh" 'V23 32000 Welt 36 Siedlungen eigener Rucksack Button'
-          test -s android/scripts/V21World.gd
-          test -s android/scripts/V23Backpack.gd
-          test -s android/scripts/Main.gd
-      - name: V24 Seen Fluesse Hoehlen und regionale Vegetation
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p android/scripts
-          cat > android/scripts/V24Regions.gd <<'LWOD_V24_REGIONS'
-          extends Node
-
-          # LWOD Android V24 - regionale Vielfalt ohne staendig tausende Einzelobjekte.
-          # Die Weltgroesse, Kamera, UI, Spielstaende und Kollisionen aus V23 bleiben erhalten.
-          # Wiesen, Blumen und Steine werden in 240x240-Chunks dynamisch erstellt/entladen.
-
-          const CELL := 240.0
-          const VIEW_RADIUS := 1
-          const EDGE_LIMIT := 15800.0
-
-          var game: Node3D
-          var world: Node
-          var spawned: Dictionary = {}
-          var previous_cell := Vector2i(999999, 999999)
-          var timer := 0.0
-          var landmarks := []
-
-          func setup(root: Node3D, expanded_world: Node) -> void:
-              game = root
-              world = expanded_world
-              name = "V24Regionen"
-              _make_landmarks()
-              _load_nearby(true)
-              set_process(true)
-              print("LWOD V24: Regionen, Seen, Fluss, Hoehlen und Chunk-Details aktiviert")
-
-          func _mat(hex_color: String) -> StandardMaterial3D:
-              var material := StandardMaterial3D.new()
-              material.albedo_color = Color(hex_color)
-              material.roughness = 0.84
-              material.cull_mode = BaseMaterial3D.CULL_DISABLED
-              return material
-
-          func _disc(center: Vector2, radius_x: float, radius_z: float, level: float, tint: String, segments: int = 28) -> void:
-              var disc := MeshInstance3D.new()
-              var shape := CylinderMesh.new()
-              shape.top_radius = radius_x
-              shape.bottom_radius = radius_x
-              shape.height = 0.025
-              shape.radial_segments = segments
-              disc.mesh = shape
-              disc.position = Vector3(center.x, level, center.y)
-              disc.scale.z = radius_z / radius_x
-              disc.material_override = _mat(tint)
-              game.add_child(disc)
-
-          func _waterbody(center: Vector2, sx: float, sz: float) -> void:
-              _disc(center, sx + 5.0, sz + 4.0, 0.016, "#b1a27d")
-              _disc(center, sx, sz, 0.044, "#3e89a3")
-              _disc(center + Vector2(-0.12 * sx, -0.14 * sz), sx * 0.68, sz * 0.59, 0.062, "#66afc0")
-
-          func _river_section(a: Vector2, b: Vector2, width: float = 11.0) -> void:
-              var dx: float = b.x - a.x
-              var dz: float = b.y - a.y
-              var segment_length: float = sqrt(dx * dx + dz * dz)
-              if segment_length < 0.5:
-                  return
-              var mesh: MeshInstance3D = game._box(game, Vector3((a.x+b.x)*0.5, 0.052, (a.y+b.y)*0.5), Vector3(width, 0.018, segment_length+2.0), Color("#488eac")) as MeshInstance3D
-              mesh.rotation.y = atan2(dx, dz)
-
-          func _tower(p: Vector2) -> void:
-              var base := Node3D.new()
-              base.position = Vector3(p.x, 0, p.y)
-              game.add_child(base)
-              game._box(base, Vector3(0, 3.8, 0), Vector3(4.5, 7.6, 4.5), Color("#999eaa"), true)
-              game._box(base, Vector3(0, 7.9, 0), Vector3(6.2, 0.9, 6.2), Color("#656579"))
-              game._cone(base, Vector3(0, 9.7, 0), 3.9, 3.3, Color("#605377"), 8)
-              game._box(base, Vector3(0, 3.2, 2.36), Vector3(1.6, 2.6, 0.1), Color("#403f59"))
-              game._box(base, Vector3(0, 6.6, 2.38), Vector3(1.1, 1.6, 0.1), Color("#6bb2cd"))
-
-          func _cave(p: Vector2) -> void:
-              var root := Node3D.new()
-              root.position = Vector3(p.x, 0, p.y)
-              game.add_child(root)
-              # Begehbarer steinerner Eingang, ohne Teleport oder neues Innenlevel.
-              game._box(root, Vector3(-5.4, 2.9, 0), Vector3(3.3, 5.8, 5.4), Color("#77787f"), true)
-              game._box(root, Vector3(5.4, 2.9, 0), Vector3(3.3, 5.8, 5.4), Color("#676b73"), true)
-              game._box(root, Vector3(0, 6.9, 0), Vector3(13.0, 2.2, 5.4), Color("#636a71"), true)
-              game._box(root, Vector3(0, 2.3, -2.8), Vector3(6.4, 4.5, 0.14), Color("#1b2332"))
-              for i in range(6):
-                  var pos := Vector3(-7.0 + float(i) * 2.8, 0, 6.0)
-                  game._cone(root, pos + Vector3(0, 0.85, 0), 0.55, 1.65, Color("#8e81ac"), 6)
-
-          func _shrine(p: Vector2, color: String) -> void:
-              var root := Node3D.new()
-              root.position = Vector3(p.x, 0, p.y)
-              game.add_child(root)
-              game._box(root, Vector3(0,0.5,0), Vector3(9.0,1.0,9.0), Color("#8f91a3"))
-              for dx in [-3.1, 3.1]:
-                  for dz in [-3.1, 3.1]:
-                      game._box(root, Vector3(dx, 2.5, dz), Vector3(0.85, 5.0, 0.85), Color("#bcbac2"))
-              game._box(root, Vector3(0, 5.15, 0), Vector3(8.5, 0.75, 8.5), Color("#7f7896"))
-              game._cone(root, Vector3(0, 7.4, 0), 1.75, 3.6, Color(color), 8)
-
-          func _crystal_field(p: Vector2) -> void:
-              var rng := RandomNumberGenerator.new()
-              rng.seed = 84211
-              for i in range(18):
-                  var phi: float = float(i) * TAU / 18.0
-                  var r: float = rng.randf_range(7.0, 21.0)
-                  var x: float = p.x + cos(phi) * r
-                  var z: float = p.y + sin(phi) * r
-                  var height: float = rng.randf_range(1.4, 4.2)
-                  game._cone(game, Vector3(x, height * 0.50, z), rng.randf_range(0.5, 1.2), height, Color("#a477ce") if i%2==0 else Color("#6ab4c8"), 6)
-
-          func _bridge(p: Vector2, direction: float = 0.0) -> void:
-              var root := Node3D.new()
-              root.position = Vector3(p.x, 0, p.y)
-              root.rotation.y = direction
-              game.add_child(root)
-              game._box(root, Vector3(0, 0.34, 0), Vector3(6.4, 0.5, 15.0), Color("#916848"))
-              for side in [-2.8, 2.8]:
-                  for z in [-6.0, -2.0, 2.0, 6.0]:
-                      game._box(root, Vector3(side, 1.1, z), Vector3(0.35, 1.5, 0.35), Color("#6f4e38"))
-                  game._box(root, Vector3(side, 1.9, 0), Vector3(0.25, 0.24, 14.0), Color("#74513b"))
-
-          func _waterfall(p: Vector2) -> void:
-              var root := Node3D.new()
-              root.position = Vector3(p.x, 0, p.y)
-              game.add_child(root)
-              game._box(root, Vector3(-6.0, 5.1, 0), Vector3(6.0, 10.0, 5.0), Color("#798c96"), true)
-              game._box(root, Vector3(6.0, 5.1, 0), Vector3(6.0, 10.0, 5.0), Color("#657b84"), true)
-              game._box(root, Vector3(0, 5.0, 1.0), Vector3(5.8, 9.0, 0.15), Color("#79c5d5"))
-              _waterbody(p + Vector2(0, 12), 17.0, 11.0)
-
-          func _make_landmarks() -> void:
-              # Markante Ziele schon wenige Gehminuten nach Verlassen des Startdorfs.
-              _crystal_field(Vector2(55, 82))
-              _shrine(Vector2(-98, 95), "#b377db")
-              _waterbody(Vector2(-105, 238), 65.0, 44.0)
-              _waterbody(Vector2(345, 1050), 95.0, 60.0)
-              _waterbody(Vector2(1850, 740), 75.0, 55.0)
-              _waterbody(Vector2(-850, -1020), 65.0, 53.0)
-              _cave(Vector2(285, -210))
-              _cave(Vector2(-740, 830))
-              _tower(Vector2(285, 250))
-              _tower(Vector2(-1120, -630))
-              _waterfall(Vector2(550, 420))
-              _bridge(Vector2(-420, 625), 0.5)
-              _shrine(Vector2(1230, -840), "#a4cbf0")
-              _crystal_field(Vector2(1790, -1510))
-              _shrine(Vector2(-2500, 2500), "#c187e8")
-
-              # Der Fluss ist ein sichtbares Oberflaechendetail; Schwimmphysik folgt spaeter.
-              var river: PackedVector2Array = PackedVector2Array([
-                  Vector2(-580,-1100), Vector2(-480,-750), Vector2(-430,-380),
-                  Vector2(-390,-50), Vector2(-450,280), Vector2(-420,625),
-                  Vector2(-470,900), Vector2(-630,1280), Vector2(-790,1580)
-              ])
-              for i in range(river.size()-1):
-                  _river_section(river[i], river[i+1], 12.0)
-
-          func _biome(p: Vector2) -> int:
-              # 0 gruener Wald, 1 Bluetenwiese, 2 Purpurheide, 3 Felsland, 4 Feuchtgebiet.
-              if p.distance_to(Vector2(-105.0, 238.0)) < 105.0:
-                  return 4
-              if p.distance_to(Vector2(345.0, 1050.0)) < 130.0:
-                  return 4
-              var v: float = sin(p.x * 0.0032) + cos(p.y * 0.0027) + sin((p.x + p.y) * 0.0019)
-              if v < -0.75:
-                  return 3
-              if v < -0.10:
-                  return 2
-              if v < 0.65:
-                  return 1
-              return 0
-
-          func _multimesh(mesh: Mesh, color: String, owner: Node3D, count: int) -> MultiMesh:
-              var item := MultiMeshInstance3D.new()
-              item.material_override = _mat(color)
-              var mm := MultiMesh.new()
-              mm.transform_format = MultiMesh.TRANSFORM_3D
-              mm.mesh = mesh
-              mm.instance_count = count
-              item.multimesh = mm
-              owner.add_child(item)
-              return mm
-
-          func _near_important(p: Vector2) -> bool:
-              if p.length_squared() < 115.0 * 115.0:
-                  return true
-              for entry in world.settlements:
-                  var city: Vector2 = entry["pos"]
-                  if p.distance_squared_to(city) < 54.0 * 54.0:
-                      return true
-              return false
-
-          func _chunk(cx: int, cz: int) -> Node3D:
-              var node := Node3D.new()
-              node.name = "V24Dekoration_%d_%d" % [cx, cz]
-              game.add_child(node)
-              var rng := RandomNumberGenerator.new()
-              rng.seed = int(2103111 + cx * 10007 + cz * 21341)
-
-              var grass_mesh := CylinderMesh.new()
-              grass_mesh.top_radius = 0.02
-              grass_mesh.bottom_radius = 0.35
-              grass_mesh.height = 1.25
-              grass_mesh.radial_segments = 5
-              var flower_mesh := SphereMesh.new()
-              flower_mesh.radius = 0.31
-              flower_mesh.height = 0.46
-              flower_mesh.radial_segments = 6
-              flower_mesh.rings = 3
-              var pebble_mesh := SphereMesh.new()
-              pebble_mesh.radius = 0.62
-              pebble_mesh.height = 0.8
-              pebble_mesh.radial_segments = 7
-              pebble_mesh.rings = 4
-
-              var center := Vector2((float(cx)+0.5)*CELL, (float(cz)+0.5)*CELL)
-              var biome: int = _biome(center)
-              var plant_color: String = ["#3b8258", "#66a162", "#795aa1", "#9a9588", "#3e9c85"][biome]
-              var blossom_color: String = ["#e2e68f", "#d9a3d1", "#b581ed", "#c5bab1", "#b7def0"][biome]
-              var stone_color := "#81888d" if biome == 3 else "#888e7e"
-              var stems: MultiMesh = _multimesh(grass_mesh, plant_color, node, 75)
-              var blossoms: MultiMesh = _multimesh(flower_mesh, blossom_color, node, 75)
-              var stones: MultiMesh = _multimesh(pebble_mesh, stone_color, node, 75)
-              var stem_count := 0
-              var blossom_count := 0
-              var stone_count := 0
-              for i in range(75):
-                  var x: float = (float(cx) + rng.randf()) * CELL
-                  var z: float = (float(cz) + rng.randf()) * CELL
-                  var pos := Vector2(x,z)
-                  if absf(x) > EDGE_LIMIT or absf(z) > EDGE_LIMIT:
-                      continue
-                  if _near_important(pos) or world._near_road(pos):
-                      continue
-                  var s: float = rng.randf_range(0.65,1.45)
-                  if biome==3 and i%2==0:
-                      var stone_base := Basis().scaled(Vector3(s, s * 0.65, s))
-                      stones.set_instance_transform(stone_count, Transform3D(stone_base, Vector3(x,0.30*s,z)))
-                      stone_count += 1
-                  else:
-                      var stem_basis := Basis().scaled(Vector3(s,s,s))
-                      stems.set_instance_transform(stem_count, Transform3D(stem_basis, Vector3(x,0.61*s,z)))
-                      stem_count += 1
-                      if i%3==0:
-                          blossoms.set_instance_transform(blossom_count, Transform3D(Basis().scaled(Vector3(s,s,s)), Vector3(x,1.20*s,z)))
-                          blossom_count += 1
-              stems.visible_instance_count = stem_count
-              blossoms.visible_instance_count = blossom_count
-              stones.visible_instance_count = stone_count
-              return node
-
-          func _load_nearby(force: bool = false) -> void:
-              if game == null or game.hero == null:
-                  return
-              var p: Vector3 = game.hero.global_position
-              var center := Vector2i(int(floor(p.x / CELL)), int(floor(p.z / CELL)))
-              if center == previous_cell and not force:
-                  return
-              previous_cell = center
-              var required: Dictionary = {}
-              for x in range(center.x-VIEW_RADIUS,center.x+VIEW_RADIUS+1):
-                  for z in range(center.y-VIEW_RADIUS,center.y+VIEW_RADIUS+1):
-                      var middle := Vector2((float(x)+0.5)*CELL,(float(z)+0.5)*CELL)
-                      if absf(middle.x) > EDGE_LIMIT + CELL or absf(middle.y) > EDGE_LIMIT + CELL:
-                          continue
-                      var key: String = "%d:%d" % [x,z]
-                      required[key] = true
-                      if not spawned.has(key):
-                          spawned[key] = _chunk(x,z)
-              for key in spawned.keys():
-                  if not required.has(key):
-                      var node: Node3D = spawned[key]
-                      node.queue_free()
-                      spawned.erase(key)
-
-          func _process(delta: float) -> void:
-              if game == null or game.state != 2:
-                  return
-              timer += delta
-              if timer > 0.75:
-                  timer = 0.0
-                  _load_nearby()
-          LWOD_V24_REGIONS
-          printf '%s  %s\n' 'eacdf8280ed2e3ec971bffdb4d6e24791a3b8d9a4fa0f3d2fd3111856af9a394' 'android/scripts/V24Regions.gd' | sha256sum -c -
-          # Einmaliger Aufruf NACH Einrichtung der V23-MiniMap und des Rucksackbuttons.
-          test "$(grep -Fxc '    bag_v23.setup(self)' android/scripts/Main.gd)" -eq 1
-          awk '
-            {print}
-            $0 == "    bag_v23.setup(self)" {
-              print "    var new_regions = load(\"res://scripts/V24Regions.gd\").new()"
-              print "    add_child(new_regions)"
-              print "    new_regions.setup(self, expanded_world)"
-              count++
-            }
-            END { if(count!=1) exit 61 }
-          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v24_main.gd"
-          mv "$RUNNER_TEMP/lwod_v24_main.gd" android/scripts/Main.gd
-          sed -i 's@version/code=23@version/code=24@' android/export_presets.cfg
-          sed -i 's@version/name="2.3"@version/name="2.4"@' android/export_presets.cfg
-          grep -Fqx 'version/code=24' android/export_presets.cfg
-          grep -Fqx '    new_regions.setup(self, expanded_world)' android/scripts/Main.gd
-          # Der vorhandene separate V23-Rucksackcontroller bleibt unangetastet.
-          test -s android/scripts/V23Backpack.gd
-      - name: V25 Hoehenprofile Vulkan Eis Wueste Berge und Mammutwald
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p android/scripts
-          cat > android/scripts/V25BiomeWorld.gd <<'LWOD_V25_BIOMES'
-          extends Node3D
-
-          const WORLD_EDGE := 15800.0
-          var game: Node = null
-          var world: Node = null
-          var loaded := false
-          var roots: Array[Node3D] = []
-          var lava_surfaces: Array[MeshInstance3D] = []
-          var regions := [
-              {"name":"vulkan", "center":Vector2(2900.0,-2150.0), "radius":920.0},
-              {"name":"eis", "center":Vector2(-3050.0,2380.0), "radius":980.0},
-              {"name":"wueste", "center":Vector2(3180.0,2280.0), "radius":1060.0},
-              {"name":"berge", "center":Vector2(-3380.0,-2700.0), "radius":1180.0},
-              {"name":"mammutwald", "center":Vector2(-300.0,3280.0), "radius":940.0},
-              {"name":"huegel", "center":Vector2(820.0,1760.0), "radius":760.0}
-          ]
-
-          func setup(root: Node3D, expanded_world: Node) -> void:
-              game = root
-              world = expanded_world
-              name = "V25BiomeWorld"
-              _extend_world_limits()
-              _build_regions()
-              loaded = true
-              set_process(true)
-              print("LWOD V25: grosse Biome mit Huegeln, Vulkan, Eis, Wueste, Bergen und Mammutwald aktiviert")
-
-          func _mat(hex_color: String, emission: float = 0.0) -> StandardMaterial3D:
-              var m := StandardMaterial3D.new()
-              m.albedo_color = Color(hex_color)
-              m.roughness = 0.9
-              m.cull_mode = BaseMaterial3D.CULL_DISABLED
-              if emission > 0.0:
-                  m.emission_enabled = true
-                  m.emission = Color(hex_color)
-                  m.emission_energy_multiplier = emission
-              return m
-
-          func _extend_world_limits() -> void:
-              # V23 besitzt bereits die begehbare Grenze bei +/-15950.
-              # Keine Eigenschaften dynamisch ueberschreiben.
-              print("V25: V23-Kartengrenze +/-15950 bleibt aktiv")
-
-          func _root_at(p: Vector2) -> Node3D:
-              var n := Node3D.new()
-              n.position = Vector3(p.x, 0, p.y)
-              game.add_child(n)
-              roots.append(n)
-              return n
-
-          func _plateau(root: Node3D, y: float, size: Vector3, color: String) -> void:
-              game._box(root, Vector3(0, y, 0), size, Color(color), true)
-
-          func _hill(root: Node3D, p: Vector3, radius: float, height: float, color: String) -> void:
-              game._cone(root, p + Vector3(0, height * 0.5, 0), radius, height, Color(color), 10)
-
-          func _spike(root: Node3D, p: Vector3, radius: float, height: float, color: String) -> void:
-              game._cone(root, p + Vector3(0, height * 0.5, 0), radius, height, Color(color), 7)
-
-          func _mammut_tree(root: Node3D, p: Vector3, scale: float = 1.0) -> void:
-              game._box(root, p + Vector3(0, 8.0 * scale, 0), Vector3(2.6 * scale, 16.0 * scale, 2.6 * scale), Color("#7a4f30"), true)
-              game._box(root, p + Vector3(0, 17.5 * scale, 0), Vector3(7.0 * scale, 3.0 * scale, 7.0 * scale), Color("#315b34"), true)
-              game._box(root, p + Vector3(0, 22.0 * scale, 0), Vector3(5.8 * scale, 3.4 * scale, 5.8 * scale), Color("#3f6e3a"), true)
-              for dx in [-3.4, 0.0, 3.4]:
-                  game._box(root, p + Vector3(dx * scale, 26.0 * scale, 0), Vector3(2.6 * scale, 2.0 * scale, 5.0 * scale), Color("#4a7a45"), true)
-
-          func _ice_tree(root: Node3D, p: Vector3, scale: float = 1.0) -> void:
-              game._box(root, p + Vector3(0, 2.8 * scale, 0), Vector3(0.7 * scale, 5.6 * scale, 0.7 * scale), Color("#6d7b91"), true)
-              for i in range(4):
-                  game._cone(root, p + Vector3(0, 4.6 * scale + i * 1.9 * scale, 0), (2.7 - i * 0.45) * scale, 2.7 * scale, Color("#d7f2ff"), 7)
-
-          func _cactus(root: Node3D, p: Vector3, scale: float = 1.0) -> void:
-              game._box(root, p + Vector3(0, 3.4 * scale, 0), Vector3(1.0 * scale, 6.8 * scale, 1.0 * scale), Color("#4f8a4e"), true)
-              game._box(root, p + Vector3(-1.1 * scale, 4.5 * scale, 0), Vector3(0.6 * scale, 3.2 * scale, 0.6 * scale), Color("#5e9d59"), true)
-              game._box(root, p + Vector3(1.1 * scale, 5.2 * scale, 0), Vector3(0.6 * scale, 2.7 * scale, 0.6 * scale), Color("#5e9d59"), true)
-
-          func _lava_strip(root: Node3D, a: Vector2, b: Vector2, width: float = 15.0) -> void:
-              var dx: float = b.x - a.x
-              var dz: float = b.y - a.y
-              var segment_length: float = sqrt(dx * dx + dz * dz)
-              if segment_length < 0.5:
-                  return
-              var mesh: MeshInstance3D = game._box(root, Vector3((a.x+b.x)*0.5, 1.2, (a.y+b.y)*0.5), Vector3(width, 0.18, segment_length + 2.0), Color("#ff5f17")) as MeshInstance3D
-              mesh.rotation.y = atan2(dx, dz)
-              mesh.material_override = _mat("#ff5f17", 2.8)
-              lava_surfaces.append(mesh)
-
-          func _vulkan_region() -> void:
-              var c := Vector2(2900.0, -2150.0)
-              var root := _root_at(c)
-              _plateau(root, 0.25, Vector3(1320, 0.5, 1320), "#47353a")
-              for r in [420.0, 290.0, 180.0]:
-                  _hill(root, Vector3(0, 0.0, 0), r, 105.0 - r * 0.12, "#5b4340")
-              _plateau(root, 82.0, Vector3(92.0, 9.0, 92.0), "#2c1f22")
-              _plateau(root, 90.5, Vector3(52.0, 1.5, 52.0), "#ff6a1a")
-              for i in range(8):
-                  var ang := float(i) * TAU / 8.0
-                  _spike(root, Vector3(cos(ang)*260.0, 8.0, sin(ang)*260.0), 26.0, 44.0, "#5b4544")
-              _lava_strip(root, Vector2(-40, 10), Vector2(360, 220), 22.0)
-              _lava_strip(root, Vector2(25, 0), Vector2(-340, 350), 18.0)
-              _lava_strip(root, Vector2(10, -30), Vector2(260, -320), 16.0)
-
-          func _eis_region() -> void:
-              var c := Vector2(-3050.0, 2380.0)
-              var root := _root_at(c)
-              _plateau(root, 0.2, Vector3(1440, 0.45, 1440), "#d8ecf7")
-              for p in [Vector3(-180,0,-120), Vector3(210,0,-40), Vector3(-40,0,220), Vector3(300,0,280), Vector3(-300,0,250)]:
-                  _hill(root, p, 170.0, 48.0, "#c8e3ef")
-              for i in range(24):
-                  var ang := float(i) * TAU / 24.0
-                  var r := 170.0 + float(i % 5) * 32.0
-                  _spike(root, Vector3(cos(ang)*r, 0, sin(ang)*r), 16.0, 36.0 + float(i % 3) * 10.0, "#eafcff")
-              for x in range(-2, 3):
-                  for z in range(-2, 3):
-                      if abs(x) + abs(z) < 4:
-                          _ice_tree(root, Vector3(x * 74.0, 0, z * 66.0), 1.2 + float((x+z)&1) * 0.2)
-
-          func _wueste_region() -> void:
-              var c := Vector2(3180.0, 2280.0)
-              var root := _root_at(c)
-              _plateau(root, 0.15, Vector3(1600, 0.35, 1600), "#d7bf77")
-              for p in [Vector3(-300,0,-180), Vector3(0,0,-240), Vector3(220,0,110), Vector3(-90,0,220), Vector3(370,0,-60)]:
-                  _hill(root, p, 190.0, 28.0, "#e1cc88")
-              for i in range(14):
-                  var ang := float(i) * TAU / 14.0
-                  _cactus(root, Vector3(cos(ang)*420.0, 0, sin(ang)*260.0), 1.0 + float(i % 3) * 0.35)
-              _plateau(root, 0.12, Vector3(190.0, 0.08, 140.0), "#6fbdcd")
-
-          func _berge_region() -> void:
-              var c := Vector2(-3380.0, -2700.0)
-              var root := _root_at(c)
-              _plateau(root, 0.18, Vector3(1680, 0.36, 1680), "#6d7a74")
-              for p in [Vector3(-320,0,-250), Vector3(0,0,0), Vector3(300,0,-120), Vector3(-120,0,310), Vector3(330,0,290), Vector3(-380,0,220)]:
-                  _hill(root, p, 210.0, 96.0, "#76837c")
-              for p in [Vector3(-150,0,-70), Vector3(150,0,-20), Vector3(10,0,180), Vector3(-260,0,170)]:
-                  _spike(root, p, 72.0, 180.0, "#737b7e")
-              _spike(root, Vector3(0,0,0), 96.0, 235.0, "#8a8f93")
-
-          func _mammutwald_region() -> void:
-              var c := Vector2(-300.0, 3280.0)
-              var root := _root_at(c)
-              _plateau(root, 0.12, Vector3(1480, 0.32, 1480), "#3f5e40")
-              for p in [Vector3(-280,0,-220), Vector3(-120,0,80), Vector3(100,0,-130), Vector3(280,0,190), Vector3(20,0,310), Vector3(-320,0,250), Vector3(270,0,-260)]:
-                  _mammut_tree(root, p, 2.0)
-              for p in [Vector3(-70,0,-340), Vector3(350,0,20), Vector3(-380,0,40), Vector3(190,0,350)]:
-                  _mammut_tree(root, p, 1.55)
-              for p in [Vector3(-360,0,-80), Vector3(330,0,-90), Vector3(0,0,0), Vector3(140,0,170)]:
-                  _hill(root, p, 110.0, 18.0, "#506f4f")
-
-          func _huegel_region() -> void:
-              var c := Vector2(820.0, 1760.0)
-              var root := _root_at(c)
-              _plateau(root, 0.10, Vector3(1220, 0.26, 1220), "#85a96d")
-              for i in range(10):
-                  var x := -350.0 + float(i % 5) * 160.0
-                  var z := -250.0 + float(i / 5) * 260.0
-                  _hill(root, Vector3(x, 0, z), 80.0 + float(i % 3) * 20.0, 16.0 + float(i % 4) * 9.0, "#95b57a")
-
-          func _build_regions() -> void:
-              _vulkan_region()
-              _eis_region()
-              _wueste_region()
-              _berge_region()
-              _mammutwald_region()
-              _huegel_region()
-
-          func _process(delta: float) -> void:
-              if not loaded:
-                  return
-              var t := Time.get_ticks_msec() * 0.001
-              for i in range(lava_surfaces.size()):
-                  var mesh: MeshInstance3D = lava_surfaces[i]
-                  if mesh == null:
-                      continue
-                  mesh.position.y = 1.15 + sin(t * 1.7 + float(i)) * 0.05
-                  var lava_mat: StandardMaterial3D = mesh.material_override as StandardMaterial3D
-                  if lava_mat != null:
-                      lava_mat.emission_energy_multiplier = 2.6 + 0.5 * sin(t * 2.5 + float(i) * 0.8)
-          LWOD_V25_BIOMES
-          test -s android/scripts/V25BiomeWorld.gd
-          grep -Fq '_vulkan_region()' android/scripts/V25BiomeWorld.gd
-          grep -Fq '_eis_region()' android/scripts/V25BiomeWorld.gd
-          grep -Fq '_wueste_region()' android/scripts/V25BiomeWorld.gd
-          grep -Fq '_berge_region()' android/scripts/V25BiomeWorld.gd
-          grep -Fq '_mammutwald_region()' android/scripts/V25BiomeWorld.gd
-          grep -Fq '_huegel_region()' android/scripts/V25BiomeWorld.gd
-          awk '
-            {print}
-            $0 == "    new_regions.setup(self, expanded_world)" {
-              print "    var biome_v25 = load(\"res://scripts/V25BiomeWorld.gd\").new()"
-              print "    add_child(biome_v25)"
-              print "    biome_v25.setup(self, expanded_world)"
-              count++
-            }
-            END { if(count!=1) exit 62 }
-          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v25_main.gd"
-          mv "$RUNNER_TEMP/lwod_v25_main.gd" android/scripts/Main.gd
-          sed -i 's@version/code=24@version/code=25@' android/export_presets.cfg
-          sed -i 's@version/name="2.4"@version/name="2.5"@' android/export_presets.cfg
-          grep -Fqx '    biome_v25.setup(self, expanded_world)' android/scripts/Main.gd
-          grep -Fqx 'version/code=25' android/export_presets.cfg
-      - name: V26 Regionen hoeher Himmel Wolken Sonne Mond und klickbare Weltkarte
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p android/scripts
-          cat > android/scripts/V26SkyWorldMap.gd <<'LWOD_V26'
-          extends Node
-
-          var game: Node = null
-          var loaded := false
-          var sky_root: Node3D = null
-          var cloud_root: Node3D = null
-          var sun_node: MeshInstance3D = null
-          var moon_node: MeshInstance3D = null
-          var ui_layer: CanvasLayer = null
-          var mini_button: Button = null
-          var world_panel: Panel = null
-          var time_label: Label = null
-          var day_clock := 0.22
-          var region_root: Node3D = null
-
-          func setup(root: Node) -> void:
-              game = root
-              name = "V26SkyWorldMap"
-              _build_height_expansion()
-              _build_sky()
-              _build_world_map_ui()
-              loaded = true
-              set_process(true)
-              print("LWOD V26: hohe Regionen, dynamischer Himmel und klickbare Weltkarte aktiv")
-
-          func _build_height_expansion() -> void:
-              region_root = Node3D.new()
-              game.add_child(region_root)
-              _raise_plateau(Vector3(2900, 25, -2150), Vector3(1100, 45, 1100), Color("#4d3836"))
-              for p in [Vector3(2880,110,-2160), Vector3(2960,90,-2050), Vector3(2780,82,-2280)]:
-                  _spike(p, 140, 260, Color("#5d4441"))
-              _raise_plateau(Vector3(-3050, 18, 2380), Vector3(1300, 35, 1300), Color("#e6f4ff"))
-              for p in [Vector3(-3140,60,2320), Vector3(-2920,72,2460), Vector3(-3230,48,2540), Vector3(-2980,55,2240)]:
-                  _spike(p, 120, 180, Color("#f2fbff"))
-              _raise_plateau(Vector3(3180, 14, 2280), Vector3(1450, 28, 1450), Color("#d9c17d"))
-              for p in [Vector3(3020,28,2400), Vector3(3340,24,2110), Vector3(3250,22,2490), Vector3(3090,26,2150)]:
-                  _dune(p, 180, 55, Color("#ead38f"))
-              _raise_plateau(Vector3(-3380, 36, -2700), Vector3(1500, 72, 1500), Color("#76827c"))
-              for p in [Vector3(-3520,150,-2840), Vector3(-3300,180,-2640), Vector3(-3180,140,-2860), Vector3(-3460,210,-2510)]:
-                  _spike(p, 160, 320, Color("#8a8f93"))
-              _raise_plateau(Vector3(-300, 16, 3280), Vector3(1320, 32, 1320), Color("#3b5a3e"))
-              for p in [Vector3(-280,22,3300), Vector3(-40,18,3160), Vector3(220,20,3400), Vector3(-420,18,3440)]:
-                  _dune(p, 150, 45, Color("#55714f"))
-              _raise_plateau(Vector3(820, 10, 1760), Vector3(1180, 24, 1180), Color("#8fb06f"))
-              for p in [Vector3(620,22,1650), Vector3(760,18,1880), Vector3(980,24,1690), Vector3(1050,15,1860), Vector3(860,28,1770)]:
-                  _dune(p, 120, 65, Color("#9ebe80"))
-
-          func _raise_plateau(p: Vector3, size: Vector3, color: Color) -> void:
-              if game.has_method("_box"):
-                  game._box(region_root, p, size, color, true)
-
-          func _spike(p: Vector3, radius: float, height: float, color: Color) -> void:
-              if game.has_method("_cone"):
-                  game._cone(region_root, p + Vector3(0, height * 0.5, 0), radius, height, color, 10)
-
-          func _dune(p: Vector3, radius: float, height: float, color: Color) -> void:
-              if game.has_method("_cone"):
-                  game._cone(region_root, p + Vector3(0, height * 0.5, 0), radius, height, color, 12)
-
-          func _build_sky() -> void:
-              sky_root = Node3D.new()
-              sky_root.name = "V26SkyRoot"
-              game.add_child(sky_root)
-              cloud_root = Node3D.new()
-              cloud_root.name = "CloudRoot"
-              sky_root.add_child(cloud_root)
-              for i in range(8):
-                  var cloud := MeshInstance3D.new()
-                  cloud.mesh = SphereMesh.new()
-                  cloud.scale = Vector3(8.0 + float(i % 3) * 3.0, 2.4, 4.6 + float(i % 2) * 2.2)
-                  cloud.position = Vector3(-120 + i * 34, 120 + (i % 3) * 12, -240 + (i % 4) * 70)
-                  var m := StandardMaterial3D.new()
-                  m.albedo_color = Color(1,1,1,0.85)
-                  m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-                  m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-                  cloud.material_override = m
-                  cloud_root.add_child(cloud)
-              sun_node = MeshInstance3D.new()
-              sun_node.mesh = SphereMesh.new()
-              sun_node.scale = Vector3.ONE * 6.0
-              var sm := StandardMaterial3D.new()
-              sm.albedo_color = Color("#ffd86b")
-              sm.emission_enabled = true
-              sm.emission = Color("#ffd86b")
-              sm.emission_energy_multiplier = 3.2
-              sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-              sun_node.material_override = sm
-              sky_root.add_child(sun_node)
-              moon_node = MeshInstance3D.new()
-              moon_node.mesh = SphereMesh.new()
-              moon_node.scale = Vector3.ONE * 4.5
-              var mm := StandardMaterial3D.new()
-              mm.albedo_color = Color("#dde8ff")
-              mm.emission_enabled = true
-              mm.emission = Color("#b5c9ff")
-              mm.emission_energy_multiplier = 1.6
-              mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-              moon_node.material_override = mm
-              sky_root.add_child(moon_node)
-              _apply_day_night()
-
-          func _build_world_map_ui() -> void:
-              # Existing V23 minimap stays visible. This transparent button makes
-              # its complete rectangle tappable without covering the bag beneath.
-              ui_layer = CanvasLayer.new()
-              ui_layer.layer = 29
-              game.add_child(ui_layer)
-              mini_button = Button.new()
-              mini_button.name = "WeltkarteMiniMapTouch"
-              mini_button.text = ""
-              mini_button.focus_mode = Control.FOCUS_NONE
-              mini_button.anchor_left = 1.0
-              mini_button.anchor_right = 1.0
-              mini_button.anchor_top = 0.0
-              mini_button.anchor_bottom = 0.0
-              mini_button.offset_left = -190.0
-              mini_button.offset_right = -14.0
-              mini_button.offset_top = 8.0
-              mini_button.offset_bottom = 197.0
-              mini_button.mouse_filter = Control.MOUSE_FILTER_STOP
-              for kind in ["normal", "hover", "pressed", "focus", "disabled"]:
-                  mini_button.add_theme_stylebox_override(kind, StyleBoxEmpty.new())
-              mini_button.pressed.connect(_toggle_world_map)
-              ui_layer.add_child(mini_button)
-
-              world_panel = Panel.new()
-              world_panel.anchor_left = 0.13
-              world_panel.anchor_top = 0.08
-              world_panel.anchor_right = 0.87
-              world_panel.anchor_bottom = 0.91
-              world_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-              world_panel.visible = false
-              ui_layer.add_child(world_panel)
-              var style := StyleBoxFlat.new()
-              style.bg_color = Color("#100f26")
-              style.border_color = Color("#d7a86f")
-              style.set_border_width_all(3)
-              style.set_corner_radius_all(12)
-              world_panel.add_theme_stylebox_override("panel", style)
-              var title := Label.new()
-              title.text = "LYDRA – WELTKARTE (N oben / O rechts)"
-              title.position = Vector2(16, 8)
-              title.add_theme_font_size_override("font_size", 20)
-              world_panel.add_child(title)
-              var map_bg := ColorRect.new()
-              map_bg.position = Vector2(20, 48)
-              map_bg.size = Vector2(520, 300)
-              map_bg.color = Color("#3e6549")
-              map_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-              world_panel.add_child(map_bg)
-              _add_map_patch(map_bg, Rect2(0,0,520,300), Color("#466e55"))
-              _map_zone(map_bg, Vector2(2900,-2150), Vector2(850,850), "Vulkan", Color("#b65d37"))
-              _map_zone(map_bg, Vector2(-3050,2380), Vector2(850,850), "Eis", Color("#dbeeff"))
-              _map_zone(map_bg, Vector2(3180,2280), Vector2(970,970), "Wueste", Color("#e5c36e"))
-              _map_zone(map_bg, Vector2(-3380,-2700), Vector2(1100,1100), "Hochgebirge", Color("#8c8d99"))
-              _map_zone(map_bg, Vector2(-300,3280), Vector2(820,820), "Mammutwald", Color("#224e37"))
-              _map_zone(map_bg, Vector2(820,1760), Vector2(650,650), "Huegel", Color("#a8c57f"))
-              var center_label := Label.new()
-              center_label.text = "START"
-              center_label.position = Vector2(247,139)
-              map_bg.add_child(center_label)
-              var world := game.get_node_or_null("V21World")
-              if world != null:
-                  for entry in world.settlements:
-                      var town_pos: Vector2 = entry["pos"]
-                      var dot := ColorRect.new()
-                      dot.position = _world_to_map(town_pos)
-                      dot.size = Vector2(3,3)
-                      dot.color = Color("#f5dba8")
-                      map_bg.add_child(dot)
-              var marker := ColorRect.new()
-              marker.name = "PlayerWorldMapMarker"
-              marker.size = Vector2(9,9)
-              marker.color = Color("#d389ff")
-              map_bg.add_child(marker)
-              var close := Button.new()
-              close.text = "Zurueck"
-              close.position = Vector2(420,356)
-              close.size = Vector2(110,36)
-              close.pressed.connect(_toggle_world_map)
-              world_panel.add_child(close)
-
-          func _world_to_map(p: Vector2) -> Vector2:
-              return Vector2(260.0 + p.x * 520.0 / 32000.0, 150.0 + p.y * 300.0 / 32000.0)
-
-          func _map_zone(parent: Control, center: Vector2, radius: Vector2, label: String, color: Color) -> void:
-              var pos: Vector2 = _world_to_map(center)
-              var size: Vector2 = Vector2(maxf(12.0, radius.x * 2.0 * 520.0 / 32000.0), maxf(12.0, radius.y * 2.0 * 300.0 / 32000.0))
-              _add_map_patch(parent, Rect2(pos-size*0.5,size),color)
-              _add_label(parent,label,pos+Vector2(5,-10))
-
-          func _add_map_patch(parent: Control, rect: Rect2, color: Color) -> void:
-              var r := ColorRect.new()
-              r.position = rect.position
-              r.size = rect.size
-              r.color = color
-              parent.add_child(r)
-
-          func _add_label(parent: Control, txt: String, pos: Vector2) -> void:
-              var l := Label.new()
-              l.text = txt
-              l.position = pos
-              parent.add_child(l)
-
-          func _toggle_world_map() -> void:
-              if world_panel != null:
-                  world_panel.visible = not world_panel.visible
-
-          func _apply_day_night() -> void:
-              # V23 clock: [0,0.5) is day, rest is night.
-              # Positive X = east, negative X = west, north is negative Z.
-              var angle: float = day_clock * TAU
-              var elevation: float = sin(angle)
-              if sun_node != null:
-                  sun_node.position = Vector3(cos(angle)*290.0, 14.0 + elevation*185.0, -18.0)
-                  sun_node.visible = elevation > -0.07
-              if moon_node != null:
-                  var moon_angle: float = angle + PI
-                  moon_node.position = Vector3(cos(moon_angle)*285.0, 16.0 + sin(moon_angle)*185.0, 24.0)
-                  moon_node.visible = elevation < 0.07
-
-          func _process(delta: float) -> void:
-              if not loaded or game == null:
-                  return
-              var world := game.get_node_or_null("V21World")
-              if world != null:
-                  day_clock = float(world.day_clock)
-              else:
-                  day_clock = fposmod(day_clock + delta / 480.0, 1.0)
-              if game.hero != null and sky_root != null:
-                  sky_root.global_position = game.hero.global_position
-              _apply_day_night()
-              if ui_layer != null:
-                  ui_layer.visible = (game.state == 2)
-              if world_panel != null and world_panel.visible and game.hero != null:
-                  var marker := world_panel.get_node_or_null("ColorRect/PlayerWorldMapMarker")
-                  # Alternate robust child traversal (map is second-level control).
-                  for child in world_panel.get_children():
-                      if child is ColorRect and child.name == "ColorRect":
-                          marker = child.get_node_or_null("PlayerWorldMapMarker")
-                          break
-                  if marker is ColorRect:
-                      var p: Vector3 = game.hero.global_position
-                      marker.position = _world_to_map(Vector2(p.x,p.z)) - Vector2(4,4)
-              if cloud_root != null:
-                  var idx := 0
-                  for c in cloud_root.get_children():
-                      if c is Node3D:
-                          c.position.x += delta * (3.0 + float(idx % 3))
-                          if c.position.x > 165.0:
-                              c.position.x = -165.0
-                          idx += 1
-          LWOD_V26
-          test -s android/scripts/V26SkyWorldMap.gd
-          grep -Fq '_build_height_expansion()' android/scripts/V26SkyWorldMap.gd
-          grep -Fq '_build_sky()' android/scripts/V26SkyWorldMap.gd
-          grep -Fq '_build_world_map_ui()' android/scripts/V26SkyWorldMap.gd
-          awk '
-            {print}
-            $0 == "    biome_v25.setup(self, expanded_world)" {
-              print "    var features_v26 = load(\"res://scripts/V26SkyWorldMap.gd\").new()"
-              print "    add_child(features_v26)"
-              print "    features_v26.setup(self)"
-              count++
-            }
-            END { if(count!=1) exit 63 }
-          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v26_main.gd"
-          mv "$RUNNER_TEMP/lwod_v26_main.gd" android/scripts/Main.gd
-          sed -i 's@version/code=25@version/code=26@' android/export_presets.cfg
-          sed -i 's@version/name="2.5"@version/name="2.6"@' android/export_presets.cfg
-          grep -Fqx '    features_v26.setup(self)' android/scripts/Main.gd
-          grep -Fqx 'version/code=26' android/export_presets.cfg
-      - name: V27 natuerliche Huegellandschaft Weltkarte und freie Touchkamera
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p android/scripts
-          cat > android/scripts/V27Terrain.gd <<'V27_V27TERRAIN'
-          extends Node3D
-
-          # V27: zusammenhaengendes, begehbares Hoehengelaende mit Chunk-Streaming.
-          # Alte aufgesetzte V25/V26-Plateaubloecke werden entfernt.
-          const EDGE: float = 15930.0
-          const CHUNK: float = 192.0
-          const RESOLUTION: int = 12
-          const RADIUS: int = 2
-
-          var biomes: Array = [
-              {"name": "Vulkanland", "pos": Vector2(8300.0, -7800.0), "radius": 2100.0, "color": Color("#77564f")},
-              {"name": "Eisregion", "pos": Vector2(-8700.0, 7900.0), "radius": 2200.0, "color": Color("#dbeef5")},
-              {"name": "Wuestenmeer", "pos": Vector2(8650.0, 8700.0), "radius": 2400.0, "color": Color("#d8c17d")},
-              {"name": "Hochgebirge", "pos": Vector2(-9100.0, -8300.0), "radius": 2600.0, "color": Color("#84919a")},
-              {"name": "Mammutwald", "pos": Vector2(-2100.0, 11300.0), "radius": 2300.0, "color": Color("#3f7150")},
-              {"name": "Huegelland", "pos": Vector2(2700.0, -4900.0), "radius": 1900.0, "color": Color("#98b47c")},
-          ]
-
-          var game: Node3D
-          var old_world: Node
-          var noise_large: FastNoiseLite
-          var noise_small: FastNoiseLite
-          var chunks: Dictionary = {}
-          var current_cell: Vector2i = Vector2i(999999,999999)
-          var material_ground: StandardMaterial3D
-          var lava_mat: StandardMaterial3D
-          var elapsed: float = 0.0
-          var stream_clock: float = 0.0
-
-          func setup(root: Node3D, world: Node, old_biomes: Node, sky_features: Node) -> void:
-              game = root
-              old_world = world
-              name = "V27ContinuousTerrain"
-              noise_large = FastNoiseLite.new()
-              noise_large.seed = 271024
-              noise_large.frequency = 0.0026
-              noise_large.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-              noise_small = FastNoiseLite.new()
-              noise_small.seed = 271025
-              noise_small.frequency = 0.009
-              noise_small.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-              material_ground = StandardMaterial3D.new()
-              material_ground.vertex_color_use_as_albedo = true
-              material_ground.roughness = 0.93
-              material_ground.cull_mode = BaseMaterial3D.CULL_DISABLED
-              # Entferne nur die alten, aufgesetzten Region-Modelle, nicht die Spielwelt.
-              if old_biomes != null:
-                  old_biomes.set_process(false)
-                  old_biomes.set("loaded", false)
-                  var prior_roots: Array = old_biomes.get("roots")
-                  for item in prior_roots:
-                      if is_instance_valid(item):
-                          item.queue_free()
-              if sky_features != null:
-                  var blocks: Node3D = sky_features.get("region_root") as Node3D
-                  if is_instance_valid(blocks):
-                      blocks.queue_free()
-              _create_lava_visuals()
-              _stream(true)
-              set_process(true)
-              print("LWOD V27: Boden aus verbundenen Hoehenmeshes statt Bloecken und Kegeln")
-
-          func biome_weight(p: Vector2, index: int) -> float:
-              var item: Dictionary = biomes[index]
-              var distance_fraction: float = p.distance_to(item["pos"]) / float(item["radius"])
-              return 1.0 - smoothstep(0.64, 1.12, distance_fraction)
-
-          func height_at(x: float, z: float) -> float:
-              var p := Vector2(x,z)
-              var n: float = noise_large.get_noise_2d(x,z)
-              var f: float = noise_small.get_noise_2d(x,z)
-              var y: float = maxf(0.0, 6.0 + n * 9.0 + f * 3.5)
-              y += biome_weight(p,0) * (60.0 + 33.0 * n)
-              y += biome_weight(p,1) * (36.0 + 18.0 * n)
-              y += biome_weight(p,2) * (21.0 + 9.0 * n)
-              y += biome_weight(p,3) * (130.0 + 70.0 * n)
-              y += biome_weight(p,4) * (20.0 + 13.0 * n)
-              y += biome_weight(p,5) * (27.0 + 13.0 * n)
-              # Der alte Startbereich bleibt sanft begehbar; ausserhalb wird der Boden wellig.
-              var from_start: float = p.length()
-              y *= smoothstep(115.0, 430.0, from_start)
-              return maxf(0.04, y)
-
-          func color_at(x: float, z: float, height: float) -> Color:
-              var p := Vector2(x,z)
-              var c: Color = Color("#719d70")
-              var n: float = noise_small.get_noise_2d(x,z)
-              c = c.lerp(Color("#83ad79"), clampf(0.5+n*0.5, 0.0, 1.0))
-              for i in range(biomes.size()):
-                  c = c.lerp(biomes[i]["color"], clampf(biome_weight(p,i),0.0,1.0))
-              if height > 115.0:
-                  c = c.lerp(Color("#b1b5b1"), clampf((height-115.0)/115.0,0.0,0.8))
-              return c
-
-          func _emit_vertex(tool: SurfaceTool, world_x: float, world_z: float, origin: Vector2) -> void:
-              var elev: float = height_at(world_x, world_z)
-              tool.set_color(color_at(world_x,world_z,elev))
-              tool.add_vertex(Vector3(world_x-origin.x, elev, world_z-origin.y))
-
-          func _make_chunk(cx: int, cz: int) -> Node3D:
-              var root := Node3D.new()
-              root.name = "Hoehenfeld_%d_%d" % [cx,cz]
-              root.position = Vector3(float(cx)*CHUNK,0.0,float(cz)*CHUNK)
-              add_child(root)
-              var origin := Vector2(float(cx)*CHUNK, float(cz)*CHUNK)
-              var st := SurfaceTool.new()
-              st.begin(Mesh.PRIMITIVE_TRIANGLES)
-              var step_size: float = CHUNK / float(RESOLUTION)
-              for iz in range(RESOLUTION):
-                  for ix in range(RESOLUTION):
-                      var x0: float = origin.x + float(ix)*step_size
-                      var x1: float = x0 + step_size
-                      var z0: float = origin.y + float(iz)*step_size
-                      var z1: float = z0 + step_size
-                      # Aufwaerts gerichtete Dreiecke, ohne offene Kanten zwischen Chunks.
-                      _emit_vertex(st,x0,z0,origin)
-                      _emit_vertex(st,x0,z1,origin)
-                      _emit_vertex(st,x1,z0,origin)
-                      _emit_vertex(st,x1,z0,origin)
-                      _emit_vertex(st,x0,z1,origin)
-                      _emit_vertex(st,x1,z1,origin)
-              st.generate_normals()
-              var terrain_mesh: ArrayMesh = st.commit()
-              var view := MeshInstance3D.new()
-              view.name = "Gelande"
-              view.mesh = terrain_mesh
-              view.material_override = material_ground
-              root.add_child(view)
-              var collision := StaticBody3D.new()
-              collision.name = "GelaendeKollision"
-              var shape_node := CollisionShape3D.new()
-              shape_node.shape = terrain_mesh.create_trimesh_shape()
-              collision.add_child(shape_node)
-              root.add_child(collision)
-              _place_region_details(root,cx,cz)
-              return root
-
-          func _place_region_details(root: Node3D,cx: int,cz: int) -> void:
-              var center: Vector2 = Vector2((float(cx)+0.5)*CHUNK,(float(cz)+0.5)*CHUNK)
-              if biome_weight(center,4) < 0.35:
-                  return
-              var rng := RandomNumberGenerator.new()
-              rng.seed = int(abs(cx*47933+cz*21341+8731))
-              for i in range(3):
-                  var x: float = (float(cx)+rng.randf())*CHUNK
-                  var z: float = (float(cz)+rng.randf())*CHUNK
-                  var p := Vector2(x,z)
-                  if biome_weight(p,4) < 0.50:
-                      continue
-                  var height: float = height_at(x,z)
-                  var trunk_scale: float = rng.randf_range(0.9,1.5)
-                  # Mammutbaum: unverwechselbar hoeher und breiter als normale Spielbaeume.
-                  var stem := MeshInstance3D.new()
-                  var stem_mesh := CylinderMesh.new()
-                  stem_mesh.top_radius = 2.3*trunk_scale
-                  stem_mesh.bottom_radius = 3.3*trunk_scale
-                  stem_mesh.height = 25.0*trunk_scale
-                  stem_mesh.radial_segments = 9
-                  stem.mesh = stem_mesh
-                  stem.position = Vector3(x-float(cx)*CHUNK,height+12.5*trunk_scale,z-float(cz)*CHUNK)
-                  var wood := StandardMaterial3D.new()
-                  wood.albedo_color = Color("#6d4935")
-                  stem.material_override = wood
-                  root.add_child(stem)
-                  for j in range(3):
-                      var crown := MeshInstance3D.new()
-                      var crown_mesh := SphereMesh.new()
-                      crown_mesh.radius = 9.0 * trunk_scale
-                      crown_mesh.height = 13.0 * trunk_scale
-                      crown_mesh.radial_segments = 12
-                      crown_mesh.rings = 7
-                      crown.mesh = crown_mesh
-                      crown.position = stem.position + Vector3(0, (14.0+float(j)*4.0)*trunk_scale, 0)
-                      crown.scale = Vector3(1.15-float(j)*0.16,0.7,1.15-float(j)*0.16)
-                      var leaf := StandardMaterial3D.new()
-                      leaf.albedo_color = Color("#285e3b").lerp(Color("#4b9351"),float(j)*0.25)
-                      crown.material_override = leaf
-                      root.add_child(crown)
-
-          func _create_lava_visuals() -> void:
-              # Die Fluesse folgen dem kontinuierlichen Vulkanboden statt schwebender Quader.
-              lava_mat = StandardMaterial3D.new()
-              lava_mat.albedo_color = Color("#ff5d22")
-              lava_mat.emission_enabled = true
-              lava_mat.emission = Color("#ff782e")
-              lava_mat.emission_energy_multiplier = 2.2
-              lava_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-              lava_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-              var start: Vector2 = biomes[0]["pos"]
-              for arm in range(3):
-                  var ang: float = 0.35 + float(arm)*2.05
-                  var st := SurfaceTool.new()
-                  st.begin(Mesh.PRIMITIVE_TRIANGLES)
-                  for i in range(20):
-                      var d0: float = float(i)*30.0
-                      var d1: float = float(i+1)*30.0
-                      var p0: Vector2 = start + Vector2(cos(ang),sin(ang))*d0
-                      var p1: Vector2 = start + Vector2(cos(ang),sin(ang))*d1
-                      var across := Vector2(-sin(ang),cos(ang))
-                      var w: float = 8.0+float(arm)*2.5
-                      var a := p0-across*w
-                      var b := p0+across*w
-                      var c := p1-across*w
-                      var d := p1+across*w
-                      var aa := Vector3(a.x,height_at(a.x,a.y)+0.25,a.y)
-                      var bb := Vector3(b.x,height_at(b.x,b.y)+0.25,b.y)
-                      var cc := Vector3(c.x,height_at(c.x,c.y)+0.25,c.y)
-                      var dd := Vector3(d.x,height_at(d.x,d.y)+0.25,d.y)
-                      for v in [aa,bb,cc,bb,dd,cc]:
-                          st.add_vertex(v)
-                  st.generate_normals()
-                  var lava := MeshInstance3D.new()
-                  lava.mesh = st.commit()
-                  lava.material_override = lava_mat
-                  add_child(lava)
-
-          func _stream(force: bool = false) -> void:
-              if game == null or game.hero == null:
-                  return
-              var pos: Vector3 = game.hero.global_position
-              var cell := Vector2i(int(floor(pos.x/CHUNK)),int(floor(pos.z/CHUNK)))
-              if cell == current_cell and not force:
-                  return
-              current_cell = cell
-              var want := {}
-              for ix in range(cell.x-RADIUS,cell.x+RADIUS+1):
-                  for iz in range(cell.y-RADIUS,cell.y+RADIUS+1):
-                      if absf(float(ix)*CHUNK) > EDGE or absf(float(iz)*CHUNK) > EDGE:
-                          continue
-                      var id := Vector2i(ix,iz)
-                      want[id] = true
-                      if not chunks.has(id):
-                          chunks[id] = _make_chunk(ix,iz)
-              for id in chunks.keys():
-                  if not want.has(id):
-                      chunks[id].queue_free()
-                      chunks.erase(id)
-
-          func _process(delta: float) -> void:
-              elapsed += delta
-              if lava_mat != null:
-                  lava_mat.emission_energy_multiplier = 2.0+0.6*sin(elapsed*2.4)
-              if game == null or game.state != 2:
-                  return
-              stream_clock += delta
-              if stream_clock >= 0.5:
-                  stream_clock=0.0
-                  _stream()
-          V27_V27TERRAIN
-          printf '%s  %s\n' '786e0015cf7eab481151c3407c39d8428473c57fedd7375bb24fbfc7a409e942' 'android/scripts/V27Terrain.gd' | sha256sum -c -
-          cat > android/scripts/V27WorldMap.gd <<'V27_V27WORLDMAP'
-          extends Control
-
-          # Skalierbare, farbige Gesamtkarte statt kleiner 520x300-Karte im grossen Panel.
-          const WORLD_EDGE: float = 16000.0
-          var region_colors: Array = [
-              {"title":"Vulkan", "pos":Vector2(8300,-7800), "radius":2100.0, "color":Color("#a95732")},
-              {"title":"Eiswelt", "pos":Vector2(-8700,7900), "radius":2200.0, "color":Color("#deeff6")},
-              {"title":"Wueste", "pos":Vector2(8650,8700), "radius":2400.0, "color":Color("#d9bd6d")},
-              {"title":"Hochgebirge", "pos":Vector2(-9100,-8300), "radius":2600.0, "color":Color("#909ba1")},
-              {"title":"Mammutwald", "pos":Vector2(-2100,11300), "radius":2300.0, "color":Color("#295a3c")},
-              {"title":"Huegelland", "pos":Vector2(2700,-4900), "radius":1900.0, "color":Color("#9bb878")}
-          ]
-          var game: Node3D
-          var world: Node
-
-          func setup(root: Node3D, source: Node) -> void:
-              game = root
-              world = source
-              mouse_filter = Control.MOUSE_FILTER_IGNORE
-              resized.connect(queue_redraw)
-              queue_redraw()
-
-          func _point(world_pos: Vector2) -> Vector2:
-              var u: float = clampf(0.5+world_pos.x/(WORLD_EDGE*2.0),0.0,1.0)
-              var v: float = clampf(0.5+world_pos.y/(WORLD_EDGE*2.0),0.0,1.0)
-              return Vector2(u*size.x,v*size.y)
-
-          func _draw() -> void:
-              if size.x < 100.0 or size.y < 70.0:
-                  return
-              draw_rect(Rect2(Vector2.ZERO,size),Color("#416d56"))
-              # Leicht unterschiedliche gruene Landschaftsflaechen.
-              for x in range(12):
-                  for z in range(8):
-                      var v: float = 0.5+0.5*sin(float(x)*1.73+float(z)*2.31)
-                      var col := Color("#4d785b").lerp(Color("#72976c"),v*0.6)
-                      var a := Vector2(float(x)/12.0*size.x,float(z)/8.0*size.y)
-                      draw_rect(Rect2(a,Vector2(size.x/12.0+1.0,size.y/8.0+1.0)),col)
-              # Seen/Fluss als Kartenorientierung (rein gezeichnet, keine neue Kollision).
-              draw_circle(_point(Vector2(-6400.0,-7500.0)),minf(size.x,size.y)*0.038,Color("#367da0"))
-              draw_circle(_point(Vector2(700.0,2600.0)),minf(size.x,size.y)*0.026,Color("#478cbd"))
-              for i in range(11):
-                  var px: float = -3500.0+float(i)*720.0
-                  var pz: float = 1200.0+sin(float(i)*0.7)*1450.0
-                  if i>0:
-                      var last_x: float = -3500.0+float(i-1)*720.0
-                      var last_z: float = 1200.0+sin(float(i-1)*0.7)*1450.0
-                      draw_line(_point(Vector2(last_x,last_z)),_point(Vector2(px,pz)),Color("#3d92b7"),maxf(2.0,size.y*0.006),true)
-              for r in region_colors:
-                  var c: Vector2 = _point(r["pos"])
-                  var radius: float = float(r["radius"])*minf(size.x,size.y)/(WORLD_EDGE*2.0)
-                  draw_circle(c,radius*1.25,Color(r["color"],0.55))
-                  draw_circle(c,radius,Color(r["color"]))
-                  draw_string(ThemeDB.fallback_font,c+Vector2(4.0,-radius-6.0),String(r["title"]),HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("#fff5df"))
-              # Verbindungswege und Siedlungen aus V23 zeichnen.
-              if world != null:
-                  var routes_value = world.get("routes")
-                  if routes_value is Array:
-                      for route in routes_value:
-                          for i in range(route.size()-1):
-                              draw_line(_point(route[i]),_point(route[i+1]),Color("#dbbc84"),maxf(1.5,size.y*0.0026),true)
-                  var settlements_value = world.get("settlements")
-                  if settlements_value is Array:
-                      for town in settlements_value:
-                          var tp: Vector2 = _point(town["pos"])
-                          draw_circle(tp,3.2,Color("#fff3c2"))
-                          draw_arc(tp,5.0,0.0,TAU,16,Color("#483d28"),1.3)
-              # Positionspfeil (violett) aktualisiert sich mit dem Spieler.
-              if game != null and game.hero != null:
-                  var hp: Vector3 = game.hero.global_position
-                  var p: Vector2 = _point(Vector2(hp.x,hp.z))
-                  var angle: float = game.hero.rotation.y
-                  var forward := Vector2(-sin(angle),-cos(angle))
-                  var side := Vector2(-forward.y,forward.x)
-                  var arrow := PackedVector2Array([p+forward*12.0,p-forward*8.0+side*6.0,p-forward*8.0-side*6.0])
-                  draw_colored_polygon(arrow,Color("#df8dff"))
-                  draw_arc(p,15.0,0.0,TAU,32,Color("#f4e2ff"),2.0)
-              # Nord oben, Sued unten, Westen links, Osten rechts.
-              draw_string(ThemeDB.fallback_font,Vector2(size.x*0.5-12,23),"N",HORIZONTAL_ALIGNMENT_LEFT,-1,21,Color.WHITE)
-              draw_string(ThemeDB.fallback_font,Vector2(size.x*0.5-12,size.y-10),"S",HORIZONTAL_ALIGNMENT_LEFT,-1,21,Color.WHITE)
-              draw_string(ThemeDB.fallback_font,Vector2(10,size.y*0.5),"W",HORIZONTAL_ALIGNMENT_LEFT,-1,21,Color.WHITE)
-              draw_string(ThemeDB.fallback_font,Vector2(size.x-28,size.y*0.5),"O",HORIZONTAL_ALIGNMENT_LEFT,-1,21,Color.WHITE)
-              draw_rect(Rect2(Vector2.ZERO,size),Color("#e7c690"),false,3.0)
-          V27_V27WORLDMAP
-          printf '%s  %s\n' '3d6cd507d5b0344ba5eacabb209286d1925c3f916aad219f460ede893390f28c' 'android/scripts/V27WorldMap.gd' | sha256sum -c -
-          cat > android/scripts/V27CameraMap.gd <<'V27_V27CAMERAMAP'
-          extends Node
-
-          # Oben links wischen = Kamera, unten links bleibt der Bewegungsstick.
-          # Die Mini-Map oeffnet eine proportional an den Bildschirm angepasste Weltkarte.
-          var game: Node3D
-          var world: Node
-          var terrain: Node
-          var v26: Node
-          var look_touch_id: int = -1
-          var mouse_look: bool = false
-          var yaw_offset: float = 0.0
-          var pitch: float = 0.32
-          var camera_distance: float = 7.3
-          var map_open: bool = false
-          var map_layer: CanvasLayer
-          var map_screen: Control
-          var map_view: Control
-
-          func setup(root: Node3D, expanded_world: Node, new_terrain: Node, old_features: Node) -> void:
-              game = root
-              world = expanded_world
-              terrain = new_terrain
-              v26 = old_features
-              name = "V27CameraWorldMap"
-              process_physics_priority = 380  # nach der bisherigen Kamera-/Kollisionsberechnung
-              _create_map_screen()
-              _connect_old_minimap()
-              set_physics_process(true)
-              set_process(true)
-              print("LWOD V27: Kamera-Wischen oben links, Steuerstick unten links, grosse Weltkarte")
-
-          func _connect_old_minimap() -> void:
-              if v26 == null:
-                  return
-              var old_panel: Control = v26.get("world_panel") as Control
-              if old_panel != null:
-                  old_panel.hide()
-              var old_button: Button = v26.get("mini_button") as Button
-              if old_button != null:
-                  for connection_info in old_button.pressed.get_connections():
-                      old_button.pressed.disconnect(connection_info["callable"])
-                  old_button.pressed.connect(_toggle_map)
-                  old_button.tooltip_text = "Gesamte Weltkarte oeffnen"
-
-          func _create_map_screen() -> void:
-              map_layer = CanvasLayer.new()
-              map_layer.layer = 40
-              game.add_child(map_layer)
-              map_screen = Control.new()
-              map_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-              map_screen.mouse_filter = Control.MOUSE_FILTER_STOP
-              map_layer.add_child(map_screen)
-              var shade := ColorRect.new()
-              shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-              shade.color = Color(0.005,0.015,0.035,0.87)
-              shade.mouse_filter = Control.MOUSE_FILTER_STOP
-              map_screen.add_child(shade)
-              var panel := Panel.new()
-              panel.anchor_left = 0.06
-              panel.anchor_top = 0.045
-              panel.anchor_right = 0.94
-              panel.anchor_bottom = 0.955
-              map_screen.add_child(panel)
-              var style := StyleBoxFlat.new()
-              style.bg_color = Color("#11152a")
-              style.border_color = Color("#dbb97c")
-              style.set_border_width_all(3)
-              style.set_corner_radius_all(14)
-              panel.add_theme_stylebox_override("panel",style)
-              var headline := Label.new()
-              headline.text = "LYDRA - FARBIGE WELTKARTE"
-              headline.position = Vector2(20,12)
-              headline.add_theme_font_size_override("font_size",23)
-              panel.add_child(headline)
-              map_view = load("res://scripts/V27WorldMap.gd").new() as Control
-              map_view.anchor_left = 0.0
-              map_view.anchor_top = 0.0
-              map_view.anchor_right = 1.0
-              map_view.anchor_bottom = 1.0
-              map_view.offset_left = 18.0
-              map_view.offset_top = 52.0
-              map_view.offset_right = -18.0
-              map_view.offset_bottom = -54.0
-              panel.add_child(map_view)
-              map_view.call("setup",game,world)
-              var close := Button.new()
-              close.text = "Zurueck zum Spiel"
-              close.anchor_left = 1.0
-              close.anchor_top = 1.0
-              close.anchor_right = 1.0
-              close.anchor_bottom = 1.0
-              close.offset_left = -200.0
-              close.offset_top = -48.0
-              close.offset_right = -18.0
-              close.offset_bottom = -10.0
-              close.focus_mode = Control.FOCUS_NONE
-              close.pressed.connect(_toggle_map)
-              panel.add_child(close)
-              map_screen.hide()
-
-          func _toggle_map() -> void:
-              map_open = not map_open
-              map_screen.visible = map_open
-              look_touch_id = -1
-              mouse_look = false
-              if map_open and map_view != null:
-                  map_view.queue_redraw()
-
-          func _can_look_here(p: Vector2) -> bool:
-              if game == null or game.state != 2 or map_open:
-                  return false
-              var s: Vector2 = get_viewport().get_visible_rect().size
-              # Bereich links oben (0..70% Hoehe), links unten fuer den Joystick freihalten.
-              return p.x >= 0.0 and p.x < s.x * 0.52 and p.y >= 0.0 and p.y < s.y * 0.67
-
-          func _input(event: InputEvent) -> void:
-              if event is InputEventScreenTouch:
-                  var t := event as InputEventScreenTouch
-                  if t.pressed and look_touch_id == -1 and _can_look_here(t.position):
-                      look_touch_id = t.index
-                  elif not t.pressed and t.index == look_touch_id:
-                      look_touch_id = -1
-              elif event is InputEventScreenDrag:
-                  var drag := event as InputEventScreenDrag
-                  if drag.index == look_touch_id and not map_open:
-                      _rotate_camera(drag.relative)
-              elif event is InputEventMouseButton:
-                  var e := event as InputEventMouseButton
-                  if e.button_index == MOUSE_BUTTON_LEFT:
-                      if e.pressed:
-                          mouse_look = _can_look_here(e.position)
-                      else:
-                          mouse_look = false
-              elif event is InputEventMouseMotion:
-                  if mouse_look and not map_open:
-                      _rotate_camera((event as InputEventMouseMotion).relative)
-
-          func _rotate_camera(delta: Vector2) -> void:
-              yaw_offset = wrapf(yaw_offset-delta.x*0.0055,-PI,PI)
-              pitch = clampf(pitch+delta.y*0.0042,-0.45,1.02)
-
-          func _physics_process(delta: float) -> void:
-              if game == null or game.state != 2 or game.hero == null or game.camera_node == null:
-                  return
-              var hero: Node3D = game.hero
-              var center: Vector3 = hero.global_position+Vector3(0.0,1.50,0.0)
-              var orbit_yaw: float = hero.rotation.y+yaw_offset
-              var flat_back := Vector3(sin(orbit_yaw),0.0,cos(orbit_yaw))
-              var horizontal: float = camera_distance*cos(pitch)
-              var desired: Vector3 = center+flat_back*horizontal+Vector3(0.0,sin(pitch)*camera_distance+0.65,0.0)
-              # Kamera bleibt oberhalb der neuen Huegel und hinter keiner Felswand.
-              if terrain != null:
-                  var ground: float = float(terrain.call("height_at",desired.x,desired.z))
-                  desired.y = maxf(desired.y,ground+1.25)
-              if world != null and world.has_method("_clearance"):
-                  var info: Dictionary = world.call("_clearance",center,desired)
-                  if info.has("pos"):
-                      desired = info["pos"]
-              if desired.distance_to(center) < 0.25:
-                  desired = center+Vector3(0,2.4,0.5)
-              var current: Vector3 = game.camera_node.global_position
-              game.camera_node.global_position = current.lerp(desired,minf(1.0,delta*11.0))
-              if game.camera_node.global_position.distance_to(center) > 0.1:
-                  game.camera_node.look_at(center)
-
-          func _process(_delta: float) -> void:
-              if map_open and (game == null or game.state != 2):
-                  _toggle_map()
-              if map_open and map_view != null:
-                  map_view.queue_redraw()
-          V27_V27CAMERAMAP
-          printf '%s  %s\n' 'c1fbae84d7b9871d451b14a6316f14c85ebdf43bc0a2a934ba5c220300152527' 'android/scripts/V27CameraMap.gd' | sha256sum -c -
-          test "$(grep -Fxc '    features_v26.setup(self)' android/scripts/Main.gd)" -eq 1
-          awk '
-            {print}
-            $0 == "    features_v26.setup(self)" {
-              print "    var terrain_v27 = load(\"res://scripts/V27Terrain.gd\").new()"
-              print "    add_child(terrain_v27)"
-              print "    terrain_v27.setup(self, expanded_world, biome_v25, features_v26)"
-              print "    var camera_map_v27 = load(\"res://scripts/V27CameraMap.gd\").new()"
-              print "    add_child(camera_map_v27)"
-              print "    camera_map_v27.setup(self, expanded_world, terrain_v27, features_v26)"
-              done++
-            }
-            END { if (done != 1) exit 67 }
-          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v27_main.gd"
-          mv "$RUNNER_TEMP/lwod_v27_main.gd" android/scripts/Main.gd
-          sed -i 's@version/code=26@version/code=27@' android/export_presets.cfg
-          sed -i 's@version/name="2.6"@version/name="2.7"@' android/export_presets.cfg
-          grep -Fqx 'version/code=27' android/export_presets.cfg
-          grep -Fqx '    camera_map_v27.setup(self, expanded_world, terrain_v27, features_v26)' android/scripts/Main.gd
-          echo 'V27: Terrain, Vollbildkarte und Touchkamera eingebaut'
-      - name: V28 Touch-Steuerung rechts Figur links Kamera reparieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p android/scripts
-          # Der bisherige linke Bewegungsstick muss passiv sein.
-          # Die V7-Signale bleiben fuer Menues/Spielstandswechsel erhalten.
-          cat > android/scripts/TouchOverlay.gd <<'LWOD_V28_OLD_TOUCH'
-          extends Control
-          signal axis_changed(axis: Vector2)
-          var move_axis := Vector2.ZERO
-          func _ready() -> void:
-              mouse_filter = Control.MOUSE_FILTER_IGNORE
-          func reset_touch() -> void:
-              move_axis = Vector2.ZERO
-              axis_changed.emit(move_axis)
-          LWOD_V28_OLD_TOUCH
-
-          cat > android/scripts/V28DualStick.gd <<'LWOD_V28_INPUT'
-          extends Control
-
-          # LINKS: Kamera hoch/runter/links/rechts. RECHTS: Figur vor/zurueck/drehen.
-          # Beide Finger bekommen eigene IDs. Die Kreise erscheinen nur beim Beruehren.
-          const STICK_RADIUS := 90.0
-          const CAMERA_YAW_SPEED := 2.2
-          const CAMERA_PITCH_SPEED := 1.5
-          const LOWER_AREA := 0.33
-
-          var game: Node3D = null
-          var camera_controller: Node = null
-          var left_id := -1
-          var right_id := -1
-          var left_origin := Vector2.ZERO
-          var right_origin := Vector2.ZERO
-          var left_axis := Vector2.ZERO
-          var right_axis := Vector2.ZERO
-
-          func setup(root: Node3D, camera_node: Node) -> void:
-              game = root
-              camera_controller = camera_node
-              name = "LWOD_V28_Dual_Stick"
-              set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-              mouse_filter = Control.MOUSE_FILTER_IGNORE
-              # V27 darf keine linken Touches mehr selbst auswerten.
-              if is_instance_valid(camera_controller):
-                  camera_controller.set_process_input(false)
-                  camera_controller.set_process_unhandled_input(false)
-                  camera_controller.set("look_touch_id", -1)
-                  camera_controller.set("mouse_look", false)
-              if is_instance_valid(game.touch_overlay):
-                  game.touch_overlay.reset_touch()
-                  game.touch_overlay.visible = false
-              set_process_input(true)
-              set_process(true)
-              print("LWOD V28: LINKS Kamerastick | RECHTS Bewegungsstick | Multitouch aktiviert")
-
-          func _can_control() -> bool:
-              if game == null or int(game.get("state")) != 2 or not is_visible_in_tree():
-                  return false
-              if is_instance_valid(camera_controller) and bool(camera_controller.get("map_open")):
-                  return false
-              # Beim oeffnen des Rucksacks oder einer Item-Seite keine Spielfigur bewegen.
-              for addon in game.get_children():
-                  if addon.has_method("_toggle_bag"):
-                      var bag: Control = addon.get("bag_panel") as Control
-                      var page: Control = addon.get("page_panel") as Control
-                      if (bag != null and bag.visible) or (page != null and page.visible):
-                          return false
-              return true
-
-          func _is_over_button(pos: Vector2) -> bool:
-              # Rucksack, Karte, Sammeln und Menuebuttons bleiben normal anklickbar.
-              if game == null:
-                  return false
-              for node in game.find_children("*", "Button", true, false):
-                  var button := node as Button
-                  if button != null and button.is_visible_in_tree() and not button.disabled:
-                      if button.get_global_rect().has_point(pos):
-                          return true
-              return false
-
-          func _accept_start(pos: Vector2) -> bool:
-              var screen: Vector2 = get_viewport().get_visible_rect().size
-              return pos.x >= 0.0 and pos.x <= screen.x and pos.y >= screen.y * LOWER_AREA and pos.y <= screen.y and not _is_over_button(pos)
-
-          func _start_touch(id: int, pos: Vector2) -> void:
-              if not _can_control() or not _accept_start(pos):
-                  return
-              var screen: Vector2 = get_viewport().get_visible_rect().size
-              if pos.x < screen.x * 0.50 and left_id < 0:
-                  left_id = id
-                  left_origin = pos
-                  left_axis = Vector2.ZERO
-              elif pos.x >= screen.x * 0.50 and right_id < 0:
-                  right_id = id
-                  right_origin = pos
-                  right_axis = Vector2.ZERO
-              queue_redraw()
-
-          func _drag_touch(id: int, pos: Vector2) -> void:
-              if id == left_id:
-                  left_axis = (pos - left_origin).limit_length(STICK_RADIUS) / STICK_RADIUS
-              elif id == right_id:
-                  right_axis = (pos - right_origin).limit_length(STICK_RADIUS) / STICK_RADIUS
-                  _send_move()
-              queue_redraw()
-
-          func _end_touch(id: int) -> void:
-              if id == left_id:
-                  left_id = -1
-                  left_axis = Vector2.ZERO
-              if id == right_id:
-                  right_id = -1
-                  right_axis = Vector2.ZERO
-                  _send_move()
-              queue_redraw()
-
-          func _send_move() -> void:
-              if game != null:
-                  game.set("joystick_axis", right_axis)
-
-          func _input(event: InputEvent) -> void:
-              if event is InputEventScreenTouch:
-                  var touch := event as InputEventScreenTouch
-                  if touch.pressed:
-                      _start_touch(touch.index, touch.position)
-                  else:
-                      _end_touch(touch.index)
-              elif event is InputEventScreenDrag:
-                  var drag := event as InputEventScreenDrag
-                  _drag_touch(drag.index, drag.position)
-              # Auch im Editor mit der Maus getrennt links und rechts testbar.
-              elif event is InputEventMouseButton:
-                  var mouse := event as InputEventMouseButton
-                  if mouse.button_index == MOUSE_BUTTON_LEFT:
-                      if mouse.pressed:
-                          _start_touch(90001, mouse.position)
-                      else:
-                          _end_touch(90001)
-              elif event is InputEventMouseMotion:
-                  var motion := event as InputEventMouseMotion
-                  if left_id == 90001 or right_id == 90001:
-                      _drag_touch(90001, motion.position)
-
-          func _process(delta: float) -> void:
-              if not _can_control():
-                  if left_id >= 0 or right_id >= 0:
-                      left_id = -1
-                      right_id = -1
-                      left_axis = Vector2.ZERO
-                      right_axis = Vector2.ZERO
-                      _send_move()
-                      queue_redraw()
-                  return
-              if right_id >= 0:
-                  # Die bestehende Spielphysik wertet X als Drehen und -Y als Laufen aus.
-                  _send_move()
-              if left_id >= 0 and is_instance_valid(camera_controller):
-                  var yaw: float = float(camera_controller.get("yaw_offset"))
-                  var pitch: float = float(camera_controller.get("pitch"))
-                  yaw = wrapf(yaw - left_axis.x * CAMERA_YAW_SPEED * delta, -PI, PI)
-                  pitch = clampf(pitch + left_axis.y * CAMERA_PITCH_SPEED * delta, -0.45, 1.02)
-                  camera_controller.set("yaw_offset", yaw)
-                  camera_controller.set("pitch", pitch)
-
-          func _draw_stick(center: Vector2, axis: Vector2, label_text: String, color: Color) -> void:
-              draw_circle(center, STICK_RADIUS, Color(0.035, 0.045, 0.10, 0.34))
-              draw_arc(center, STICK_RADIUS, 0.0, TAU, 56, color, 4.0, true)
-              draw_line(center, center + axis * 63.0, Color(color.r, color.g, color.b, 0.55), 3.0, true)
-              var knob: Vector2 = center + axis * 65.0
-              draw_circle(knob, 32.0, Color(color.r, color.g, color.b, 0.35))
-              draw_arc(knob, 32.0, 0.0, TAU, 32, color, 3.0, true)
-              draw_string(ThemeDB.fallback_font, center + Vector2(-38.0, -105.0), label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, color)
-
-          func _draw() -> void:
-              if left_id >= 0:
-                  _draw_stick(left_origin, left_axis, "KAMERA", Color("#d2b6ff"))
-              if right_id >= 0:
-                  _draw_stick(right_origin, right_axis, "FIGUR", Color("#ffd38a"))
-          LWOD_V28_INPUT
-          test -s android/scripts/V28DualStick.gd
-          test -s android/scripts/TouchOverlay.gd
-          # V28 nach V27-Anbindung aktivieren; Originalmenues und Spielstaende erhalten.
-          test "$(grep -Fxc '    camera_map_v27.setup(self, expanded_world, terrain_v27, features_v26)' android/scripts/Main.gd)" -eq 1
-          awk '
-            {print}
-            $0 == "    camera_map_v27.setup(self, expanded_world, terrain_v27, features_v26)" {
-              print "    var v28_sticks = load(\"res://scripts/V28DualStick.gd\").new()"
-              print "    play_hud_root.add_child(v28_sticks)"
-              print "    v28_sticks.setup(self, camera_map_v27)"
-              done++
-            }
-            END { if (done != 1) exit 68 }
-          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v28_main.gd"
-          mv "$RUNNER_TEMP/lwod_v28_main.gd" android/scripts/Main.gd
-          sed -i 's@version/code=27@version/code=28@' android/export_presets.cfg
-          sed -i 's@version/name="2.7"@version/name="2.8"@' android/export_presets.cfg
-          grep -Fqx '    v28_sticks.setup(self, camera_map_v27)' android/scripts/Main.gd
-          grep -Fqx 'version/code=28' android/export_presets.cfg
-          echo 'V28: rechter Bewegungsstick und linker Kamerastick eingebaut'
-      - name: V29 echte Figurenbewegung rechts und freie Kamera links
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p android/scripts
-          cat > android/scripts/V29IndependentSticks.gd <<'LWOD_V29_DUAL'
-          extends Control
-
-          # V29: independent camera (left) and actual character movement (right).
-          # Input is sent into Main.gd movement physics, not used to rotate the camera.
-          const RADIUS: float = 92.0
-          const CAMERA_YAW_SPEED: float = 2.25
-          const CAMERA_PITCH_SPEED: float = 1.65
-
-          var game: Node3D
-          var look: Node
-          var old_stick: Control
-          var camera_id: int = -1
-          var movement_id: int = -1
-          var camera_start: Vector2 = Vector2.ZERO
-          var movement_start: Vector2 = Vector2.ZERO
-          var camera_axis: Vector2 = Vector2.ZERO
-          var movement_axis: Vector2 = Vector2.ZERO
-          var mouse_id: int = 910002
-
-          func setup(root: Node3D, old_controller: Control, camera_controller: Node) -> void:
-              game = root
-              old_stick = old_controller
-              look = camera_controller
-              name = "LWOD_V29_STEUERUNG"
-              set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-              mouse_filter = Control.MOUSE_FILTER_IGNORE
-              if is_instance_valid(old_stick):
-                  old_stick.set_process_input(false)
-                  old_stick.set_process(false)
-                  old_stick.visible = false
-              if is_instance_valid(look):
-                  look.set_process_input(false)
-                  look.set_process_unhandled_input(false)
-              game.set("joystick_axis", Vector2.ZERO)
-              set_process_input(true)
-              set_process(true)
-              print("V29 INPUT READY: LINKS KAMERA - RECHTS FIGUR - frei laufen")
-
-          func _playing() -> bool:
-              if not is_instance_valid(game) or int(game.get("state")) != 2:
-                  return false
-              if is_instance_valid(look) and bool(look.get("map_open")):
-                  return false
-              return true
-
-          func _touch_over_ui(pos: Vector2) -> bool:
-              var s: Vector2 = get_viewport().get_visible_rect().size
-              # Minimap, inventory and menu live in the upper-right corner.
-              return pos.x > s.x * 0.73 and pos.y < s.y * 0.34
-
-          func _start_finger(id: int, pos: Vector2) -> void:
-              if not _playing() or _touch_over_ui(pos):
-                  return
-              var s: Vector2 = get_viewport().get_visible_rect().size
-              if pos.x < s.x * 0.5:
-                  if camera_id == -1:
-                      camera_id = id
-                      camera_start = pos
-                      camera_axis = Vector2.ZERO
-              elif movement_id == -1:
-                  movement_id = id
-                  movement_start = pos
-                  movement_axis = Vector2.ZERO
-              queue_redraw()
-
-          func _move_finger(id: int, pos: Vector2) -> void:
-              if id == camera_id:
-                  camera_axis = (pos - camera_start).limit_length(RADIUS) / RADIUS
-              elif id == movement_id:
-                  movement_axis = (pos - movement_start).limit_length(RADIUS) / RADIUS
-                  _send_movement()
-              queue_redraw()
-
-          func _end_finger(id: int) -> void:
-              if id == camera_id:
-                  camera_id = -1
-                  camera_axis = Vector2.ZERO
-              if id == movement_id:
-                  movement_id = -1
-                  movement_axis = Vector2.ZERO
-                  _send_movement()
-              queue_redraw()
-
-          func _send_movement() -> void:
-              if is_instance_valid(game):
-                  game.set("joystick_axis", movement_axis)
-
-          func _reset() -> void:
-              if camera_id == -1 and movement_id == -1:
-                  return
-              camera_id = -1
-              movement_id = -1
-              camera_axis = Vector2.ZERO
-              movement_axis = Vector2.ZERO
-              _send_movement()
-              queue_redraw()
-
-          func _input(event: InputEvent) -> void:
-              if event is InputEventScreenTouch:
-                  var touch: InputEventScreenTouch = event as InputEventScreenTouch
-                  if touch.pressed:
-                      _start_finger(touch.index, touch.position)
-                  else:
-                      _end_finger(touch.index)
-              elif event is InputEventScreenDrag:
-                  var drag: InputEventScreenDrag = event as InputEventScreenDrag
-                  _move_finger(drag.index, drag.position)
-              elif not OS.has_feature("mobile") and event is InputEventMouseButton:
-                  var button: InputEventMouseButton = event as InputEventMouseButton
-                  if button.button_index == MOUSE_BUTTON_LEFT:
-                      if button.pressed:
-                          _start_finger(mouse_id, button.position)
-                      else:
-                          _end_finger(mouse_id)
-              elif not OS.has_feature("mobile") and event is InputEventMouseMotion:
-                  var motion: InputEventMouseMotion = event as InputEventMouseMotion
-                  if camera_id == mouse_id or movement_id == mouse_id:
-                      _move_finger(mouse_id, motion.position)
-
-          func _process(delta: float) -> void:
-              if not _playing():
-                  _reset()
-                  return
-              if movement_id != -1:
-                  _send_movement()
-              if camera_id != -1 and is_instance_valid(look):
-                  var yaw: float = float(look.get("yaw_offset"))
-                  var pitch: float = float(look.get("pitch"))
-                  yaw = wrapf(yaw - camera_axis.x * CAMERA_YAW_SPEED * delta, -PI, PI)
-                  pitch = clampf(pitch + camera_axis.y * CAMERA_PITCH_SPEED * delta, -0.55, 1.08)
-                  look.set("yaw_offset", yaw)
-                  look.set("pitch", pitch)
-
-          func _draw_joystick(center: Vector2, axis: Vector2, label_text: String, color: Color) -> void:
-              draw_circle(center, RADIUS, Color(0.04, 0.055, 0.12, 0.32))
-              draw_arc(center, RADIUS, 0.0, TAU, 50, color, 3.0, true)
-              var knob: Vector2 = center + axis * 66.0
-              draw_circle(knob, 32.0, Color(color.r, color.g, color.b, 0.3))
-              draw_arc(knob, 32.0, 0.0, TAU, 36, color, 3.0, true)
-              draw_string(ThemeDB.fallback_font, center + Vector2(-35, -108), label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, color)
-
-          func _draw() -> void:
-              if camera_id != -1:
-                  _draw_joystick(camera_start, camera_axis, "KAMERA", Color("#d9b7ff"))
-              if movement_id != -1:
-                  _draw_joystick(movement_start, movement_axis, "FIGUR", Color("#ffd395"))
-          LWOD_V29_DUAL
-          cat > "$RUNNER_TEMP/lwod_v29_movement.gd" <<'LWOD_V29_MOVE'
-              # V29: Right stick moves the hero in world space relative to camera heading.
-              # Camera yaw is independent of the hero's own rotation.
-              var input_axis: Vector2 = joystick_axis
-              if Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A):
-                  input_axis.x -= 1.0
-              if Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D):
-                  input_axis.x += 1.0
-              if Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_W):
-                  input_axis.y -= 1.0
-              if Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_S):
-                  input_axis.y += 1.0
-              input_axis = input_axis.limit_length(1.0)
-              var look_script: Node = get_node_or_null("V27CameraWorldMap")
-              var world_yaw: float = 0.0
-              if look_script != null:
-                  world_yaw = float(look_script.get("yaw_offset"))
-              var forward: Vector3 = Vector3(-sin(world_yaw), 0, -cos(world_yaw))
-              var sideways: Vector3 = Vector3(cos(world_yaw), 0, -sin(world_yaw))
-              var move_vec: Vector3 = sideways * input_axis.x + forward * (-input_axis.y)
-              if move_vec.length_squared() > 0.001:
-                  move_vec = move_vec.normalized()
-                  hero.velocity.x = move_vec.x * WALK_SPEED
-                  hero.velocity.z = move_vec.z * WALK_SPEED
-                  var target_heading: float = atan2(-move_vec.x, -move_vec.z)
-                  heading = lerp_angle(heading, target_heading, minf(1.0, delta * 11.0))
-                  hero.rotation.y = heading
-              else:
-                  hero.velocity.x = 0.0
-                  hero.velocity.z = 0.0
-              if not hero.is_on_floor():
-                  hero.velocity.y -= GRAVITY * delta
-              else:
-                  hero.velocity.y = -0.05
-              hero.move_and_slide()
-          LWOD_V29_MOVE
-          test -s android/scripts/V29IndependentSticks.gd
-          test -s "$RUNNER_TEMP/lwod_v29_movement.gd"
-          # Camera world yaw must not follow hero turn. Left stick alone orbits camera.
-          test "$(grep -Fxc '    var orbit_yaw: float = hero.rotation.y+yaw_offset' android/scripts/V27CameraMap.gd)" -eq 1
-          sed -i 's@var orbit_yaw: float = hero.rotation.y+yaw_offset@var orbit_yaw: float = yaw_offset@' android/scripts/V27CameraMap.gd
-          # Replace old V7 turn-in-place movement with camera-relative strafe+forward.
-          test "$(grep -Fxc '    var turn_amount := joystick_axis.x' android/scripts/Main.gd)" -eq 1
-          awk -v movefile="$RUNNER_TEMP/lwod_v29_movement.gd" '
-            BEGIN {
-              while ((getline ln < movefile) > 0) { repl = repl ln "\n" }
-              close(movefile)
-            }
-            $0 == "    var turn_amount := joystick_axis.x" {
-              printf "%s", repl
-              skipping=1
-              replaced++
-              next
-            }
-            skipping && $0 == "    hero.move_and_slide()" { skipping=0; next }
-            skipping { next }
-            { print }
-            END {if (replaced != 1 || skipping) exit 81}
-          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v29_main.gd"
-          mv "$RUNNER_TEMP/lwod_v29_main.gd" android/scripts/Main.gd
-          # Disable V28 input; new controller is exclusive owner of both touch halves.
-          test "$(grep -Fxc '    v28_sticks.setup(self, camera_map_v27)' android/scripts/Main.gd)" -eq 1
-          awk '
-            {print}
-            $0 == "    v28_sticks.setup(self, camera_map_v27)" {
-              print "    var sticks_v29 = load(\"res://scripts/V29IndependentSticks.gd\").new()"
-              print "    play_hud_root.add_child(sticks_v29)"
-              print "    sticks_v29.setup(self, v28_sticks, camera_map_v27)"
-              added++
-            }
-            END {if(added!=1) exit 82}
-          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v29_main2.gd"
-          mv "$RUNNER_TEMP/lwod_v29_main2.gd" android/scripts/Main.gd
-          sed -i 's@version/code=28@version/code=29@' android/export_presets.cfg
-          sed -i 's@version/name="2.8"@version/name="2.9"@' android/export_presets.cfg
-          grep -Fqx 'version/code=29' android/export_presets.cfg
-          grep -Fqx '    sticks_v29.setup(self, v28_sticks, camera_map_v27)' android/scripts/Main.gd
-          grep -Fqx '    hero.move_and_slide()' android/scripts/Main.gd
-          grep -Fq 'var move_vec: Vector3 = sideways * input_axis.x + forward * (-input_axis.y)' android/scripts/Main.gd
-          echo 'V29: LINKS Kamera, RECHTS Bewegung; eigene Weltbewegung implementiert'
-      - name: V30 Kollision und Startposition reparieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p android/scripts
-          cat > android/scripts/V30MovementRepair.gd <<'LWOD_V30_REPAIR'
-          extends Node
-
-          # Alte grosse ebene Boden-Kollisionskoerper liegen unter dem neuen
-          # Hoehenmesh und koennen die CharacterBody3D-Bewegung blockieren.
-          # Haus-, Baum- und Gebirgskollisionen bleiben unangetastet.
-          var game: Node3D
-          var removed_floor_colliders: int = 0
-
-          func setup(root: Node3D) -> void:
-              game = root
-              name = "V30MovementRepair"
-              _remove_old_flat_floor_colliders()
-              var hero: CharacterBody3D = game.hero
-              hero.floor_snap_length = 0.55
-              hero.safe_margin = 0.005
-              hero.max_slides = 8
-              print("V30_PHYSICS_READY old_duplicate_floors_disabled=", removed_floor_colliders)
-
-          func _remove_old_flat_floor_colliders() -> void:
-              for node in game.find_children("*", "StaticBody3D", true, false):
-                  var body: StaticBody3D = node as StaticBody3D
-                  if body == null or body.name == "GelaendeKollision":
-                      continue
-                  var obsolete_floor := false
-                  for shape_node in body.get_children():
-                      if shape_node is CollisionShape3D:
-                          var box_shape: BoxShape3D = (shape_node as CollisionShape3D).shape as BoxShape3D
-                          if box_shape != null:
-                              var sz: Vector3 = box_shape.size
-                              if sz.x >= 100.0 and sz.z >= 100.0 and sz.y <= 2.5:
-                                  obsolete_floor = true
-                  if obsolete_floor:
-                      body.collision_layer = 0
-                      body.collision_mask = 0
-                      removed_floor_colliders += 1
-          LWOD_V30_REPAIR
-          # Startposition auf freiem Weg, mit Sicherheitsabstand ueber Boden.
-          # Gespeicherte Spielstaende werden NICHT veraendert.
-          awk '
-            /^func _on_new_game_pressed\(\) -> void:$/ {in_new=1}
-            in_new && /^func / && !/^func _on_new_game_pressed\(\) -> void:$/ {in_new=0}
-            in_new && $0 == "    hero.position = Vector3(0, 0.1, 10)" {
-              print "    hero.position = Vector3(0.0, 1.2, 38.0)"
-              done++
-              next
-            }
-            {print}
-            END { if(done!=1) exit 71 }
-          ' android/scripts/Main.gd > "$RUNNER_TEMP/v30_main_a.gd"
-          mv "$RUNNER_TEMP/v30_main_a.gd" android/scripts/Main.gd
-          # V30-Kollisionsreparatur NACH Initialisierung des V29-Controllers.
-          awk '
-            {print}
-            $0 == "    sticks_v29.setup(self, v28_sticks, camera_map_v27)" {
-              print "    var repair_v30 = load(\"res://scripts/V30MovementRepair.gd\").new()"
-              print "    add_child(repair_v30)"
-              print "    repair_v30.setup(self)"
-              done++
-            }
-            END { if(done!=1) exit 72 }
-          ' android/scripts/Main.gd > "$RUNNER_TEMP/v30_main_b.gd"
-          mv "$RUNNER_TEMP/v30_main_b.gd" android/scripts/Main.gd
-          sed -i 's@version/code=29@version/code=30@' android/export_presets.cfg
-          sed -i 's@version/name="2.9"@version/name="3.0"@' android/export_presets.cfg
-          grep -Fqx '    repair_v30.setup(self)' android/scripts/Main.gd
-          grep -Fqx 'version/code=30' android/export_presets.cfg
-          test -s android/scripts/V30MovementRepair.gd
-          echo 'V30: rechter Stick = Fortbewegung, linker = Kamera, Boden-Kollisionen bereinigt'
-      - name: V31 Terrainkollision und Bewegung dauerhaft reparieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p android/scripts
-          cat > android/scripts/V31TerrainMotion.gd <<'LWOD_V31_MOTION'
-          extends Node
-
-          # Vermeidet das Festhaengen an Trimesh-Kanten zwischen Hoehen-Chunks.
-          # Hoehen werden exakt aus demselben Terrain-Generator gelesen.
-          # Haeuser, Mauern und andere feste Hindernisse behalten ihre Kollision.
-          var game: Node3D
-          var terrain: Node3D
-          var disabled_chunks: int = 0
-
-          func setup(root: Node3D) -> void:
-              game = root
-              name = "V31TerrainMotion"
-              terrain = game.get_node_or_null("V27ContinuousTerrain") as Node3D
-              if terrain == null or not terrain.has_method("height_at"):
-                  push_error("V31: V27-Hoehengelaende nicht gefunden")
-                  return
-              # Auch die bereits vor diesem Script erzeugten Chunks bereinigen.
-              for node in terrain.find_children("GelaendeKollision", "StaticBody3D", true, false):
-                  var body: StaticBody3D = node as StaticBody3D
-                  if body != null:
-                      body.collision_layer = 0
-                      body.collision_mask = 0
-                      disabled_chunks += 1
-              align_to_ground(game.hero)
-              print("V31_TERRAIN_READY initial_chunks_disabled=", disabled_chunks,
-                  " floor_height=", _floor_at(game.hero.global_position))
-
-          func _floor_at(p: Vector3) -> float:
-              if not is_instance_valid(terrain):
-                  return 0.04
-              return float(terrain.call("height_at", p.x, p.z))
-
-          func align_to_ground(hero: CharacterBody3D) -> void:
-              if not is_instance_valid(hero) or not is_instance_valid(terrain):
-                  return
-              var p: Vector3 = hero.global_position
-              # Hero-Origin sitzt an der Fusssohle; Original-Kapsel hat Unterkante
-              # bei ca. 0.025 ueber dem Origin. Keine Schwebebewegung der Kamera.
-              p.y = _floor_at(p) + 0.085
-              hero.global_position = p
-              hero.velocity.y = 0.0
-          LWOD_V31_MOTION
-          # Kollisionen neu erzeugter Chunks bereits bei der Erstellung deaktivieren;
-          # damit keine 0.5s-Zeitfenster fuer haengende Bewegung bestehen.
-          test "$(grep -Fxc '    collision.add_child(shape_node)' android/scripts/V27Terrain.gd)" -eq 1
-          sed -i '/^    collision.add_child(shape_node)$/a\    collision.collision_layer = 0' android/scripts/V27Terrain.gd
-          sed -i '/^    collision.add_child(shape_node)$/a\    collision.collision_mask = 0' android/scripts/V27Terrain.gd
-          grep -Fqx '    collision.collision_layer = 0' android/scripts/V27Terrain.gd
-          # Die Hauptbewegung soll nicht mit Schwerkraft durch die komplexe
-          # Grafikoberflaeche fallen. Horizontalkollisionen von Haeusern bleiben.
-          test "$(grep -Fxc '    if not hero.is_on_floor():' android/scripts/Main.gd)" -eq 1
-          awk '
-            $0 == "    if not hero.is_on_floor():" {
-              print "    var terrain_motion: Node = get_node_or_null(\"V31TerrainMotion\")"
-              print "    if terrain_motion != null:"
-              print "        terrain_motion.align_to_ground(hero)"
-              print "    elif not hero.is_on_floor():"
-              print "        hero.velocity.y -= GRAVITY * delta"
-              print "    else:"
-              print "        hero.velocity.y = -0.05"
-              replacing=1; count++; next
-            }
-            replacing && $0 == "    hero.move_and_slide()" {
-              print $0
-              print "    if terrain_motion != null:"
-              print "        terrain_motion.align_to_ground(hero)"
-              replacing=0; next
-            }
-            replacing {next}
-            {print}
-            END {if (count!=1 || replacing) exit 85}
-          ' android/scripts/Main.gd > "$RUNNER_TEMP/v31_main_a.gd"
-          mv "$RUNNER_TEMP/v31_main_a.gd" android/scripts/Main.gd
-          test "$(grep -Fxc '    repair_v30.setup(self)' android/scripts/Main.gd)" -eq 1
-          awk '
-            {print}
-            $0 == "    repair_v30.setup(self)" {
-              print "    var motion_v31 = load(\"res://scripts/V31TerrainMotion.gd\").new()"
-              print "    add_child(motion_v31)"
-              print "    motion_v31.setup(self)"
-              found++
-            }
-            END {if (found!=1) exit 86}
-          ' android/scripts/Main.gd > "$RUNNER_TEMP/v31_main_b.gd"
-          mv "$RUNNER_TEMP/v31_main_b.gd" android/scripts/Main.gd
-          sed -i 's@version/code=30@version/code=31@' android/export_presets.cfg
-          sed -i 's@version/name="3.0"@version/name="3.1"@' android/export_presets.cfg
-          grep -Fqx 'version/code=31' android/export_presets.cfg
-          grep -Fqx '    motion_v31.setup(self)' android/scripts/Main.gd
-          grep -Fq 'terrain_motion.align_to_ground(hero)' android/scripts/Main.gd
-          test -s android/scripts/V31TerrainMotion.gd
-          echo 'V31_TERRAIN_PATCH_OK: rechts Figur, links Kamera; Chunk-Kollisionskanten entfernt'
-      - name: V32 Touchbereiche verbindlich trennen
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p android/scripts android/tests
-          cat > android/scripts/V32TouchRouter.gd <<'LWOD_V32_TOUCH'
-          extends Control
-
-          # V32: One authoritative touch router. LEFT = CAMERA, RIGHT = HERO.
-          const RADIUS: float = 92.0
-          const CAMERA_YAW_SPEED: float = 2.35
-          const CAMERA_PITCH_SPEED: float = 1.55
-
-          var game: Node3D
-          var look: Node
-          var camera_id: int = -1
-          var hero_id: int = -1
-          var camera_origin: Vector2 = Vector2.ZERO
-          var hero_origin: Vector2 = Vector2.ZERO
-          var camera_axis: Vector2 = Vector2.ZERO
-          var hero_axis: Vector2 = Vector2.ZERO
-          var mouse_id: int = 90932
-
-          func setup(root: Node3D) -> void:
-              game = root
-              name = "V32_TOUCH_LINKS_KAMERA_RECHTS_FIGUR"
-              look = root.get_node_or_null("V27CameraWorldMap")
-              set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-              mouse_filter = Control.MOUSE_FILTER_IGNORE
-              # Older input scripts are disabled; only V32 receives gameplay touch events.
-              for old_name in ["LWOD_V29_STEUERUNG", "LWOD_V28_Dual_Stick"]:
-                  var old: Node = root.find_child(old_name, true, false)
-                  if old != null:
-                      old.set_process_input(false)
-                      old.set_process_unhandled_input(false)
-                      old.set_process(false)
-                      if old is Control:
-                          (old as Control).visible = false
-              if is_instance_valid(root.touch_overlay):
-                  root.touch_overlay.set_process_input(false)
-                  root.touch_overlay.visible = false
-              if look != null:
-                  look.set_process_input(false)
-                  look.set_process_unhandled_input(false)
-                  look.set("look_touch_id", -1)
-                  look.set("mouse_look", false)
-              game.set("joystick_axis", Vector2.ZERO)
-              set_process_input(true)
-              set_process(true)
-              print("V32_TOUCH_READY LEFT_CAMERA RIGHT_HERO")
-
-          func _playing() -> bool:
-              if game == null or int(game.get("state")) != 2:
-                  return false
-              if look != null and bool(look.get("map_open")):
-                  return false
-              return true
-
-          func _blocked_by_ui(pos: Vector2) -> bool:
-              # Buttons always win, even where they overlap the two control zones.
-              for node in game.find_children("*", "Button", true, false):
-                  var button: Button = node as Button
-                  if button != null and button.is_visible_in_tree() and not button.disabled:
-                      if button.get_global_rect().has_point(pos):
-                          return true
-              return false
-
-          func _begin_finger(id: int, pos: Vector2) -> void:
-              if not _playing() or _blocked_by_ui(pos):
-                  return
-              var viewport_width: float = get_viewport().get_visible_rect().size.x
-              if pos.x < viewport_width * 0.5:
-                  if camera_id == -1:
-                      camera_id = id
-                      camera_origin = pos
-                      camera_axis = Vector2.ZERO
-              else:
-                  if hero_id == -1:
-                      hero_id = id
-                      hero_origin = pos
-                      hero_axis = Vector2.ZERO
-                      _send_hero_axis()
-              queue_redraw()
-
-          func _drag_finger(id: int, pos: Vector2) -> void:
-              if id == camera_id:
-                  camera_axis = (pos - camera_origin).limit_length(RADIUS) / RADIUS
-              elif id == hero_id:
-                  hero_axis = (pos - hero_origin).limit_length(RADIUS) / RADIUS
-                  _send_hero_axis()
-              queue_redraw()
-
-          func _release_finger(id: int) -> void:
-              if id == camera_id:
-                  camera_id = -1
-                  camera_axis = Vector2.ZERO
-              if id == hero_id:
-                  hero_id = -1
-                  hero_axis = Vector2.ZERO
-                  _send_hero_axis()
-              queue_redraw()
-
-          func _send_hero_axis() -> void:
-              if game != null:
-                  game.set("joystick_axis", hero_axis)
-
-          func _input(event: InputEvent) -> void:
-              if event is InputEventScreenTouch:
-                  var e: InputEventScreenTouch = event as InputEventScreenTouch
-                  if e.pressed:
-                      _begin_finger(e.index, e.position)
-                  else:
-                      _release_finger(e.index)
-              elif event is InputEventScreenDrag:
-                  var d: InputEventScreenDrag = event as InputEventScreenDrag
-                  _drag_finger(d.index, d.position)
-              elif not OS.has_feature("mobile") and event is InputEventMouseButton:
-                  var mb: InputEventMouseButton = event as InputEventMouseButton
-                  if mb.button_index == MOUSE_BUTTON_LEFT:
-                      if mb.pressed:
-                          _begin_finger(mouse_id, mb.position)
-                      else:
-                          _release_finger(mouse_id)
-              elif not OS.has_feature("mobile") and event is InputEventMouseMotion:
-                  var mm: InputEventMouseMotion = event as InputEventMouseMotion
-                  if camera_id == mouse_id or hero_id == mouse_id:
-                      _drag_finger(mouse_id, mm.position)
-
-          func _process(delta: float) -> void:
-              if not _playing():
-                  if camera_id != -1 or hero_id != -1:
-                      camera_id = -1
-                      hero_id = -1
-                      camera_axis = Vector2.ZERO
-                      hero_axis = Vector2.ZERO
-                      _send_hero_axis()
-                      queue_redraw()
-                  return
-              if hero_id != -1:
-                  _send_hero_axis()
-              if camera_id != -1 and look != null:
-                  var yaw: float = float(look.get("yaw_offset"))
-                  var pitch: float = float(look.get("pitch"))
-                  look.set("yaw_offset", wrapf(yaw - camera_axis.x * CAMERA_YAW_SPEED * delta, -PI, PI))
-                  look.set("pitch", clampf(pitch + camera_axis.y * CAMERA_PITCH_SPEED * delta, -0.55, 1.08))
-
-          func _draw_stick(center: Vector2, axis: Vector2, txt: String, col: Color) -> void:
-              draw_circle(center, RADIUS, Color(0.035, 0.045, 0.09, 0.29))
-              draw_arc(center, RADIUS, 0.0, TAU, 48, col, 3.0)
-              var knob: Vector2 = center + axis * 64.0
-              draw_circle(knob, 30.0, Color(col.r, col.g, col.b, 0.35))
-              draw_arc(knob, 30.0, 0.0, TAU, 36, col, 3.0)
-              draw_string(ThemeDB.fallback_font, center + Vector2(-40.0, -105.0), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, col)
-
-          func _draw() -> void:
-              if camera_id != -1:
-                  _draw_stick(camera_origin, camera_axis, "KAMERA", Color("#d2acff"))
-              if hero_id != -1:
-                  _draw_stick(hero_origin, hero_axis, "FIGUR", Color("#ffdb93"))
-          LWOD_V32_TOUCH
-          cat > android/tests/V32TouchSmoke.gd <<'LWOD_V32_TEST'
-          extends SceneTree
-
-          func _initialize() -> void:
-              call_deferred("_run")
-
-          func _touch(ctl: Node, id: int, pos: Vector2, down: bool) -> void:
-              var e := InputEventScreenTouch.new()
-              e.index = id
-              e.position = pos
-              e.pressed = down
-              ctl._input(e)
-
-          func _drag(ctl: Node, id: int, pos: Vector2) -> void:
-              var e := InputEventScreenDrag.new()
-              e.index = id
-              e.position = pos
-              ctl._input(e)
-
-          func _run() -> void:
-              var packed := load("res://scenes/Main.tscn") as PackedScene
-              if packed == null:
-                  push_error("V32 TEST: Scene missing")
-                  quit(40)
-                  return
-              var game: Node3D = packed.instantiate() as Node3D
-              root.add_child(game)
-              for i in range(10):
-                  await process_frame
-              game.call("_on_new_game_pressed")
-              for i in range(10):
-                  await physics_frame
-              var ctl: Node = game.find_child("V32_TOUCH_LINKS_KAMERA_RECHTS_FIGUR", true, false)
-              var hero: CharacterBody3D = game.get("hero") as CharacterBody3D
-              var camera: Node = game.get_node_or_null("V27CameraWorldMap")
-              if ctl == null or hero == null or camera == null:
-                  push_error("V32 TEST: missing input/hero/camera")
-                  quit(41)
-                  return
-              var w: float = root.get_visible_rect().size.x
-              var h: float = root.get_visible_rect().size.y
-              var left := Vector2(w*0.22, h*0.70)
-              var right := Vector2(w*0.78, h*0.70)
-              # Left input: camera only, with no character axis.
-              var yaw0: float = float(camera.get("yaw_offset"))
-              var pos0: Vector3 = hero.global_position
-              _touch(ctl, 4, left, true)
-              _drag(ctl, 4, left+Vector2(70.0,0.0))
-              for i in range(15):
-                  await process_frame
-              var yaw_delta: float = absf(wrapf(float(camera.get("yaw_offset"))-yaw0,-PI,PI))
-              var left_hero_axis: Vector2 = game.get("joystick_axis")
-              _touch(ctl, 4, left, false)
-              print("V32_LEFT yaw_change=",yaw_delta," hero_axis=",left_hero_axis)
-              if yaw_delta < 0.01 or left_hero_axis.length() > 0.01:
-                  push_error("V32 TEST FAIL: left side is not camera-only")
-                  quit(42)
-                  return
-              # Right input: movement only, independent from camera yaw.
-              var yaw1: float = float(camera.get("yaw_offset"))
-              pos0 = hero.global_position
-              _touch(ctl, 6, right, true)
-              _drag(ctl, 6, right+Vector2(0.0,-90.0))
-              var right_axis: Vector2 = game.get("joystick_axis")
-              if right_axis.y > -0.85:
-                  push_error("V32 TEST FAIL: right half did not drive hero axis")
-                  quit(43)
-                  return
-              for i in range(76):
-                  await physics_frame
-              var moved := Vector2(hero.global_position.x-pos0.x,hero.global_position.z-pos0.z).length()
-              var yaw_right := absf(wrapf(float(camera.get("yaw_offset"))-yaw1,-PI,PI))
-              _touch(ctl, 6, right, false)
-              print("V32_RIGHT moved=",moved," camera_yaw_delta=",yaw_right)
-              if moved < 1.25 or yaw_right > 0.02:
-                  push_error("V32 TEST FAIL: right stick does not control hero exclusively")
-                  quit(44)
-                  return
-              # Two independent touch IDs must work concurrently.
-              var yaw2: float = float(camera.get("yaw_offset"))
-              _touch(ctl, 8, left, true)
-              _touch(ctl, 9, right, true)
-              _drag(ctl, 8, left + Vector2(-80.0, 0.0))
-              _drag(ctl, 9, right + Vector2(0.0, -85.0))
-              var both_axis: Vector2 = game.get("joystick_axis")
-              for i in range(12):
-                  await process_frame
-              var both_yaw: float = absf(wrapf(float(camera.get("yaw_offset"))-yaw2,-PI,PI))
-              _touch(ctl, 8, left, false)
-              _touch(ctl, 9, right, false)
-              var stopped: Vector2 = game.get("joystick_axis")
-              print("V32_MULTITOUCH movement_axis=",both_axis," camera_yaw=",both_yaw," stopped=",stopped)
-              if both_axis.y > -0.75 or both_yaw < 0.01 or stopped.length() > 0.01:
-                  push_error("V32 TEST FAIL: multitouch or release failed")
-                  quit(45)
-                  return
-              print("V32_TOUCH_TEST_OK: LEFT CAMERA | RIGHT HERO | MULTITOUCH")
-              quit(0)
-          LWOD_V32_TEST
-          # Bind V32 last in the initialization: it supersedes V7, V27, V28 and V29 controls.
-          test "$(grep -Fxc '    motion_v31.setup(self)' android/scripts/Main.gd)" -eq 1
-          awk '
-            {print}
-            $0 == "    motion_v31.setup(self)" {
-              print "    var v32_touch = load(\"res://scripts/V32TouchRouter.gd\").new()"
-              print "    play_hud_root.add_child(v32_touch)"
-              print "    v32_touch.setup(self)"
-              count++
-            }
-            END {if(count!=1) exit 93}
-          ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v32_main.gd"
-          mv "$RUNNER_TEMP/lwod_v32_main.gd" android/scripts/Main.gd
-          sed -i 's@version/code=31@version/code=32@' android/export_presets.cfg
-          sed -i 's@version/name="3.1"@version/name="3.2"@' android/export_presets.cfg
-          grep -Fqx 'version/code=32' android/export_presets.cfg
-          grep -Fqx '    v32_touch.setup(self)' android/scripts/Main.gd
-          # Ensure the route uses exclusive left/right ownership.
-          grep -Fq 'if pos.x < viewport_width * 0.5:' android/scripts/V32TouchRouter.gd
-          grep -Fq 'game.set("joystick_axis", hero_axis)' android/scripts/V32TouchRouter.gd
-          echo 'V32_TOUCH_PATCH_OK: LEFT=CAMERA RIGHT=HERO'
-      - name: V33 Blick in den Himmel und unabhängige Links-Rechts-Steuerung
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p android/scripts android/tests
-          cat > android/scripts/V33TouchCamera.gd <<'V33_TOUCH'
-          extends Control
-          
-          # Definitive split-screen controls. LEFT = camera yaw and pitch; RIGHT = movement.
-          # No other controller is allowed to modify joystick_axis or camera orientation.
-          const STICK_RADIUS: float = 94.0
-          const CAMERA_YAW_SPEED: float = 2.9
-          const CAMERA_PITCH_SPEED: float = 3.6
-          const MAX_UP: float = 1.43
-          const MAX_DOWN: float = -1.05
-          
-          var game: Node3D
-          var old_look: Node
-          var terrain: Node
-          var camera_id: int = -1
-          var move_id: int = -1
-          var camera_center: Vector2 = Vector2.ZERO
-          var move_center: Vector2 = Vector2.ZERO
-          var camera_axis: Vector2 = Vector2.ZERO
-          var move_axis: Vector2 = Vector2.ZERO
-          var camera_yaw: float = 0.0
-          var view_pitch: float = -0.31
-          var mouse_id: int = 93301
-          
-          func setup(root: Node3D) -> void:
-              game = root
-              name = "V33_LINKS_KAMERA_RECHTS_BEWEGUNG"
-              process_priority = 9000
-              process_physics_priority = 9000
-              set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-              mouse_filter = Control.MOUSE_FILTER_IGNORE
-              old_look = root.get_node_or_null("V27CameraWorldMap")
-              terrain = root.get_node_or_null("V27ContinuousTerrain")
-              if old_look != null:
-                  camera_yaw = float(old_look.get("yaw_offset"))
-                  old_look.set_physics_process(false)
-                  old_look.set_process_input(false)
-                  old_look.set_process_unhandled_input(false)
-                  old_look.set("look_touch_id", -1)
-                  old_look.set("mouse_look", false)
-              # Stop all earlier touch owners, including V32.
-              for nm in ["V32_TOUCH_LINKS_KAMERA_RECHTS_FIGUR", "LWOD_V29_STEUERUNG", "LWOD_V28_Dual_Stick"]:
-                  var previous: Node = root.find_child(nm, true, false)
-                  if previous != null and previous != self:
-                      previous.set_process_input(false)
-                      previous.set_process_unhandled_input(false)
-                      previous.set_process(false)
-                      previous.set_physics_process(false)
-                      if previous is Control:
-                          (previous as Control).hide()
-              if is_instance_valid(root.touch_overlay):
-                  root.touch_overlay.set_process_input(false)
-                  root.touch_overlay.set_process(false)
-                  root.touch_overlay.hide()
-              game.set("joystick_axis", Vector2.ZERO)
-              _sync_camera_yaw()
-              set_process_input(true)
-              set_physics_process(true)
-              set_process(true)
-              print("V33_READY: LEFT CAMERA RIGHT MOVEMENT; SKY_LOOK_ENABLED")
-          
-          func _playing() -> bool:
-              if not is_instance_valid(game) or int(game.get("state")) != 2:
-                  return false
-              if old_look != null and bool(old_look.get("map_open")):
-                  return false
-              return true
-          
-          func _on_ui(pos: Vector2) -> bool:
-              # Touching map, backpack or dialog buttons must not activate the joysticks.
-              for item in game.find_children("*", "Button", true, false):
-                  var b: Button = item as Button
-                  if b != null and b.is_visible_in_tree() and not b.disabled:
-                      if b.get_global_rect().has_point(pos):
-                          return true
-              return false
-          
-          func _start(id: int, pos: Vector2) -> void:
-              if not _playing() or _on_ui(pos):
-                  return
-              var width: float = get_viewport().get_visible_rect().size.x
-              if pos.x < width * 0.5:
-                  if camera_id == -1:
-                      camera_id = id
-                      camera_center = pos
-                      camera_axis = Vector2.ZERO
-              else:
-                  if move_id == -1:
-                      move_id = id
-                      move_center = pos
-                      move_axis = Vector2.ZERO
-                      _send_movement()
-              queue_redraw()
-          
-          func _drag(id: int, pos: Vector2) -> void:
-              if id == camera_id:
-                  camera_axis = (pos-camera_center).limit_length(STICK_RADIUS)/STICK_RADIUS
-              elif id == move_id:
-                  move_axis = (pos-move_center).limit_length(STICK_RADIUS)/STICK_RADIUS
-                  _send_movement()
-              queue_redraw()
-          
-          func _release(id: int) -> void:
-              if id == camera_id:
-                  camera_id = -1
-                  camera_axis = Vector2.ZERO
-              if id == move_id:
-                  move_id = -1
-                  move_axis = Vector2.ZERO
-                  _send_movement()
-              queue_redraw()
-          
-          func _send_movement() -> void:
-              if is_instance_valid(game):
-                  game.set("joystick_axis", move_axis)
-          
-          func _sync_camera_yaw() -> void:
-              # Main.gd movement is relative to this value, but right stick NEVER changes it.
-              if old_look != null:
-                  old_look.set("yaw_offset", camera_yaw)
-          
-          func _input(event: InputEvent) -> void:
-              if event is InputEventScreenTouch:
-                  var touch: InputEventScreenTouch = event as InputEventScreenTouch
-                  if touch.pressed:
-                      _start(touch.index, touch.position)
-                  else:
-                      _release(touch.index)
-              elif event is InputEventScreenDrag:
-                  var drag: InputEventScreenDrag = event as InputEventScreenDrag
-                  _drag(drag.index, drag.position)
-              elif not OS.has_feature("mobile") and event is InputEventMouseButton:
-                  var mb: InputEventMouseButton = event as InputEventMouseButton
-                  if mb.button_index == MOUSE_BUTTON_LEFT:
-                      if mb.pressed:
-                          _start(mouse_id, mb.position)
-                      else:
-                          _release(mouse_id)
-              elif not OS.has_feature("mobile") and event is InputEventMouseMotion:
-                  var motion: InputEventMouseMotion = event as InputEventMouseMotion
-                  if camera_id == mouse_id or move_id == mouse_id:
-                      _drag(mouse_id, motion.position)
-          
-          func _physics_process(delta: float) -> void:
-       
+    - name: Repository laden
+      uses: actions/checkout@v4
+    - name: Godot und Android SDK vorbereiten
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/.config/godot" "$HOME/.local/share/godot/export_templates"
+        cp -a /root/.config/godot/. "$HOME/.config/godot/"
+        cp -a /root/.local/share/godot/export_templates/. "$HOME/.local/share/godot/export_templates/"
+        test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_debug.apk"
+        test -x "$JAVA_HOME/bin/java"
+        test -s /root/debug.keystore
+        sdkmanager --sdk_root="$ANDROID_HOME" 'platforms;android-35' 'build-tools;35.0.1'
+        test -d "$ANDROID_HOME/platforms/android-35"
+    - name: V23-Quelle herunterladen und richtige Pruefsumme pruefen
+      shell: bash
+      run: |
+        set -euo pipefail
+        wget -q --tries=3 --timeout=45 \
+          -O "$RUNNER_TEMP/lwod_v23.yml" \
+          'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/2b1332ef7b51655427065cd8ec8371af1e7773dc/.github/workflows/blank-ps1.yml'
+        test -s "$RUNNER_TEMP/lwod_v23.yml"
+        source_hash="$(git hash-object "$RUNNER_TEMP/lwod_v23.yml")"
+        if [ "$source_hash" != "f2417eca21fc0e9ac53a9e678b139a68e26ccdc8" ]; then
+          echo "::error::V23-Quellversion passt nicht. Erwartet: f2417eca21fc0e9ac53a9e678b139a68e26ccdc8, erhalten: $source_hash"
+          exit 22
+        fi
+        echo "V23-Quelle korrekt: $source_hash"
+        cat > "$RUNNER_TEMP/replay_v23.sh" <<'REPLAY_V23'
+        #!/bin/bash
+        set -euo pipefail
+        name="$1"
+        awk -v name="$name" '
+          $0 == "    - name: " name { found=1; next }
+          found && $0 == "      run: |" { active=1; next }
+          active && /^    - name:/ { exit }
+          active && /^        / { sub(/^        /, ""); print; next }
+          active && /^$/ { print ""; next }
+          END { if (active != 1) exit 57 }
+        ' "$RUNNER_TEMP/lwod_v23.yml" > "$RUNNER_TEMP/v23_step.sh"
+        test -s "$RUNNER_TEMP/v23_step.sh"
+        bash -n "$RUNNER_TEMP/v23_step.sh"
+        echo "V23 Basis: $name"
+        bash "$RUNNER_TEMP/v23_step.sh"
+        REPLAY_V23
+        chmod +x "$RUNNER_TEMP/replay_v23.sh"
+    - name: FFmpeg statisch ohne apt und ohne xz bereitstellen
+      shell: bash
+      run: |
+        set -euo pipefail
+        if command -v ffmpeg >/dev/null 2>&1; then
+          echo 'FFmpeg ist bereits im Container vorhanden'
+        else
+          echo 'Statische FFmpeg-Datei als gzip-Archiv von GitHub laden'
+          command -v gzip >/dev/null
+          command -v sha256sum >/dev/null
+          wget -q --show-progress --https-only --tries=3 --timeout=90 \
+            -O "$RUNNER_TEMP/ffmpeg-linux-x64.gz" \
+            'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz'
+          test -s "$RUNNER_TEMP/ffmpeg-linux-x64.gz"
+          printf '%s  %s\n' \
+            'bfe8a8fc511530457b528c48d77b5737527b504a3797a9bc4866aeca69c2dffa' \
+            "$RUNNER_TEMP/ffmpeg-linux-x64.gz" | sha256sum -c -
+          gzip -dc "$RUNNER_TEMP/ffmpeg-linux-x64.gz" > /usr/local/bin/ffmpeg
+          chmod 0755 /usr/local/bin/ffmpeg
+        fi
+        ffmpeg -hide_banner -version | head -n 1
+        test -x "$(command -v ffmpeg)"
+    - name: V23-Spielwelt und Menues vollstaendig wiederherstellen
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat <<'LWOD_STEP_5_B64' | base64 -d | gzip -dc > "$RUNNER_TEMP/lwod_fix33_step_5.sh"
+        H4sIAAAAAAAC/62V3W4TMRCF7/MUo4KUGzZ/K7XAZUQrJEgISWgvK2c9WY/itRf/NC0P1hfoizFe
+        4AZB6y6stHthj745Hp+j9RigwGihpRb3gvTgBaxcxD2aV2B3ILRG2KF5uA9UBzSwqZSjEBDIgEQH
+        NbZkTNq5nJXFOxGQ4MY6TVijGQ1qhy0UF19vYQj8FGBEg29hjkeByjHmcvq6+BwxtdmjD6DQRcY5
+        LSSaIZy8XH9ZLs/X19vzxWqsj1Ze38zK0V2jT/7GZiJsWkJ9RB12wpNPgnbokML/QEI0EhZoInpA
+        50PS3g/7yVFNRmgywVkoz06nZ9BQgK01PN6AtSNW3Y+9Ug/3hm6L9yK2oUlqO90X0RwCWcP3tUMl
+        9L9MZGFld2+J+1EY6Ssl9jwe5FkbVE1v9Bv2h6sPVmvyrBU+8LoTjI/hW7e1t643fTb5yetInrSy
+        EZOh0zF4Wl4KrNiFPelTuGKPHETy9oIMNaKFrahhKSr1wzrrWB28qA6t9ZSuomejEsrZZDLp2kF5
+        ChtCqaPh1AESfzmbvzrBPIbwVCNOivqtgFtrcdeVeHUCw9zU5rCeSOmzEX9OZQ4mN4U5rGekLveE
+        GSnLQ+WmKouWnaI8Wo/U5IF7pGQQkqMLDzxsZ0mOfeWoDX7MMq/4zyZHtXykppwnlfw+VrYQZNL+
+        d6GUfSh/BwAA
+        LWOD_STEP_5_B64
+        bash -n "$RUNNER_TEMP/lwod_fix33_step_5.sh"
+        bash "$RUNNER_TEMP/lwod_fix33_step_5.sh"
+    - name: V24 Seen Fluesse Hoehlen und regionale Vegetation
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat <<'LWOD_STEP_6_B64' | base64 -d | gzip -dc > "$RUNNER_TEMP/lwod_fix33_step_6.sh"
+        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
+        LWOD_STEP_6_B64
+        bash -n "$RUNNER_TEMP/lwod_fix33_step_6.sh"
+        bash "$RUNNER_TEMP/lwod_fix33_step_6.sh"
+    - name: V25 Hoehenprofile Vulkan Eis Wueste Berge und Mammutwald
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat <<'LWOD_STEP_7_B64' | base64 -d | gzip -dc > "$RUNNER_TEMP/lwod_fix33_step_7.sh"
+        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
+        LWOD_STEP_7_B64
+        bash -n "$RUNNER_TEMP/lwod_fix33_step_7.sh"
+        bash "$RUNNER_TEMP/lwod_fix33_step_7.sh"
+    - name: V26 Regionen hoeher Himmel Wolken Sonne Mond und klickbare Weltkarte
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat <<'LWOD_STEP_8_B64' | base64 -d | gzip -dc > "$RUNNER_TEMP/lwod_fix33_step_8.sh"
+        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
+        HsizQyoe1JhMoCPFwXX/CwvecDs1LgAA
+        LWOD_STEP_8_B64
+        bash -n "$RUNNER_TEMP/lwod_fix33_step_8.sh"
+        bash "$RUNNER_TEMP/lwod_fix33_step_8.sh"
+    - name: V27 natuerliche Huegellandschaft Weltkarte und freie Touchkamera
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat <<'LWOD_STEP_9_B64' | base64 -d | gzip -dc > "$RUNNER_TEMP/lwod_fix33_step_9.sh"
+        H4sIAAAAAAAC/708aXfbOJLf/SuwyvSLZFOMSIo6vJ1+48RK4m0fWdtJdiaTx8cDlDimSA1J+eqd
+        /75VAEgCJGW759h+M7EEVBWuulFQTgsypNuUbKINDd0o3lvfBFFGhhviJkGWRsGb3M+iTZHv+W5B
+        fmm2vvlqTq9plrlRoi8D8vPPr6HBwcbF5eXRyfnrPXpf0CTIyXkaUOt4b+8Vgd5D8rjN3fWaJiuX
+        JksAoLlGPLqkK8/NaE4+pXSFHbGLfWQdFeT9apvcDK+KjLrrKFnqQOkoLihxt+GS5rR4hM9fTRtm
+        NBl+jt2CulsvTql/Q8kdzQKaEJoUIc2SQt/z0yQvyOL44+KQhHEKK3tLDHtujfSR6Hv/6cv5r1Ln
+        3Ky6LhdXF6dfrk8uzg9JlLBes+w6Oj75clU2m3t7t25GvChd0/yQHME2PUDz9z0C//3WS9w17R2S
+        3tdtfOMmMexsTyO9TZpD41fqF2lm9mfWCOakkeF0hh8GAJC5QbRFGNPgfT0/jdMMGt7j337v1XRq
+        T8Zhb/B3rTHSIsozuozSpD3QcDbl1Kbz9kDmjoECj9LQ7hjo25bmcOxrSrOONU1sRo6PqI403jXS
+        zDemQcdIn1J/taRelC1px6LmYouGfB/VsSY7xpqN58bc7RjrDDh2W9y5ccdBDcvTMIyOoawdQ1nh
+        1LBHXcvagizE3TxhipMajttHZcx3jDSfeeOpz0b6wdlyCUMdlmKJDWkcOHdpFge8lbUlaZRTJ3Zh
+        ew/JBzcvzrHhNCrk7nztxnFXt48iC5x/HPkFcJ2bIfv/9nfet80yEEjHp4gr1hZBf/mxP2f/afzP
+        gCGtQayzyI2dZZZuE5joVQFb5GbBmegQS4ndW9cB4J0AoFg2OQ1qAUfJx46c6RfHj1P/Ru3dC7eJ
+        T0DRbDf9LE2Lcu80Im2axnaxlHjekt88OCF1i21Wtg3I8BdyC2r0kB07ngQMgkTZ9+ogoJH9Za0J
+        h+qB+nyfJkWUbNNtLnRvj0PUhwWAynHoCb3rD5pQek4pDmJOjZE5bvWGGf3blib+A9+BkTlpgfDP
+        xcOmPeL1nz4vnKuTs8+ni/9xrs4uLq4/SeiMZ56dJYNSZmm3epuznLcg/oFJNhgN8NqMJM22Aa7f
+        0qyg9w4TQmcLg7u548YeDVKgVGRb2okF/y5XCc1ztpK51Qnkb+PYWQMTAdA7N6fSfN5/OT11jk+u
+        jt6dLo4Z8iuy4DaPkmSbkSACcwk2M9Fkq5mQS2YUhmdANY6BY5PIXxUM+moT0fiOxmAzkV4USvxN
+        /uMtUAXpZV0l4/I+OLPC2WSpD6vph26c08EOqH4PZCygqOcacCiOmyyCHUTJkAyoRGCJBFh3r0YM
+        04zA4a7BDCsEKgCxlCh3IrDabuJT59aNo6CPWAMVjsFCsw5MtqUOcBsVhw4UZNFubwcz/qhI8lJX
+        wORlFDF9tvtsjr0BcStX6cmZcrqNufLG9kwdH5RagTILavE2yrew0WUXV3h9ZEreIp9c3Qr7mMBc
+        T79dHHMH7l2KLpW7zQkwuwecSRP4zv02OJkVbAhMuCjIO+6EJQTl6Fc0awmcFdem7BSdOxotV0V/
+        U5kBDU4uoPfMj2K6kulhvlbcVDyPhlXh/PCd4f2oAINIbFqYuQy4VukbveosUnbw35md/TEgbziQ
+        aBS29Qffhwz0f5YQQx+RIcnXcGYr8HQ2/ZE+GYPx1w2YfGvUcrkrtlAHSN+LiWjkUXzqWueGHFb2
+        sH+vPQ6qHmkhsjoGfnL4dzNQEcImAleNuxEeaoS1ex/2mVsxgWUfkITskzn7FMInS7c51gM5eNs4
+        UW00AIj+ZMSgLQv+7JNkN7jBwC0+jDF7Dtxk4KbBwOfPQVsM2rD4ZKaj5+DHnDoHN56du83Bpx3g
+        r8gxzZjmRTOSFR7NKKhYkFcaeQXJ3SQsqujnP1GocpqtwGCQuygLSADIXNxAE8fRUq9PNUvXIMFA
+        UmbsGCKnYtUvp7r/VmZUw7DxJMcWO9CagMLe5YkDSz+UzMuNWSfvaoKzZVZmjudLWNkXTipMvQpg
+        jHkwHfWeYPenuNcHKB82Idv0K5fecoPpvAeush+76w2uzT5I9uFfjXCvHfxojs2MB1qOzIX4s18a
+        qugRlKmkbqVBStXz47vwun9UwzRYJBpoOFo9GKh2vnMQWbOD6RygXIVneLZnSKvoc+QhQx284Uc7
+        Yv+fDZQD9cUhOhRCaYe7J/0iTcH1vtpmoevTa/giXFmnPmH+vT7nNIuWUVIp6oYjyz1relufVq3x
+        BOWKJJ8eToH5Cmzn+hWPldACWEOqAwnFDYJyFXwqVoky5FPUYSREqsYr2x8GJUNDgHBDHRaj9H1u
+        bGBnH2urw+1wvTS00MjGvF1y/7BDL/1zbgJDCoP+hP/rkZ/Id/9e8x9/1MBgaSK0DFW8Y/W5zfHv
+        B/ss98DOUbQ9ijY+Gq7dX0VxwMKQWkj4AmU5a5IknfR42IN4EitIq8sLHXRTlPTPwKzrny9Pzk6u
+        T74unOvLk6Pzj6eLK5kM3TgoKzUHsIEqk1rnTiRpe6zFTeo/VP25+2eAyincj+qxS1ZAS8UtOmxF
+        Ncc2qlGj3qMW3w362B7loR7l8alRHqVRHneP8oocbcM7F3g8J0vw8MEjp2A/jsFyoDsFogihAknD
+        EPwu8quboB//eBflPjAfz5XlukJQEf280O5H2uNI45MfPAtpvAzSeDFN498zugoJrLuE/cnQ+U3S
+        bF37vXgSBQ+eHXRXRXSBLI5OeqH76RqoS9C3Eb1DIUGQE+GMK1oAASot8JFi8ob26p41Jy0PKnWW
+        UV4Ky8kiFt01Ir9aedQKAHElS5qCd5CjVjlk8WoR+eA2PCiTrGCUmWKS9deyp1eL88rd4MbBdA6Z
+        deYAV9isUK0BdfaxsU5dxB9FFuFXh8G0JlQvqyY36Fp1hSJCmE0MSssRYVRACzeCY0YcjaldxRCy
+        JIvQ/zvxqtROaRZkq6CaO5+C5GWVQazzV/1a+x6An1Gq4H6lgqXWyhlQ/AVOGt3Qn8FJsexa1/G1
+        1HYpWeL5XALDpevz7Rrcy4+c69NMtlLJskylYCznejlMbn88nVvWgf+4bxrW2DiYTS2j2xOyBmpk
+        e1+rMWmpOAjAByF4S3xxCtJjG+nxWaRu37Fryzblbtkj1TL4PGNGFbqK06o4K8ogTFVkoFCd3Hdj
+        ybRV03b4Do30Ofh2do35ivCUseduIV7dJiDbd9Rf5TT2cHh0FDIWFnug1QsWIuSE6ymRevFcul1T
+        XZlLjqmNpxSRDMjkj0nvQ4zBccaMuApbwelFunF4vIv5Nt3al9bdAe6lRQHxQ4VhPYshvF0gDq7q
+        M7BIFrRfTpdrkASkP1egSo1aYai9HS7W/bDpEfH5HBimbsuz0R6Hna5SubN3aRoIJbs7KYj/IaDO
+        M3/cxZWinEkwnlt2b9BYVIclQCq18KvKEJHU1Ndfu2W20lhZepc8yz8KdMVEVxvgWNrBQkzGKlC9
+        4ggelHedcwOjYgwROb8Apc0fhrkTNkqWCDFtA5RsVEN3wEjMpDLXQcVcEEX2jbE+OuCc89fBPnwZ
+        KFxFRh07prM+iUsN3bCHFZGRbkwgFphq7eb2acXUDV/El/gfAu/iTXNmU8vrDdQAdOwBw2IAKk3D
+        tLvW1MXFOJ4C2jTriFkFZ50pS9X+viLHESUf4i3NcwqsH4OvRwJQjjdc20c0iyPmD/MrVo/lUHhW
+        EvzkO+qh35OR/9668Icr2fLm6LmMfwm3awPD0A5Ms9cABoc1R8fFoYnrxcwUV7cBLSCF2nRm0ieo
+        0Wz54Ky3cRFtYlg2096mCg1OVQBSsOPu4OrT0fHJ+Ufn7OJ44Xw5x6/iDqEi8LtuHrj9YYmp2jUS
+        mZLRD5FqrdwMN1vvdjSgUb6Js+wq0AK0wb6pj+yG2dsdy/6OeLbDBTJHHfo0kEJBEf8N9lklQQvS
+        aEEeGDtgNyN549hOVrrGBA8478OMBloOy8APg/2gg4bxe2kYLRouSGWeyw7YsITXSgptPXRXL3RW
+        aURxWnZ7DCS/GQ35WPt3LQCPAxzsBPAZgLGbQsABdlNw3XqNVt/V77XaG8Rvrv6AHrtps0/tGXoy
+        uqeg4zevQve60H1fRvcVdPzmV+h+F3oQyOiBgo7fggo9aKIjh98ih393Xc3zNN/Hf4MAPvxoX4Tl
+        hZx5u1VkakegXZkmUCPPeh0IVLt1agxe93fZFqGkKsjarGBXZVXEbRes2gdH3gPlgLLI7h1V2wKR
+        Bb+W55d6JOUFE+CnZGnZuDMgA+VWSp4F9CtEfRmnHky89B6kKBKGOJRqHzBAA6kB5Q+w+v0b7oMO
+        NLX9sWyvAkhGCKYnV1dgzRZEFQXhq+6atAL+llGp5nbnJkyh/vb3va5kHMLq90Ne+aTxbwf8Gyi3
+        RhLvsYH3oOA9dOGJhUG0GvbrJB5fN/mF1XDh4cj9j43+Nh+3wsHqZjFQj+Feix5VgcHt+B4FP2TT
+        Lc0T95mXvegrN+9HQcd1Mu8XROQstDQc264At0tQu6EPIFKHe42xcDrdI9WjtC+EVRgd5DanSKHK
+        jIj734DGhSvf6tQCIipo8CKMQZUcWDlQrevwl/otI1BVk320MmIMMBrjwZNSiT4dxRHNTvaWi3pa
+        E1Y6f0EPQ8q0yJ1vZTtdapLBnlrwuMcuykPy+qeckJ/yvySvyevpbEJHI8P2wyl1vfHMMGzDt8aj
+        qW/Ng9nYnI2nlm9PQxoEU2tqe545Dr3Qn7rj0ZzOxyaQeLLs8jX5X8zAmfYk367J0CfD3cWa3/A2
+        5MzdqNWa3y4uT4/Pjj7X5ZpYYpSlMdZrXt24eDZYmIk1GpkXLSn5SHN3XdyAS0GFR30T0wjOk9jm
+        6N4ajYa/sr5oTZZocsHx/uwmNC5rL9mITqMCczIalXVYIivH3OqO2skiKmLaOxS1k1WNnFw2qbGa
+        Sbk6rlkwWXrX7tyeWqZUhVdSX0Q51r60yLNiSQ0rJRXyZjf5gNIwnHSQ51WS7clP7JGGIyjExzuI
+        z71gEnQQ7yqMVOoiNVYUqYwx6R5jPpp7rtExRkdBpFIPqbFiSGUIq3sIc267lt+1jHYhpFwHqbEi
+        SHmEZgVktQjPm01nMMLej+7yR7n0cXetX55umevwgjK+soSPo/BirhSLwcIoLigPFpmQ6WcXX64W
+        zoeTU1AizsnH84vLhchZ47VQAH5QksCi+1yPZzTIXJH2l1v6tfpO0U/gF5+SL8Kva8XnOoW9rSVQ
+        uh2vsMH76NfSiuFWfYtdX448Q+PhGRoiO18e7XYfFw6e6y3/UBUhOHyhLV+Ng5OfCRNxtAscD1qw
+        0KPTKiAp2DrY10v4xxQXyab+58XlhYboA61KfBiTwAYRLss5TimrkNtigj4HN5MGLNEAqm6L13Gn
+        wK7Q7IZFHsYuxRSEXll1yXcyzIaDJPlHs45Q81aOg228QGBmkrs94BUZ+tQSwdYjhlqW0RFqpLG4
+        zOErC6Yzu5XomZrz6QTEEfYfbPGgO2JTb5nvB28MONfy4MpZvJmVbY3Ao7n7rlbS4xQYtQNgEI1j
+        I6EDVjkBcWdcHsQVpcmbD/EWQlTMnTObA/FHBM4smKxtsiT9DMwSWdJHPLKEFhq5QTtFEhAcUt15
+        DfSaJfwo82PaF1JUKbQJ18DDqc2qrgfaOkpCMVkxR8yHjaxZxTbWZBq4o5JtniDOK7q5/t1N2ZzU
+        DDmd+V7Q676pMYxGBmUj3dUMLTb/gypVMTVlv4aBS7c0BjNqBzWbRTiVKfDa2JbxsEjxl1GbZWM3
+        L5zdww+N5gQUxCcngrhdU6n2OoZzbu40n4/GqcNWN7o399oGm6sTDOamNwVBYBVRZsWNeByjyUCr
+        CyTxDDJ2BornomysL+djxMhZWXaoQHJr1kwXZVI14n4Hk7SU7J6yH4L3fI0TAXVh2mKlWV27BFrF
+        HjyN2UJqwoNzHCXL/vWKrunxOx0C7Nhz/RsnTPEy9aDc7THKEyc5nKBNuOJ4QJjb/x8D7dPF5cmf
+        L86vj06do1OwjWeL82vndPHhWhsammFrdYo0tIOwVtFfwWONkgBUAPhw4LDiNdsVKuotvjdihatf
+        TYsItZBU9c3canfW8mbptqA5FuBuaVmaX1YgY09PuZhUoKOcu7CHreQLA2N8I8G3Y8aGiDNgUZU2
+        NDpizE4hYFjfox8V24uGA+NHzfKB5/mzccnyhm7LLG8qPF9lXGkBp8VuYbp2R+pWt6iNt3ufCry1
+        gvW3cNprZxe2mw5ZQxotceti9GKjWbop85blm73BDiQ38xGjLL67PvqiGZKqnlmBCY4nODtWyZyf
+        RQIo34Q0ikn/NkpjWNeAuDfF1kWTRLMCXBh/xZ6+4Z0Guw4ubynKOFiwKcvw1OmpTuZdbV6ekqoM
+        QccelrK72mCacaM/DgbNbL18R14PlKVYkZIm+oMCD2d752ZBV4Y5Bg9sKJLM8LnBcxGvSqmQBCH9
+        QSs/3TdmlmUpq+D5DKqIBgKRsVv/++ZAYO2j36FtSnL7M2Z0Aro/aTYPy+YfTW2JJ0/R8Y0fliks
+        BQeu5SucBWHYa6pMZKKNZshMZEkcOKYmImmVVn8FIQhsW+rha46rLQ2YNwqfv7GndwTk/ibXyAX7
+        An7WqsglH+dJBa06YlglOzRMzbQGWu+897RCNg0+Zf3bp5PrxeCfGpCrnaEBdqF39W8d15DMug2j
+        fft/WOXQnKmDXvyjg74shKFTfzIf4d0tZrtBvY2q1FWZ/enKXVnBxA/s0TSwvZE1HnuuTV3f9Txz
+        NDdnk8CYm7ZvhXNj4rqBaczD8WREAzqbW9Z8FJozvzt3JWWhfk/y6j0ok8xtZa/eH50tLo+U9BWP
+        4l+RC68UBVLWRr6FKAHJaFxgRK8oxWel9hQcBvQb8iLyb/CdMV4zn0VJNIShSUrDEOIIwqKITZZu
+        0ow9Q0EtTPCC+V0UY/QXZWtUhnTjAiEKYhnzdJn+fPpBKk6UWm7NifQtTtMbp0i3/sqBOFi8OB4a
+        /JkkSzMghHrHwTofgGXSMAQ72n79uIkKf6Vctpr8sSbbMad82FJDTHVLPMzcOOmGJh3jYVfsPmCR
+        3Hs3uXXzU/xSdcHxUsQrE45lO5Y21q27EzL0foOFlsrTVQ2iuztH2UH+MPN3PcMs8zfqCLwGnZPG
+        5wj1QDwZYk7EC7VyrNbjTbaXpQT0xOsqlm93NqsHMPrwF1+tRQVmPK3ZCJV94oIvgNzpRTmY0wh9
+        WM7HwzdVFJvjwxJwZ4F5lXdf9T5XD8J4RsnBiUIgEQFEX3r+VU2j+QzshY/DxMy+CZFLvdogXRUQ
+        eGdMtGQB1ESauJaTXl0K0jXZVgqI7fwzF3NIYYNp6IqzYIcBkfupIl2F/fwhXsl90tNH1tv98pF1
+        6StwCqSqYfZWcVsU+PTsHfsrj4irEd18RA6ivLXkSK0R0ScWG4PhJgSDKbrHNYq+ybAuhvngTg2p
+        XCJVzzFVDJDzMuXYGAIiPrBpWLsiu9AdJEp8UFFLcN6QBTvh8TVHEW1Ahu4LXo2M9woSGwh9m/Qa
+        hUEyT6u8UCkczLDWGkd5risg9BJuPKpUgFSRVMHVaHxIKXerUuXd7EULKMpVmuXwNxD6FgUK39z2
+        S9zPl4urxbXzAatnLhfvr1t0XpIvvrq++NxYlboCTmsgV3VXBd1pho6DWsmNRdz/zPw5CbUgCmNH
+        Gx1bg/1r4b+zqQz/u5cqtkipGi8LxpktY5LK3H2Uy3qJXE758pyYhsIATtqdRbrhfWO73ZmJgsWR
+        Ph+3e3lpLO+27d2TZkjyA5qHmPIKPvjwLr3/ELvK8WCz7i1b9WaGYdim21OgID6gWQsS4vs5/hKE
+        BInHLaDvoqBYOSDjfasJ4adZAhA8X8NAjLGyo7CoAj1fh+F46X1VodHvca2qsZ56uSvqBpigwBWf
+        up5yTGWfXqqG0z8dXx6RIflwdPnu5OOCfFucXv96dHm96KnwrcJfs2+ONMNskK2ni945e4Ajzbdq
+        62Hg01glP7qSUi217InIW4IP2vFZd374ZofT2xvwhTaNTEmkzZ2d3RV/dvaWDGrs6K9YtAXAxb0c
+        Hd/hdvbz4W1zR3c5/nAngWoGQ3ssQJqbXKKom6yjFWKJpe2mp6HW5i8FpbcwcZoztuIWVX4Bgz0V
+        U/15C14MuCKPW5Fi6UlA6imU26T08T3o7Gruv9LZ2nzeq+78kOW829180OF41tXZ3nalu95zQ6Ud
+        pj6ItajvLNXvh4v3X66c84vzhQT5rI1vHiJDaxk34SkJs17T6LLnGFuwx79F9bVJ7hZcYC/mD6ck
+        CCVO4iFSfROLnVWwIpyuajhMqlVS3fK/KlbsvoL13YRRd7BgXvppA7Y2jJEOX1jQgk1VdNXwa6WJ
+        M+Mhp+vQ68P5YXjaH+j8K9shnjAY6NWTw1cQ8vIH6TwWZu46mGx9OvqJ/6LDQBNd3GMPwYNnoe5/
+        pQ/ckw8Bf8V+WkSX73M3+j0vqRmx3dywK9oc/t3HC0xTND6oMA8M5oHBTKblhkbJZlv06S1NIPg7
+        wS8L/NyOAxgIJpJroCvGIdfIBGpSlBW2cQR3B4Kcry5K1mczbXAWshZrb5x9/di34Xg3ObPQ2a9X
+        VDA0FjVe6rACDAdUcwBPEhdsz2ju3KHjzF2qGwRMvXxyjxBF3iJE2DHBqg6xzc4sJmUJYurwXEOf
+        EcoouD/RrdAduyZ/hrLM9bw6e7pj6hKCPHdwmVibU82fe5/vvlxfX5yzRFyrLrHShu1rCEXFNJii
+        9lLUOwUK8vwMpVrmn9yPs5T93om8PonM7zqK/q4t5GMMpGMSwto4Sl5F2P2bAXU6Ci+NMncT9uum
+        IUNlKWGIH2xt+PlE+3wijAzmqup6E/b1gMPzu6qxqQ1H+tjGKhOzro1p5DaeKHF8mXJulQVXjSJr
+        xt7PPpeZQALSrwRVRHc8NLXYc8X29c1B9RqJVdfY7DJB/okALyoc2F/50aNyN3NQb379KyNwug7m
+        seUqc7yjqcjxah68qqmbJC8/zaJHcCjcWKoSUjOK+4jLjrBGC2geZfgbbfWS+SYcVBPar0krK8fJ
+        cWr7jYGwttSuN+WVSFWV+V8wffyHVzDVhiUiCeEVaOz+eBXh8LyAJCMfQFjvQJCqK7kyK9h5/1b+
+        Yp16oy9QhD9bVe33NLF4LN4Xn+SLtrLtofx1nqpB4+McGNXDrOadNpN9fju7csHho8UqhXDF8WPq
+        ZrhFvUb1COZ9Gr+2xNH5pCVETTxZFrNR7nqRCitUZvevDVMoENjLZEwy1a+D0KSItcm/18QH4m99
+        TaletyYkWKV+nWfqY6xtkEIEXvTeuhaVxLbzdvQ5IFKV3/OiKjEnXtWDBU1M5ewbys/APEe0c/W/
+        wOqNevEtGszeuOVL8lZ1t/O07lMc4f4zmlA6UMWV/xd51c2bnq6rKt8IPZfOxsHUm8+mRjC2Dc8Y
+        uxPLmITG2J/Z1AvCseX5I9d05xbeZfmmObKwNNu0zWn3VZV859RxV1XQvCC9P/SXGd2Q4Yd7n7xm
+        2VmR/Hcw1cuvLXIah4PXrWutM17DPeiRIf0bMfbcuxvyGvbjN7ZCfHPxhxHue+8psj3yW52I56Dy
+        D1zcmtMyLfGXdl6iLiT/S5mX6DWp1bGcRLMNJnVK02te0mji0f6taWvKktoEpcsnxhpPLkQ+qpcs
+        RSXchlT7n1yQtPDOJQVpQg8O4CMe6OL8mPyGQtHHZhQCYwAUo4JMpgCwk0dA3nt/uPxyfr64dK4X
+        Z5/fxHdpgEPCFBlAb299+xzILuJ7GF8MI/I6/+MtzfA26Y0POuStOWl8n/6xniBsA4SXIi2c6364
+        7CCDd19ve6Y+6bWapr2niQmp+ts9ed2YxEvR/mXnuPNU9qi/Sslrdu8lREkjX9M49oDH+BUG+g4s
+        mLzhzgb4D0vqudvi9d7/AXhvY6+BWwAA
+        LWOD_STEP_9_B64
+        bash -n "$RUNNER_TEMP/lwod_fix33_step_9.sh"
+        bash "$RUNNER_TEMP/lwod_fix33_step_9.sh"
+    - name: V28 Touch-Steuerung rechts Figur links Kamera reparieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat <<'LWOD_STEP_10_B64' | base64 -d | gzip -dc > "$RUNNER_TEMP/lwod_fix33_step_10.sh"
+        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
+        0Pg/8ua2Wo4fAAA=
+        LWOD_STEP_10_B64
+        bash -n "$RUNNER_TEMP/lwod_fix33_step_10.sh"
+        bash "$RUNNER_TEMP/lwod_fix33_step_10.sh"
+    - name: V29 echte Figurenbewegung rechts und freie Kamera links
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat <<'LWOD_STEP_11_B64' | base64 -d | gzip -dc > "$RUNNER_TEMP/lwod_fix33_step_11.sh"
+        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
+        LWOD_STEP_11_B64
+        bash -n "$RUNNER_TEMP/lwod_fix33_step_11.sh"
+        bash "$RUNNER_TEMP/lwod_fix33_step_11.sh"
+    - name: V30 Kollision und Startposition reparieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat <<'LWOD_STEP_12_B64' | base64 -d | gzip -dc > "$RUNNER_TEMP/lwod_fix33_step_12.sh"
+        H4sIAAAAAAAC/51WbW/bNhD+rl9x0YraXmz5DUUbIw6aJmkSdPWKuEtRIJhAS2eZsERqJOW4Cfbf
+        d6Ts+C1xh+oTxbt77v2OGg00sJCQ8xzHjKdeNo25gkYOTMRK8ripI8Vzo72IGTjZvm3edluf5Qwz
+        FOYGc8ZVkMRwfFz549uf5yERw5uLL6fXNxUP5wZFrGEgY/S83+A0NQiJkloj4AgFwgeiiMYnmaZc
+        cyn0VKLKUUHKMUEBhTD0E2MGAgsUBHElcYIiQz0hYgzELwQxxhzhbMIUi0iAQH90zxsf8B6TQiQw
+        SmU05ahQBBaBFbpRhw+syBoO4xJHXCWkemEEwY1S5COnn4kEDdMGTeDNmIKEZdhzDnXP3YXCjGIR
+        h+NUShVGFiRGpXvAhYE+tDxvXIgINJoiryopzVK6Bo0TmFFcex7QZ4GJ33K4f1H++zvB9h05LPWG
+        MrWqmdnWX605NmvhBJXsbUeHoK3GwBIdpz0EJYgWLA9TFImZWA+CN29WHJqNMcyYSrhwtFZrjZix
+        eaitfk20d+4+VxSHqvUi/HL1fXh9NqTqOD3/DtbwuMhTTjWGpfU6jLlmFPu479dfCmxtEdCfB2Az
+        vmOpQFDgKS+l52Mu4jCa8DSmwqj6v5NKf2iY4VEZIfo3qsA6jFmqsVaiLGM6IpYerLOTxw6e6Y3r
+        Jyk+dkLQJ74iTUGWIEGZZ0r0JaaMugWfmsFfqbRfJIXhosANO+RIyxSXAYRev7T2icd6rScsx3Dp
+        u1NKNb1yvbaphwxdl9BwtjRoaK+755vsq4hQ7i1Dj5p6vmCloFTXwNguWC1wdEtaie0ocMFb4MNB
+        GcFdM5am6Ice3GJkpOqSAU+CgeYP+KyQdfkhmMNJH9otqmk78ezNw87NDzjuQyd487xy+21lpO+K
+        aL0KNhk2gVxyomWIwpT9QOWGyB6mjOnpDs8LzQOH5I+3NadpJlLFKpNLzQ0hAivGMFbIaex+w6QO
+        GTcw5BG1+AS5oQ7VxoajoBGuyglu5+ol6hwdFw35Yc4xJTZb0HCPinhgcH129RVmqNytooHK7qdQ
+        Ibubf5ctTd4IvA9te4a5QloT8V31btXIr5rwyB1Pv/0vyZVneP16idC054NfgGttwr1quZZ8GmxP
+        oekvC6vaqtP0a9epPGo+PK5m3U+kApJrB506dN8FJOnkYto5h4fl1KeVSQdrzaODs6eLwTk8UulU
+        LeNBv10DnFNK3raJr7KznT8zLuxCPgH/1c1fg8HFTfj14vOX5owSnhEtZET1vWy2l/4SLCWaKmdt
+        YytaSoqZQsHg9OwKrgW5zCwNld29dhfcdo4aZzS9FAlREa7yvnJxLeCaZudUh7POUVAuTY3puA6z
+        zruwJNUhoowqRtbmxPb2ufiXm9muy5D8ogSkksXVO5+qoNfc+5C582sBVUF1kZs1TBYv9kV1hbzL
+        taKtmb+d6H1Z7fxaVkc/yepob1apNaDBoaLfU3/avDYj6ut+52jzv9t6vzIN57lUxnUWGh1E4+QZ
+        GLve+n4nOPK3rrpBy98PllAoofHxnzlUXg7si5FaF9/yYa9Wg5qex/p/PXo9jCYSKkTqkXnRxD5W
+        h7ZGqeA+EvBo8QKt03tWTN0o/+RKt7798LVvTnqgcsETU/H+Aw7PeGSiCwAA
+        LWOD_STEP_12_B64
+        bash -n "$RUNNER_TEMP/lwod_fix33_step_12.sh"
+        bash "$RUNNER_TEMP/lwod_fix33_step_12.sh"
+    - name: V31 Terrainkollision und Bewegung dauerhaft reparieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat <<'LWOD_STEP_13_B64' | base64 -d | gzip -dc > "$RUNNER_TEMP/lwod_fix33_step_13.sh"
+        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
+        /xWNpRAAAA==
+        LWOD_STEP_13_B64
+        bash -n "$RUNNER_TEMP/lwod_fix33_step_13.sh"
+        bash "$RUNNER_TEMP/lwod_fix33_step_13.sh"
+    - name: V32 Touchbereiche verbindlich trennen
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat <<'LWOD_STEP_14_B64' | base64 -d | gzip -dc > "$RUNNER_TEMP/lwod_fix33_step_14.sh"
+        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
+        LWOD_STEP_14_B64
+        bash -n "$RUNNER_TEMP/lwod_fix33_step_14.sh"
+        bash "$RUNNER_TEMP/lwod_fix33_step_14.sh"
+    - name: V33 Blick in den Himmel und unabhängige Links-Rechts-Steuerung
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat <<'LWOD_STEP_15_B64' | base64 -d | gzip -dc > "$RUNNER_TEMP/lwod_fix33_step_15.sh"
+        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
+        kvxbmiEPumiLW7X/AKsmRqj9MwAA
+        LWOD_STEP_15_B64
+        bash -n "$RUNNER_TEMP/lwod_fix33_step_15.sh"
+        bash "$RUNNER_TEMP/lwod_fix33_step_15.sh"
+    - name: Godot Ressourcen importieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        godot --headless --path android --editor --import --quit
+        test -s android/scripts/V24Regions.gd
+        test -s android/scripts/V25BiomeWorld.gd
+        test -s android/scripts/V26SkyWorldMap.gd
+        test -s android/scripts/V27Terrain.gd
+        test -s android/scripts/V27WorldMap.gd
+        test -s android/scripts/V27CameraMap.gd
+        test -s android/scripts/V28DualStick.gd
+        test -s android/scripts/V29IndependentSticks.gd
+        test -s android/scripts/V30MovementRepair.gd
+        test -s android/scripts/V31TerrainMotion.gd
+        test -s android/scripts/V32TouchRouter.gd
+        test -s android/scripts/V33TouchCamera.gd
+    - name: Godot Start und Scriptfehler testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        godot --headless --path android --quit-after 8 > "$RUNNER_TEMP/lwod_v29_run.log" 2>&1 || {
+          cat "$RUNNER_TEMP/lwod_v29_run.log"
+          exit 1
+        }
+        cat "$RUNNER_TEMP/lwod_v29_run.log"
+        if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v29_run.log"; then
+          echo '::error::V31 Godot-Skriptfehler gefunden'
+          exit 1
+        fi
+    - name: V31 Terrainphysik vorhanden
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -s android/scripts/V31TerrainMotion.gd
+        grep -Fq 'align_to_ground' android/scripts/Main.gd
+        test -s android/scripts/V32TouchRouter.gd
+        echo 'V31 terrain verified; V32 exclusive touch test follows'
+    - name: V33 Echter Kamerablick und Bewegungs-Multitouch Test
+      shell: bash
+      run: |
+        set -euo pipefail
+        godot --headless --path android --script res://tests/V33TouchSmoke.gd > "$RUNNER_TEMP/lwod_v33_touch.log" 2>&1 || {
+          cat "$RUNNER_TEMP/lwod_v33_touch.log"
+          exit 1
+        }
+        cat "$RUNNER_TEMP/lwod_v33_touch.log"
+        grep -Fq 'V33_TEST_OK:' "$RUNNER_TEMP/lwod_v33_touch.log"
+    - name: LWOD Android V33 FIX APK erstellen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/android
+        godot --headless --path android --export-debug 'Android' \
+          "$GITHUB_WORKSPACE/build/android/LWOD-Android-V33-Kamera-Bewegung.apk"
+        test -s build/android/LWOD-Android-V33-Kamera-Bewegung.apk
+        unzip -t build/android/LWOD-Android-V33-Kamera-Bewegung.apk > /dev/null
+
+        echo "APK wurde erzeugt:"
+        ls -lh build/android/LWOD-Android-V33-Kamera-Bewegung.apk
+    - name: Fehlerdiagnose bereitstellen
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: LWOD_V33_DIAGNOSE
+        path: |
+          ${{ runner.temp }}/lwod_v29_run.log
+          android/scripts/V24Regions.gd
+          android/scripts/V27Terrain.gd
+          android/scripts/V27CameraMap.gd
+          android/scripts/V27WorldMap.gd
+          android/scripts/V28DualStick.gd
+          android/scripts/V29IndependentSticks.gd
+          android/scripts/Main.gd
+          android/scripts/V30MovementRepair.gd
+          android/scripts/V31TerrainMotion.gd
+          android/scripts/V32TouchRouter.gd
+          android/tests/V32TouchSmoke.gd
+          android/tests/V33TouchSmoke.gd
+          android/scripts/V33TouchCamera.gd
+          ${{ runner.temp }}/lwod_v33_touch.log
+          ${{ runner.temp }}/lwod_v30_movement_test.log
+          android/scripts/TouchOverlay.gd
+        if-no-files-found: warn
+        retention-days: 14
+    - name: Android V33 FIX APK hochladen
+      uses: actions/upload-artifact@v4
+      with:
+        name: LWOD_ANDROID_V33_FIX_APK
+        path: build/android/LWOD-Android-V33-Kamera-Bewegung.apk
+        if-no-files-found: error
+        retention-days: 14
