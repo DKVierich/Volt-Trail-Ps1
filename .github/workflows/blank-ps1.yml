@@ -1,6 +1,6 @@
-# LWOD Android V22: 9600x9600 Welt, kleiner Kompass, Rucksack wieder sichtbar.
+# LWOD Android V23: Welt 32000x32000, 36 Siedlungen, eigener Rucksack.
 # Als .github/workflows/lwod-android.yml speichern (PS1-Workflow separat behalten).
-name: LWOD Android V22 Riesenwelt KompaktHUD
+name: LWOD Android V23 Riesenwelt und Rucksack FIX
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: Android V22 APK erstellen
+    name: Android V23 APK erstellen
     runs-on: ubuntu-latest
     timeout-minutes: 50
     container:
@@ -949,7 +949,7 @@ jobs:
         sed -i 's@version/name="2.0"@version/name="2.1"@' android/export_presets.cfg
         grep -Fqx 'version/code=21' android/export_presets.cfg
         echo 'V21 Basis fuer V22 erstellt'
-    - name: V22 Riesige Welt und kompaktes HUD mit Rucksack
+    - name: V23 32000 Welt 36 Siedlungen eigener Rucksack Button
       shell: bash
       run: |
         set -euo pipefail
@@ -957,10 +957,10 @@ jobs:
         cat > android/scripts/V21World.gd <<'LWOD_V22_WORLD'
         extends Node
 
-        # Lydra World Of Dragon V22: 4800 x 4800 Welt, chunk-basiertes Wald-Streaming.
+        # Lydra World Of Dragon V23: 32000 x 32000 Welt, chunk-basiertes Wald-Streaming.
         # Kamera, Spielstand, Menues, Figur und Tag/Nacht aus V21 bleiben erhalten.
-        const LIMIT := 2375.0
-        const WORLD_SIZE := 4800.0
+        const LIMIT := 15950.0
+        const WORLD_SIZE := 32000.0
         const CYCLE_SECONDS := 480.0
         const CHUNK_SIZE := 240.0
         const CHUNK_RADIUS := 2
@@ -987,7 +987,31 @@ jobs:
             {"name":"Nebelhafen", "pos":Vector2(-620.0,1600.0)},
             {"name":"Purpurwald", "pos":Vector2(760.0,1770.0)},
             {"name":"Sternenbruch", "pos":Vector2(-1550.0,-1760.0)},
-            {"name":"Kristallbucht", "pos":Vector2(1590.0,-1640.0)}
+            {"name":"Kristallbucht", "pos":Vector2(1590.0,-1640.0)},
+            {"name":"Tal der Blueten", "pos":Vector2(420.0,-340.0)},
+            {"name":"Westhain", "pos":Vector2(-480.0,-380.0)},
+            {"name":"Nordlicht", "pos":Vector2(-520.0,-880.0)},
+            {"name":"Ostfeste", "pos":Vector2(710.0,-620.0)},
+            {"name":"Adlerfels", "pos":Vector2(980.0,320.0)},
+            {"name":"Farnwald", "pos":Vector2(-820.0,960.0)},
+            {"name":"Blausee", "pos":Vector2(320.0,1080.0)},
+            {"name":"Daemmerbruch", "pos":Vector2(-1180.0,80.0)},
+            {"name":"Morgenwacht", "pos":Vector2(2120.0,-2240.0)},
+            {"name":"Sternenlicht", "pos":Vector2(-2540.0,-2140.0)},
+            {"name":"Nebelwald", "pos":Vector2(-2520.0,2500.0)},
+            {"name":"Wasserfall", "pos":Vector2(2450.0,2550.0)},
+            {"name":"Silberpass", "pos":Vector2(3800.0,-3800.0)},
+            {"name":"Lichttal", "pos":Vector2(-4200.0,-3450.0)},
+            {"name":"Nordburg", "pos":Vector2(-3200.0,4400.0)},
+            {"name":"Windstadt", "pos":Vector2(4550.0,3700.0)},
+            {"name":"Violetttal", "pos":Vector2(6500.0,-5200.0)},
+            {"name":"Perlenfurt", "pos":Vector2(-7200.0,5400.0)},
+            {"name":"Sonnenfeste", "pos":Vector2(7300.0,6800.0)},
+            {"name":"Mondstrand", "pos":Vector2(-6400.0,-7500.0)},
+            {"name":"Silberwald", "pos":Vector2(9900.0,-9300.0)},
+            {"name":"Drachenwacht", "pos":Vector2(-10500.0,8900.0)},
+            {"name":"Kristallstadt", "pos":Vector2(11600.0,9200.0)},
+            {"name":"Nebelkueste", "pos":Vector2(-11800.0,-11600.0)}
         ]
         var routes: Array[PackedVector2Array] = []
 
@@ -1007,8 +1031,8 @@ jobs:
             _build_new_perimeter()
             _find_sun_and_sky()
             if game.camera_node != null:
-                game.camera_node.far = 5000.0
-            print("LWOD V22: 4800x4800-Welt, streaming, 12 Aussenposten")
+                game.camera_node.far = 5800.0
+            print("LWOD V23: 32000x32000-Welt, Streaming, 36 Siedlungen")
 
         func _disable_old_perimeter() -> void:
             for label in ["V19Weltgrenzen", "V19GebirgsKollision", "V20Bergkollision"]:
@@ -1056,6 +1080,20 @@ jobs:
             _route(PackedVector2Array([Vector2(175,160),Vector2(570,380),Vector2(1130,500),Vector2(1640,680)]))
             _route(PackedVector2Array([Vector2(-170,160),Vector2(-390,660),Vector2(-520,1100),Vector2(-620,1600)]))
             _route(PackedVector2Array([Vector2(175,160),Vector2(390,620),Vector2(560,1230),Vector2(760,1770)]))
+            # Fernstrassen, die alle 36 Ortschaften verbinden.
+            # Nur zwei kostenguenstige Wegsegmente pro neuem Ort.
+            for i in range(12, settlements.size()):
+                var target: Vector2 = settlements[i]["pos"]
+                var nearest := Vector2.ZERO
+                var best_dist: float = INF
+                for j in range(i):
+                    var candidate: Vector2 = settlements[j]["pos"]
+                    var distance: float = target.distance_squared_to(candidate)
+                    if distance < best_dist:
+                        best_dist = distance
+                        nearest = candidate
+                var bend: Vector2 = (target + nearest) * 0.5 + Vector2(0.0, sin(float(i) * 1.9) * 65.0)
+                _route(PackedVector2Array([nearest, bend, target]))
 
         func _outpost_house(pos: Vector3, house_type: int) -> void:
             var root := Node3D.new()
@@ -1100,8 +1138,8 @@ jobs:
             var rock_colors: Array[Color] = [Color("#778e8a"),Color("#607d83"),Color("#71858c"),Color("#5b7682")]
             for side in range(4):
                 for i in range(120):
-                    var t: float = -2580.0+float(i)*(5160.0/120.0)
-                    var u: float = -2580.0+float(i+1)*(5160.0/120.0)
+                    var t: float = -16200.0+float(i)*(32400.0/120.0)
+                    var u: float = -16200.0+float(i+1)*(32400.0/120.0)
                     var h0: float = 24.0+26.0*absf(sin(float(i)*0.19+float(side)))+11.0*absf(cos(float(i)*0.43))
                     var h1: float = 24.0+26.0*absf(sin(float(i+1)*0.19+float(side)))+11.0*absf(cos(float(i+1)*0.43))
                     var base0: Vector3
@@ -1112,20 +1150,20 @@ jobs:
                     var peak1: Vector3
                     if side<=1:
                         var sign_z: float = -1.0 if side==0 else 1.0
-                        base0=Vector3(t,-0.1,sign_z*2406.0)
-                        base1=Vector3(u,-0.1,sign_z*2406.0)
-                        rise0=Vector3(t,h0*0.30,sign_z*2450.0)
-                        rise1=Vector3(u,h1*0.30,sign_z*2450.0)
-                        peak0=Vector3(t,h0,sign_z*2580.0)
-                        peak1=Vector3(u,h1,sign_z*2580.0)
+                        base0=Vector3(t,-0.1,sign_z*15985.0)
+                        base1=Vector3(u,-0.1,sign_z*15985.0)
+                        rise0=Vector3(t,h0*0.30,sign_z*16035.0)
+                        rise1=Vector3(u,h1*0.30,sign_z*16035.0)
+                        peak0=Vector3(t,h0,sign_z*16200.0)
+                        peak1=Vector3(u,h1,sign_z*16200.0)
                     else:
                         var sign_x: float = -1.0 if side==2 else 1.0
-                        base0=Vector3(sign_x*2406.0,-0.1,t)
-                        base1=Vector3(sign_x*2406.0,-0.1,u)
-                        rise0=Vector3(sign_x*2450.0,h0*0.30,t)
-                        rise1=Vector3(sign_x*2450.0,h1*0.30,u)
-                        peak0=Vector3(sign_x*2580.0,h0,t)
-                        peak1=Vector3(sign_x*2580.0,h1,u)
+                        base0=Vector3(sign_x*15985.0,-0.1,t)
+                        base1=Vector3(sign_x*15985.0,-0.1,u)
+                        rise0=Vector3(sign_x*16035.0,h0*0.30,t)
+                        rise1=Vector3(sign_x*16035.0,h1*0.30,u)
+                        peak0=Vector3(sign_x*16200.0,h0,t)
+                        peak1=Vector3(sign_x*16200.0,h1,u)
                     _quad(surface,base0,base1,rise1,rise0,rock_colors[(i+side)%4])
                     _quad(surface,rise0,rise1,peak1,peak0,rock_colors[(i+side+2)%4])
             surface.generate_normals()
@@ -1144,10 +1182,10 @@ jobs:
             wall.name = "V22AussenGrenze"
             game.add_child(wall)
             for item in [
-                [Vector3(0,18,-2394),Vector3(4780,36,2)],
-                [Vector3(0,18,2394),Vector3(4780,36,2)],
-                [Vector3(-2394,18,0),Vector3(2,36,4780)],
-                [Vector3(2394,18,0),Vector3(2,36,4780)]]:
+                [Vector3(0,18,-15964),Vector3(31900,36,2)],
+                [Vector3(0,18,15964),Vector3(31900,36,2)],
+                [Vector3(-15964,18,0),Vector3(2,36,31900)],
+                [Vector3(15964,18,0),Vector3(2,36,31900)]]:
                 var collider := CollisionShape3D.new()
                 var shape := BoxShape3D.new()
                 shape.size = item[1]
@@ -1236,6 +1274,14 @@ jobs:
                     trunks.set_instance_transform(tree_count,Transform3D(basis,Vector3(px,1.05*scale,pz)))
                     crowns.set_instance_transform(tree_count,Transform3D(basis,Vector3(px,3.1*scale,pz)))
                     tree_count += 1
+            # Kleine lokale Bodenvariationen werden zusammen mit dem Chunk entladen.
+            for patch in range(5):
+                var patch_x: float = (float(cx)+rng.randf()) * CHUNK_SIZE
+                var patch_z: float = (float(cz)+rng.randf()) * CHUNK_SIZE
+                if absf(patch_x) > LIMIT-20.0 or absf(patch_z) > LIMIT-20.0:
+                    continue
+                var color: Color = Color("#769f73") if patch % 2 == 0 else Color("#699567")
+                game._box(root, Vector3(patch_x, 0.012, patch_z), Vector3(rng.randf_range(10.0, 25.0), 0.015, rng.randf_range(6.0, 19.0)), color)
             trunks.visible_instance_count = tree_count
             crowns.visible_instance_count = tree_count
             rocks.visible_instance_count = rock_count
@@ -1360,7 +1406,7 @@ jobs:
             game.camera_node.global_position=safe["pos"]
             game.camera_node.look_at(center)
         LWOD_V22_WORLD
-        printf '%s  %s\n' 'a9ce2857bc9e7625cb87243c4bca5b08e8cda0e1b0542b88c0ed4fff7ed625cf' 'android/scripts/V21World.gd' | sha256sum -c -
+        printf '%s  %s\n' '7277eb826962a78df2aaad1b94593848e396747ab5d2217f87a169470e1669e2' 'android/scripts/V21World.gd' | sha256sum -c -
         cat > android/scripts/V21Minimap.gd <<'LWOD_V22_MAP'
         extends Control
 
@@ -1385,53 +1431,9 @@ jobs:
             offset_top = 8.0
             offset_bottom = 197.0
             clip_contents = true
-            _restore_backpack()
+            bag_button = null  # V23 benutzt eigenstaendige Rucksack-Ebene
             set_process(true)
-            print("LWOD V22: kompakte MiniMap und funktionaler Rucksack aktiviert")
-
-        func _restore_backpack() -> void:
-            if game.backpack_button == null:
-                push_warning("V22: Kein Rucksackbutton in V18-Basis gefunden")
-                return
-            bag_button = game.backpack_button as Button
-            if bag_button == null:
-                push_warning("V22: Rucksack ist kein Button")
-                return
-            # Die alten Button-Signale erhalten: kein neuer Handler, kein doppeltes Umschalten.
-            bag_button.anchor_left = 1.0
-            bag_button.anchor_right = 1.0
-            bag_button.anchor_top = 0.0
-            bag_button.anchor_bottom = 0.0
-            bag_button.offset_left = -138.0
-            bag_button.offset_right = -68.0
-            bag_button.offset_top = 209.0
-            bag_button.offset_bottom = 276.0
-            bag_button.text = ""
-            bag_button.flat = false
-            bag_button.add_theme_font_size_override("font_size", 18)
-            bag_button.tooltip_text = "Rucksack / Spielmenue"
-            bag_button.expand_icon = true
-            var backpack_icon: Texture2D = load("res://assets/v22_backpack.png") as Texture2D
-            if backpack_icon != null:
-                bag_button.icon = backpack_icon
-            else:
-                bag_button.text = "MENÜ"
-            bag_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-            bag_button.visible = true
-            bag_button.disabled = false
-            bag_button.mouse_filter = Control.MOUSE_FILTER_STOP
-            bag_button.modulate = Color(1,1,1,0.96)
-            bag_button.z_index = 100
-            var style := StyleBoxFlat.new()
-            style.bg_color = Color(0.07,0.05,0.14,0.46)
-            style.border_color = Color(0.91,0.73,0.44,0.80)
-            style.set_border_width_all(2)
-            style.set_corner_radius_all(14)
-            for state_name in ["normal","hover","pressed","focus"]:
-                bag_button.add_theme_stylebox_override(state_name,style)
-            var parent := bag_button.get_parent()
-            if parent != null:
-                parent.move_child(bag_button,parent.get_child_count()-1)
+            print("LWOD V23: kompakte MiniMap; separater Rucksack-Button")
 
         func _process(_delta: float) -> void:
             if game == null:
@@ -1505,8 +1507,10 @@ jobs:
             draw_rect(Rect2(10,173,156,7),Color("#2e304b"),true)
             draw_rect(Rect2(10,173,156.0*phase,7),Color("#edbe79") if daytime else Color("#8e8bdb"),true)
             draw_rect(Rect2(10,173,156,7),gold,false,1.0)
+            # Lokaler Ausschnitt; die gesamte Welt umfasst 32.000 x 32.000 Einheiten.
+            tooltip_text = "Welt 32000 x 32000 | X: %d Z: %d" % [int(player.x), int(player.z)]
         LWOD_V22_MAP
-        printf '%s  %s\n' '26ca8597a71e51cfff295e456b5b37bcdbb24102b9206e91447ea7ecad2965f0' 'android/scripts/V21Minimap.gd' | sha256sum -c -
+        printf '%s  %s\n' '999c869a98f1a6319ea8834b650e18909d0b2ebb0d1ba7fa772b40b5291106d3' 'android/scripts/V21Minimap.gd' | sha256sum -c -
         base64 -d <<'LWOD_V22_BAG_PNG' > android/assets/v22_backpack.png
         iVBORw0KGgoAAAANSUhEUgAAADoAAAA6CAYAAADhu0ooAAAABmJLR0QA/wD/AP+gvaeTAAAKbElEQVRoge1aa5AU1RX+TnfP
         zs7szPQsuywPAYGwcRfEV0XLQKokQnxhLGNIKKyUVhQkPipV4I8QrTJYifmTQB5SJLqIFfK0jFUxiRqjprQKcQUUl4XdBSyU
@@ -1555,6 +1559,110 @@ jobs:
         grep -Fqx 'version/code=22' android/export_presets.cfg
         test -s android/assets/v22_backpack.png
         echo 'V22: 4800x4800 Welt, Wald-Streaming, kompakte MiniMap und Rucksack aktiv'
+
+        cat > android/scripts/V23Backpack.gd <<'LWOD_V23_BACKPACK'
+        extends CanvasLayer
+
+        # V23: eigener, sicher sichtbarer Rucksack-Button.
+        # Der Button verwendet die urspruengliche V7-Menuefunktion direkt.
+        var game: Node3D
+        var overlay: Control
+        var bag: Button
+        var addon: Node
+
+        func setup(root: Node3D) -> void:
+            game = root
+            layer = 30
+            overlay = Control.new()
+            overlay.name = "V23HUDOverlay"
+            overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+            add_child(overlay)
+            overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+            bag = Button.new()
+            bag.name = "RucksackButtonV23"
+            bag.anchor_left = 1.0
+            bag.anchor_right = 1.0
+            bag.offset_left = -171.0
+            bag.offset_right = -16.0
+            bag.offset_top = 211.0
+            bag.offset_bottom = 286.0
+            bag.focus_mode = Control.FOCUS_NONE
+            bag.mouse_filter = Control.MOUSE_FILTER_STOP
+            bag.text = "RUCKSACK"
+            bag.tooltip_text = "Rucksack und Spielmenue"
+            bag.add_theme_font_size_override("font_size", 18)
+            bag.add_theme_color_override("font_color", Color("#f7e2bd"))
+            bag.add_theme_color_override("font_hover_color", Color("#ffffff"))
+            var texture: Texture2D = load("res://assets/v22_backpack.png") as Texture2D
+            if texture != null:
+                bag.icon = texture
+                bag.expand_icon = true
+                bag.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+            var base := StyleBoxFlat.new()
+            base.bg_color = Color(0.09, 0.05, 0.17, 0.82)
+            base.border_color = Color("#d8b27b")
+            base.set_border_width_all(2)
+            base.set_corner_radius_all(13)
+            for state_name in ["normal", "hover", "pressed", "focus"]:
+                bag.add_theme_stylebox_override(state_name, base)
+            overlay.add_child(bag)
+            bag.pressed.connect(_open_bag)
+
+            # Alte Schaltflaeche nicht mehr zeichnen, Signal/Spielmenue bleiben vorhanden.
+            if game.backpack_button != null:
+                game.backpack_button.hide()
+            for child in game.get_children():
+                if child.has_method("_toggle_bag"):
+                    addon = child
+                    break
+            if addon != null:
+                # Menue nach links setzen, damit es nicht unter dem HUD-Button liegt.
+                var old_panel = addon.get("bag_panel")
+                if old_panel is Control:
+                    (old_panel as Control).position = Vector2(690, 116)
+            else:
+                push_warning("V23: V7-Menuecontroller fehlt. Rucksack nutzt Originalsignal.")
+            set_process(true)
+            print("V23: eigenstaendiger Rucksack-Button und 8 Eintraege aktiv")
+
+        func _open_bag() -> void:
+            if game == null or game.state != 2:
+                return
+            if addon != null and is_instance_valid(addon):
+                addon.call("_toggle_bag")
+            elif game.backpack_button != null:
+                game.backpack_button.pressed.emit()
+            else:
+                push_warning("V23: Rucksack-Menuecontroller nicht vorhanden")
+
+        func _process(_delta: float) -> void:
+            if game == null:
+                return
+            overlay.visible = game.state == 2
+            if game.backpack_button != null and game.backpack_button.visible:
+                game.backpack_button.hide()
+        LWOD_V23_BACKPACK
+        printf '%s  %s\n' '75c818ef434613ee174c29a1905bff2f56617380ab9031f4a3e8964e76f87202' 'android/scripts/V23Backpack.gd' | sha256sum -c -
+
+        test "$(grep -Fxc '    minimap.setup(self, expanded_world)' android/scripts/Main.gd)" -eq 1
+        awk '
+          {print}
+          $0 == "    minimap.setup(self, expanded_world)" {
+            print "    var bag_v23 = load(\"res://scripts/V23Backpack.gd\").new()"
+            print "    bag_v23.name = \"V23Backpack\""
+            print "    add_child(bag_v23)"
+            print "    bag_v23.setup(self)"
+            n++
+          }
+          END {if(n!=1) exit 51}
+        ' android/scripts/Main.gd > "$RUNNER_TEMP/lwod_v23_main.gd"
+        mv "$RUNNER_TEMP/lwod_v23_main.gd" android/scripts/Main.gd
+        sed -i 's@version/code=22@version/code=23@' android/export_presets.cfg
+        sed -i 's@version/name="2.2"@version/name="2.3"@' android/export_presets.cfg
+        # Older export templates may not specify name; the version code is mandatory.
+        grep -Fqx 'version/code=23' android/export_presets.cfg
+        printf 'V23 fertig: Weltgroesse %s, Orte %s, unabhängiger Rucksack\n' '32000x32000' '36'
     - name: Godot Ressourcen importieren
       shell: bash
       run: |
@@ -1571,24 +1679,24 @@ jobs:
         }
         cat "$RUNNER_TEMP/lwod_v21_test.log"
         if grep -Eq 'SCRIPT ERROR:|Parse Error:|Invalid call\.|Failed to load script' "$RUNNER_TEMP/lwod_v21_test.log"; then
-          echo '::error::Godot-Skriptfehler im V22-Laufzeittest'
+          echo '::error::Godot-Skriptfehler im V23-Laufzeittest'
           exit 1
         fi
-    - name: LWOD Android V22 APK erstellen
+    - name: LWOD Android V23 APK erstellen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android
         godot --headless --path android --export-debug 'Android' \
-          "$GITHUB_WORKSPACE/build/android/LWOD-Android-V22.apk"
-        test -s build/android/LWOD-Android-V22.apk
-        unzip -t build/android/LWOD-Android-V22.apk >/dev/null
+          "$GITHUB_WORKSPACE/build/android/LWOD-Android-V23.apk"
+        test -s build/android/LWOD-Android-V23.apk
+        unzip -t build/android/LWOD-Android-V23.apk >/dev/null
     - name: Fehlerdiagnose speichern
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V22_DIAGNOSE
-        path: '${{ runner.temp }}/lwod_v20_test.log
+        name: LWOD_V23_DIAGNOSE
+        path: '${{ runner.temp }}/lwod_v21_test.log
 
           android/scripts/V19TerrainSafety.gd
 
@@ -1598,10 +1706,10 @@ jobs:
           '
         if-no-files-found: warn
         retention-days: 14
-    - name: V21 APK bereitstellen
+    - name: V23 APK bereitstellen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V22_WELTKARTE_APK
-        path: build/android/LWOD-Android-V22.apk
+        name: LWOD_ANDROID_V23_RIESENWELT_APK
+        path: build/android/LWOD-Android-V23.apk
         if-no-files-found: error
         retention-days: 14
