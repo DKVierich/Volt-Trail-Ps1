@@ -1,7 +1,7 @@
-# LWOD Android V27 FIX1: apt-freie Intro-Umwandlung, V27 Terrain & Touchkamera.
+# LWOD Android V27 FIX2: apt-freie und xz-freie Intro-Umwandlung, V27 Terrain & Touchkamera.
 # Als EIGENE Datei .github/workflows/lwod-android.yml speichern.
 # Der PS1-Workflow blank-ps1.yml bleibt unveraendert.
-name: LWOD Android V27 FIX1 Terrain Kamera
+name: LWOD Android V27 FIX2 Terrain Kamera
 'on':
   workflow_dispatch: {}
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V27 FIX1 APK
+    name: LWOD Android V27 FIX2 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -68,25 +68,27 @@ jobs:
           bash "$RUNNER_TEMP/v23_step.sh"
           REPLAY_V23
           chmod +x "$RUNNER_TEMP/replay_v23.sh"
-      - name: FFmpeg fuer Originalintro ohne Ubuntu Paketserver vorbereiten
+      - name: FFmpeg statisch ohne apt und ohne xz bereitstellen
         shell: bash
         run: |
           set -euo pipefail
           if command -v ffmpeg >/dev/null 2>&1; then
-            echo "FFmpeg ist bereits vorhanden"
+            echo 'FFmpeg ist bereits im Container vorhanden'
           else
-            echo "FFmpeg wird ohne apt-get als statische Version geladen"
-            mkdir -p "$RUNNER_TEMP/ffmpeg-bin"
-            wget --https-only --tries=3 --timeout=60 \
-              -O "$RUNNER_TEMP/ffmpeg-static.tar.xz" \
-              'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz'
-            test -s "$RUNNER_TEMP/ffmpeg-static.tar.xz"
-            tar -xf "$RUNNER_TEMP/ffmpeg-static.tar.xz" -C "$RUNNER_TEMP/ffmpeg-bin"
-            binary="$(find "$RUNNER_TEMP/ffmpeg-bin" -type f -name ffmpeg -print -quit)"
-            test -n "$binary"
-            install -m 0755 "$binary" /usr/local/bin/ffmpeg
+            echo 'Statische FFmpeg-Datei als gzip-Archiv von GitHub laden'
+            command -v gzip >/dev/null
+            command -v sha256sum >/dev/null
+            wget -q --show-progress --https-only --tries=3 --timeout=90 \
+              -O "$RUNNER_TEMP/ffmpeg-linux-x64.gz" \
+              'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz'
+            test -s "$RUNNER_TEMP/ffmpeg-linux-x64.gz"
+            printf '%s  %s\n' \
+              'bfe8a8fc511530457b528c48d77b5737527b504a3797a9bc4866aeca69c2dffa' \
+              "$RUNNER_TEMP/ffmpeg-linux-x64.gz" | sha256sum -c -
+            gzip -dc "$RUNNER_TEMP/ffmpeg-linux-x64.gz" > /usr/local/bin/ffmpeg
+            chmod 0755 /usr/local/bin/ffmpeg
           fi
-          ffmpeg -hide_banner -version >/dev/null
+          ffmpeg -hide_banner -version | head -n 1
           test -x "$(command -v ffmpeg)"
       - name: V23-Spielwelt und Menues vollstaendig wiederherstellen
         shell: bash
@@ -1464,20 +1466,20 @@ jobs:
             echo '::error::V27 Godot-Skriptfehler gefunden'
             exit 1
           fi
-      - name: LWOD Android V27 FIX1 APK erstellen
+      - name: LWOD Android V27 FIX2 APK erstellen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android
           godot --headless --path android --export-debug 'Android' \
-            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V27-FIX1.apk"
-          test -s build/android/LWOD-Android-V27-FIX1.apk
-          unzip -t build/android/LWOD-Android-V27-FIX1.apk > /dev/null
+            "$GITHUB_WORKSPACE/build/android/LWOD-Android-V27-FIX2.apk"
+          test -s build/android/LWOD-Android-V27-FIX2.apk
+          unzip -t build/android/LWOD-Android-V27-FIX2.apk > /dev/null
       - name: Fehlerdiagnose bereitstellen
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_V27_FIX1_DIAGNOSE
+          name: LWOD_V27_FIX2_DIAGNOSE
           path: |
             ${{ runner.temp }}/lwod_v27_run.log
             android/scripts/V24Regions.gd
@@ -1489,7 +1491,7 @@ jobs:
       - name: Android V27 APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V27_FIX1_APK
-          path: build/android/LWOD-Android-V27-FIX1.apk
+          name: LWOD_ANDROID_V27_FIX2_APK
+          path: build/android/LWOD-Android-V27-FIX2.apk
           if-no-files-found: error
           retention-days: 14
