@@ -1,8 +1,7 @@
-# Lydra World Of Dragon – Android V38
-# Vollstaendiger Workflow: NPCs, Dialogantworten, Dorfdekoration, Tag/Nacht-Ablauf.
-# Die spielbare V37-Lichtkristallquest und Steuerung werden beibehalten.
-# In .github/workflows/blank-ps1.yml vollständig ersetzen und committen.
-name: LWOD Android V38 Lebendige Doerfer und Dialoge
+# LWOD Android V39 - vollständiger Workflow zum Kopieren.
+# Links Bewegung, rechts Kamera. NPCs folgen Geh-Zielen statt Kreisbahnen.
+# Quest- und Spielstände bleiben erhalten.
+name: LWOD Android V39 NPC Wege und grosse Namen
 'on':
   workflow_dispatch: {}
   push:
@@ -15,7 +14,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V38 APK
+    name: LWOD Android V39 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -49,29 +48,27 @@ jobs:
         '
     - name: V23-Quelle herunterladen und richtige Pruefsumme pruefen
       shell: bash
-      run: "set -euo pipefail\nwget -q --tries=3 --timeout=45 \\\n  -O \"$RUNNER_TEMP/lwod_v23.yml\" \\\
-        \n  'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/2b1332ef7b51655427065cd8ec8371af1e7773dc/.github/workflows/blank-ps1.yml'\n\
-        test -s \"$RUNNER_TEMP/lwod_v23.yml\"\nsource_hash=\"$(git hash-object \"$RUNNER_TEMP/lwod_v23.yml\"\
-        )\"\nif [ \"$source_hash\" != \"f2417eca21fc0e9ac53a9e678b139a68e26ccdc8\" ]; then\n  echo \"\
-        ::error::V23-Quellversion passt nicht. Erwartet: f2417eca21fc0e9ac53a9e678b139a68e26ccdc8, erhalten:\
-        \ $source_hash\"\n  exit 22\nfi\necho \"V23-Quelle korrekt: $source_hash\"\ncat > \"$RUNNER_TEMP/replay_v23.sh\"\
-        \ <<'REPLAY_V23'\n#!/bin/bash\nset -euo pipefail\nname=\"$1\"\nawk -v name=\"$name\" '\n  $0 ==\
-        \ \"    - name: \" name { found=1; next }\n  found && $0 == \"      run: |\" { active=1; next\
-        \ }\n  active && /^    - name:/ { exit }\n  active && /^        / { sub(/^        /, \"\"); print;\
-        \ next }\n  active && /^$/ { print \"\"; next }\n  END { if (active != 1) exit 57 }\n' \"$RUNNER_TEMP/lwod_v23.yml\"\
-        \ > \"$RUNNER_TEMP/v23_step.sh\"\ntest -s \"$RUNNER_TEMP/v23_step.sh\"\nbash -n \"$RUNNER_TEMP/v23_step.sh\"\
-        \necho \"V23 Basis: $name\"\nbash \"$RUNNER_TEMP/v23_step.sh\"\nREPLAY_V23\nchmod +x \"$RUNNER_TEMP/replay_v23.sh\"\
-        \n"
+      run: "set -euo pipefail\nwget -q --tries=3 --timeout=45 \\\n  -O \"$RUNNER_TEMP/lwod_v23.yml\" \\\n  'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/2b1332ef7b51655427065cd8ec8371af1e7773dc/.github/workflows/blank-ps1.yml'\n\
+        test -s \"$RUNNER_TEMP/lwod_v23.yml\"\nsource_hash=\"$(git hash-object \"$RUNNER_TEMP/lwod_v23.yml\")\"\n\
+        if [ \"$source_hash\" != \"f2417eca21fc0e9ac53a9e678b139a68e26ccdc8\" ]; then\n  echo \"::error::V23-Quellversion\
+        \ passt nicht. Erwartet: f2417eca21fc0e9ac53a9e678b139a68e26ccdc8, erhalten: $source_hash\"\n  exit 22\n\
+        fi\necho \"V23-Quelle korrekt: $source_hash\"\ncat > \"$RUNNER_TEMP/replay_v23.sh\" <<'REPLAY_V23'\n#!/bin/bash\n\
+        set -euo pipefail\nname=\"$1\"\nawk -v name=\"$name\" '\n  $0 == \"    - name: \" name { found=1; next }\n\
+        \  found && $0 == \"      run: |\" { active=1; next }\n  active && /^    - name:/ { exit }\n  active &&\
+        \ /^        / { sub(/^        /, \"\"); print; next }\n  active && /^$/ { print \"\"; next }\n  END { if\
+        \ (active != 1) exit 57 }\n' \"$RUNNER_TEMP/lwod_v23.yml\" > \"$RUNNER_TEMP/v23_step.sh\"\ntest -s \"$RUNNER_TEMP/v23_step.sh\"\
+        \nbash -n \"$RUNNER_TEMP/v23_step.sh\"\necho \"V23 Basis: $name\"\nbash \"$RUNNER_TEMP/v23_step.sh\"\nREPLAY_V23\n\
+        chmod +x \"$RUNNER_TEMP/replay_v23.sh\"\n"
     - name: FFmpeg statisch ohne apt und ohne xz bereitstellen
       shell: bash
-      run: "set -euo pipefail\nif command -v ffmpeg >/dev/null 2>&1; then\n  echo 'FFmpeg ist bereits\
-        \ im Container vorhanden'\nelse\n  echo 'Statische FFmpeg-Datei als gzip-Archiv von GitHub laden'\n\
-        \  command -v gzip >/dev/null\n  command -v sha256sum >/dev/null\n  wget -q --show-progress --https-only\
-        \ --tries=3 --timeout=90 \\\n    -O \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\" \\\n    'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz'\n\
+      run: "set -euo pipefail\nif command -v ffmpeg >/dev/null 2>&1; then\n  echo 'FFmpeg ist bereits im Container\
+        \ vorhanden'\nelse\n  echo 'Statische FFmpeg-Datei als gzip-Archiv von GitHub laden'\n  command -v gzip\
+        \ >/dev/null\n  command -v sha256sum >/dev/null\n  wget -q --show-progress --https-only --tries=3 --timeout=90\
+        \ \\\n    -O \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\" \\\n    'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64.gz'\n\
         \  test -s \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\"\n  printf '%s  %s\\n' \\\n    'bfe8a8fc511530457b528c48d77b5737527b504a3797a9bc4866aeca69c2dffa'\
         \ \\\n    \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\" | sha256sum -c -\n  gzip -dc \"$RUNNER_TEMP/ffmpeg-linux-x64.gz\"\
-        \ > /usr/local/bin/ffmpeg\n  chmod 0755 /usr/local/bin/ffmpeg\nfi\nffmpeg -hide_banner -version\
-        \ | head -n 1\ntest -x \"$(command -v ffmpeg)\"\n"
+        \ > /usr/local/bin/ffmpeg\n  chmod 0755 /usr/local/bin/ffmpeg\nfi\nffmpeg -hide_banner -version | head -n\
+        \ 1\ntest -x \"$(command -v ffmpeg)\"\n"
     - name: V23-Spielwelt und Menues vollstaendig wiederherstellen
       shell: bash
       run: 'set -euo pipefail
@@ -1292,7 +1289,7 @@ jobs:
         bash "$RUNNER_TEMP/lwod_fix33_step_14.sh"
 
         '
-    - name: V33 Blick in den Himmel und unabhängige Links-Rechts-Steuerung
+    - name: "V33 Blick in den Himmel und unabh\xE4ngige Links-Rechts-Steuerung"
       shell: bash
       run: 'set -euo pipefail
 
@@ -1596,79 +1593,73 @@ jobs:
         bash "$RUNNER_TEMP/lwod_v34_patch.sh"'
     - name: V35 Wolken ueber gesamten Himmel - 96 mehrteilige Wolkenbaenke
       shell: bash
-      run: "set -euo pipefail\nfile=android/scripts/V26SkyWorldMap.gd\ntest -s \"$file\"\ntest \"$(grep\
-        \ -Fxc '    for i in range(8):' \"$file\")\" -eq 1\ntest \"$(grep -Fxc '    sun_node = MeshInstance3D.new()'\
-        \ \"$file\")\" -eq 1\ncat > \"$RUNNER_TEMP/lwod_v35_clouds.gdpart\" <<'LWOD_V35_CLOUDS'\n    #\
-        \ Wolkenhimmel V35: 96 Wolkenbaenke auf dem ganzen Himmel, statt 8 Scheiben.\n    # Pro Wolkenbank\
-        \ eine MultiMesh-Instanz: viele weiche 3D-Teile, weniger Drawcalls.\n    var cloud_rng := RandomNumberGenerator.new()\n\
-        \    cloud_rng.seed = 202611350\n    var puff_mesh := SphereMesh.new()\n    puff_mesh.radius =\
-        \ 1.0\n    puff_mesh.height = 2.0\n    puff_mesh.radial_segments = 10\n    puff_mesh.rings = 6\n\
-        \    var cloud_material := StandardMaterial3D.new()\n    cloud_material.albedo_color = Color(0.96,\
-        \ 0.97, 1.0, 0.83)\n    cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA\n    cloud_material.shading_mode\
-        \ = BaseMaterial3D.SHADING_MODE_UNSHADED\n    cloud_material.cull_mode = BaseMaterial3D.CULL_DISABLED\n\
-        \    for cloud_i in range(96):\n        var bank := MultiMeshInstance3D.new()\n        bank.name\
-        \ = \"Wolkenbank_%03d\" % cloud_i\n        bank.material_override = cloud_material\n        var\
-        \ mm := MultiMesh.new()\n        mm.transform_format = MultiMesh.TRANSFORM_3D\n        mm.mesh\
-        \ = puff_mesh\n        var puff_count: int = cloud_rng.randi_range(9, 14)\n        mm.instance_count\
-        \ = puff_count\n        var col: int = cloud_i % 12\n        var row: int = int(cloud_i / 12)\n\
-        \        var x: float = (float(col) - 5.5) * 180.0 + cloud_rng.randf_range(-75.0, 75.0)\n    \
-        \    var z: float = (float(row) - 3.5) * 275.0 + cloud_rng.randf_range(-80.0, 80.0)\n        var\
-        \ height: float = cloud_rng.randf_range(155.0, 315.0)\n        bank.position = Vector3(x, height,\
-        \ z)\n        var bank_width: float = cloud_rng.randf_range(45.0, 125.0)\n        for puff_i in\
-        \ range(puff_count):\n            var a: float = cloud_rng.randf_range(0.0, TAU)\n           \
-        \ var distance: float = cloud_rng.randf_range(0.0, bank_width)\n            var ox: float = cos(a)\
-        \ * distance\n            var oz: float = sin(a) * distance * 0.85\n            var oy: float\
-        \ = cloud_rng.randf_range(-12.0, 21.0)\n            var size: float = cloud_rng.randf_range(17.0,\
-        \ 37.0)\n            var scale_vec := Vector3(size * cloud_rng.randf_range(0.9, 1.5),\n      \
-        \          size * cloud_rng.randf_range(0.78, 1.30),\n                size * cloud_rng.randf_range(0.85,\
-        \ 1.55))\n            mm.set_instance_transform(puff_i,\n                Transform3D(Basis().scaled(scale_vec),\
-        \ Vector3(ox, oy, oz)))\n        bank.multimesh = mm\n        cloud_root.add_child(bank)\nLWOD_V35_CLOUDS\n\
-        awk -v replacement=\"$RUNNER_TEMP/lwod_v35_clouds.gdpart\" '\n  $0 == \"    for i in range(8):\"\
-        \ && !found {\n    while ((getline line < replacement) > 0) print line\n    close(replacement)\n\
-        \    skip=1; found=1; next\n  }\n  skip && $0 == \"    sun_node = MeshInstance3D.new()\" {\n \
-        \   skip=0\n    print\n    next\n  }\n  !skip { print }\n  END { if (!found || skip) exit 22 }\n\
-        ' \"$file\" > \"$RUNNER_TEMP/V26SkyWorldMap_v35.gd\"\nmv \"$RUNNER_TEMP/V26SkyWorldMap_v35.gd\"\
-        \ \"$file\"\n# 96 Wolkenbaenke statt zentraler Wolkenansammlung; weiter Ziehbereich.\nsed -i 's/c.position.x\
-        \ > 165.0/c.position.x > 1160.0/; s/c.position.x = -165.0/c.position.x = -1160.0/' \"$file\"\n\
-        test \"$(grep -Fc 'range(96)' \"$file\")\" -eq 1\ngrep -Fq 'c.position.x > 1160.0' \"$file\"\n\
-        # Bestehende Himmelskoerper, Touch-Steuerung und Spielwelt bleiben unveraendert.\ngrep -Fq 'sun_node.scale\
-        \ = Vector3.ONE * 24.0' \"$file\"\ngrep -Fq 'moon_node.scale = Vector3.ONE * 19.0' \"$file\"\n\
-        sed -i 's@version/code=34@version/code=35@' android/export_presets.cfg\nsed -i 's@version/name=\"\
-        3.4\"@version/name=\"3.5\"@' android/export_presets.cfg\ngrep -Fqx 'version/code=35' android/export_presets.cfg\n\
-        echo 'V35: 96 verteilte Wolkenbaenke erzeugt, Sonne und Mond erhalten'\n"
+      run: "set -euo pipefail\nfile=android/scripts/V26SkyWorldMap.gd\ntest -s \"$file\"\ntest \"$(grep -Fxc ' \
+        \   for i in range(8):' \"$file\")\" -eq 1\ntest \"$(grep -Fxc '    sun_node = MeshInstance3D.new()' \"\
+        $file\")\" -eq 1\ncat > \"$RUNNER_TEMP/lwod_v35_clouds.gdpart\" <<'LWOD_V35_CLOUDS'\n    # Wolkenhimmel\
+        \ V35: 96 Wolkenbaenke auf dem ganzen Himmel, statt 8 Scheiben.\n    # Pro Wolkenbank eine MultiMesh-Instanz:\
+        \ viele weiche 3D-Teile, weniger Drawcalls.\n    var cloud_rng := RandomNumberGenerator.new()\n    cloud_rng.seed\
+        \ = 202611350\n    var puff_mesh := SphereMesh.new()\n    puff_mesh.radius = 1.0\n    puff_mesh.height =\
+        \ 2.0\n    puff_mesh.radial_segments = 10\n    puff_mesh.rings = 6\n    var cloud_material := StandardMaterial3D.new()\n\
+        \    cloud_material.albedo_color = Color(0.96, 0.97, 1.0, 0.83)\n    cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA\n\
+        \    cloud_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED\n    cloud_material.cull_mode =\
+        \ BaseMaterial3D.CULL_DISABLED\n    for cloud_i in range(96):\n        var bank := MultiMeshInstance3D.new()\n\
+        \        bank.name = \"Wolkenbank_%03d\" % cloud_i\n        bank.material_override = cloud_material\n  \
+        \      var mm := MultiMesh.new()\n        mm.transform_format = MultiMesh.TRANSFORM_3D\n        mm.mesh\
+        \ = puff_mesh\n        var puff_count: int = cloud_rng.randi_range(9, 14)\n        mm.instance_count = puff_count\n\
+        \        var col: int = cloud_i % 12\n        var row: int = int(cloud_i / 12)\n        var x: float = (float(col)\
+        \ - 5.5) * 180.0 + cloud_rng.randf_range(-75.0, 75.0)\n        var z: float = (float(row) - 3.5) * 275.0\
+        \ + cloud_rng.randf_range(-80.0, 80.0)\n        var height: float = cloud_rng.randf_range(155.0, 315.0)\n\
+        \        bank.position = Vector3(x, height, z)\n        var bank_width: float = cloud_rng.randf_range(45.0,\
+        \ 125.0)\n        for puff_i in range(puff_count):\n            var a: float = cloud_rng.randf_range(0.0,\
+        \ TAU)\n            var distance: float = cloud_rng.randf_range(0.0, bank_width)\n            var ox: float\
+        \ = cos(a) * distance\n            var oz: float = sin(a) * distance * 0.85\n            var oy: float =\
+        \ cloud_rng.randf_range(-12.0, 21.0)\n            var size: float = cloud_rng.randf_range(17.0, 37.0)\n\
+        \            var scale_vec := Vector3(size * cloud_rng.randf_range(0.9, 1.5),\n                size * cloud_rng.randf_range(0.78,\
+        \ 1.30),\n                size * cloud_rng.randf_range(0.85, 1.55))\n            mm.set_instance_transform(puff_i,\n\
+        \                Transform3D(Basis().scaled(scale_vec), Vector3(ox, oy, oz)))\n        bank.multimesh =\
+        \ mm\n        cloud_root.add_child(bank)\nLWOD_V35_CLOUDS\nawk -v replacement=\"$RUNNER_TEMP/lwod_v35_clouds.gdpart\"\
+        \ '\n  $0 == \"    for i in range(8):\" && !found {\n    while ((getline line < replacement) > 0) print\
+        \ line\n    close(replacement)\n    skip=1; found=1; next\n  }\n  skip && $0 == \"    sun_node = MeshInstance3D.new()\"\
+        \ {\n    skip=0\n    print\n    next\n  }\n  !skip { print }\n  END { if (!found || skip) exit 22 }\n' \"\
+        $file\" > \"$RUNNER_TEMP/V26SkyWorldMap_v35.gd\"\nmv \"$RUNNER_TEMP/V26SkyWorldMap_v35.gd\" \"$file\"\n\
+        # 96 Wolkenbaenke statt zentraler Wolkenansammlung; weiter Ziehbereich.\nsed -i 's/c.position.x > 165.0/c.position.x\
+        \ > 1160.0/; s/c.position.x = -165.0/c.position.x = -1160.0/' \"$file\"\ntest \"$(grep -Fc 'range(96)' \"\
+        $file\")\" -eq 1\ngrep -Fq 'c.position.x > 1160.0' \"$file\"\n# Bestehende Himmelskoerper, Touch-Steuerung\
+        \ und Spielwelt bleiben unveraendert.\ngrep -Fq 'sun_node.scale = Vector3.ONE * 24.0' \"$file\"\ngrep -Fq\
+        \ 'moon_node.scale = Vector3.ONE * 19.0' \"$file\"\nsed -i 's@version/code=34@version/code=35@' android/export_presets.cfg\n\
+        sed -i 's@version/name=\"3.4\"@version/name=\"3.5\"@' android/export_presets.cfg\ngrep -Fqx 'version/code=35'\
+        \ android/export_presets.cfg\necho 'V35: 96 verteilte Wolkenbaenke erzeugt, Sonne und Mond erhalten'\n"
     - name: V36 Sonne und Mond korrekt hinter Wolken rendern
       shell: bash
-      run: "set -euo pipefail\nfile=\"android/scripts/V26SkyWorldMap.gd\"\ntest -s \"$file\"\n# V35-Wolken\
-        \ als blickdichte 3D-Koerper zeichnen: sie schreiben in den Tiefenpuffer.\n# Sonne und Mond werden\
-        \ auf eine weiter entfernte Umlaufbahn verschoben.\n# Die Skalierung erfolgt proportional, damit\
-        \ ihre sichtbare Groesse gleich bleibt.\ngrep -Fqx '    cloud_material.albedo_color = Color(0.96,\
-        \ 0.97, 1.0, 0.83)' \"$file\"\ngrep -Fqx '    cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA'\
-        \ \"$file\"\ngrep -Fqx '    sun_node.scale = Vector3.ONE * 24.0' \"$file\"\ngrep -Fqx '    moon_node.scale\
-        \ = Vector3.ONE * 19.0' \"$file\"\ngrep -Fqx '        sun_node.position = Vector3(cos(angle)*290.0,\
-        \ 14.0 + elevation*185.0, -18.0)' \"$file\"\ngrep -Fqx '        moon_node.position = Vector3(cos(moon_angle)*285.0,\
-        \ 16.0 + sin(moon_angle)*185.0, 24.0)' \"$file\"\nawk '\n  $0 == \"    cloud_material.albedo_color\
-        \ = Color(0.96, 0.97, 1.0, 0.83)\" {print \"    cloud_material.albedo_color = Color(0.96, 0.97,\
-        \ 1.0, 1.0)\"; a++; next}\n  $0 == \"    cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA\"\
-        \ {print \"    cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED\"; b++; next}\n\
-        \  $0 == \"    sun_node.scale = Vector3.ONE * 24.0\" {print \"    sun_node.scale = Vector3.ONE\
-        \ * 264.0\"; c++; next}\n  $0 == \"    moon_node.scale = Vector3.ONE * 19.0\" {print \"    moon_node.scale\
-        \ = Vector3.ONE * 209.0\"; d++; next}\n  $0 == \"        sun_node.position = Vector3(cos(angle)*290.0,\
-        \ 14.0 + elevation*185.0, -18.0)\" {print \"        sun_node.position = Vector3(cos(angle)*3190.0,\
-        \ 154.0 + elevation*2035.0, -198.0)\"; e++; next}\n  $0 == \"        moon_node.position = Vector3(cos(moon_angle)*285.0,\
-        \ 16.0 + sin(moon_angle)*185.0, 24.0)\" {print \"        moon_node.position = Vector3(cos(moon_angle)*3135.0,\
-        \ 176.0 + sin(moon_angle)*2035.0, 264.0)\"; f++; next}\n  {print}\n  END { if(a!=1 || b!=1 ||\
-        \ c!=1 || d!=1 || e!=1 || f!=1) exit 36 }\n' \"$file\" > \"$RUNNER_TEMP/lwod_v36_sky.gd\"\nmv\
-        \ \"$RUNNER_TEMP/lwod_v36_sky.gd\" \"$file\"\n# Vor der Sonne liegende Wolken verdecken sie ab\
-        \ jetzt physikalisch korrekt.\ntest \"$(grep -Fc 'cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED'\
-        \ \"$file\")\" -eq 1\ngrep -Fq 'sun_node.position = Vector3(cos(angle)*3190.0' \"$file\"\ngrep\
-        \ -Fq 'moon_node.position = Vector3(cos(moon_angle)*3135.0' \"$file\"\ngrep -Fq 'for cloud_i in\
-        \ range(96):' \"$file\"\nsed -i 's@version/code=35@version/code=36@; s@version/name=\"3.5\"@version/name=\"\
-        3.6\"@' android/export_presets.cfg\ngrep -Fqx 'version/code=36' android/export_presets.cfg\necho\
-        \ 'V36 SKY DEPTH OK: 96 Wolkenbaenke verdecken Sonne und Mond bei Ueberlappung'\n"
+      run: "set -euo pipefail\nfile=\"android/scripts/V26SkyWorldMap.gd\"\ntest -s \"$file\"\n# V35-Wolken als blickdichte\
+        \ 3D-Koerper zeichnen: sie schreiben in den Tiefenpuffer.\n# Sonne und Mond werden auf eine weiter entfernte\
+        \ Umlaufbahn verschoben.\n# Die Skalierung erfolgt proportional, damit ihre sichtbare Groesse gleich bleibt.\n\
+        grep -Fqx '    cloud_material.albedo_color = Color(0.96, 0.97, 1.0, 0.83)' \"$file\"\ngrep -Fqx '    cloud_material.transparency\
+        \ = BaseMaterial3D.TRANSPARENCY_ALPHA' \"$file\"\ngrep -Fqx '    sun_node.scale = Vector3.ONE * 24.0' \"\
+        $file\"\ngrep -Fqx '    moon_node.scale = Vector3.ONE * 19.0' \"$file\"\ngrep -Fqx '        sun_node.position\
+        \ = Vector3(cos(angle)*290.0, 14.0 + elevation*185.0, -18.0)' \"$file\"\ngrep -Fqx '        moon_node.position\
+        \ = Vector3(cos(moon_angle)*285.0, 16.0 + sin(moon_angle)*185.0, 24.0)' \"$file\"\nawk '\n  $0 == \"   \
+        \ cloud_material.albedo_color = Color(0.96, 0.97, 1.0, 0.83)\" {print \"    cloud_material.albedo_color\
+        \ = Color(0.96, 0.97, 1.0, 1.0)\"; a++; next}\n  $0 == \"    cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA\"\
+        \ {print \"    cloud_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED\"; b++; next}\n  $0 ==\
+        \ \"    sun_node.scale = Vector3.ONE * 24.0\" {print \"    sun_node.scale = Vector3.ONE * 264.0\"; c++;\
+        \ next}\n  $0 == \"    moon_node.scale = Vector3.ONE * 19.0\" {print \"    moon_node.scale = Vector3.ONE\
+        \ * 209.0\"; d++; next}\n  $0 == \"        sun_node.position = Vector3(cos(angle)*290.0, 14.0 + elevation*185.0,\
+        \ -18.0)\" {print \"        sun_node.position = Vector3(cos(angle)*3190.0, 154.0 + elevation*2035.0, -198.0)\"\
+        ; e++; next}\n  $0 == \"        moon_node.position = Vector3(cos(moon_angle)*285.0, 16.0 + sin(moon_angle)*185.0,\
+        \ 24.0)\" {print \"        moon_node.position = Vector3(cos(moon_angle)*3135.0, 176.0 + sin(moon_angle)*2035.0,\
+        \ 264.0)\"; f++; next}\n  {print}\n  END { if(a!=1 || b!=1 || c!=1 || d!=1 || e!=1 || f!=1) exit 36 }\n\
+        ' \"$file\" > \"$RUNNER_TEMP/lwod_v36_sky.gd\"\nmv \"$RUNNER_TEMP/lwod_v36_sky.gd\" \"$file\"\n# Vor der\
+        \ Sonne liegende Wolken verdecken sie ab jetzt physikalisch korrekt.\ntest \"$(grep -Fc 'cloud_material.transparency\
+        \ = BaseMaterial3D.TRANSPARENCY_DISABLED' \"$file\")\" -eq 1\ngrep -Fq 'sun_node.position = Vector3(cos(angle)*3190.0'\
+        \ \"$file\"\ngrep -Fq 'moon_node.position = Vector3(cos(moon_angle)*3135.0' \"$file\"\ngrep -Fq 'for cloud_i\
+        \ in range(96):' \"$file\"\nsed -i 's@version/code=35@version/code=36@; s@version/name=\"3.5\"@version/name=\"\
+        3.6\"@' android/export_presets.cfg\ngrep -Fqx 'version/code=36' android/export_presets.cfg\necho 'V36 SKY\
+        \ DEPTH OK: 96 Wolkenbaenke verdecken Sonne und Mond bei Ueberlappung'\n"
     - name: V37 Dorfbewohner Dialoge Lichtkristall Quest und Belohnung
       shell: bash
-      run: "set -euo pipefail\nmkdir -p android/scripts android/tests\ncat <<'LWOD_V37_SCRIPT_B64' | base64\
-        \ -d | gzip -dc > android/scripts/V37VillageQuests.gd\nH4sIAAAAAAAC/61b63LbxpL+76cYw5VaMhER8U4qcbYki469lmWvJNtJXC4UCAxJHIEADy66eGur\n\
+      run: "set -euo pipefail\nmkdir -p android/scripts android/tests\ncat <<'LWOD_V37_SCRIPT_B64' | base64 -d |\
+        \ gzip -dc > android/scripts/V37VillageQuests.gd\nH4sIAAAAAAAC/61b63LbxpL+76cYw5VaMhER8U4qcbYki469lmWvJNtJXC4UCAxJHIEADy66eGur\n\
         9h3OA5w/eYbzK//8Jvsk+/XMAJgBQclKNlWxyJmevndPz0yT32Q88lN2Gvv80aMn7OTDm2P2vj8+\nYEd8yVdzN+HsOE4Wc3xbRnm05NEeu4hzb+UHbhgvOcsjn/EkzTg7d9drHv4952lmA9VxwFOeskPf\n\
         78QRu+KJC0o8ydglDyLOXrlrDHX2QOiaL4E57TAwkbAXAaFJ08sk2GTcfuTFUZqx88P3M+f5y5PZ\nATvPkiBasqfMylOeHHz/fXgd+85Vf+xI2t5iaalVF4cnr5yzw9OfsWwRxm6GVX17pGafnf16Doht\n\
         gIECOH37zPlAKM7fzmbHFcS+PX706MpN2BJCHAjl9Y/FQMaTxA0iY2zD400IsENM3X48DrwsiCM3\nuf0ETB8/CRAvuU0zNzSWCWEcDC+xNogEXcae4J+I53usy1yyRgxlwSQ9tuQLmII+95k7X/LUW4Vx\n\
@@ -1714,23 +1705,22 @@ jobs:
         ftO6ZHiah4jhWZKIN74Cm3vFW+Vv+9qFbSQ02evNK02HOc5r124SUV1oiV8pigMSHaUCdhlHVILI\nqgMHpg11wVYFh1WqrfYLqQcrD/wp7pEXfI178iOdX/N06IXuehO0qEpWy5d3qH+/Tb8i2WP9Kqz0\n\
         gyX1S90E9FuA+/FppgHWQg2ivcgh/6Ky9e6bk/1H2/T3S12o1r7H9QeY7auDsq7++uNwrXQveUdd\nwpvP7o2/gHsYn/WOs4fx+H+kqfs2VDsAAA==\n\
         LWOD_V37_SCRIPT_B64\nprintf '%s  %s\\n' '82b639f20ba4a0403a65c56f8d6df6c0537f3868101d1fb8c3240d3e6f711e79'\
-        \ 'android/scripts/V37VillageQuests.gd' | sha256sum -c -\n# Neues Spiel setzt nur den Questfortschritt\
-        \ zurueck; bestehende Saves bleiben unberuehrt.\nawk '\n  {print}\n  $0 == \"    touch_v33.setup(self)\"\
-        \ {\n    print \"    var village_v37 = load(\\\"res://scripts/V37VillageQuests.gd\\\").new()\"\
-        \n    print \"    add_child(village_v37)\"\n    print \"    village_v37.setup(self)\"\n    boot++\n\
-        \  }\n  $0 == \"func _on_new_game_pressed() -> void:\" { in_new=1 }\n  in_new && $0 == \"    _show_playing()\"\
-        \ {\n    print \"    var village_v37 = get_node_or_null(\\\"V37VillageQuests\\\")\"\n    print\
-        \ \"    if village_v37 != null:\"\n    print \"        village_v37.reset_new_game()\"\n    in_new=0\n\
-        \    reset++\n  }\n  END { if(boot!=1 || reset!=1) exit 87 }\n' android/scripts/Main.gd > \"$RUNNER_TEMP/lwod_v37_main.gd\"\
-        \nmv \"$RUNNER_TEMP/lwod_v37_main.gd\" android/scripts/Main.gd\nsed -i 's@version/code=36@version/code=37@;\
-        \ s@version/name=\"3.6\"@version/name=\"3.7\"@' android/export_presets.cfg\ntest -s android/scripts/V37VillageQuests.gd\n\
-        grep -Fqx '    village_v37.setup(self)' android/scripts/Main.gd\ngrep -Fq 'village_v37.reset_new_game()'\
-        \ android/scripts/Main.gd\ngrep -Fqx 'version/code=37' android/export_presets.cfg\necho 'V37:\
-        \ Bewohner, Gespraeche, Lichtkristall-Quest und Belohnung eingebaut'\n"
+        \ 'android/scripts/V37VillageQuests.gd' | sha256sum -c -\n# Neues Spiel setzt nur den Questfortschritt zurueck;\
+        \ bestehende Saves bleiben unberuehrt.\nawk '\n  {print}\n  $0 == \"    touch_v33.setup(self)\" {\n    print\
+        \ \"    var village_v37 = load(\\\"res://scripts/V37VillageQuests.gd\\\").new()\"\n    print \"    add_child(village_v37)\"\
+        \n    print \"    village_v37.setup(self)\"\n    boot++\n  }\n  $0 == \"func _on_new_game_pressed() -> void:\"\
+        \ { in_new=1 }\n  in_new && $0 == \"    _show_playing()\" {\n    print \"    var village_v37 = get_node_or_null(\\\
+        \"V37VillageQuests\\\")\"\n    print \"    if village_v37 != null:\"\n    print \"        village_v37.reset_new_game()\"\
+        \n    in_new=0\n    reset++\n  }\n  END { if(boot!=1 || reset!=1) exit 87 }\n' android/scripts/Main.gd >\
+        \ \"$RUNNER_TEMP/lwod_v37_main.gd\"\nmv \"$RUNNER_TEMP/lwod_v37_main.gd\" android/scripts/Main.gd\nsed -i\
+        \ 's@version/code=36@version/code=37@; s@version/name=\"3.6\"@version/name=\"3.7\"@' android/export_presets.cfg\n\
+        test -s android/scripts/V37VillageQuests.gd\ngrep -Fqx '    village_v37.setup(self)' android/scripts/Main.gd\n\
+        grep -Fq 'village_v37.reset_new_game()' android/scripts/Main.gd\ngrep -Fqx 'version/code=37' android/export_presets.cfg\n\
+        echo 'V37: Bewohner, Gespraeche, Lichtkristall-Quest und Belohnung eingebaut'\n"
     - name: V38 NPC Modelle Fantasy Dialoge Dorfleben und Tagesablauf
       shell: bash
-      run: "set -euo pipefail\nmkdir -p android/scripts android/tests\ncat <<'LWOD_V38_SCRIPT_B64' | base64\
-        \ -d | gzip -dc > android/scripts/V38VillageLife.gd\nH4sIAAAAAAAC/6U7W3LbSJL/OkUNHRtBdlMY4klQYXvD3fK0O8J271ie7thRKBAFoEhihQcXACVZX3uHvcIcY//6\n\
+      run: "set -euo pipefail\nmkdir -p android/scripts android/tests\ncat <<'LWOD_V38_SCRIPT_B64' | base64 -d |\
+        \ gzip -dc > android/scripts/V38VillageLife.gd\nH4sIAAAAAAAC/6U7W3LbSJL/OkUNHRtBdlMY4klQYXvD3fK0O8J271ie7thRKBAFoEhihQcXACVZX3uHvcIcY//6\n\
         JnuSzczCowoAJfWOI0yJVfmqrHxVVUo81CKPK/a5iMXZ2Sv2q+2z//2v/2Y8jpM6uRPssii3d6IMRVWJ8pjvGD9u\nWSxKVh0SkYa8FDkgrc//ehRVHfIqqQwgc1WLI4Ev2UcO9KM939ZL9iHJMpEu2dVBJNFelDk75jGTqCIt9jkyCFOR\n\
         hEAVWNZiL3LjLCryqmaff/7pw9fg6uu7L18v2DYteM3esJXhOs38p1++fP7580/q3MZv5v76t/dXX4PPv3z9+cf3\nwdX7H3/5fHnVA/rG6uzsjpdsxzNxQbqwL2ngP1G0Sg7RwH1RpnEQpUV0q4yWokpikSPku7Lk34Dm9Q3NJDmokadB\n\
         deD3eTt9/auI6qK0bnq4fZEJACrqJ2CKMtklORAreb4THSCtQgFLeXboJn/J8uRjstvX9qUCEouoKLWF0oqCCsZh\nt1QVrhqaVR2QMoKq5jtQUpLj/LkpsYvskIo6KfJApPxQifgEiRxFQRI1kAiLIgWALU8rsL3tMY9YJerjYV4WRd1K\n\
@@ -1765,23 +1755,411 @@ jobs:
         qkhCTzf2ScRn+vomIwnQeUm+gHqp7ra33y7c0wQ3baVB411SiX9R0bfo9d13sBIUBynKlxRdNcOFFnAWkW19Krl2\nwU81/I1g3ijEjFSUh3kjKBQvSb6Vb8jk+tRPAUf3xYhY05Eoo5u+jkFLo7qQbg870Yc9cFATwfkItdSpuW1LxAa6\n\
         rkMP6nrt++PCiJNmR+tirql5QQ0lzU1j24qnuAdWKCQ+bqMmg+Ksb4mE/lAGNI7ypaztehz+mYraCbiYtseGyJ+m\nWk2pEi/uoADX/opB17eppJfuXqeH1/Pgd8xRHwwXtMPeRO/Otg54mSm+JeWcWCX1Dk0tTmmc3P8Ral+epEaipWL3\n\
         EmLUVvS8aC+ndlo0/LOYRmnTeylblySEURYQdsmO6W8S8nktd8JewQ+540PqnRZPk+9AdPrnL2PQKvYZ8bH96iR5\n6zn5n6TfgZzUz5A+2TqHk119qpRr7tAkkFLMyQFqbiYvb76/ZlrCuhgmm6DlpuQcimly/ObZnvKGQKsE4o0RqJ9q\n\
-        Q9NEeVRhwT1cE/ZjL0aW/U9cLCoCn7pgHFzXDR9f/g/5SNCDnDoAAA==\nLWOD_V38_SCRIPT_B64\nprintf '%s  %s\\\
-        n' '4ec389f7efe869eca4e8122056dd0931850f8aafa1d44f9948e452581d3290f0' 'android/scripts/V38VillageLife.gd'\
-        \ | sha256sum -c -\n# Bestehende V37-Dialoge behalten; nur normale Bewohner erhalten Antwortoptionen.\n\
-        awk '\n  index($0, \"_show_dialog(str(person[\") > 0 {\n    print \"        var village_v38: Node\
-        \ = game.get_node_or_null(\" sprintf(\"%cV38VillageLife%c\", 34, 34) \")\"\n    print \"     \
-        \   if village_v38 != null:\"\n    print \"            village_v38.talk_to_villager(index)\"\n\
-        \    print \"        else:\"\n    print \"    \" $0\n    changed++\n    next\n  }\n  {print}\n\
-        \  END {if(changed != 1) exit 88}\n' android/scripts/V37VillageQuests.gd > \"$RUNNER_TEMP/lwod_v38_quest.gd\"\
-        \nmv \"$RUNNER_TEMP/lwod_v38_quest.gd\" android/scripts/V37VillageQuests.gd\n# Add-on erst NACH\
-        \ der funktionierenden V37-Quest starten.\nawk '\n  {print}\n  $0 == \"    village_v37.setup(self)\"\
-        \ {\n    print \"    var village_v38 = load(\" sprintf(\"%cres://scripts/V38VillageLife.gd%c\"\
-        , 34, 34) \").new()\"\n    print \"    add_child(village_v38)\"\n    print \"    village_v38.setup(self)\"\
-        \n    added++\n  }\n  END {if(added != 1) exit 89}\n' android/scripts/Main.gd > \"$RUNNER_TEMP/lwod_v38_main.gd\"\
-        \nmv \"$RUNNER_TEMP/lwod_v38_main.gd\" android/scripts/Main.gd\nsed -i 's@version/code=37@version/code=38@;s@version/name=\"\
-        3.7\"@version/name=\"3.8\"@' android/export_presets.cfg\ntest -s android/scripts/V38VillageLife.gd\n\
-        grep -Fqx '    village_v38.setup(self)' android/scripts/Main.gd\ngrep -Fqx 'version/code=38' android/export_presets.cfg\n\
-        printf 'V38: Modelle, Gespräche, Dorfdekoration und Abendablauf eingefügt\\n'\n"
+        Q9NEeVRhwT1cE/ZjL0aW/U9cLCoCn7pgHFzXDR9f/g/5SNCDnDoAAA==\nLWOD_V38_SCRIPT_B64\nprintf '%s  %s\\n' '4ec389f7efe869eca4e8122056dd0931850f8aafa1d44f9948e452581d3290f0'\
+        \ 'android/scripts/V38VillageLife.gd' | sha256sum -c -\n# Bestehende V37-Dialoge behalten; nur normale Bewohner\
+        \ erhalten Antwortoptionen.\nawk '\n  index($0, \"_show_dialog(str(person[\") > 0 {\n    print \"      \
+        \  var village_v38: Node = game.get_node_or_null(\" sprintf(\"%cV38VillageLife%c\", 34, 34) \")\"\n    print\
+        \ \"        if village_v38 != null:\"\n    print \"            village_v38.talk_to_villager(index)\"\n \
+        \   print \"        else:\"\n    print \"    \" $0\n    changed++\n    next\n  }\n  {print}\n  END {if(changed\
+        \ != 1) exit 88}\n' android/scripts/V37VillageQuests.gd > \"$RUNNER_TEMP/lwod_v38_quest.gd\"\nmv \"$RUNNER_TEMP/lwod_v38_quest.gd\"\
+        \ android/scripts/V37VillageQuests.gd\n# Add-on erst NACH der funktionierenden V37-Quest starten.\nawk '\n\
+        \  {print}\n  $0 == \"    village_v37.setup(self)\" {\n    print \"    var village_v38 = load(\" sprintf(\"\
+        %cres://scripts/V38VillageLife.gd%c\", 34, 34) \").new()\"\n    print \"    add_child(village_v38)\"\n \
+        \   print \"    village_v38.setup(self)\"\n    added++\n  }\n  END {if(added != 1) exit 89}\n' android/scripts/Main.gd\
+        \ > \"$RUNNER_TEMP/lwod_v38_main.gd\"\nmv \"$RUNNER_TEMP/lwod_v38_main.gd\" android/scripts/Main.gd\nsed\
+        \ -i 's@version/code=37@version/code=38@;s@version/name=\"3.7\"@version/name=\"3.8\"@' android/export_presets.cfg\n\
+        test -s android/scripts/V38VillageLife.gd\ngrep -Fqx '    village_v38.setup(self)' android/scripts/Main.gd\n\
+        grep -Fqx 'version/code=38' android/export_presets.cfg\nprintf 'V38: Modelle, Gespr\xE4che, Dorfdekoration\
+        \ und Abendablauf eingef\xFCgt\\n'\n"
+    - name: V39 NPC Wege Blickrichtung und Namensschilder reparieren
+      shell: bash
+      run: 'set -euo pipefail
+
+        mkdir -p android/scripts android/tests
+
+        cat <<''LWOD_V39_QUEST'' | base64 -d | gzip -dc > android/scripts/V37VillageQuests.gd
+
+        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
+
+        LWOD_V39_QUEST
+
+        printf ''%s  %s\n'' ''9d3ff12c7ca78a370263329f3f94832460f80b1335738dfaab0eec0d4a95a8d7'' ''android/scripts/V37VillageQuests.gd''
+        | sha256sum -c -
+
+        cat <<''LWOD_V39_LIFE'' | base64 -d | gzip -dc > android/scripts/V38VillageLife.gd
+
+        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
+
+        LWOD_V39_LIFE
+
+        printf ''%s  %s\n'' ''a61da7ed8975a6f75503de0b8e281b120633655ad377dac764a6ccc3d88ece1b'' ''android/scripts/V38VillageLife.gd''
+        | sha256sum -c -
+
+        cat <<''LWOD_V39_TEST'' | base64 -d | gzip -dc > android/tests/V39NPCSmoke.gd
+
+        H4sIAAAAAAAC/4VWUW/bNhB+z6+4aS8yGstyknWtERdIt3YblmUZHGQPRSEw0kkiTJMqScVtfv2OpCxLXtzoJTH5
+
+        3d3H7453xK8WZWFglaPEO414clK2MoeMS245E/wJ4wlM38Gj4sXiBOjLmRBZgSVqjUUcZbqV0WRnVjIu4g0awypc
+
+        wMpqLqsD+6Y1dUbGSsfR/fnb7O7D6i77ePXH9QIieAWd8cRjv7TcxvPeO4U6ZPPINBhHfgG3LF9j4U8CSxCKETuN
+
+        ZjGbeYCZ/cW4TKzJiS8wM8R7V7wMnmC5BNkKEQK4Lxwr6u2hxFrYaNIDNNpWy55QxTbE50YVeP4rUfFeEy6NZZJE
+
+        tU5Sih/2vZFWyiasKLK85qKInX1wXioNHLgEzWSF8dnZZM+KbRm30GiVk2RZqcmoZ/ClRWNN4EAMnMOkQptJ+p0p
+
+        nbnzOfl/vudCkNz/eHx3IudA8BJfNn/TmV8TujMmFUPwnYyggrejsvrYU2hlATe3v0xXa80b+5LEDapGEMMrrdk3
+
+        ohhiOpJxFPZCkv3+jljYSEyo6h+WML/4H5v3uFW1RP3EagHbVpMAj6gZ3RLUR/i4JDWojZIuUx2zHujYyiYf1EPA
+
+        foqcmtHng1LoE8AeUCzg2v3xVk67HuFC+lpxEcm7z45f0Eh3ZB+9O3mHNTt/Y4D7fDwKE5CsR54MvHSYQV7dQlIq
+
+        aTMnKlzCxcV+XbVWcIm7rTfjoJ3eN1RbdASe1xYqrYyZrcmdZsZqpEWoULbVQPcD7X1pupZEnUjJTOI2c0tZQzff
+
+        YBHt+oivDuOqo6C2pqpMNSijUyiZMLgv+8NEuVR+mn8+kitfiBofF3CPuVX63KWJktEoQ91TDaqV2ToTKCtbL6Ck
+
+        1mQJmSZpD6B8bpkuskKRku3medBGPVI7DTed7jaXHtBv04ntsf0fYcU3reBUw/A2hRWu6bqR7q7U4QNp/4TcEgOa
+
+        Bslzjed1mg6KqpOzk73rQCRmmsx/2mfKXfqXMF5ztf2ugDtcXjsqI6jawtRnoAcGUPJtIF1/BfxOyAJd/3cOkJ6P
+
+        i3KQKHi1PLQZQUfZcOD5aHuQ1SHlqb+sQj0wkVGVS0OYTfLADDfJUyLphx+6xUEw5402KkmXxe6rowuQUNnEHdeh
+
+        i7GPgxpzlHuXPRDpOiwOLtuwrMYHddKHPOyLFJnMjlPto89gw76W8TxJTwMmHgnacW/oAWHDO+H26u53CJlYUh0N
+
+        MnVKDwcyxs7U7Y58uX13isH++FAOULLcLTj63sHoGP1oG9bHJZwnqet240q4hDO/eqDbJczTo8MGamqYEtZI7RL+
+
+        xQphQ6P9lrUG5fMzh7iMKVKANHn9nRCCtSXF0C3m6y2jRmCOenaaDweq/z+j50tFU9UPzvT5KU4QajAvzctBUv3j
+
+        7+8/qef6MeAHwCn8hvUTRzFU4RTeC56vXUe6poNoNy9aWflXgw8NqGsmbK+Xfzqmk5P/AA3oGuniCgAA
+
+        LWOD_V39_TEST
+
+        printf ''%s  %s\n'' ''d4713718a7a1b21e5cc595120643161c1c5aa1f5c1e84ebdc8db7da69b70c2f7'' ''android/tests/V39NPCSmoke.gd''
+        | sha256sum -c -
+
+        # Laufzeit-Skript und UI werden ersetzt, Questdaten und Save-Dateien nicht.
+
+        sed -i ''s@version/code=38@version/code=39@; s@version/name="3.8"@version/name="3.9"@'' android/export_presets.cfg
+
+        if ! grep -Fqx ''version/code=39'' android/export_presets.cfg; then echo ''::error::V39 Android Versionsnummer
+        fehlt''; exit 39; fi
+
+        grep -Fq ''walk_target'' android/scripts/V37VillageQuests.gd
+
+        grep -Fq ''outline_size = 12'' android/scripts/V38VillageLife.gd
+
+        echo ''V39: NPC-Wegpunkte, echte Blickrichtung, grosse Namensschilder installiert''
+
+        '
     - name: Godot Ressourcen importieren
       shell: bash
       run: 'set -euo pipefail
@@ -1815,6 +2193,9 @@ jobs:
 
         test -s android/scripts/V38VillageLife.gd
 
+
+        test -s android/tests/V39NPCSmoke.gd
+
         '
     - name: Godot Start und Scriptfehler testen
       shell: bash
@@ -1838,59 +2219,61 @@ jobs:
     - name: V36 FIX1 Kameratest nach Kameraupdate messen
       shell: bash
       run: "set -euo pipefail\ntest -s android/tests/V34TouchSmoke.gd\ntest \"$(grep -Fxc '    var actual_look:\
-        \ float = (-cam.global_basis.z).y' android/tests/V34TouchSmoke.gd)\" -eq 1\n# SceneTree.process_frame\
-        \ wird VOR Node._process gesendet.\n# Deshalb in der Testszene die reale Kameramethode einmal\
-        \ direkt anwenden,\n# bevor die Kamerarichtung gemessen wird. Keine Spielfunktionen veraendern.\n\
-        sed -i '/^    var actual_look: float = (-cam.global_basis.z).y$/i\\    ctrl.call(\"_update_camera\"\
-        , 1.0 / 60.0)' android/tests/V34TouchSmoke.gd\ntest \"$(grep -Fxc '    ctrl.call(\"_update_camera\"\
-        , 1.0 / 60.0)' android/tests/V34TouchSmoke.gd)\" -eq 1\ngodot --headless --path android --script\
-        \ res://tests/V34TouchSmoke.gd > \"$RUNNER_TEMP/lwod_v36_fix1_touch.log\" 2>&1 || {\n  cat \"\
-        $RUNNER_TEMP/lwod_v36_fix1_touch.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/lwod_v36_fix1_touch.log\"\
+        \ float = (-cam.global_basis.z).y' android/tests/V34TouchSmoke.gd)\" -eq 1\n# SceneTree.process_frame wird\
+        \ VOR Node._process gesendet.\n# Deshalb in der Testszene die reale Kameramethode einmal direkt anwenden,\n\
+        # bevor die Kamerarichtung gemessen wird. Keine Spielfunktionen veraendern.\nsed -i '/^    var actual_look:\
+        \ float = (-cam.global_basis.z).y$/i\\    ctrl.call(\"_update_camera\", 1.0 / 60.0)' android/tests/V34TouchSmoke.gd\n\
+        test \"$(grep -Fxc '    ctrl.call(\"_update_camera\", 1.0 / 60.0)' android/tests/V34TouchSmoke.gd)\" -eq\
+        \ 1\ngodot --headless --path android --script res://tests/V34TouchSmoke.gd > \"$RUNNER_TEMP/lwod_v36_fix1_touch.log\"\
+        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/lwod_v36_fix1_touch.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/lwod_v36_fix1_touch.log\"\
         \ngrep -Fq 'V34_TEST_OK:' \"$RUNNER_TEMP/lwod_v36_fix1_touch.log\"\n"
     - name: V37 NPC Dialog und Quest Ablauf automatisch pruefen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p android/tests\ncat <<'LWOD_V37_SMOKE_B64' | base64 -d | gzip -dc\
-        \ > android/tests/V37QuestSmoke.gd\nH4sIAAAAAAAC/5WVTVPbMBCG7/yKbU7OjPMBoQUyk85Q4ERLYUK5aoS1djRRJCPJTcmv70o2CZAw\n\
-        Mb4kUbS7z777YfznUQsH0ww13lvEg4O80hkwqaWXXMkVJl3ofYe/RorxAdCTcaWYwBytRZF0mK10\np/tiRj/e3//LLZQ8m6MYw238jMFgAspwcmDRjQcDF87c4BeXuu9dRi6Bu9f3oy+ZN65gMgFdKVWH\n\
-        CE9ZuRkjJmOTzsPohN1fTe/HEPz1pqsQT8ts5qFAAhUYkF8snyrpk9PDzYFFX1m9hl8aq4j9xggc\nXRJ2TdCX2nmuSSQfJCLY+kI0s8b4PheCZTOpRBI91P5zY0GC1GC5LjA5GnY3KfAllx5KazJ0juWW\n\
-        L3AN8VSh866mIIbosV+gZ5oOmLEsqBEzf5BK8QLvokGTJulWO2irW7TuTZ+dxwXkOFN+S7CjDwXT\nZUak59byZ0KtAwfWpFOiKRVuoMLNvqub7MsEDo/3cV3ZJbcePV2FH7g0M412i2y0k4zCtVVtQAc/\n\
-        Q7vMraQiK9WJeG2Eu24sQHCbwxyp0tdSCxDoGlEvjPbWKIXWgaP/t/CPP8J/rWRmn0McAmtZ0Tf5\nfFDSrzsj16qFsadpN5ppXLKCepOVNLoORWdnZx+3aGzKSWqfvM4rfmcEWVCbRNWH+zK7QbKBaSlR\n\
-        kaB+5Wuhm4FfVbbCbL6V67eduTYoTbIk1Zx500lhuGlZ4+HRGPWGWtCqNAUzZVgs3b1NrATvXUaT\n9VYymOcat0ty0gKT1LKexbPNaO0X9rDVEmgIQ021WSx2bM7TFohZaPjMs3Xbtsc8aj1yNSmNVIGO\n\
-        E+qODj9rwZrTu4/ifFrPEYQJeHct1IZaaI7atZX9/LHgjwi0oSztOEU7rtJFnFjKK5uFNbVVhLPh\n/sRoWsPma6b3M5m1GcHYhO3n72z3+7a0gSZ6vvtDrqN/9vt6HBb+ze1FCvXcpHCuNZ8tMIUrehHH\n\
-        auu0kS7dyJau0RqAGJzE+g9XL2ct+QgAAA==\nLWOD_V37_SMOKE_B64\nprintf '%s  %s\\n' '8bafefbb4033ca8b1249835ac916faaf14a6ae60a8385a90db45488a9d93e949'\
-        \ 'android/tests/V37QuestSmoke.gd' | sha256sum -c -\ngodot --headless --path android --script\
-        \ res://tests/V37QuestSmoke.gd > \"$RUNNER_TEMP/lwod_v37_quests.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/lwod_v37_quests.log\"\
-        \n  exit 1\n}\ncat \"$RUNNER_TEMP/lwod_v37_quests.log\"\ngrep -Fq 'V37_QUEST_TEST_OK:' \"$RUNNER_TEMP/lwod_v37_quests.log\"\
+      run: "set -euo pipefail\nmkdir -p android/tests\ncat <<'LWOD_V37_SMOKE_B64' | base64 -d | gzip -dc > android/tests/V37QuestSmoke.gd\n\
+        H4sIAAAAAAAC/5WVTVPbMBCG7/yKbU7OjPMBoQUyk85Q4ERLYUK5aoS1djRRJCPJTcmv70o2CZAw\nMb4kUbS7z777YfznUQsH0ww13lvEg4O80hkwqaWXXMkVJl3ofYe/RorxAdCTcaWYwBytRZF0mK10\n\
+        p/tiRj/e3//LLZQ8m6MYw238jMFgAspwcmDRjQcDF87c4BeXuu9dRi6Bu9f3oy+ZN65gMgFdKVWH\nCE9ZuRkjJmOTzsPohN1fTe/HEPz1pqsQT8ts5qFAAhUYkF8snyrpk9PDzYFFX1m9hl8aq4j9xggc\n\
+        XRJ2TdCX2nmuSSQfJCLY+kI0s8b4PheCZTOpRBI91P5zY0GC1GC5LjA5GnY3KfAllx5KazJ0juWW\nL3AN8VSh866mIIbosV+gZ5oOmLEsqBEzf5BK8QLvokGTJulWO2irW7TuTZ+dxwXkOFN+S7CjDwXT\n\
+        ZUak59byZ0KtAwfWpFOiKRVuoMLNvqub7MsEDo/3cV3ZJbcePV2FH7g0M412i2y0k4zCtVVtQAc/\nQ7vMraQiK9WJeG2Eu24sQHCbwxyp0tdSCxDoGlEvjPbWKIXWgaP/t/CPP8J/rWRmn0McAmtZ0Tf5\n\
+        fFDSrzsj16qFsadpN5ppXLKCepOVNLoORWdnZx+3aGzKSWqfvM4rfmcEWVCbRNWH+zK7QbKBaSlR\nkaB+5Wuhm4FfVbbCbL6V67eduTYoTbIk1Zx500lhuGlZ4+HRGPWGWtCqNAUzZVgs3b1NrATvXUaT\n\
+        9VYymOcat0ty0gKT1LKexbPNaO0X9rDVEmgIQ021WSx2bM7TFohZaPjMs3Xbtsc8aj1yNSmNVIGO\nE+qODj9rwZrTu4/ifFrPEYQJeHct1IZaaI7atZX9/LHgjwi0oSztOEU7rtJFnFjKK5uFNbVVhLPh\n\
+        /sRoWsPma6b3M5m1GcHYhO3n72z3+7a0gSZ6vvtDrqN/9vt6HBb+ze1FCvXcpHCuNZ8tMIUrehHH\nauu0kS7dyJau0RqAGJzE+g9XL2ct+QgAAA==\n\
+        LWOD_V37_SMOKE_B64\nprintf '%s  %s\\n' '8bafefbb4033ca8b1249835ac916faaf14a6ae60a8385a90db45488a9d93e949'\
+        \ 'android/tests/V37QuestSmoke.gd' | sha256sum -c -\ngodot --headless --path android --script res://tests/V37QuestSmoke.gd\
+        \ > \"$RUNNER_TEMP/lwod_v37_quests.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/lwod_v37_quests.log\"\n  exit 1\n\
+        }\ncat \"$RUNNER_TEMP/lwod_v37_quests.log\"\ngrep -Fq 'V37_QUEST_TEST_OK:' \"$RUNNER_TEMP/lwod_v37_quests.log\"\
         \n"
     - name: V38 Bewohner und Dialoge im Godot Test pruefen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p android/tests\ncat <<'LWOD_V38_SMOKE_B64' | base64 -d | gzip -dc\
-        \ > android/tests/V38VillageSmoke.gd\nH4sIAAAAAAAC/51W32/bNhB+z19x05OMOo4dZ01rLAOcpkWHZW2HBN1DMRC0dJYI06RKUnGTv35HUpYV/2iM+cWW\n\
-        fHf87rvv7og/HKrcwl2GCu8N4snJvFYZMKGEE1yKJ0x7cPo7PGiRT06APhmXkuU4R2MwTxNmapX01m5zLmSa6Rwn\nIJTrw6p8nMCdM0IVW2Gq2paMYmiTJl/Hb9j9+7t79mH6x+0EEnjlHXvB7nstXIjYnkEHbmN64AasT2ECX3i2wDzk\n\
-        A1cgNSeMBu3k7CwY2LO/uFADZzNCDdx27UMoMY+R4OoKVC1lPMB/YnKj4agPSRsE5lhKl/RaK4OuNqpFVfAlgfpE\n+Mc3hCeEHghlHVfEr/PsEoj4f3AyWrsBz3OWlULmqfePwefagCBWwXBVYHp+0dtA4ysuHFRGZ2gtmxtyahFIMW8Q\n\
-        0Pk+3KBAxxQ9M22YTzEU4KuQkhd4S9ZNNt75e43W2ZfdLxv3v4N9E4Co9IevmQS9jneY23PilqIBhTdAqF6it0Jd\nSUpvagx/JIAxvoeYJvG/DZb4PLBR079cwehiF8CYAFzjSpcKzRMvJaxqQ6k/oOHUKGh+goVXFXIqDtUgqJ/gDNvK\n\
-        VWisVr58DeQ2indVVdYRSbT9lniSk3+39NEkQx4+hcArV7l/3l/XaYsq6a09NocH8WxwwytiZc1X9/0Bti6IrU9Y\nI3wQRW1QLel0KTFUDVXsZOtM2gnV28sfHfeiNG8w04aSOCieX0NjmgXNnWsaEgoV1ETNLbWZ8Q8RVXIIgNdqVI7k\n\
-        y4pEvJbKb/B697DXPnWelU4eEz4k5ycnDUytmMIV869YRaPJYp7sbfFjOpxwk9TSru7Db0YTpqCSh5oPd+FfxkY7\nDQ0LK2FIQoKygYWmub5w8FSbGrNFgRbd0wHVN6c2eTkuF8zppA+jvemMjxxYPHNCK+qhj9f6xzutHM1amgbPmzun\n\
-        5aSLGlljHYf5M49Wx9GiO4aaV0FuYc6yTNdEY2BrvMvWG1/sL+9Op8qttHG8tis/G2gfLXwgQXMh0refp6CshiWu\n7AqNJ6kPw//N0yat/TmMdnN4+zyHZrDFovtzn1AUR9U5k9oiiwVIej8VwrAdvko7mGkt090iMl35tuntQB4NCfJ7\n\
-        mfOo0mjd4J6hzUqO+ZGYqRuMY+HdXsiZprGVEZHmkUzlXps53YnoztINclT3jb3its08IOJogV66B0o2Gj1rUj/L\nrlHSaqpVAf4GtjiQ+yHVBB1af3yml7SEvIAYSl75EdSHt4OmXl29NlF8MQfD862bAZN8hnJCI5a+tjq0YxCbMxit\n\
-        aev8O3gQVsy6K3Gdv78NTGdUaFlbu0SZ+8TJUswc5LxGU/K5owWD5aG565GSXrPFi1eY89E/2sh8U9jgtrsxw+tI\nYs4fWXgM5FyebxC8RGCnKdKdtfNtGHb+56USt6Io3fimt0tRlyZ/Z2mXnG8L6fwP6mxQfkPZpstRdFnaYqoyXqKb\n\
-        q/jnPye08oH2KNFGc8P24SY0II/zA1Ufgi77MK0tYVOhOl6kz9Zi0rnGk7z+A7zlozRxDAAA\nLWOD_V38_SMOKE_B64\n\
-        printf '%s  %s\\n' 'c3a5453fc76a8cadc739c2578e66509f5ef917f477b5f6e23585f43ec80e843a' 'android/tests/V38VillageSmoke.gd'\
-        \ | sha256sum -c -\ngodot --headless --path android --script res://tests/V38VillageSmoke.gd >\
-        \ \"$RUNNER_TEMP/lwod_v38_test.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/lwod_v38_test.log\"\n  exit\
-        \ 1\n}\ncat \"$RUNNER_TEMP/lwod_v38_test.log\"\ngrep -Fq 'V38_TEST_OK:' \"$RUNNER_TEMP/lwod_v38_test.log\"\
-        \n"
-    - name: LWOD Android V38 APK erstellen
+      run: "set -euo pipefail\nmkdir -p android/tests\ncat <<'LWOD_V38_SMOKE_B64' | base64 -d | gzip -dc > android/tests/V38VillageSmoke.gd\n\
+        H4sIAAAAAAAC/51W32/bNhB+z19x05OMOo4dZ01rLAOcpkWHZW2HBN1DMRC0dJYI06RKUnGTv35HUpYV/2iM+cWW\nfHf87rvv7og/HKrcwl2GCu8N4snJvFYZMKGEE1yKJ0x7cPo7PGiRT06APhmXkuU4R2MwTxNmapX01m5zLmSa6Rwn\n\
+        IJTrw6p8nMCdM0IVW2Gq2paMYmiTJl/Hb9j9+7t79mH6x+0EEnjlHXvB7nstXIjYnkEHbmN64AasT2ECX3i2wDzk\nA1cgNSeMBu3k7CwY2LO/uFADZzNCDdx27UMoMY+R4OoKVC1lPMB/YnKj4agPSRsE5lhKl/RaK4OuNqpFVfAlgfpE\n\
+        +Mc3hCeEHghlHVfEr/PsEoj4f3AyWrsBz3OWlULmqfePwefagCBWwXBVYHp+0dtA4ysuHFRGZ2gtmxtyahFIMW8Q\n0Pk+3KBAxxQ9M22YTzEU4KuQkhd4S9ZNNt75e43W2ZfdLxv3v4N9E4Co9IevmQS9jneY23PilqIBhTdAqF6it0Jd\n\
+        SUpvagx/JIAxvoeYJvG/DZb4PLBR079cwehiF8CYAFzjSpcKzRMvJaxqQ6k/oOHUKGh+goVXFXIqDtUgqJ/gDNvK\nVWisVr58DeQ2indVVdYRSbT9lniSk3+39NEkQx4+hcArV7l/3l/XaYsq6a09NocH8WxwwytiZc1X9/0Bti6IrU9Y\n\
+        I3wQRW1QLel0KTFUDVXsZOtM2gnV28sfHfeiNG8w04aSOCieX0NjmgXNnWsaEgoV1ETNLbWZ8Q8RVXIIgNdqVI7k\ny4pEvJbKb/B697DXPnWelU4eEz4k5ycnDUytmMIV869YRaPJYp7sbfFjOpxwk9TSru7Db0YTpqCSh5oPd+FfxkY7\n\
+        DQ0LK2FIQoKygYWmub5w8FSbGrNFgRbd0wHVN6c2eTkuF8zppA+jvemMjxxYPHNCK+qhj9f6xzutHM1amgbPmzun\n5aSLGlljHYf5M49Wx9GiO4aaV0FuYc6yTNdEY2BrvMvWG1/sL+9Op8qttHG8tis/G2gfLXwgQXMh0refp6CshiWu\n\
+        7AqNJ6kPw//N0yat/TmMdnN4+zyHZrDFovtzn1AUR9U5k9oiiwVIej8VwrAdvko7mGkt090iMl35tuntQB4NCfJ7\nmfOo0mjd4J6hzUqO+ZGYqRuMY+HdXsiZprGVEZHmkUzlXps53YnoztINclT3jb3its08IOJogV66B0o2Gj1rUj/L\n\
+        rlHSaqpVAf4GtjiQ+yHVBB1af3yml7SEvIAYSl75EdSHt4OmXl29NlF8MQfD862bAZN8hnJCI5a+tjq0YxCbMxit\naev8O3gQVsy6K3Gdv78NTGdUaFlbu0SZ+8TJUswc5LxGU/K5owWD5aG565GSXrPFi1eY89E/2sh8U9jgtrsxw+tI\n\
+        Ys4fWXgM5FyebxC8RGCnKdKdtfNtGHb+56USt6Io3fimt0tRlyZ/Z2mXnG8L6fwP6mxQfkPZpstRdFnaYqoyXqKb\nq/jnPye08oH2KNFGc8P24SY0II/zA1Ufgi77MK0tYVOhOl6kz9Zi0rnGk7z+A7zlozRxDAAA\n\
+        LWOD_V38_SMOKE_B64\nprintf '%s  %s\\n' 'c3a5453fc76a8cadc739c2578e66509f5ef917f477b5f6e23585f43ec80e843a'\
+        \ 'android/tests/V38VillageSmoke.gd' | sha256sum -c -\ngodot --headless --path android --script res://tests/V38VillageSmoke.gd\
+        \ > \"$RUNNER_TEMP/lwod_v38_test.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/lwod_v38_test.log\"\n  exit 1\n}\n\
+        cat \"$RUNNER_TEMP/lwod_v38_test.log\"\ngrep -Fq 'V38_TEST_OK:' \"$RUNNER_TEMP/lwod_v38_test.log\"\n"
+    - name: V39 NPC Bewegung und lesbare Namen im Godot Test pruefen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/android\ngodot --headless --path android --export-debug\
-        \ 'Android' \\\n  \"$GITHUB_WORKSPACE/build/android/LWOD-Android-V38-DORFLEBEN.apk\"\ntest -s\
-        \ build/android/LWOD-Android-V38-DORFLEBEN.apk\nunzip -t build/android/LWOD-Android-V38-DORFLEBEN.apk\
-        \ > /dev/null\n\necho \"APK wurde erzeugt:\"\nls -lh build/android/LWOD-Android-V38-DORFLEBEN.apk\n"
+      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V39NPCSmoke.gd > \"$RUNNER_TEMP/lwod_v39_npc.log\"\
+        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/lwod_v39_npc.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/lwod_v39_npc.log\"\
+        \ngrep -Fq 'V39_TEST_OK:' \"$RUNNER_TEMP/lwod_v39_npc.log\"\n"
+    - name: LWOD Android V39 APK erstellen
+      shell: bash
+      run: "set -euo pipefail\nmkdir -p build/android\ngodot --headless --path android --export-debug 'Android'\
+        \ \\\n  \"$GITHUB_WORKSPACE/build/android/LWOD-Android-V39-NPC-WEGE.apk\"\ntest -s build/android/LWOD-Android-V39-NPC-WEGE.apk\n\
+        unzip -t build/android/LWOD-Android-V39-NPC-WEGE.apk > /dev/null\n\necho \"APK wurde erzeugt:\"\nls -lh\
+        \ build/android/LWOD-Android-V39-NPC-WEGE.apk\n"
     - name: Fehlerdiagnose bereitstellen
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V38_DIAGNOSE
+        name: LWOD_V39_DIAGNOSE
         path: '${{ runner.temp }}/lwod_v29_run.log
 
           android/scripts/V24Regions.gd
@@ -1942,13 +2325,17 @@ jobs:
 
           android/tests/V38VillageSmoke.gd
 
-          ${{ runner.temp }}/lwod_v38_test.log'
+          ${{ runner.temp }}/lwod_v38_test.log
+
+          android/tests/V39NPCSmoke.gd
+
+          ${{ runner.temp }}/lwod_v39_npc.log'
         if-no-files-found: warn
         retention-days: 14
-    - name: Android V38 APK hochladen
+    - name: Android V39 APK hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V38_DORFLEBEN_APK
-        path: build/android/LWOD-Android-V38-DORFLEBEN.apk
+        name: LWOD_ANDROID_V39_NPC_APK
+        path: build/android/LWOD-Android-V39-NPC-WEGE.apk
         if-no-files-found: error
         retention-days: 14
