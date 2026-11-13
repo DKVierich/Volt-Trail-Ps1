@@ -1,4 +1,4 @@
-name: LWOD Android V40.5.5 FIX1 Einfuehrungstext entfernen
+name: LWOD Android V40.6 Quest-Tagebuch und Gebietsmeldung
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V40.5.5 FIX1 APK
+    name: LWOD Android V40.6 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -23,20 +23,30 @@ jobs:
       uses: actions/checkout@v4
     - name: V40.4 funktionierende Basis wiederherstellen
       shell: bash
-      run: "set -euo pipefail\nwget -q --tries=3 --timeout=60 --https-only -O \"$RUNNER_TEMP/lwod_v404_base.yml\"\
-        \ 'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/56f0951afbb88f543dff9bd1b935dca7e6007311/.github/workflows/blank-ps1.yml'\n\
-        test -s \"$RUNNER_TEMP/lwod_v404_base.yml\"\ntest \"$(git hash-object \"$RUNNER_TEMP/lwod_v404_base.yml\"\
-        )\" = 'c7a6f3d386b25b8bb867d2a57fe508b884cf4a53' || { echo 'V40.4-Quellversion stimmt nicht';\
-        \ exit 44; }\ncat > \"$RUNNER_TEMP/replay_v404.sh\" <<'REPLAY'\n#!/usr/bin/env bash\nset -euo\
-        \ pipefail\nwanted=\"$1\"\nawk -v wanted=\"$wanted\" '\n  $0 == \"    - name: \" wanted {\
-        \ found=1; next }\n  found && $0 == \"      run: |\" { active=1; next }\n  active && /^  \
-        \  - name:/ { exit }\n  active && /^        / { sub(/^        /, \"\"); print; next }\n  active\
-        \ && /^$/ { print \"\"; next }\n  END { if(active != 1) exit 57 }\n' \"$RUNNER_TEMP/lwod_v404_base.yml\"\
-        \ > \"$RUNNER_TEMP/v404_replay_step.sh\"\ntest -s \"$RUNNER_TEMP/v404_replay_step.sh\"\nbash\
-        \ -n \"$RUNNER_TEMP/v404_replay_step.sh\"\nbash \"$RUNNER_TEMP/v404_replay_step.sh\"\nREPLAY\n\
-        chmod +x \"$RUNNER_TEMP/replay_v404.sh\"\nbash \"$RUNNER_TEMP/replay_v404.sh\" 'V40.3 FIX5\
-        \ Basis aus festem Commit wiederherstellen'\nbash \"$RUNNER_TEMP/replay_v404.sh\" 'V40.4 Shop\
-        \ und Inventar installieren'\n"
+      run: |
+        set -euo pipefail
+        wget -q --tries=3 --timeout=60 --https-only -O "$RUNNER_TEMP/lwod_v404_base.yml" 'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/56f0951afbb88f543dff9bd1b935dca7e6007311/.github/workflows/blank-ps1.yml'
+        test -s "$RUNNER_TEMP/lwod_v404_base.yml"
+        test "$(git hash-object "$RUNNER_TEMP/lwod_v404_base.yml")" = 'c7a6f3d386b25b8bb867d2a57fe508b884cf4a53' || { echo 'V40.4-Quellversion stimmt nicht'; exit 44; }
+        cat > "$RUNNER_TEMP/replay_v404.sh" <<'REPLAY'
+        #!/usr/bin/env bash
+        set -euo pipefail
+        wanted="$1"
+        awk -v wanted="$wanted" '
+          $0 == "    - name: " wanted { found=1; next }
+          found && $0 == "      run: |" { active=1; next }
+          active && /^    - name:/ { exit }
+          active && /^        / { sub(/^        /, ""); print; next }
+          active && /^$/ { print ""; next }
+          END { if(active != 1) exit 57 }
+        ' "$RUNNER_TEMP/lwod_v404_base.yml" > "$RUNNER_TEMP/v404_replay_step.sh"
+        test -s "$RUNNER_TEMP/v404_replay_step.sh"
+        bash -n "$RUNNER_TEMP/v404_replay_step.sh"
+        bash "$RUNNER_TEMP/v404_replay_step.sh"
+        REPLAY
+        chmod +x "$RUNNER_TEMP/replay_v404.sh"
+        bash "$RUNNER_TEMP/replay_v404.sh" 'V40.3 FIX5 Basis aus festem Commit wiederherstellen'
+        bash "$RUNNER_TEMP/replay_v404.sh" 'V40.4 Shop und Inventar installieren'
     - name: V40.4.3 goldener Waffenslot und Haendlerhinweise
       shell: bash
       run: "set -euo pipefail\ncat <<'LWOD_V4043_MARKET' | base64 -d | gzip -dc > android/scripts/V404Market.gd\n\
@@ -130,9 +140,10 @@ jobs:
         S6WQ9TeM5iIBfiBQlONRWOx5GE/d0CluuClQJ4t74nUYE6BfpVI1AJ+OWFa/1i6eIFVwdaqrQhI0ezZVZ1HtNuhRGh22JqnK\n\
         A/qNsac8wJgSFwnS4vjgocBDUwqccQaBpxLlOYR6Co3e2OR3dPJ0hj/G+L3hzgAWY/5tCfSK35vSfIt7NgHoVgCrcaBbtetC\n\
         B/vW5t4ibnoqU2/Wu8WUXo9MyTF7Nf6b85toXCkdizVRJpnpqliZLFo50a53m0My48a+waiiZFuw4Ks4gaWGkiyIqY4L230X\n\
-        nSJfa0G3k+skT56dXI7FPdIvWk02J+C/ASJKtJQxXgAA\nLWOD_V4043_MARKET\nprintf '%s  %s\\n' '1df7efb3889bff352b781476605b491f565693e65d51943ba4efb7af09687bbf'\
-        \ 'android/scripts/V404Market.gd' | sha256sum -c -\ncat <<'LWOD_V4043_WEAPONS' | base64 -d\
-        \ | gzip -dc > android/tests/V404WeaponSmoke.gd\nH4sIAAAAAAAC/6VW227bMAx9z1dw2YuNtWk79KUBMqDDumJYLwNStI+CYtG2EFnydInXfP3oSzKnaZpsy0MgxyTPIXlIBX95\n\
+        nSJfa0G3k+skT56dXI7FPdIvWk02J+C/ASJKtJQxXgAA\nLWOD_V4043_MARKET\nprintf '%s  %s\\n'\
+        \ '1df7efb3889bff352b781476605b491f565693e65d51943ba4efb7af09687bbf' 'android/scripts/V404Market.gd'\
+        \ | sha256sum -c -\ncat <<'LWOD_V4043_WEAPONS' | base64 -d | gzip -dc > android/tests/V404WeaponSmoke.gd\n\
+        H4sIAAAAAAAC/6VW227bMAx9z1dw2YuNtWk79KUBMqDDumJYLwNStI+CYtG2EFnydInXfP3oSzKnaZpsy0MgxyTPIXlIBX95\n\
         1MLBNEGNDxZx8B5uZJb7Cutv0EYfC3TehsTLBYKns4PUWHg8Px2dj84AfwZZFqg9cC1A6gUdjX2mk0fLyctoNxqkQSfAUi5V\n\
         VFozU1iMYeqt1FkMx59gYaQYD4A+ZXA5Q2uNjYYEcc6eri5/3N+xr5ffbsYwhA/Q+ceNOYH76CwedABSSy+5kkuMXsRNuFJM\n\
         YEqhUURDZoMert3o4aX9gltwiZWlH8P1l2lzggkow8nbohufnLSv3UlN85bbOfpRJoYxcLf2aELJtIsEkwnooFSLUH/aijSJ\n\
@@ -144,8 +155,8 @@ jobs:
         aGI77KA30ON/LdMlLcis20v7urA37b4VXRToGe1llvECDybYGzzpsWCJCdq/WBVkeNqza0eEfjz7eLqV3x1Su2FaStJz3elW\n\
         ezSVYrUn2xYsA+kimWc16+WO7pd0afvNu/nhavrA7r+Pe3N91AU+go1pOoKVImtsokVLwvrNmqX0LyTq3e7x4DfJ0DywpQgA\n\
         AA==\nLWOD_V4043_WEAPONS\nprintf '%s  %s\\n' '17ff8322183965bb4775acf60c241c48858c22e92c8034bcc125e722b1a2bc4f'\
-        \ 'android/tests/V404WeaponSmoke.gd' | sha256sum -c -\ncat <<'LWOD_V4043_SMOKE' | base64 -d\
-        \ | gzip -dc > android/tests/V4043UISmoke.gd\nH4sIAAAAAAAC/6VV32/aMBB+56+4pS9B69K1RXuIxKS1Vadqvx5Yu0fLxAdYOHZmO1D21+/skJBC2SoVCUGc7747f9+djY8e\n\
+        \ 'android/tests/V404WeaponSmoke.gd' | sha256sum -c -\ncat <<'LWOD_V4043_SMOKE' | base64\
+        \ -d | gzip -dc > android/tests/V4043UISmoke.gd\nH4sIAAAAAAAC/6VV32/aMBB+56+4pS9B69K1RXuIxKS1Vadqvx5Yu0fLxAdYOHZmO1D21+/skJBC2SoVCUGc7747f9+djY8e\n\
         tXAwKVDjT4s4OIH7O7A4t+icNBo8Op+D5l6uEOZGCXB+oxC4FjDnJUKJuoaFFFLPobKmrHw2KBR3Dm75Ej8TJB8AfXCb6rsR\n\
         eHkTl1bcwpQXy4q+LPAwawxluzbaW6MGg1mtC2AzLlW6XmxymHhLaYbw7iOsjBQNcVW7BUNrjU2Th9H70SW7v2O3n+6+5pDA\n\
         W6DAYcT9rqVPz4ctq9TSS67kH0z3CAuuFBM4I04UacJsrZMujB728WEbztS2wBw+30wKKysPY1CGUzTpmJ+dubjozkJ937hd\n\
@@ -155,333 +166,402 @@ jobs:
         cDBthqeKvRk/I2OHDdHh9UG7/EJe0RTHvfemd021hN6hfUv8R/PECSfN2lHuOx8eD6c3WhvHdx8bPCsWUon0SGiDDf/2sK1N\n\
         sZpxZGvFC5sg/7jesLDckJkKaUgPtHiQTk5p823mGCzQY+GPaXCk0mwRGm3YFvHSAq6VcSh2+aUuDJ0xhVcbmCpTLN32BD1u\n\
         SOxRVnGNKvjyX6l7+O0E7RZ6sF2Hl1lz1rN17BwWO6fp7tdo3s0W0FGIqF+gfb/SV+l9kPsFWld00fjeffLjC53tND8U3QgD\n\
-        03iMxHuwRFssOPE3jOE2DECp4+XoklbZGWXv29R7bg+23lK8r4aDv3eunCujBwAA\nLWOD_V4043_SMOKE\nprintf\
-        \ '%s  %s\\n' 'c7b619211da3ca8d660a881eaef35c53d7a6ac82aefde3c14840ea24920fd363' 'android/tests/V4043UISmoke.gd'\
-        \ | sha256sum -c -\n# Im V40.4-Basiscode oeffnete Ausruestung zusaetzlich das Einkaufsinventar.\n\
-        # Nur diesen Doppeleinstieg entfernen; die originale Ausruestungsoberflaeche bleibt erhalten.\n\
-        awk '\n  /^[ \t]*\"Ausruestung\":[ \t]*$/ {print; inside=1; next}\n  inside==1 && /^[ \t]*if\
-        \ has_node\\(\"V404Market\"\\):[ \t]*$/ {inside=2; next}\n  inside==2 && /^[ \t]*get_node\\\
-        (\"V404Market\"\\)\\.open_inventory\\(\\)[ \t]*$/ {inside=0; removed++; next}\n  {if(inside>0)\
-        \ {bad=1;inside=0}; print}\n  END {if(removed!=1 || bad) exit 45}\n' android/scripts/Main.gd\
-        \ > \"$RUNNER_TEMP/v4041_main.gd\"\ntest -s \"$RUNNER_TEMP/v4041_main.gd\"\nmv \"$RUNNER_TEMP/v4041_main.gd\"\
-        \ android/scripts/Main.gd\n\ngrep -Fq 'func equip_weapon(item_id: String) -> bool:' android/scripts/V404Market.gd\n\
-        sed -i 's@version/code=45@version/code=48@; s@version/name=\"4.0.4\"@version/name=\"4.0.4.3\"\
-        @' android/export_presets.cfg\ngrep -Fqx 'version/code=48' android/export_presets.cfg\ngrep\
-        \ -Fqx 'version/name=\"4.0.4.3\"' android/export_presets.cfg\n"
+        03iMxHuwRFssOPE3jOE2DECp4+XoklbZGWXv29R7bg+23lK8r4aDv3eunCujBwAA\nLWOD_V4043_SMOKE\n\
+        printf '%s  %s\\n' 'c7b619211da3ca8d660a881eaef35c53d7a6ac82aefde3c14840ea24920fd363'\
+        \ 'android/tests/V4043UISmoke.gd' | sha256sum -c -\n# Im V40.4-Basiscode oeffnete Ausruestung\
+        \ zusaetzlich das Einkaufsinventar.\n# Nur diesen Doppeleinstieg entfernen; die originale\
+        \ Ausruestungsoberflaeche bleibt erhalten.\nawk '\n  /^[ \t]*\"Ausruestung\":[ \t]*$/\
+        \ {print; inside=1; next}\n  inside==1 && /^[ \t]*if has_node\\(\"V404Market\"\\):[\
+        \ \t]*$/ {inside=2; next}\n  inside==2 && /^[ \t]*get_node\\(\"V404Market\"\\)\\.open_inventory\\\
+        (\\)[ \t]*$/ {inside=0; removed++; next}\n  {if(inside>0) {bad=1;inside=0}; print}\n\
+        \  END {if(removed!=1 || bad) exit 45}\n' android/scripts/Main.gd > \"$RUNNER_TEMP/v4041_main.gd\"\
+        \ntest -s \"$RUNNER_TEMP/v4041_main.gd\"\nmv \"$RUNNER_TEMP/v4041_main.gd\" android/scripts/Main.gd\n\
+        \ngrep -Fq 'func equip_weapon(item_id: String) -> bool:' android/scripts/V404Market.gd\n\
+        sed -i 's@version/code=45@version/code=48@; s@version/name=\"4.0.4\"@version/name=\"\
+        4.0.4.3\"@' android/export_presets.cfg\ngrep -Fqx 'version/code=48' android/export_presets.cfg\n\
+        grep -Fqx 'version/name=\"4.0.4.3\"' android/export_presets.cfg\n"
     - name: V40.5.2 Neue Quest Fragezeichen und Abgabe Ausrufezeichen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p android/scripts android/tests\ncat <<'V405_MARKER_DATA' |\
-        \ base64 -d | gzip -dc > android/scripts/V405QuestMarkers.gd\n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\n\
-        Dw/w7UBf7f9caTDdR49K5KDzNylTeNUNEwAA\nV405_MARKER_DATA\nprintf '%s  %s\\n' 'cf736f6512e657992addbdb85f37fa553f2471e14120bf0ba6a375e99e5ee44a'\
-        \ 'android/scripts/V405QuestMarkers.gd' | sha256sum -c -\ncat <<'V405_MARKER_TEST_DATA' |\
-        \ base64 -d | gzip -dc > android/tests/V405QuestMarkersSmoke.gd\n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\nV405_MARKER_TEST_DATA\n\
-        printf '%s  %s\\n' '408749d4182a69bd74c9e0a82383cfa36093642642c739c6ac1563b3ff883454' 'android/tests/V405QuestMarkersSmoke.gd'\
-        \ | sha256sum -c -\n# Die Quest-Symbole nach dem bestehenden Shop registrieren.\n# Bereits\
-        \ existierende NPCs/Quest-Speicherstaende werden nicht veraendert.\nawk '\n  { print }\n \
-        \ $0 == \"    v404_shop.setup(self)\" {\n    print \"    var v405 = load(\" sprintf(\"%cres://scripts/V405QuestMarkers.gd%c\"\
-        , 34, 34) \").new()\"\n    print \"    add_child(v405)\"\n    print \"    v405.setup(self)\"\
-        \n    added++\n  }\n  END { if (added != 1) exit 51 }\n' android/scripts/Main.gd > \"$RUNNER_TEMP/v405_main.gd\"\
-        \ntest -s \"$RUNNER_TEMP/v405_main.gd\"\nmv \"$RUNNER_TEMP/v405_main.gd\" android/scripts/Main.gd\n\
-        test \"$(grep -Fxc '    v405.setup(self)' android/scripts/Main.gd)\" -eq 1\nsed -i 's@version/code=48@version/code=51@;\
-        \ s@version/name=\"4.0.4.3\"@version/name=\"4.0.5.2\"@' android/export_presets.cfg\ngrep -Fqx\
-        \ 'version/code=51' android/export_presets.cfg\ngrep -Fqx 'version/name=\"4.0.5.2\"' android/export_presets.cfg\n"
+      run: |
+        set -euo pipefail
+        mkdir -p android/scripts android/tests
+        cat <<'V405_MARKER_DATA' | base64 -d | gzip -dc > android/scripts/V405QuestMarkers.gd
+        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
+        Dw/w7UBf7f9caTDdR49K5KDzNylTeNUNEwAA
+        V405_MARKER_DATA
+        printf '%s  %s\n' 'cf736f6512e657992addbdb85f37fa553f2471e14120bf0ba6a375e99e5ee44a' 'android/scripts/V405QuestMarkers.gd' | sha256sum -c -
+        cat <<'V405_MARKER_TEST_DATA' | base64 -d | gzip -dc > android/tests/V405QuestMarkersSmoke.gd
+        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
+        V405_MARKER_TEST_DATA
+        printf '%s  %s\n' '408749d4182a69bd74c9e0a82383cfa36093642642c739c6ac1563b3ff883454' 'android/tests/V405QuestMarkersSmoke.gd' | sha256sum -c -
+        # Die Quest-Symbole nach dem bestehenden Shop registrieren.
+        # Bereits existierende NPCs/Quest-Speicherstaende werden nicht veraendert.
+        awk '
+          { print }
+          $0 == "    v404_shop.setup(self)" {
+            print "    var v405 = load(" sprintf("%cres://scripts/V405QuestMarkers.gd%c", 34, 34) ").new()"
+            print "    add_child(v405)"
+            print "    v405.setup(self)"
+            added++
+          }
+          END { if (added != 1) exit 51 }
+        ' android/scripts/Main.gd > "$RUNNER_TEMP/v405_main.gd"
+        test -s "$RUNNER_TEMP/v405_main.gd"
+        mv "$RUNNER_TEMP/v405_main.gd" android/scripts/Main.gd
+        test "$(grep -Fxc '    v405.setup(self)' android/scripts/Main.gd)" -eq 1
+        sed -i 's@version/code=48@version/code=51@; s@version/name="4.0.4.3"@version/name="4.0.5.2"@' android/export_presets.cfg
+        grep -Fqx 'version/code=51' android/export_presets.cfg
+        grep -Fqx 'version/name="4.0.5.2"' android/export_presets.cfg
     - name: V40.5.5 Einfuehrungstext aus dem HUD entfernen
       shell: bash
-      run: 'set -euo pipefail
-
-        cat <<''V4055_MARKER'' | base64 -d | gzip -dc > android/scripts/V405QuestMarkers.gd
-
+      run: |
+        set -euo pipefail
+        cat <<'V4055_MARKER' | base64 -d | gzip -dc > android/scripts/V405QuestMarkers.gd
         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
-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
-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
-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
-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
-
         RhnjM9hDKahyJqZczDVBsW8fd/zdHVLpOYfmEjxbqpCFUouFYSHXKd6pu9nz2UwYcIoMqIRsobhmjzCYltYsTtrzwdkw
-
         GBxc3AyDk+HAytzzd/aLt1x+GV6u3e/vZPdHw+PB19G1vQq+0SXJl10ejy4G18Hg7OLr+bXD671vtW4hxQzC963H7R7Z
-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
-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
-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
-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
-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
-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
-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
-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
-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
-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
-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
-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
-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
-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
-
         CbtbnmUh18/4VW5IaTinj8pptfT0NyRDC/lXXncRdck8i6osdVChzavmWurKy4JN/C7FubiextTk6SSmYpi3e9XckBjt
-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
-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
-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
-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
-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
-
         3RKtnsSsbTPH31ACXsgH5SxICkpQWat90fPVZGMfRCQqfkRfq/XmRkxMrHc9NAfdZqB2oOPGVN+lLqIYbTbUqvJ5wcb3
-
         Zfx+Jt8Vonab24I36+sFCFozSwV5wys3o2ev3DAj1i21xQYpLVAwEiWJXSrZoUhGS2qN8F+7+prL6A6f+aIrbwExViE4
-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
-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
-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
-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
-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
-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
-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
-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
-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
-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
-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
-
         V4055_MARKER
-
-        printf ''%s  %s\n'' ''7c202042799e1a2f6a1b1db06a6040f7814f671d5e7374af169d15d5e68037f2'' ''android/scripts/V405QuestMarkers.gd''
-        | sha256sum -c -
-
-        cat <<''V4055_TEST'' | base64 -d | gzip -dc > android/tests/V405QuestMarkersSmoke.gd
-
+        printf '%s  %s\n' '7c202042799e1a2f6a1b1db06a6040f7814f671d5e7374af169d15d5e68037f2' 'android/scripts/V405QuestMarkers.gd' | sha256sum -c -
+        cat <<'V4055_TEST' | base64 -d | gzip -dc > android/tests/V405QuestMarkersSmoke.gd
         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
-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
-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
-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
-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
-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
-
         jIQxQaKxqUNQcD0V2jgQgEAS/VRUgcLvoNQBaegMZ33vi1vfqEQSrIVe3H949F3mOazkPLjZDyobAC2ZrGwkrmXXCthj
-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
-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
-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
-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
-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
-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
-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
-
         EzwOqnI2ZgmKGezpvgcLpLXLgoeGr+FKoh6g/KBdi+q87x+9GzbqH4xWZ+MmypH/Gh5iqcW0Twe1KmvDzR7/lPBlFO+O
-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
-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
-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
-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
-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
-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
-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
-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
-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
-
         9smPtWaTMIXWmyidSIUs9QMmW7ZOmKIShmScV9lkh13bKxqXEW2GQH5o00ObGVbU6B+b+jY25Qdv5djUFHiH+sng4hCj
-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
-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
-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
-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
-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
-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
-
         AHP9BYiLv3gOGQAA
-
         V4055_TEST
-
-        printf ''%s  %s\n'' ''4a6b0ed75ab3732615579a26132b4fb97b5a06a09ad4cd50d6b75bdd8ce532cf'' ''android/tests/V405QuestMarkersSmoke.gd''
-        | sha256sum -c -
-
+        printf '%s  %s\n' '4a6b0ed75ab3732615579a26132b4fb97b5a06a09ad4cd50d6b75bdd8ce532cf' 'android/tests/V405QuestMarkersSmoke.gd' | sha256sum -c -
         # Versionsnummer nur in der Android-Exportdatei aendern.
-
-        sed -i ''s@version/code=51@version/code=54@; s@version/name="4.0.5.2"@version/name="4.0.5.5"@''
-        android/export_presets.cfg
-
-        grep -Fqx ''version/code=54'' android/export_presets.cfg
-
-        grep -Fqx ''version/name="4.0.5.5"'' android/export_presets.cfg
-
-        '
+        sed -i 's@version/code=51@version/code=54@; s@version/name="4.0.5.2"@version/name="4.0.5.5"@' android/export_presets.cfg
+        grep -Fqx 'version/code=54' android/export_presets.cfg
+        grep -Fqx 'version/name="4.0.5.5"' android/export_presets.cfg
+    - name: V40.6 Gebiete, Quest-Tagebuch und Sammelanzeigen installieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p android/scripts android/tests
+        cat <<'V406_HUD_DATA' | base64 -d | gzip -dc > android/scripts/V406JournalHUD.gd
+        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
+        twKLRn9DvGsq2LY27uTH3r7/HzvTHnXfSQAA
+        V406_HUD_DATA
+        printf '%s  %s\n' '07526c6482dd9b7980c9fe646fc1062bbfa4fe5e09aebbf6c79495e76cd491ac' 'android/scripts/V406JournalHUD.gd' | sha256sum -c -
+        cat <<'V406_TEST_DATA' | base64 -d | gzip -dc > android/tests/V406JournalSmoke.gd
+        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
+        //8AiNePMO0RAAA=
+        V406_TEST_DATA
+        printf '%s  %s\n' 'c1962f8d28ea81b9922d2ca79cde889380abaef74a0d96a5be1865d97c469834' 'android/tests/V406JournalSmoke.gd' | sha256sum -c -
+        # Die funktionierende Quest- und Haendlerlogik nicht umschreiben.
+        # Das neue Tagebuch ist ein eigenes Godot-Add-on nach dem Questmarker.
+        python3 - <<'PYTHON_V406'
+        from pathlib import Path
+        file=Path('android/scripts/Main.gd')
+        source=file.read_text(encoding='utf-8')
+        old='    v405.setup(self)'
+        assert source.count(old)==1, 'Questmarker-Startstelle unerwartet geaendert'
+        new=old+'\n    var v406 = load("res://scripts/V406JournalHUD.gd").new()\n    add_child(v406)\n    v406.setup(self)'
+        file.write_text(source.replace(old,new,1),encoding='utf-8')
+        PYTHON_V406
+        grep -Fqx '    v406.setup(self)' android/scripts/Main.gd
+        # Die Versionsnummer wird nach V40.5.5 FIX1 geaendert.
+        grep -Fqx 'version/code=54' android/export_presets.cfg
+        grep -Fqx 'version/name="4.0.5.5"' android/export_presets.cfg
+        sed -i 's@version/code=54@version/code=60@; s@version/name="4.0.5.5"@version/name="4.0.6"@' android/export_presets.cfg
+        grep -Fqx 'version/code=60' android/export_presets.cfg
+        grep -Fqx 'version/name="4.0.6"' android/export_presets.cfg
     - name: Godot Ressourcen importieren
       shell: bash
-      run: 'set -euo pipefail
-
-        bash "$RUNNER_TEMP/replay_v404.sh" ''Godot Ressourcen importieren''
-
+      run: |
+        set -euo pipefail
+        bash "$RUNNER_TEMP/replay_v404.sh" 'Godot Ressourcen importieren'
         test -s android/scripts/V404Market.gd
-
         test -s android/tests/V404WeaponSmoke.gd
-
-        '
     - name: Bisherige Handels- und Dorf-Tests
       shell: bash
-      run: 'set -euo pipefail
-
-        bash "$RUNNER_TEMP/replay_v404.sh" ''Bisherige Spieltests V31 bis FIX5 ausfuehren''
-
-        bash "$RUNNER_TEMP/replay_v404.sh" ''V40.4 Handel und Inventar testen''
-
-        '
+      run: |
+        set -euo pipefail
+        bash "$RUNNER_TEMP/replay_v404.sh" 'Bisherige Spieltests V31 bis FIX5 ausfuehren'
+        bash "$RUNNER_TEMP/replay_v404.sh" 'V40.4 Handel und Inventar testen'
     - name: V40.4.3 Waffenslot automatisch testen
       shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V404WeaponSmoke.gd\
-        \ > \"$RUNNER_TEMP/v4043_weapon.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/v4043_weapon.log\"\n\
-        \  exit 1\n}\ncat \"$RUNNER_TEMP/v4043_weapon.log\"\ngrep -Fq 'V404_WEAPON_TEST_OK:' \"$RUNNER_TEMP/v4043_weapon.log\"\
-        \n"
+      run: |
+        set -euo pipefail
+        godot --headless --path android --script res://tests/V404WeaponSmoke.gd > "$RUNNER_TEMP/v4043_weapon.log" 2>&1 || {
+          cat "$RUNNER_TEMP/v4043_weapon.log"
+          exit 1
+        }
+        cat "$RUNNER_TEMP/v4043_weapon.log"
+        grep -Fq 'V404_WEAPON_TEST_OK:' "$RUNNER_TEMP/v4043_weapon.log"
     - name: V40.4.3 Goldrahmen und Haendlerhinweise pruefen
       shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V4043UISmoke.gd\
-        \ > \"$RUNNER_TEMP/v4043_ui.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/v4043_ui.log\"\n  exit 1\n\
-        }\ncat \"$RUNNER_TEMP/v4043_ui.log\"\ngrep -Fq 'V4043_UI_OK:' \"$RUNNER_TEMP/v4043_ui.log\"\
-        \n"
+      run: |
+        set -euo pipefail
+        godot --headless --path android --script res://tests/V4043UISmoke.gd > "$RUNNER_TEMP/v4043_ui.log" 2>&1 || {
+          cat "$RUNNER_TEMP/v4043_ui.log"
+          exit 1
+        }
+        cat "$RUNNER_TEMP/v4043_ui.log"
+        grep -Fq 'V4043_UI_OK:' "$RUNNER_TEMP/v4043_ui.log"
     - name: V40.5.5 Questmarker und entfernten Reisehinweis testen
       shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V405QuestMarkersSmoke.gd\
-        \ > \"$RUNNER_TEMP/v405_markers.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/v405_markers.log\"\n\
-        \  exit 1\n}\ncat \"$RUNNER_TEMP/v405_markers.log\"\ngrep -Fq 'V4055_MARKERS_TEST_OK:' \"\
-        $RUNNER_TEMP/v405_markers.log\"\n"
-    - name: LWOD Android V40.5.5 APK erstellen
+      run: |
+        set -euo pipefail
+        godot --headless --path android --script res://tests/V405QuestMarkersSmoke.gd > "$RUNNER_TEMP/v405_markers.log" 2>&1 || {
+          cat "$RUNNER_TEMP/v405_markers.log"
+          exit 1
+        }
+        cat "$RUNNER_TEMP/v405_markers.log"
+        grep -Fq 'V4055_MARKERS_TEST_OK:' "$RUNNER_TEMP/v405_markers.log"
+    - name: V40.6 Quest-Register, Gebiet und Fundmeldung testen
       shell: bash
-      run: 'set -euo pipefail
-
+      run: |
+        set -euo pipefail
+        godot --headless --path android --script res://tests/V406JournalSmoke.gd > "$RUNNER_TEMP/v406_journal.log" 2>&1 || {
+          cat "$RUNNER_TEMP/v406_journal.log"
+          exit 1
+        }
+        cat "$RUNNER_TEMP/v406_journal.log"
+        grep -Fq 'V406_SMOKE_OK:' "$RUNNER_TEMP/v406_journal.log"
+    - name: LWOD Android V40.6 APK erstellen
+      shell: bash
+      run: |
+        set -euo pipefail
         mkdir -p build/android
-
-        godot --headless --path android --export-debug ''Android'' "$GITHUB_WORKSPACE/build/android/LWOD-Android-V40.5.5-Ohne-Reisetext.apk"
-
-        test -s build/android/LWOD-Android-V40.5.5-Ohne-Reisetext.apk
-
-        unzip -t build/android/LWOD-Android-V40.5.5-Ohne-Reisetext.apk >/dev/null
-
-        ls -lh build/android/LWOD-Android-V40.5.5-Ohne-Reisetext.apk
-
-        '
+        godot --headless --path android --export-debug 'Android' "$GITHUB_WORKSPACE/build/android/LWOD-Android-V40.6-QuestTagebuch.apk"
+        test -s build/android/LWOD-Android-V40.6-QuestTagebuch.apk
+        unzip -t build/android/LWOD-Android-V40.6-QuestTagebuch.apk >/dev/null
+        ls -lh build/android/LWOD-Android-V40.6-QuestTagebuch.apk
     - name: Fehlerdiagnose speichern
       if: failure()
       uses: actions/upload-artifact@v4
       with:
         name: LWOD_V40_5_5_DIAGNOSE
-        path: 'android/scripts/Main.gd
-
+        path: |-
+          android/scripts/Main.gd
           android/scripts/V404Market.gd
-
           android/tests/V404WeaponSmoke.gd
-
           ${{ runner.temp }}/v4043_weapon.log
-
           android/tests/V4043UISmoke.gd
-
           ${{ runner.temp }}/v4043_ui.log
-
           android/scripts/V405QuestMarkers.gd
-
           android/tests/V405QuestMarkersSmoke.gd
-
-          ${{ runner.temp }}/v405_markers.log'
+          ${{ runner.temp }}/v405_markers.log
         if-no-files-found: warn
         retention-days: 14
-    - name: Android V40.5.5 APK hochladen
+    - name: Android V40.6 APK hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V40_5_5_FIX1_APK
-        path: build/android/LWOD-Android-V40.5.5-Ohne-Reisetext.apk
+        name: LWOD_ANDROID_V40_6_APK
+        path: build/android/LWOD-Android-V40.6-QuestTagebuch.apk
         if-no-files-found: error
         retention-days: 14
