@@ -1,4 +1,4 @@
-name: LWOD Android V40.6 Quest-Tagebuch und Gebietsmeldung
+name: LWOD Android V40.6 FIX1 Quest-Tagebuch und Gebietsmeldung
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V40.6 APK
+    name: LWOD Android V40.6 FIX1 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -342,7 +342,7 @@ jobs:
         sed -i 's@version/code=51@version/code=54@; s@version/name="4.0.5.2"@version/name="4.0.5.5"@' android/export_presets.cfg
         grep -Fqx 'version/code=54' android/export_presets.cfg
         grep -Fqx 'version/name="4.0.5.5"' android/export_presets.cfg
-    - name: V40.6 Gebiete, Quest-Tagebuch und Sammelanzeigen installieren
+    - name: V40.6 FIX1 Gebiete Quest-Tagebuch und Sammelanzeigen
       shell: bash
       run: |
         set -euo pipefail
@@ -463,15 +463,25 @@ jobs:
         printf '%s  %s\n' 'c1962f8d28ea81b9922d2ca79cde889380abaef74a0d96a5be1865d97c469834' 'android/tests/V406JournalSmoke.gd' | sha256sum -c -
         # Die funktionierende Quest- und Haendlerlogik nicht umschreiben.
         # Das neue Tagebuch ist ein eigenes Godot-Add-on nach dem Questmarker.
-        python3 - <<'PYTHON_V406'
-        from pathlib import Path
-        file=Path('android/scripts/Main.gd')
-        source=file.read_text(encoding='utf-8')
-        old='    v405.setup(self)'
-        assert source.count(old)==1, 'Questmarker-Startstelle unerwartet geaendert'
-        new=old+'\n    var v406 = load("res://scripts/V406JournalHUD.gd").new()\n    add_child(v406)\n    v406.setup(self)'
-        file.write_text(source.replace(old,new,1),encoding='utf-8')
-        PYTHON_V406
+        # Nur awk verwenden: Im Godot-Android-CI-Container ist Python nicht installiert.
+        awk '
+          $0 == "    v405.setup(self)" {
+            count++
+            print
+            print "    var v406 = load(\"res://scripts/V406JournalHUD.gd\").new()"
+            print "    add_child(v406)"
+            print "    v406.setup(self)"
+            next
+          }
+          { print }
+          END {
+            if (count != 1) {
+              print "Fehler: Questmarker-Startstelle erwartet 1x, gefunden " count > "/dev/stderr"
+              exit 46
+            }
+          }
+        ' android/scripts/Main.gd > android/scripts/Main.gd.v406
+        mv android/scripts/Main.gd.v406 android/scripts/Main.gd
         grep -Fqx '    v406.setup(self)' android/scripts/Main.gd
         # Die Versionsnummer wird nach V40.5.5 FIX1 geaendert.
         grep -Fqx 'version/code=54' android/export_presets.cfg
@@ -532,7 +542,7 @@ jobs:
         }
         cat "$RUNNER_TEMP/v406_journal.log"
         grep -Fq 'V406_SMOKE_OK:' "$RUNNER_TEMP/v406_journal.log"
-    - name: LWOD Android V40.6 APK erstellen
+    - name: LWOD Android V40.6 FIX1 APK erstellen
       shell: bash
       run: |
         set -euo pipefail
@@ -558,10 +568,10 @@ jobs:
           ${{ runner.temp }}/v405_markers.log
         if-no-files-found: warn
         retention-days: 14
-    - name: Android V40.6 APK hochladen
+    - name: Android V40.6 FIX1 APK hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V40_6_APK
+        name: LWOD_ANDROID_V40_6_FIX1_APK
         path: build/android/LWOD-Android-V40.6-QuestTagebuch.apk
         if-no-files-found: error
         retention-days: 14
