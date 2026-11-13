@@ -1,4 +1,4 @@
-name: LWOD Android V40.5.3 NPC Marker und HUD
+name: LWOD Android V40.5.4 Reisehinweis ausblenden
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V40.5.3 APK
+    name: LWOD Android V40.5.4 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -26,253 +26,395 @@ jobs:
       run: "set -euo pipefail\nwget -q --tries=3 --timeout=60 --https-only -O \"$RUNNER_TEMP/lwod_v404_base.yml\"\
         \ 'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/56f0951afbb88f543dff9bd1b935dca7e6007311/.github/workflows/blank-ps1.yml'\n\
         test -s \"$RUNNER_TEMP/lwod_v404_base.yml\"\ntest \"$(git hash-object \"$RUNNER_TEMP/lwod_v404_base.yml\"\
-        )\" = 'c7a6f3d386b25b8bb867d2a57fe508b884cf4a53' || { echo 'V40.4-Quellversion stimmt nicht'; exit 44;\
-        \ }\ncat > \"$RUNNER_TEMP/replay_v404.sh\" <<'REPLAY'\n#!/usr/bin/env bash\nset -euo pipefail\nwanted=\"\
-        $1\"\nawk -v wanted=\"$wanted\" '\n  $0 == \"    - name: \" wanted { found=1; next }\n  found && $0 ==\
-        \ \"      run: |\" { active=1; next }\n  active && /^    - name:/ { exit }\n  active && /^        / {\
-        \ sub(/^        /, \"\"); print; next }\n  active && /^$/ { print \"\"; next }\n  END { if(active != 1)\
-        \ exit 57 }\n' \"$RUNNER_TEMP/lwod_v404_base.yml\" > \"$RUNNER_TEMP/v404_replay_step.sh\"\ntest -s \"\
-        $RUNNER_TEMP/v404_replay_step.sh\"\nbash -n \"$RUNNER_TEMP/v404_replay_step.sh\"\nbash \"$RUNNER_TEMP/v404_replay_step.sh\"\
-        \nREPLAY\nchmod +x \"$RUNNER_TEMP/replay_v404.sh\"\nbash \"$RUNNER_TEMP/replay_v404.sh\" 'V40.3 FIX5 Basis\
-        \ aus festem Commit wiederherstellen'\nbash \"$RUNNER_TEMP/replay_v404.sh\" 'V40.4 Shop und Inventar installieren'\n"
+        )\" = 'c7a6f3d386b25b8bb867d2a57fe508b884cf4a53' || { echo 'V40.4-Quellversion stimmt nicht';\
+        \ exit 44; }\ncat > \"$RUNNER_TEMP/replay_v404.sh\" <<'REPLAY'\n#!/usr/bin/env bash\nset -euo\
+        \ pipefail\nwanted=\"$1\"\nawk -v wanted=\"$wanted\" '\n  $0 == \"    - name: \" wanted {\
+        \ found=1; next }\n  found && $0 == \"      run: |\" { active=1; next }\n  active && /^  \
+        \  - name:/ { exit }\n  active && /^        / { sub(/^        /, \"\"); print; next }\n  active\
+        \ && /^$/ { print \"\"; next }\n  END { if(active != 1) exit 57 }\n' \"$RUNNER_TEMP/lwod_v404_base.yml\"\
+        \ > \"$RUNNER_TEMP/v404_replay_step.sh\"\ntest -s \"$RUNNER_TEMP/v404_replay_step.sh\"\nbash\
+        \ -n \"$RUNNER_TEMP/v404_replay_step.sh\"\nbash \"$RUNNER_TEMP/v404_replay_step.sh\"\nREPLAY\n\
+        chmod +x \"$RUNNER_TEMP/replay_v404.sh\"\nbash \"$RUNNER_TEMP/replay_v404.sh\" 'V40.3 FIX5\
+        \ Basis aus festem Commit wiederherstellen'\nbash \"$RUNNER_TEMP/replay_v404.sh\" 'V40.4 Shop\
+        \ und Inventar installieren'\n"
     - name: V40.4.3 goldener Waffenslot und Haendlerhinweise
       shell: bash
       run: "set -euo pipefail\ncat <<'LWOD_V4043_MARKET' | base64 -d | gzip -dc > android/scripts/V404Market.gd\n\
-        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\n\
+        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\nLWOD_V4043_MARKET\nprintf '%s  %s\\n' '1df7efb3889bff352b781476605b491f565693e65d51943ba4efb7af09687bbf'\
-        \ 'android/scripts/V404Market.gd' | sha256sum -c -\ncat <<'LWOD_V4043_WEAPONS' | base64 -d | gzip -dc\
-        \ > android/tests/V404WeaponSmoke.gd\nH4sIAAAAAAAC/6VW227bMAx9z1dw2YuNtWk79KUBMqDDumJYLwNStI+CYtG2EFnydInXfP3oSzKnaZpsy0MgxyTPIXlIBX95\n\
-        1MLBNEGNDxZx8B5uZJb7Cutv0EYfC3TehsTLBYKns4PUWHg8Px2dj84AfwZZFqg9cC1A6gUdjX2mk0fLyctoNxqkQSfAUi5V\nVFozU1iMYeqt1FkMx59gYaQYD4A+ZXA5Q2uNjYYEcc6eri5/3N+xr5ffbsYwhA/Q+ceNOYH76CwedABSSy+5kkuMXsRNuFJM\n\
-        YEqhUURDZoMert3o4aX9gltwiZWlH8P1l2lzggkow8nbohufnLSv3UlN85bbOfpRJoYxcLf2aELJtIsEkwnooFSLUH/aijSJ\nQh3CH0/njWWKufLDeG1o0Qer18yKBm4Md0YgsWrDjzRWUevSvh85vkCGmlO9BJmlXDlcUdLGr8xy7liBPjeUmilRswp5aTRz\n\
-        qLBpICVFHd/h0QigcxnGW7k98TRF7ZTxx7eNB+omO9Svp0fUOpB+4GhYGSOYq4wVu0BgbjSJDkyuET6jk35JmswoicxDhVa8\nAdnLjc3C8x64aZJTPD/ngTxlQnNSGMwUnQ4B2J1XXeW+UYli1Qsp4N0E+tZbrK6xJkQFaKvRElsV4O+KnaOdbdNZv1bIPZkw\n\
-        bgtjX6nPNWbUcl8vhCpQ3SHoZVAcnZMZyAL+aGIPvw49MVI7EvDFxcXOhs2s0UtkM8UFbul1k/6m6Q7FVpjkNACNVjN0Sa54\ndqCAyE0diLJA26joQJS3xbEticcuvEALCv2Slj3w4DK0gRY51o+tWHLuYVr3o1UN9cSQwf+peZuNsTlpgm4a2BjYFrOSWNM8\n\
-        aGI77KA30ON/LdMlLcis20v7urA37b4VXRToGe1llvECDybYGzzpsWCJCdq/WBVkeNqza0eEfjz7eLqV3x1Su2FaStJz3elW\nezSVYrUn2xYsA+kimWc16+WO7pd0afvNu/nhavrA7r+Pe3N91AU+go1pOoKVImtsokVLwvrNmqX0LyTq3e7x4DfJ0DywpQgA\n\
+        \ 'android/scripts/V404Market.gd' | sha256sum -c -\ncat <<'LWOD_V4043_WEAPONS' | base64 -d\
+        \ | gzip -dc > android/tests/V404WeaponSmoke.gd\nH4sIAAAAAAAC/6VW227bMAx9z1dw2YuNtWk79KUBMqDDumJYLwNStI+CYtG2EFnydInXfP3oSzKnaZpsy0MgxyTPIXlIBX95\n\
+        1MLBNEGNDxZx8B5uZJb7Cutv0EYfC3TehsTLBYKns4PUWHg8Px2dj84AfwZZFqg9cC1A6gUdjX2mk0fLyctoNxqkQSfAUi5V\n\
+        VFozU1iMYeqt1FkMx59gYaQYD4A+ZXA5Q2uNjYYEcc6eri5/3N+xr5ffbsYwhA/Q+ceNOYH76CwedABSSy+5kkuMXsRNuFJM\n\
+        YEqhUURDZoMert3o4aX9gltwiZWlH8P1l2lzggkow8nbohufnLSv3UlN85bbOfpRJoYxcLf2aELJtIsEkwnooFSLUH/aijSJ\n\
+        Qh3CH0/njWWKufLDeG1o0Qer18yKBm4Md0YgsWrDjzRWUevSvh85vkCGmlO9BJmlXDlcUdLGr8xy7liBPjeUmilRswp5aTRz\n\
+        qLBpICVFHd/h0QigcxnGW7k98TRF7ZTxx7eNB+omO9Svp0fUOpB+4GhYGSOYq4wVu0BgbjSJDkyuET6jk35JmswoicxDhVa8\n\
+        AdnLjc3C8x64aZJTPD/ngTxlQnNSGMwUnQ4B2J1XXeW+UYli1Qsp4N0E+tZbrK6xJkQFaKvRElsV4O+KnaOdbdNZv1bIPZkw\n\
+        bgtjX6nPNWbUcl8vhCpQ3SHoZVAcnZMZyAL+aGIPvw49MVI7EvDFxcXOhs2s0UtkM8UFbul1k/6m6Q7FVpjkNACNVjN0Sa54\n\
+        dqCAyE0diLJA26joQJS3xbEticcuvEALCv2Slj3w4DK0gRY51o+tWHLuYVr3o1UN9cSQwf+peZuNsTlpgm4a2BjYFrOSWNM8\n\
+        aGI77KA30ON/LdMlLcis20v7urA37b4VXRToGe1llvECDybYGzzpsWCJCdq/WBVkeNqza0eEfjz7eLqV3x1Su2FaStJz3elW\n\
+        ezSVYrUn2xYsA+kimWc16+WO7pd0afvNu/nhavrA7r+Pe3N91AU+go1pOoKVImtsokVLwvrNmqX0LyTq3e7x4DfJ0DywpQgA\n\
         AA==\nLWOD_V4043_WEAPONS\nprintf '%s  %s\\n' '17ff8322183965bb4775acf60c241c48858c22e92c8034bcc125e722b1a2bc4f'\
-        \ 'android/tests/V404WeaponSmoke.gd' | sha256sum -c -\ncat <<'LWOD_V4043_SMOKE' | base64 -d | gzip -dc\
-        \ > android/tests/V4043UISmoke.gd\nH4sIAAAAAAAC/6VV32/aMBB+56+4pS9B69K1RXuIxKS1Vadqvx5Yu0fLxAdYOHZmO1D21+/skJBC2SoVCUGc7747f9+djY8e\n\
-        tXAwKVDjT4s4OIH7O7A4t+icNBo8Op+D5l6uEOZGCXB+oxC4FjDnJUKJuoaFFFLPobKmrHw2KBR3Dm75Ej8TJB8AfXCb6rsR\neHkTl1bcwpQXy4q+LPAwawxluzbaW6MGg1mtC2AzLlW6XmxymHhLaYbw7iOsjBQNcVW7BUNrjU2Th9H70SW7v2O3n+6+5pDA\n\
-        W6DAYcT9rqVPz4ctq9TSS67kH0z3CAuuFBM4I04UacJsrZMujB728WEbztS2wBw+30wKKysPY1CGUzTpmJ+dubjozkJ937hd\nos/mIhkCd11EpJKzLROMx6BrpZoM4dPIkDTRLUobDzNTa+LqgBZ9bXVXWZlHyamgJibTuE6H3Wt85GVFfuZjuKq9N3rvfbSc\n\
-        Xk6C61fm8VZx34OE19l0zgqjjKUc1+E3TU4uRucXl9OkDzJWoD0AihE//8D7QIeebcFrKfyCkR3pxXDbRLHajAvB/AJLZLEb\np+aRmRX5JQWmiTa25Co5jXS7nThFYj23zTKjqqoNQ+qQitrQN6TpNtlpjNzx8MLXXOVPFAnqEiibU+1P6+rKiWb3Y1rDG77W\n\
-        cDBthqeKvRk/I2OHDdHh9UG7/EJe0RTHvfemd021hN6hfUv8R/PECSfN2lHuOx8eD6c3WhvHdx8bPCsWUon0SGiDDf/2sK1N\nsZpxZGvFC5sg/7jesLDckJkKaUgPtHiQTk5p823mGCzQY+GPaXCk0mwRGm3YFvHSAq6VcSh2+aUuDJ0xhVcbmCpTLN32BD1u\n\
-        SOxRVnGNKvjyX6l7+O0E7RZ6sF2Hl1lz1rN17BwWO6fp7tdo3s0W0FGIqF+gfb/SV+l9kPsFWld00fjeffLjC53tND8U3QgD\n03iMxHuwRFssOPE3jOE2DECp4+XoklbZGWXv29R7bg+23lK8r4aDv3eunCujBwAA\n\
-        LWOD_V4043_SMOKE\nprintf '%s  %s\\n' 'c7b619211da3ca8d660a881eaef35c53d7a6ac82aefde3c14840ea24920fd363'\
-        \ 'android/tests/V4043UISmoke.gd' | sha256sum -c -\n# Im V40.4-Basiscode oeffnete Ausruestung zusaetzlich\
-        \ das Einkaufsinventar.\n# Nur diesen Doppeleinstieg entfernen; die originale Ausruestungsoberflaeche\
-        \ bleibt erhalten.\nawk '\n  /^[ \t]*\"Ausruestung\":[ \t]*$/ {print; inside=1; next}\n  inside==1 &&\
-        \ /^[ \t]*if has_node\\(\"V404Market\"\\):[ \t]*$/ {inside=2; next}\n  inside==2 && /^[ \t]*get_node\\\
-        (\"V404Market\"\\)\\.open_inventory\\(\\)[ \t]*$/ {inside=0; removed++; next}\n  {if(inside>0) {bad=1;inside=0};\
-        \ print}\n  END {if(removed!=1 || bad) exit 45}\n' android/scripts/Main.gd > \"$RUNNER_TEMP/v4041_main.gd\"\
-        \ntest -s \"$RUNNER_TEMP/v4041_main.gd\"\nmv \"$RUNNER_TEMP/v4041_main.gd\" android/scripts/Main.gd\n\n\
-        grep -Fq 'func equip_weapon(item_id: String) -> bool:' android/scripts/V404Market.gd\nsed -i 's@version/code=45@version/code=48@;\
-        \ s@version/name=\"4.0.4\"@version/name=\"4.0.4.3\"@' android/export_presets.cfg\ngrep -Fqx 'version/code=48'\
-        \ android/export_presets.cfg\ngrep -Fqx 'version/name=\"4.0.4.3\"' android/export_presets.cfg\n"
+        \ 'android/tests/V404WeaponSmoke.gd' | sha256sum -c -\ncat <<'LWOD_V4043_SMOKE' | base64 -d\
+        \ | gzip -dc > android/tests/V4043UISmoke.gd\nH4sIAAAAAAAC/6VV32/aMBB+56+4pS9B69K1RXuIxKS1Vadqvx5Yu0fLxAdYOHZmO1D21+/skJBC2SoVCUGc7747f9+djY8e\n\
+        tXAwKVDjT4s4OIH7O7A4t+icNBo8Op+D5l6uEOZGCXB+oxC4FjDnJUKJuoaFFFLPobKmrHw2KBR3Dm75Ej8TJB8AfXCb6rsR\n\
+        eHkTl1bcwpQXy4q+LPAwawxluzbaW6MGg1mtC2AzLlW6XmxymHhLaYbw7iOsjBQNcVW7BUNrjU2Th9H70SW7v2O3n+6+5pDA\n\
+        W6DAYcT9rqVPz4ctq9TSS67kH0z3CAuuFBM4I04UacJsrZMujB728WEbztS2wBw+30wKKysPY1CGUzTpmJ+dubjozkJ937hd\n\
+        os/mIhkCd11EpJKzLROMx6BrpZoM4dPIkDTRLUobDzNTa+LqgBZ9bXVXWZlHyamgJibTuE6H3Wt85GVFfuZjuKq9N3rvfbSc\n\
+        Xk6C61fm8VZx34OE19l0zgqjjKUc1+E3TU4uRucXl9OkDzJWoD0AihE//8D7QIeebcFrKfyCkR3pxXDbRLHajAvB/AJLZLEb\n\
+        p+aRmRX5JQWmiTa25Co5jXS7nThFYj23zTKjqqoNQ+qQitrQN6TpNtlpjNzx8MLXXOVPFAnqEiibU+1P6+rKiWb3Y1rDG77W\n\
+        cDBthqeKvRk/I2OHDdHh9UG7/EJe0RTHvfemd021hN6hfUv8R/PECSfN2lHuOx8eD6c3WhvHdx8bPCsWUon0SGiDDf/2sK1N\n\
+        sZpxZGvFC5sg/7jesLDckJkKaUgPtHiQTk5p823mGCzQY+GPaXCk0mwRGm3YFvHSAq6VcSh2+aUuDJ0xhVcbmCpTLN32BD1u\n\
+        SOxRVnGNKvjyX6l7+O0E7RZ6sF2Hl1lz1rN17BwWO6fp7tdo3s0W0FGIqF+gfb/SV+l9kPsFWld00fjeffLjC53tND8U3QgD\n\
+        03iMxHuwRFssOPE3jOE2DECp4+XoklbZGWXv29R7bg+23lK8r4aDv3eunCujBwAA\nLWOD_V4043_SMOKE\nprintf\
+        \ '%s  %s\\n' 'c7b619211da3ca8d660a881eaef35c53d7a6ac82aefde3c14840ea24920fd363' 'android/tests/V4043UISmoke.gd'\
+        \ | sha256sum -c -\n# Im V40.4-Basiscode oeffnete Ausruestung zusaetzlich das Einkaufsinventar.\n\
+        # Nur diesen Doppeleinstieg entfernen; die originale Ausruestungsoberflaeche bleibt erhalten.\n\
+        awk '\n  /^[ \t]*\"Ausruestung\":[ \t]*$/ {print; inside=1; next}\n  inside==1 && /^[ \t]*if\
+        \ has_node\\(\"V404Market\"\\):[ \t]*$/ {inside=2; next}\n  inside==2 && /^[ \t]*get_node\\\
+        (\"V404Market\"\\)\\.open_inventory\\(\\)[ \t]*$/ {inside=0; removed++; next}\n  {if(inside>0)\
+        \ {bad=1;inside=0}; print}\n  END {if(removed!=1 || bad) exit 45}\n' android/scripts/Main.gd\
+        \ > \"$RUNNER_TEMP/v4041_main.gd\"\ntest -s \"$RUNNER_TEMP/v4041_main.gd\"\nmv \"$RUNNER_TEMP/v4041_main.gd\"\
+        \ android/scripts/Main.gd\n\ngrep -Fq 'func equip_weapon(item_id: String) -> bool:' android/scripts/V404Market.gd\n\
+        sed -i 's@version/code=45@version/code=48@; s@version/name=\"4.0.4\"@version/name=\"4.0.4.3\"\
+        @' android/export_presets.cfg\ngrep -Fqx 'version/code=48' android/export_presets.cfg\ngrep\
+        \ -Fqx 'version/name=\"4.0.4.3\"' android/export_presets.cfg\n"
     - name: V40.5.2 Neue Quest Fragezeichen und Abgabe Ausrufezeichen
       shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p android/scripts android/tests
-        cat <<'V405_MARKER_DATA' | base64 -d | gzip -dc > android/scripts/V405QuestMarkers.gd
-        H4sIAAAAAAAC/9VYW2/buBJ+969g3Rf5NNFxbt09XvQsnNjtBnWcPUkaoC0CgZJGNmGa9JJUejm7/31nSEmWHSfp6xpoDHOu
-        nMs3w8JXByq3bKpz6HRestvjfnwSHw7Y/0qwzjruSstyYWDhmFDs+tsy1RJYubTgvoOKUaTP3jAFJYt+7TH2J2MH+JurGSi9
-        XIJi0QJQ8IKbBZgesh8i+ZMAycAUJUjp9tgwnfEU2FLDTIpszqIXQdMRaUpnYLO51NbuUHYqeTlgU0hB/UEO/8LeaZkP2G+8
-        XDl/ErORgMbvQkt0jOX4b/r72f57pR1dItPKOnZ9Phonp5MPYzZ4w8601Cbqvjw6SU+KotureC6G59Pk3eVk1OYpigxOThqe
-        d8Pfk+Hp5e04mQ4vvLJ+/Pp1RRyN3w4/TG6S4fTst8ur5CORj+Kfjyvy28nlEIkXlx+mN0HyoN/p3HPDZnwJA5+no5E/8Nez
-        4cgfrECvJPIMjeHfMHSf7/yxLgowyDcSmRNacUO0///laSD5ykIeLKGholQZw9SWq8ho7Wp7Pbb/X3avRT7oMPwodAV1dLFY
-        TnydhITYrqfOApXk/e/gJ54QIZ6BSxQqTbRJVCll1L09+ulWSMlnEGoO40hiomgksb6QM9imz6q08wSMoeBvFuz+mVbOaCnB
-        sALm0lXK6GPwWkb5nyFS6FKwQE5F3XDY7TFuQwg960s2ljlnqQAHDjsBWAoLrpQDNsFadQsjsEuk3F8XIVZ/3AkWZ0gEk/jj
-        qEuaunusa0UO+H2GYjyVEFmQBR4ngPTAm6DOGfoSvMeEJCujM7A2cqaEcLoyQjkfgJPD5GJ49X58dZ1cjYejjwOG2kPaYyu+
-        Q4R6QmofmIh8alHRoA46tgQTNhFYjVxlkNxzKfIoBKo32Iom2z/otH6RQ+2Qbt0FG/ZtiZmxK47RNNBqU6zP7Whhg1Kwllyo
-        drDiOO5R649QER2mPFswKQBv63xjA2YFv9oA1t9jB3uIPFh3BrstxGLLnlplifI9du0wsrM9thAqX/9q3SWxujQZctZO+SCm
-        WssmiiTLXrypco0Vka+P/I22qvkLNwrNtOr5g6oLzYS7uG8rTCx75RVtlzUruLTQzuFDf2NMa8hm71nr3uL3kmogD53EEK1N
-        cKAO1RNOELggWw0g2GpJgW4neBZtipO7q+yRJn/EsX2sjeDVDzuEZqqOmHO7dmFtz0OlzJOlx7IBm+BIkt7zIPe5lrn73A08
-        3TuCioqv0YOGHrbPWnHLIn3WhBgTVkJSGMCm7DRBDEQC6MpQrOBL1KuwaUpYS4lhVyVkiy8cm8Au9HLFnUiFFA4bjS0FQpKk
-        nrjGkQ3q3zceVlMQKcw9IcBV5ccDdB9/zSRfchoe3Tajg6+OGH/dOC0QgRNCHSQd9I/bpJX4CrKm4bzp/9ymzrUR31GYywRj
-        NlO4PJB6nJLnny6nN8NJMpycv5tejKc3yRn+GV+1pe/x5iLbkr0dX92cnz0jqUsnhYLG59e7iEudl5I7Yqin/sF/Do+PMpwX
-        dbu/adodsOoavteHx3jTahBValvq1lvHI3qalaOtAJMrU80NcrNTbuEClRnBqT5OzyeT08vh1SgZT4enk/GG3EpbQYmkhsT6
-        xJgn9RE1xd5WK9XBFVakfmCuGwoZY57nSTYXMo+q4vaU7X6hdaMp+i4edwckvbc+q/ppUNlrUSggeE5frdP2XBnsQDrP+Zf/
-        mxjAlrLzqmUqXKApWo/EB7hUY75H9YBfoWkLTUuWsZomXb1utRvfOhMFhjD/JLUsDTGcfh7hagsbGFD51BakDSlsItXC1+Ij
-        mKx935HCGnLXqdy4zy1kTpujZ8Y9ij6c9ZVohNN0e4vdY/1eEyJfERQhKhHa9/yBAdWeO2i64msgdDMqBH4WW7mNxEFiB+jW
-        8Uf+CpYeC3brPp67aYhX7fttrvDN7X4wEFVymsrb3J79qi75N8zIwC8NeLGHGaBluef3Blqq6tU56tJGA1U5HTYhr+9KUa/2
-        /Y3BlnPHt14A2126wb85ukn6s2/cu62S3JxS7VQFmWcG5e7i2zko8XnkhCphwywuxfcIlGa9iTWW2xBxt22zltu5ET2De086
-        5O0NKGWUVExcYwlHk4x6vU20QGbKY3+n8fV4DbPez2J275/Ns5SbRgZkW9nhk8pebCij/ZL2gCW9hv1Te0avGPYFDG7SLQMW
-        ntTa7TwauKrSQyXvxBlPIqioheh3tA4O06Z1u6a76gdRDpJqu5Cau61Oq1+3r7AoiGvXQKCsCf/+/ac30xPR/cEee8kuBL2h
-        Qjng2ih5WYDClxDgDtReMffDU+o93tXw/cuiwCeqjR/gdxhPgxowH106aG42i0dvV6W19pagYROvrVBRne1/scP4JyT7iohE
-        Dw/w7UBf7f9caTDdR49K5KDzNylTeNUNEwAA
-        V405_MARKER_DATA
-        printf '%s  %s\n' 'cf736f6512e657992addbdb85f37fa553f2471e14120bf0ba6a375e99e5ee44a' 'android/scripts/V405QuestMarkers.gd' | sha256sum -c -
-        cat <<'V405_MARKER_TEST_DATA' | base64 -d | gzip -dc > android/tests/V405QuestMarkersSmoke.gd
-        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
-        V405_MARKER_TEST_DATA
-        printf '%s  %s\n' '408749d4182a69bd74c9e0a82383cfa36093642642c739c6ac1563b3ff883454' 'android/tests/V405QuestMarkersSmoke.gd' | sha256sum -c -
-        # Die Quest-Symbole nach dem bestehenden Shop registrieren.
-        # Bereits existierende NPCs/Quest-Speicherstaende werden nicht veraendert.
-        awk '
-          { print }
-          $0 == "    v404_shop.setup(self)" {
-            print "    var v405 = load(" sprintf("%cres://scripts/V405QuestMarkers.gd%c", 34, 34) ").new()"
-            print "    add_child(v405)"
-            print "    v405.setup(self)"
-            added++
-          }
-          END { if (added != 1) exit 51 }
-        ' android/scripts/Main.gd > "$RUNNER_TEMP/v405_main.gd"
-        test -s "$RUNNER_TEMP/v405_main.gd"
-        mv "$RUNNER_TEMP/v405_main.gd" android/scripts/Main.gd
-        test "$(grep -Fxc '    v405.setup(self)' android/scripts/Main.gd)" -eq 1
-        sed -i 's@version/code=48@version/code=51@; s@version/name="4.0.4.3"@version/name="4.0.5.2"@' android/export_presets.cfg
-        grep -Fqx 'version/code=51' android/export_presets.cfg
-        grep -Fqx 'version/name="4.0.5.2"' android/export_presets.cfg
-    - name: V40.5.3 Questmarker tiefer und HUD lesbarer
+      run: "set -euo pipefail\nmkdir -p android/scripts android/tests\ncat <<'V405_MARKER_DATA' |\
+        \ base64 -d | gzip -dc > android/scripts/V405QuestMarkers.gd\n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\n\
+        Dw/w7UBf7f9caTDdR49K5KDzNylTeNUNEwAA\nV405_MARKER_DATA\nprintf '%s  %s\\n' 'cf736f6512e657992addbdb85f37fa553f2471e14120bf0ba6a375e99e5ee44a'\
+        \ 'android/scripts/V405QuestMarkers.gd' | sha256sum -c -\ncat <<'V405_MARKER_TEST_DATA' |\
+        \ base64 -d | gzip -dc > android/tests/V405QuestMarkersSmoke.gd\nH4sIAAAAAAAC/61Y227bOBB9z1dM1BcbTZSkadCFF2ngzaYXNHG7SdCHLQqBkkYyNzTpklQu/vodkpKs+JIY2dWDDVHD4Znb\n\
+        mZHw3qLMDVxlKPFaI25tvYJrNNYM4GQAEqsdkDwbu3smS5RqMkG5A9sDSFEjtzCrNAzTkqU4l0QtMOeljbdumYYJ4zIxlpUI\n\
+        g2PY39oqKplBwiW3nAk+w14fdt/DreL5YAvoypgQSY4Fao15L0qyMWY3Ub/ZWDAuenfjhwFcWc1lubB7WplxQluV7kXf3+4f\n\
+        vUmuz66ukw/Dz+cDiOA10Na+l/xVcds7aPV6nL8qMj6gDbC4tEGvRltp2bGm2efhLdrgDDfOqQP4xrIbzL2H4RiEYmSTRjPY\n\
+        2/MCZu+CVMbWZDLqAzNdea+KF0ETHB+DrIQIB7gruCL6xKqpNTMnUuBY2KjfSgTQLaKSTQjQSOV4+Cdh8WpjLskcSbGwzmQC\n\
+        EJ4Ho5WyMctzMpKLvOf2B+WF0vAPOQe0S4vem9/6c1jsjlFiTLXK0Jik0LSpRTBh+ga1CSAIgtMYl2gTSfeJ0omzMATuLxeK\n\
+        iyBfm+Q0+Ag9u//w3XcuBEXJa2n2kytrAI0zQdUa13rXK9gFUq8hoNk9VdJqJQStPOPwKaqpIJcPtWYPBNcf5fD2ovAohNw/\n\
+        bhCGB7EJlbF9DAdvl0CNvp3unnNjEW5RMyph1CtQ+HvvIVdSVElKJhLvEreUTCkHDeZRUwsOWBCjB86htWAtUPut0aSxILFx\n\
+        Jy4octbJrWDFj/2fPyIXmujnQmbNk2EA58Qewu9ySp5Kh7P7TLAJs1zVxVJvfRzdbnClsvVqfMsNTwW61XrF4r11Ho5Oos7q\n\
+        ROWVoGpwT06VcETy6vAoPSqKqL8cCawQRpiiDGmUalYRC0IqGN3DB005OEMiRpSr06RFHY+V5jNKLSYS4sVSEtN6dJ++Xn7+\n\
+        ++voenieDM8/fxxdnI2uk1P6ObtcgtM9L/AxEDEQT65PEE9VdNzgkTNdgfuid0XehsWvaJS9jiPIgFqwDQf1ihx6YXUepH7w\n\
+        NwUnOiOF0VyFuxwEyoDFTY9kUo3spiVFv2FN1Y4oc6UxQdszRcpkRq4fwHfMrNKHBGIh2YNAMlWG+8zb8Q7Zqc1oqYWlpugF\n\
+        2fgedj3AuNkU3/fhPezH+/tHLtW6srMl2Vkru2TY1cMkVaIObUV5pyHHCRAhPBvobo27FqZtaHebVPg8S5+oomgJ7bCdGRCo\n\
+        IArHVOArGXKmC7hBLilRA6/CmEIuNwGfOfLNKB31A9khNjRgMyrYfjEVfCDX8/IpNhhWRpMTmvqcz06bGF3QxESjzctDthyd\n\
+        tMTSgX1hTF7RBMZsZWBSGQOSZWM3MVI2Xk05Crjj6JqmcamaOpIhxfH/0G02DuVJtJKuTY3Po35EmAHxmE62SBm23u4hRRVK\n\
+        JXLnOz9/eZOcJ1xXlZBzMkukCOeq5DeuS9+53K/tf2SBaR1Ruo6u6wgTvXzgkrl/N3PS/ymJMTK1R5oLWl6aWKN+f/VwGJIx\n\
+        HOAYggA6TiyRCNINSXI9OVLWrWjrb59q684v3abuVLy4qT+XCe6wxX7v1rp54e8Xer1fW1XeRZHh0dG6Tt9xZ1PbdRps0us7\n\
+        r0I01m1s39oCPm8otQNr8xpeQvRm49p72sPbL/Rw4MLwYvm0qx8T6QamHf53Z3fY8kXurqmjiZn2PdvS9F5aT41Qt/YJt797\n\
+        jY41ZorO1JZMHhG9zjiOGw5ZsKV+3SKaoLlhPpWnSIOcf/GuybEUKqUBsxk1WkGaPUuqU+FEw7i3RtCMeWGdVD0u9Q7jI3/o\n\
+        DuwexO/C0as0wOvjsHmhOy2IxTl376MZJlb1avivw8Z6KjpYNxQVSpAvm3HIj0irU2MlvOPWByFUU03v/s03hIvh5Zezy6vw\n\
+        LeHrlwH8QR197yPlyw6chO8k2+13kFvfQLIbSlzkzdyz13wV2YE/8A7LSpZR5zsExexf+7lDmY0RAAA=\nV405_MARKER_TEST_DATA\n\
+        printf '%s  %s\\n' '408749d4182a69bd74c9e0a82383cfa36093642642c739c6ac1563b3ff883454' 'android/tests/V405QuestMarkersSmoke.gd'\
+        \ | sha256sum -c -\n# Die Quest-Symbole nach dem bestehenden Shop registrieren.\n# Bereits\
+        \ existierende NPCs/Quest-Speicherstaende werden nicht veraendert.\nawk '\n  { print }\n \
+        \ $0 == \"    v404_shop.setup(self)\" {\n    print \"    var v405 = load(\" sprintf(\"%cres://scripts/V405QuestMarkers.gd%c\"\
+        , 34, 34) \").new()\"\n    print \"    add_child(v405)\"\n    print \"    v405.setup(self)\"\
+        \n    added++\n  }\n  END { if (added != 1) exit 51 }\n' android/scripts/Main.gd > \"$RUNNER_TEMP/v405_main.gd\"\
+        \ntest -s \"$RUNNER_TEMP/v405_main.gd\"\nmv \"$RUNNER_TEMP/v405_main.gd\" android/scripts/Main.gd\n\
+        test \"$(grep -Fxc '    v405.setup(self)' android/scripts/Main.gd)\" -eq 1\nsed -i 's@version/code=48@version/code=51@;\
+        \ s@version/name=\"4.0.4.3\"@version/name=\"4.0.5.2\"@' android/export_presets.cfg\ngrep -Fqx\
+        \ 'version/code=51' android/export_presets.cfg\ngrep -Fqx 'version/name=\"4.0.5.2\"' android/export_presets.cfg\n"
+    - name: V40.5.4 Reisehinweis nach 5 Sekunden sanft ausblenden
       shell: bash
-      run: |
-        set -euo pipefail
-        cat <<'V4053_MARKER' | base64 -d | gzip -dc > android/scripts/V405QuestMarkers.gd
-        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
-        V4053_MARKER
-        printf '%s  %s\n' '61c18cbfdfab0286906263d65d5bb4c873601db4049606a14aa465e938797044' 'android/scripts/V405QuestMarkers.gd' | sha256sum -c -
-        cat <<'V4053_TEST' | base64 -d | gzip -dc > android/tests/V405QuestMarkersSmoke.gd
-        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
-        V4053_TEST
-        printf '%s  %s\n' 'a0b3459c0176f5f3c47350a6ef9b66e4f28166eac8e94e0a785e16849f24e315' 'android/tests/V405QuestMarkersSmoke.gd' | sha256sum -c -
-        sed -i 's@version/code=51@version/code=52@; s@version/name="4.0.5.2"@version/name="4.0.5.3"@' android/export_presets.cfg
-        grep -Fqx 'version/code=52' android/export_presets.cfg
-        grep -Fqx 'version/name="4.0.5.3"' android/export_presets.cfg
+      run: 'set -euo pipefail
+
+        cat <<''V4054_MARKER'' | base64 -d | gzip -dc > android/scripts/V405QuestMarkers.gd
+
+        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
+
+        V4054_MARKER
+
+        printf ''%s  %s\n'' ''59d00ba06571cf9bde8277895c916b0c715ed63e4acd546f816a1e80f143148c'' ''android/scripts/V405QuestMarkers.gd''
+        | sha256sum -c -
+
+        cat <<''V4054_TEST'' | base64 -d | gzip -dc > android/tests/V405QuestMarkersSmoke.gd
+
+        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
+
+        V4054_TEST
+
+        printf ''%s  %s\n'' ''d7c171a9b6c8e26382512169726eb805f981ddf8d4c6e494aa877677043c9aad'' ''android/tests/V405QuestMarkersSmoke.gd''
+        | sha256sum -c -
+
+        sed -i ''s@version/code=51@version/code=53@; s@version/name="4.0.5.2"@version/name="4.0.5.4"@''
+        android/export_presets.cfg
+
+        grep -Fqx ''version/code=53'' android/export_presets.cfg
+
+        grep -Fqx ''version/name="4.0.5.4"'' android/export_presets.cfg
+
+        '
     - name: Godot Ressourcen importieren
       shell: bash
       run: 'set -euo pipefail
@@ -295,44 +437,42 @@ jobs:
         '
     - name: V40.4.3 Waffenslot automatisch testen
       shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V404WeaponSmoke.gd > \"$RUNNER_TEMP/v4043_weapon.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/v4043_weapon.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/v4043_weapon.log\"\
-        \ngrep -Fq 'V404_WEAPON_TEST_OK:' \"$RUNNER_TEMP/v4043_weapon.log\"\n"
+      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V404WeaponSmoke.gd\
+        \ > \"$RUNNER_TEMP/v4043_weapon.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/v4043_weapon.log\"\n\
+        \  exit 1\n}\ncat \"$RUNNER_TEMP/v4043_weapon.log\"\ngrep -Fq 'V404_WEAPON_TEST_OK:' \"$RUNNER_TEMP/v4043_weapon.log\"\
+        \n"
     - name: V40.4.3 Goldrahmen und Haendlerhinweise pruefen
       shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V4043UISmoke.gd > \"$RUNNER_TEMP/v4043_ui.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/v4043_ui.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/v4043_ui.log\"\ngrep\
-        \ -Fq 'V4043_UI_OK:' \"$RUNNER_TEMP/v4043_ui.log\"\n"
-    - name: V40.5.3 Questmarker und Reiseanzeige testen
+      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V4043UISmoke.gd\
+        \ > \"$RUNNER_TEMP/v4043_ui.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/v4043_ui.log\"\n  exit 1\n\
+        }\ncat \"$RUNNER_TEMP/v4043_ui.log\"\ngrep -Fq 'V4043_UI_OK:' \"$RUNNER_TEMP/v4043_ui.log\"\
+        \n"
+    - name: V40.5.4 Questmarker und Reisehinweis testen
       shell: bash
-      run: |
-        set -euo pipefail
-        godot --headless --path android --script res://tests/V405QuestMarkersSmoke.gd > "$RUNNER_TEMP/v405_markers.log" 2>&1 || {
-          cat "$RUNNER_TEMP/v405_markers.log"
-          exit 1
-        }
-        cat "$RUNNER_TEMP/v405_markers.log"
-        grep -Fq 'V4053_MARKERS_TEST_OK:' "$RUNNER_TEMP/v405_markers.log"
-    - name: LWOD Android V40.5.3 APK erstellen
+      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V405QuestMarkersSmoke.gd\
+        \ > \"$RUNNER_TEMP/v405_markers.log\" 2>&1 || {\n  cat \"$RUNNER_TEMP/v405_markers.log\"\n\
+        \  exit 1\n}\ncat \"$RUNNER_TEMP/v405_markers.log\"\ngrep -Fq 'V4054_MARKERS_TEST_OK:' \"\
+        $RUNNER_TEMP/v405_markers.log\"\n"
+    - name: LWOD Android V40.5.4 APK erstellen
       shell: bash
       run: 'set -euo pipefail
 
         mkdir -p build/android
 
-        godot --headless --path android --export-debug ''Android'' "$GITHUB_WORKSPACE/build/android/LWOD-Android-V40.5.3-Questmarker-HUD.apk"
+        godot --headless --path android --export-debug ''Android'' "$GITHUB_WORKSPACE/build/android/LWOD-Android-V40.5.4-Reisehinweis-Fade.apk"
 
-        test -s build/android/LWOD-Android-V40.5.3-Questmarker-HUD.apk
+        test -s build/android/LWOD-Android-V40.5.4-Reisehinweis-Fade.apk
 
-        unzip -t build/android/LWOD-Android-V40.5.3-Questmarker-HUD.apk >/dev/null
+        unzip -t build/android/LWOD-Android-V40.5.4-Reisehinweis-Fade.apk >/dev/null
 
-        ls -lh build/android/LWOD-Android-V40.5.3-Questmarker-HUD.apk
+        ls -lh build/android/LWOD-Android-V40.5.4-Reisehinweis-Fade.apk
 
         '
     - name: Fehlerdiagnose speichern
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V40_5_3_DIAGNOSE
+        name: LWOD_V40_5_4_DIAGNOSE
         path: 'android/scripts/Main.gd
 
           android/scripts/V404Market.gd
@@ -352,10 +492,10 @@ jobs:
           ${{ runner.temp }}/v405_markers.log'
         if-no-files-found: warn
         retention-days: 14
-    - name: Android V40.5.3 APK hochladen
+    - name: Android V40.5.4 APK hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V40_5_3_APK
-        path: build/android/LWOD-Android-V40.5.3-Questmarker-HUD.apk
+        name: LWOD_ANDROID_V40_5_4_APK
+        path: build/android/LWOD-Android-V40.5.4-Reisehinweis-Fade.apk
         if-no-files-found: error
         retention-days: 14
