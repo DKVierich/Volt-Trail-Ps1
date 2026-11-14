@@ -1,4 +1,4 @@
-name: LWOD Android V40.8.1 Teleport Kristalle
+name: LWOD Android V40.8.2 Terrain und Teleport FIX
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V40.8.1 APK
+    name: LWOD Android V40.8.2 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -1142,120 +1142,146 @@ jobs:
         ' android/export_presets.cfg)\" -eq 1\nsed -i 's@version/code=80@version/code=81@; s@version/name=\"4.0.8\"@version/name=\"\
         4.0.8.1\"@' android/export_presets.cfg\ngrep -Fqx 'version/code=81' android/export_presets.cfg\ngrep -Fqx 'version/name=\"\
         4.0.8.1\"' android/export_presets.cfg\nprintf 'V4081_INSTALL_OK: 16 Tor-Kristalle fuer 8 Doerfer vorbereitet\\n'\n"
-    - name: Godot Ressourcen importieren
+    - name: V40.8.2 Hoehenabgleich, Wege und Teleporter reparieren
       shell: bash
       run: 'set -euo pipefail
 
-        bash "$RUNNER_TEMP/replay_v404.sh" ''Godot Ressourcen importieren''
+        mkdir -p android/scripts android/tests
 
-        test -s android/scripts/V404Market.gd
+        cat <<''LWOD_V4082_V408REGIONS'' | base64 -d | gzip -dc > android/scripts/V408Regions.gd
 
-        test -s android/tests/V404WeaponSmoke.gd
+        H4sIAAAAAAAC/80823LbOLLv+QquUlMlxhSHF1EXn/HWOrEncZXj5NhJXGdTLhZIQhLHFKklKdvJ1vzNfsa8zY+dbgAkAZKSlT37
 
-        '
-    - name: Bisherige Handels- und Dorf-Tests
-      shell: bash
-      run: 'set -euo pipefail
+        cKYqsshuNBqNvgMa+lTSNCq0qyyiL1681C5vP5xpX8aWOTvWSLgqtZuYRsk2XdJUi9NiSQuyLo+1myxNaVqSRDvSfqMajVPtLMsX
 
-        bash "$RUNNER_TEMP/replay_v404.sh" ''Bisherige Spieltests V31 bis FIX5 ausfuehren''
+        gKIVMQ0A+W2eFUVOl3EGiCZQfk2Lkq5gMqq9p+mWFob23/BZFto2jbSbTUyToiQM/kjzCEikMTJA84KW30vzRZilRal9ubi8PH17
 
-        bash "$RUNNER_TEMP/replay_v404.sh" ''V40.4 Handel und Inventar testen''
+        7r85v/p0fq0dn2hfaFhmuTO0TMvQRvbYtHSBe3t6eelfn55dfL5BxPHEtATk8sPpmX92cfPp9OrNOYO5Vg38fNUBT8cN+N2Hzzfn
 
-        '
-    - name: V40.4.3 Waffenslot automatisch testen
-      shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V404WeaponSmoke.gd > \"$RUNNER_TEMP/v4043_weapon.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/v4043_weapon.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/v4043_weapon.log\"\ngrep -Fq\
-        \ 'V404_WEAPON_TEST_OK:' \"$RUNNER_TEMP/v4043_weapon.log\"\n"
-    - name: V40.4.3 Goldrahmen und Haendlerhinweise pruefen
-      shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V4043UISmoke.gd > \"$RUNNER_TEMP/v4043_ui.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/v4043_ui.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/v4043_ui.log\"\ngrep -Fq 'V4043_UI_OK:'\
-        \ \"$RUNNER_TEMP/v4043_ui.log\"\n"
-    - name: V40.5.5 Questmarker und entfernten Reisehinweis testen
-      shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V405QuestMarkersSmoke.gd > \"$RUNNER_TEMP/v405_markers.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/v405_markers.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/v405_markers.log\"\ngrep -Fq\
-        \ 'V4055_MARKERS_TEST_OK:' \"$RUNNER_TEMP/v405_markers.log\"\n"
-    - name: V40.6.2 Questregister und Fundmeldung links testen
-      shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V406JournalSmoke.gd > \"$RUNNER_TEMP/v406_journal.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/v406_journal.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/v406_journal.log\"\ngrep -Fq\
-        \ 'V4062_SMOKE_OK:' \"$RUNNER_TEMP/v406_journal.log\"\n"
-    - name: V40.6.3 Quest-Items und Inventarregister testen
-      shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V4063InventorySmoke.gd > \"$RUNNER_TEMP/v4063_inventory.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/v4063_inventory.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/v4063_inventory.log\"\ngrep\
-        \ -Fq 'V4063_SMOKE_OK' \"$RUNNER_TEMP/v4063_inventory.log\"\n"
-    - name: V40.6.4 FIX1 Sammelinventar wirklich testen
-      shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V4064PickupSmoke.gd > \"$RUNNER_TEMP/v4064_items.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/v4064_items.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/v4064_items.log\"\ngrep -Fq 'V4064_FIX1_SMOKE_OK'\
-        \ \"$RUNNER_TEMP/v4064_items.log\"\n"
-    - name: V40.7 FIX1 Grafikgeometrie und 10 Haeuser testen
-      shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V407GraphicsSmoke.gd > \"$RUNNER_TEMP/v407_graphics.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/v407_graphics.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/v407_graphics.log\"\ngrep -Fq\
-        \ 'V407_GRAPHICS_SMOKE_OK' \"$RUNNER_TEMP/v407_graphics.log\"\n"
-    - name: V40.8 FIX2 Regionentest mit Geometrie-Erkennung
-      shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V408RegionSmoke.gd > \"$RUNNER_TEMP/v408_regions.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/v408_regions.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/v408_regions.log\"\ngrep -Fq\
-        \ 'V408_REGION_TEST_OK:' \"$RUNNER_TEMP/v408_regions.log\"\n"
-    - name: V40.8.1 Teleportziele, Nord- und Suedtor testen
-      shell: bash
-      run: "set -euo pipefail\ngodot --headless --path android --script res://tests/V408TeleportSmoke.gd > \"$RUNNER_TEMP/v4081_teleport.log\"\
-        \ 2>&1 || {\n  cat \"$RUNNER_TEMP/v4081_teleport.log\"\n  exit 1\n}\ncat \"$RUNNER_TEMP/v4081_teleport.log\"\ngrep\
-        \ -Fq 'V4081_TELEPORT_TEST_OK:' \"$RUNNER_TEMP/v4081_teleport.log\"\n"
-    - name: LWOD Android V40.8.1 APK erstellen
-      shell: bash
-      run: 'set -euo pipefail
+        /unV28tzRvbryPZmfG6X8zCfsz+TCfvjjvGP6+DnxMXPOQPYDkNjg+8U2sjyBSPNUZyJ6QIFRtyZmg58zkwPPivomH0fMyh/b9+9
 
-        mkdir -p build/android
+        ePFAco3vQHGsneY5+fb1LA5LeCb5tzsNyL/Q4L9/DlKypoPjwbssXC1pEOdLOjC0wUOcJGSJgF9hax5RG/D1JisGx5XMR3PbQrZG
 
-        godot --headless --path android --export-debug ''Android'' "$GITHUB_WORKSPACE/build/android/LWOD-Android-V40.8.1-Teleport.apk"
+        Mxf/6gAvs8dUQpg5HkOYeq5AyEkUb4HG2GJDtUGYJVk+OH6Df4aDl3NrHhB7wGhR4DpOG9hsPLfnZKD/brRY//OPJQV200jlnL/P
 
-        test -s build/android/LWOD-Android-V40.8.1-Teleport.apk
+        t6sO586UMz6e9zPuWjaHu22+XW8H30Ewm876+Z7PgvE07PL9ZZvck1Tl+bQIV3SxzbvS5kIGWc76eZ66EwafzGdtnif9PJO5N3Wd
 
-        unzip -t build/android/LWOD-Android-V40.8.1-Teleport.apk >/dev/null
+        fp6nU28yXnR5vv3zD7BklecbkPwKR3dYnrDtn013cDwZM7BltRme9zMczYNoEvUzHM1Cexp1GT6Pi0ealC2dBv9UrrJk3dVpzqwx
 
-        ls -lh build/android/LWOD-Android-V40.8.1-Teleport.apk
+        3aEZIP4ZgzMNUZie7mCa0sVisoPpAIBel+n3ZL3elo8kaWn07Tb/TpMVjXsYd7gx2vYuYwSXwxAspigK67N+1p25R9ywn3V3MbU9
 
-        '
-    - name: Fehlerdiagnose speichern
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: LWOD_V40_8_FIX2_DIAGNOSE
-        path: 'android/scripts/Main.gd
+        q8v6zXa9Wahcv8+yPIIA0eXZ4xPbO1R65IFQET52DjTDcTC1JzvM0HOm00kAHL8Q7nEJHB+z4OeesRePWZ5E/A17FiQUnCQjEY18
 
-          android/scripts/V404Market.gd
+        ZBQca+NSwaP+83eGkSWRv8q2BS38nK6zBwok47QEBKuGF/Ey3QPOYZIdYAT5a1qsaKECkDE/TLLw/lhbwAODQNx6sdimoQZhdLsZ
 
-          android/tests/V404WeaponSmoke.gd
+        5llWVqvRtdFftYcsjo7ZBqIwYARisOeUPw8gHZjdolyueTAZMKiQDCDgOHNJSz8Fqn6W++k2SYaDL870TZaWcboFSXwSW6FrpKhk
 
-          ${{ runner.temp }}/v4043_weapon.log
+        iVQWWa7hMMwcajrhKk6inKZDnTOG/8ULhmeuSAFrB8uNhgO/KHNK1oC/Te+LgYSN/7GtBPZwmAIIYND9C0FUYAEaMK1lebMu/qqh
 
-          android/tests/V4043UISmoke.gd
+        udkWKx+AqEkokmPti+OObsGzaDBDDk/T0Vua8BRmQVdJ+V/atUiARC7zQHMGBt+u13Rz2Jc8ZY9iv31UgGxbgqWUxVCvQJuEhNSH
 
-          ${{ runner.temp }}/v4043_ui.log
+        bSwTuobsq/DB64KibEtaYy3z7NEXS/CDOFtTicAiB6Xx2Yr9NdlUgGAL4vaTLF36UQw5WAqzMPWrELabiJTUl/VegIAZf5NnIS2K
 
-          android/scripts/V405QuestMarkers.gd
+        YZlvKX+7yUEruZD82w/Xl2f+9fnp2f8cS3ZxAp6gayVGLZRBYyMVqmIwhsBgfFYYis3ItEQWhHjiq1nE3+kQnYTG1tMFHdkKhcbm
 
-          android/tests/V405QuestMarkersSmoke.gd
+        GGrzqGPafBZT7SEGJSAJ5NOgCs7oHaGwtByEkWmn26KgKW4nAFcE8+MU8intbRZlkACTbZmtSRlj4M+B2uc1YNA0hbRbyxaldgWG
 
-          ${{ runner.temp }}/v405_markers.log
+        kWqPMMffuOn8zXZcDXaqLHGqd2RbmNoZcEOSAFaBqgZUMClnIwtQu2WCr7kaHmvltw2bTPOe3CdvhAQeQZcg8z1jK2DJPLAbo2cD
 
-          android/scripts/V408Regions.gd
+        UmtI1GEB2vctpP9AcUPw0dROUZep9iH4jd7DqAAmwbVtUwIFQ0lguZC3M+fjx4Wf0CUJv/EtH9Yu1dBC0GXI8qscVbj+O+adgiwT
 
-          android/tests/V408RegionSmoke.gd
+        Jgi2elOCYi2HqYmeSTchZS5BzQt0NUwIsgfgVqWhUr6o/UepDaGMKWr3h84Hn9+D7C5SrvruWf0awkYSFyACXGBYumcd8guSFJw+
 
-          ${{ runner.temp }}/v408_regions.log'
-        if-no-files-found: warn
-        retention-days: 14
-    - name: Android V40.8.1 APK hochladen
-      uses: actions/upload-artifact@v4
-      with:
-        name: LWOD_ANDROID_V40_8_1_APK
-        path: build/android/LWOD-Android-V40.8.1-Teleport.apk
-        if-no-files-found: error
-        retention-days: 14
+        +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
