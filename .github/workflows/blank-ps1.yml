@@ -1,4 +1,4 @@
-name: LWOD Android V40.9.2 Sonnental Modelle in alle sieben Doerfer
+name: LWOD Android V40.9.2 FIX1 Sonnental Modelle
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V40.9.2 APK
+    name: LWOD Android V40.9.2 FIX1 APK
     runs-on: ubuntu-latest
     timeout-minutes: 70
     container:
@@ -1732,6 +1732,33 @@ jobs:
         grep -Fqx 'version/code=92' android/export_presets.cfg
         grep -Fqx 'version/name="4.0.9.2"' android/export_presets.cfg
         printf 'V4092_INSTALL_OK: original Sonnental 3D models reused for region houses NPCs and markets\n'
+    - name: V40.9.2 FIX1 Sonnental Modellkopien und Modelltest korrigieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PYFIX1'
+        from pathlib import Path
+        model = Path('android/scripts/V408Regions.gd')
+        test = Path('android/tests/V4092SonnentalModelsSmoke.gd')
+        assert model.is_file() and test.is_file(), 'V40.9.2 Dateien nicht gefunden'
+        current = model.read_text(encoding='utf-8')
+        old = '            image.name = "SonnentalModell"\n'
+        new = ('            image.name = "SonnentalModell_%03d" % (cloned + 1)\n'
+               '            image.set_meta("lwod_sonnental_clone", true)\n')
+        assert current.count(old) == 1, 'Sonnental Mesh-Kopierstelle unerwartet'
+        model.write_text(current.replace(old, new), encoding='utf-8')
+        current = test.read_text(encoding='utf-8')
+        old = ('    var count: int = 1 if root is MeshInstance3D and '
+               'String(root.name)=="SonnentalModell" else 0\n')
+        new = ('    var count: int = 1 if root is MeshInstance3D '
+               'and root.has_meta("lwod_sonnental_clone") '
+               'and (root as MeshInstance3D).mesh != null else 0\n')
+        assert current.count(old) == 1, 'Sonnental Teststelle unerwartet'
+        test.write_text(current.replace(old, new), encoding='utf-8')
+        assert 'SonnentalModell_%03d' in model.read_text(encoding='utf-8')
+        assert 'root.has_meta("lwod_sonnental_clone")' in test.read_text(encoding='utf-8')
+        print('V4092_FIX1_PATCH_OK: eindeutige Modellnamen, Mesh-Marker und stabile Erkennung')
+        PYFIX1
     - name: V40.9.2 Haus-, Bewohner- und Marktstandvorlagen testen
       shell: bash
       run: |
@@ -1762,7 +1789,7 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V40_9_2_DIAGNOSE
+        name: LWOD_V40_9_2_FIX1_DIAGNOSE
         path: 'android/scripts/Main.gd
 
           android/scripts/V404Market.gd
@@ -1807,7 +1834,7 @@ jobs:
     - name: V40.9.2 APK hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V40_9_2_APK
+        name: LWOD_ANDROID_V40_9_2_FIX1_APK
         path: build/android/LWOD-Android-V40.9.2-SonnentalModelle.apk
         if-no-files-found: error
         retention-days: 14
