@@ -1,4 +1,4 @@
-name: LWOD Android V40.9.2 FIX2 NPCs und Haendler
+name: LWOD Android V40.9.2 FIX3 NPC Bewegungsfehler
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V40.9.2 FIX2 APK
+    name: LWOD Android V40.9.2 FIX3 APK
     runs-on: ubuntu-latest
     timeout-minutes: 70
     container:
@@ -1776,7 +1776,7 @@ jobs:
         }
         cat "$RUNNER_TEMP/v4092_repeat_teleport.log"
         grep -Fq 'V4084_TELEPORT_UI_OK:' "$RUNNER_TEMP/v4092_repeat_teleport.log"
-    - name: V40.9.2 FIX2 NPC Wege und Haendler korrigieren
+    - name: V40.9.2 FIX3 NPC-Quelldatei sicher korrigieren
       shell: bash
       run: |
         set -euo pipefail
@@ -1849,19 +1849,29 @@ jobs:
             path=pathlib.Path(item['path'])
             data=path.read_text(encoding='utf-8')
             digest=lambda s: hashlib.sha256(s.encode('utf-8')).hexdigest()
-            if digest(data)!=item['before_sha256']:
-                raise SystemExit('V4092_FIX2: Quelldatei unerwartet veraendert: '+str(path))
+            is_quest_npcs = str(path) == 'android/scripts/V37VillageQuests.gd'
+            # V37 wird bereits von der festen Basis erzeugt und kann andere
+            # unbeteiligte Quest-Korrekturen enthalten. NUR die eindeutige NPC-Stelle
+            # ersetzen, statt eine veraltete Pruefsumme der kompletten Datei zu fordern.
+            if not is_quest_npcs and digest(data)!=item['before_sha256']:
+                raise SystemExit('V4092_FIX3: Quelldatei unerwartet veraendert: '+str(path))
             for edit in item['edits']:
-                if data.count(edit['old'])!=1:
-                    raise SystemExit('V4092_FIX2: Patch-Stelle mehrdeutig/fehlend in '+str(path))
+                before_count=data.count(edit['old'])
+                after_count=data.count(edit['new'])
+                if before_count != 1 or after_count != 0:
+                    raise SystemExit('V4092_FIX3: NPC-Patch-Stelle fehlt, ist bereits ersetzt oder mehrdeutig in '+str(path)+': '+str((before_count,after_count)))
                 data=data.replace(edit['old'],edit['new'],1)
-            if digest(data)!=item['sha256']:
-                raise SystemExit('V4092_FIX2: Zieldatei-Pruefsumme ungueltig: '+str(path))
+                if data.count(edit['new']) != 1:
+                    raise SystemExit('V4092_FIX3: Ersatzstelle nicht eindeutig: '+str(path))
+            if not is_quest_npcs and digest(data)!=item['sha256']:
+                raise SystemExit('V4092_FIX3: Zieldatei-Pruefsumme ungueltig: '+str(path))
+            # Das originale Sonnental-Questskript bleibt bis auf die eine
+            # kontrollierte Bewegungsstelle bytegenau erhalten.
             path.write_text(data,encoding='utf-8')
-            print('FIX2_UPDATED:',path)
+            print('FIX3_UPDATED:',path,'SHA256=',digest(data))
         PYAPPLY
         echo "94e0ce7d767692ce76640018c70f752f0cd9ba761f27a52e81dc2602d2d0860f  android/tests/V4092NPCMotionSmoke.gd" | sha256sum -c -
-    - name: V40.9.2 FIX2 NPC Bewegungen und Haendlermodelle testen
+    - name: V40.9.2 FIX3 NPC Bewegungen und Haendlermodelle testen
       shell: bash
       run: |
         set -euo pipefail
@@ -1880,7 +1890,7 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V40_9_2_FIX2_DIAGNOSE
+        name: LWOD_V40_9_2_FIX3_DIAGNOSE
         path: 'android/scripts/Main.gd
 
           android/scripts/V404Market.gd
@@ -1925,7 +1935,7 @@ jobs:
     - name: V40.9.2 APK hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V40_9_2_FIX2_APK
+        name: LWOD_ANDROID_V40_9_2_FIX3_APK
         path: build/android/LWOD-Android-V40.9.2-SonnentalModelle.apk
         if-no-files-found: error
         retention-days: 14
