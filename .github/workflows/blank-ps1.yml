@@ -1,4 +1,4 @@
-name: LWOD Android V40.9.4 FIX2 Spielfigur und Phoenix
+name: LWOD Android V40.9.5 Neue Spielfigur und Phoenix
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   android:
-    name: LWOD Android V40.9.4 FIX2 APK
+    name: LWOD Android V40.9.5 APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:
@@ -25,7 +25,7 @@ jobs:
       - name: Repository laden
         uses: actions/checkout@v4
 
-      - name: Python YAML bereitstellen
+      - name: Grundpakete bereitstellen
         shell: bash
         run: |
           set -euo pipefail
@@ -34,121 +34,167 @@ jobs:
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-yaml
           fi
 
-      - name: Vollstaendiges Spiel rekonstruieren, Fehler reparieren und APK bauen
+      - name: Bestehendes Spiel inklusive NPCs und Sonnental wiederherstellen
         shell: bash
         run: |
           set -euo pipefail
-          ORIGINAL="$RUNNER_TEMP/lwod_v4094_original.yml"
-          wget -q --tries=3 --timeout=60 --https-only -O "$ORIGINAL" \
+          wget -q --tries=3 --timeout=60 --https-only -O "$RUNNER_TEMP/lwod_4094_original.yml" \
             'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/71e1462a498cf34943c37807df9bc1b2cdece637/.github/workflows/blank-ps1.yml'
-
-          python3 - <<'PY'
-          import hashlib
-          import os
-          import subprocess
+          python3 - <<'PY_REBUILD'
           from pathlib import Path
-          import yaml
-
-          original = Path(os.environ['RUNNER_TEMP']) / 'lwod_v4094_original.yml'
-          data = original.read_bytes()
-          git_blob_sha = hashlib.sha1(
-              ('blob %d\0' % len(data)).encode() + data
-          ).hexdigest()
-          if git_blob_sha != 'df81453c567051bb0813926abca84d6ba2467196':
-              raise SystemExit('FEHLER: Originaldatei stimmt nicht mit dem geprueften Stand ueberein')
-
+          import subprocess, os, yaml, hashlib
+          p = Path(os.environ['RUNNER_TEMP']) / 'lwod_4094_original.yml'
+          data = p.read_bytes()
+          blob_sha = hashlib.sha1(('blob %d\0' % len(data)).encode() + data).hexdigest()
+          assert blob_sha == 'df81453c567051bb0813926abca84d6ba2467196', 'Unerwarteter Basisstand'
           steps = yaml.safe_load(data)['jobs']['android']['steps']
-          expected = [
-              'V40.9.2 FIX5 unveraenderlich wiederherstellen',
-              'V40.9.3 Detaillierte NPCs und Haendler installieren',
-              'V40.9.3 FIX2 Sonnental Haendler richtig ausrichten',
-              'V40.9.4 Spielfigur und violetten Phoenix neu gestalten',
-              'V40.9.4 Neue Spielfigur und Phoenix testen',
-              'V40.9.3 Neue NPCs und bisherige Kollisionen testen',
-              'V40.9.3 APK erstellen und pruefen',
-          ]
-          if len(steps) != 10 or [s['name'] for s in steps[2:9]] != expected:
-              raise SystemExit('FEHLER: Basis-Workflow hat eine unerwartete Struktur')
+          assert len(steps) == 10
+          for i in (2,3,4,5):
+              name = steps[i]['name']
+              print('REKONSTRUKTION:', name, flush=True)
+              subprocess.run(['timeout','--signal=TERM','--kill-after=5s','1200s',
+                  'bash','-e','-u','-o','pipefail','-c',steps[i]['run']],check=True)
+          print('BASIS_OK: Alle bisherigen Spielinhalte vorhanden',flush=True)
+          PY_REBUILD
 
-          def repair_hero():
-              p = Path('android/scripts/V4094HeroPhoenix.gd')
-              content = p.read_text(encoding='utf-8')
-              patches = [
-                  (
-                      '    for i,p in enumerate([hero_left_arm,hero_right_arm]):\n'
-                      '        sign := -1.0 if i == 0 else 1.0',
-                      '    for i in range(2):\n'
-                      '        var p: Node3D = hero_left_arm if i == 0 else hero_right_arm\n'
-                      '        var sign: float = -1.0 if i == 0 else 1.0'
-                  ),
-                  (
-                      '    for i,wing in enumerate([phoenix_left_wing,phoenix_right_wing]):',
-                      '    for i in range(2):\n'
-                      '        var wing: Node3D = phoenix_left_wing if i == 0 else phoenix_right_wing'
-                  ),
-              ]
-              for old, new in patches:
-                  if content.count(old) != 1:
-                      raise SystemExit('FIX2: Patch-Stelle fehlt oder ist doppelt: ' + old[:55])
-                  content = content.replace(old, new)
-              if 'enumerate(' in content:
-                  raise SystemExit('FIX2: Nicht unterstuetztes enumerate verblieben')
-              p.write_text(content, encoding='utf-8')
-              print('FIX2_OK: Arme, Richtungsvariablen und Phoenixfluegel korrigiert', flush=True)
+      - name: Neue Modelle installieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/scripts
+          base64 -d <<'LWOD_NEW_VISUALS' | gzip -dc > android/scripts/V4094HeroPhoenix.gd
+          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
+          LWOD_NEW_VISUALS
+          printf '%s  %s\n' '98e94e8bb9a1838c97ec14708e53d0303c1150d8375ffb789864778f9f670f70' 'android/scripts/V4094HeroPhoenix.gd' | sha256sum -c -
+          grep -Fq 'lwod_v4095_hero' android/scripts/V4094HeroPhoenix.gd
+          grep -Fq 'lwod_v4095_unique_phoenix' android/scripts/V4094HeroPhoenix.gd
+          echo 'NEUE_MODELLE_OK'
 
-          def preflight():
-              cmd = [
-                  'timeout', '--signal=TERM', '--kill-after=5s', '60s',
-                  'godot', '--headless', '--path', 'android',
-                  '--check-only', '--script', 'res://scripts/V4094HeroPhoenix.gd'
-              ]
-              result = subprocess.run(cmd, text=True, stdout=subprocess.PIPE,
-                                      stderr=subprocess.STDOUT)
-              print(result.stdout, flush=True)
-              if result.returncode != 0 or 'Parse Error:' in result.stdout:
-                  raise SystemExit('FIX2: Der Godot-Parser meldet weiterhin einen Fehler')
-              print('FIX2_CHECK_OK: Figuren-Skript erfolgreich geprueft', flush=True)
+      - name: GDScript-Syntax vorab pruefen
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > android/tests/V4095ParseSmoke.gd <<'GD_PARSE'
+          extends SceneTree
+          func _initialize() -> void:
+              var source: Script = load("res://scripts/V4094HeroPhoenix.gd") as Script
+              if source == null or not source.can_instantiate():
+                  push_error("V4095_PARSE_ERROR")
+                  quit(1)
+                  return
+              print("V4095_PARSE_OK")
+              quit(0)
+          GD_PARSE
+          timeout --signal=TERM --kill-after=5s 60s             godot --headless --path android --quit-after 120 --script res://tests/V4095ParseSmoke.gd             2>&1 | tee /tmp/lwod_parser.log
+          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/lwod_parser.log; then
+            echo 'FEHLER: Syntaxpruefung fehlgeschlagen'
+            exit 1
+          fi
+          grep -Fq 'V4095_PARSE_OK' /tmp/lwod_parser.log
+          echo 'GDSCRIPT_OK'
 
-          for i in range(2, 9):
-              step = steps[i]
-              name = step['name']
-              if i == 6:
-                  repair_hero()
-                  preflight()
-              print('STARTE:', name, flush=True)
-              seconds = 1200 if i == 2 else (900 if i == 8 else 120)
-              script = step['run']
-              if i in (6, 7):
-                  script = script.replace(
-                      'godot --headless --path android --script',
-                      'godot --headless --path android --quit-after 180 --script'
-                  )
-              result = subprocess.run(
-                  ['timeout', '--signal=TERM', '--kill-after=5s',
-                   f'{seconds}s', 'bash', '-e', '-u', '-o', 'pipefail',
-                   '-c', script],
-                  cwd=os.environ['GITHUB_WORKSPACE'], text=True,
-                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT
-              )
-              print(result.stdout, flush=True)
-              if result.returncode != 0:
-                  raise SystemExit(f'FEHLER bei {name}: Exit-Code {result.returncode}')
-              if i == 6 and 'V4094_VISUAL_OK:' not in result.stdout:
-                  raise SystemExit('FEHLER: Figuren-Test hat keine Erfolgsmeldung geliefert')
-              print('OK:', name, flush=True)
+      - name: Neue Spielfigur und Phoenix testen
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=5s 100s \
+            godot --headless --path android --quit-after 300 --script res://tests/V4094VisualSmoke.gd \
+            2>&1 | tee /tmp/lwod_visual.log
+          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script' /tmp/lwod_visual.log; then
+            echo 'FEHLER: Laufzeitfehler im Figurenmodell'
+            exit 1
+          fi
+          grep -Fq 'V4094_VISUAL_OK:' /tmp/lwod_visual.log
+          echo 'FIGUREN_OK'
 
-          old_apk = Path('build/android/LWOD-Android-V40.9.4.apk')
-          new_apk = Path('build/android/LWOD-Android-V40.9.4-FIX2.apk')
-          if not old_apk.is_file() or old_apk.stat().st_size == 0:
-              raise SystemExit('FEHLER: APK wurde nicht erstellt')
-          old_apk.replace(new_apk)
-          print('ERFOLG: APK erstellt:', new_apk, flush=True)
-          PY
+      - name: NPCs und Markt-Kollisionen testen
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in V4093CharacterSmoke.gd V4092Fix5MotionMarketSmoke.gd; do
+            timeout --signal=TERM --kill-after=5s 100s \
+              godot --headless --path android --quit-after 300 --script "res://tests/$script" \
+              2>&1 | tee "/tmp/$script.log"
+            if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script' "/tmp/$script.log"; then
+              exit 1
+            fi
+          done
+          echo 'NPC_TESTS_OK'
+
+      - name: APK bauen und validieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/android
+          APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V40.9.5.apk"
+          timeout --signal=TERM --kill-after=5s 900s \
+            godot --headless --path android --export-debug Android "$APK"
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          ls -lh "$APK"
 
       - name: Fertige APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V40_9_4_FIX2_APK
-          path: build/android/LWOD-Android-V40.9.4-FIX2.apk
+          name: LWOD_ANDROID_V40_9_5_APK
+          path: build/android/LWOD-Android-V40.9.5.apk
           if-no-files-found: error
           retention-days: 14
