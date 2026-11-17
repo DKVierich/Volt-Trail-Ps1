@@ -1,19 +1,16 @@
-name: LWOD Android V40.9.8 Klare Figuren und Phoenix
-
-on:
-  workflow_dispatch:
+name: LWOD Android V40.9.9 3D-Skelette und GLB-Animationen
+'on':
+  workflow_dispatch: {}
   push:
     branches:
-      - main
+    - main
     paths:
-      - .github/workflows/blank-ps1.yml
-
+    - .github/workflows/blank-ps1.yml
 permissions:
   contents: read
-
 jobs:
   android:
-    name: LWOD Android V40.9.8 APK
+    name: LWOD Android V40.9.9 APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:
@@ -22,403 +19,337 @@ jobs:
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       ANDROID_HOME: /usr/lib/android-sdk
     steps:
-      - name: Repository laden
-        uses: actions/checkout@v4
+    - name: Repository laden
+      uses: actions/checkout@v4
+    - name: Grundpakete bereitstellen
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! python3 -c 'import yaml' >/dev/null 2>&1; then
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-yaml
+        fi
+    - name: Bestehendes Spiel inklusive NPCs und Sonnental wiederherstellen
+      shell: bash
+      run: |
+        set -euo pipefail
+        wget -q --tries=3 --timeout=60 --https-only -O "$RUNNER_TEMP/lwod_4094_original.yml" \
+          'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/71e1462a498cf34943c37807df9bc1b2cdece637/.github/workflows/blank-ps1.yml'
+        python3 - <<'PY_REBUILD'
+        from pathlib import Path
+        import subprocess, os, yaml, hashlib
+        p = Path(os.environ['RUNNER_TEMP']) / 'lwod_4094_original.yml'
+        data = p.read_bytes()
+        blob_sha = hashlib.sha1(('blob %d\0' % len(data)).encode() + data).hexdigest()
+        assert blob_sha == 'df81453c567051bb0813926abca84d6ba2467196', 'Unerwarteter Basisstand'
+        steps = yaml.safe_load(data)['jobs']['android']['steps']
+        assert len(steps) == 10
+        for i in (2,3,4,5):
+            name = steps[i]['name']
+            print('REKONSTRUKTION:', name, flush=True)
+            subprocess.run(['timeout','--signal=TERM','--kill-after=5s','1200s',
+                'bash','-e','-u','-o','pipefail','-c',steps[i]['run']],check=True)
+        print('BASIS_OK: Alle bisherigen Spielinhalte vorhanden',flush=True)
+        PY_REBUILD
+    - name: 3D-Modell-Werkzeuge bereitstellen
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! python3 -c 'import numpy, PIL' >/dev/null 2>&1; then
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-numpy python3-pil
+        fi
+        python3 -c 'import numpy, PIL; print("MODEL_DEPENDENCIES_OK")'
+    - name: Skinned GLB-Spielfigur und Phönix erstellen und installieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p android/assets/characters android/scripts android/tests
+        base64 -d <<'LWOD4099_GEN' | gzip -dc > "$RUNNER_TEMP/lwod_4099_build_models.py"
+        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
+        LWOD4099_GEN
+        base64 -d <<'LWOD4099_LOADER' | gzip -dc > android/scripts/V4094HeroPhoenix.gd
+        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
+        LWOD4099_LOADER
+        printf '%s  %s\n' '10df5411d005d9e55673de1dba24b429266d31b3eb6d85bdaa3d3fca3c5586c1' "$RUNNER_TEMP/lwod_4099_build_models.py" | sha256sum -c -
+        printf '%s  %s\n' '72dad222f9c139576005e3ee19250e26971bc2629beedfef4549b28d5fec2d2c' android/scripts/V4094HeroPhoenix.gd | sha256sum -c -
+        cd "$GITHUB_WORKSPACE"
+        sed "s@ROOT=Path('/mnt/data/lwod_v4099')@ROOT=Path('$GITHUB_WORKSPACE/android/assets/characters')@" \
+          "$RUNNER_TEMP/lwod_4099_build_models.py" > "$RUNNER_TEMP/lwod_4099_working.py"
+        python3 "$RUNNER_TEMP/lwod_4099_working.py"
+        python3 - <<'PY_GLB_VERIFY'
+        import struct, json, pathlib,hashlib
+        files=(pathlib.Path('android/assets/characters/LWOD_Heldin_V4099.glb'),pathlib.Path('android/assets/characters/LWOD_Phoenix_Violett_V4099.glb'))
+        expected={
+          "LWOD_Heldin_V4099.glb": "0a9b71b1e00d0880e5b48838e6b5de4b620e03ec804754ddee6305f020d230cf",
+          "LWOD_Phoenix_Violett_V4099.glb": "31a2d7c058d8591b5da7f7c21c3b3e3697b439e2b06817f02c5ee8db8e531061"
+        }
+        for path in files:
+            data=path.read_bytes()
+            assert data[:4]==b'glTF' and struct.unpack_from('<I',data,4)[0]==2
+            assert hashlib.sha256(data).hexdigest()==expected[path.name],path
+            n,tag=struct.unpack_from('<I4s',data,12)
+            assert tag==b'JSON'
+            obj=json.loads(data[20:20+n])
+            assert len(obj.get('skins',[]))==1 and len(obj.get('animations',[]))==2
+            assert len(obj['meshes'][0]['primitives'])==1
+            a=obj['meshes'][0]['primitives'][0]['attributes']
+            assert all(k in a for k in ('JOINTS_0','WEIGHTS_0','TEXCOORD_0','NORMAL'))
+            print('V4099_GLB_OK:',path.name,'bones',len(obj['skins'][0]['joints']),'animations',[a['name'] for a in obj['animations']])
+        PY_GLB_VERIFY
+    - name: Godot importiert beide echten GLB-Modelle
+      shell: bash
+      run: |
+        set -euo pipefail
+        timeout --signal=TERM --kill-after=5s 210s godot --headless --editor --path android --import 2>&1 | tee /tmp/lwod4099_import.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to import|Error importing' /tmp/lwod4099_import.log; then
+          echo 'GLB-IMPORTFEHLER'; exit 1
+        fi
+        for file in LWOD_Heldin_V4099.glb LWOD_Phoenix_Violett_V4099.glb; do
+          test -s "android/assets/characters/$file"
+        done
+        echo V4099_IMPORT_OK
+    - name: Skelett, Texturen und Animationen in Godot testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > android/tests/V4099RigSmoke.gd <<'GD_V4099_TEST'
+        extends SceneTree
+        class TestGame:
+            extends Node3D
+            var hero: Node3D
+            var phoenix: Node3D
 
-      - name: Grundpakete bereitstellen
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! python3 -c 'import yaml' >/dev/null 2>&1; then
-            apt-get update -qq
-            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-yaml
-          fi
+        func _initialize() -> void:
+            call_deferred("_run")
 
-      - name: Bestehendes Spiel inklusive NPCs und Sonnental wiederherstellen
-        shell: bash
-        run: |
-          set -euo pipefail
-          wget -q --tries=3 --timeout=60 --https-only -O "$RUNNER_TEMP/lwod_4094_original.yml" \
-            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/71e1462a498cf34943c37807df9bc1b2cdece637/.github/workflows/blank-ps1.yml'
-          python3 - <<'PY_REBUILD'
-          from pathlib import Path
-          import subprocess, os, yaml, hashlib
-          p = Path(os.environ['RUNNER_TEMP']) / 'lwod_4094_original.yml'
-          data = p.read_bytes()
-          blob_sha = hashlib.sha1(('blob %d\0' % len(data)).encode() + data).hexdigest()
-          assert blob_sha == 'df81453c567051bb0813926abca84d6ba2467196', 'Unerwarteter Basisstand'
-          steps = yaml.safe_load(data)['jobs']['android']['steps']
-          assert len(steps) == 10
-          for i in (2,3,4,5):
-              name = steps[i]['name']
-              print('REKONSTRUKTION:', name, flush=True)
-              subprocess.run(['timeout','--signal=TERM','--kill-after=5s','1200s',
-                  'bash','-e','-u','-o','pipefail','-c',steps[i]['run']],check=True)
-          print('BASIS_OK: Alle bisherigen Spielinhalte vorhanden',flush=True)
-          PY_REBUILD
+        func _find_rig(n: Node) -> Skeleton3D:
+            if n is Skeleton3D:
+                return n as Skeleton3D
+            for c in n.get_children():
+                var rig: Skeleton3D = _find_rig(c)
+                if rig != null: return rig
+            return null
 
-      - name: Neue Modelle installieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p android/scripts
-          base64 -d <<'LWOD_NEW_VISUALS' | gzip -dc > android/scripts/V4094HeroPhoenix.gd
-          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
-          LWOD_NEW_VISUALS
-          printf '%s  %s\n' '6b0de8f856d867a9d95944722b7db77a6b1dc70d6021974191b927c783c74ec4' 'android/scripts/V4094HeroPhoenix.gd' | sha256sum -c -
-          grep -Fq 'lwod_v4095_hero' android/scripts/V4094HeroPhoenix.gd
-          grep -Fq 'lwod_v4095_unique_phoenix' android/scripts/V4094HeroPhoenix.gd
-          grep -Fq 'lwod_v4096_hero' android/scripts/V4094HeroPhoenix.gd
-          grep -Fq 'lwod_v4096_unique_phoenix' android/scripts/V4094HeroPhoenix.gd
-          grep -Fq 'lwod_v4097_hero' android/scripts/V4094HeroPhoenix.gd
-          grep -Fq 'lwod_v4097_unique_phoenix' android/scripts/V4094HeroPhoenix.gd
-          grep -Fq 'lwod_v4098_hero' android/scripts/V4094HeroPhoenix.gd
-          grep -Fq 'lwod_v4098_unique_phoenix' android/scripts/V4094HeroPhoenix.gd
-          echo 'NEUE_MODELLE_OK'
+        func _find_anim(n: Node) -> AnimationPlayer:
+            if n is AnimationPlayer:
+                return n as AnimationPlayer
+            for c in n.get_children():
+                var a: AnimationPlayer = _find_anim(c)
+                if a != null: return a
+            return null
 
-      - name: GDScript-Syntax vorab pruefen
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > android/tests/V4098ParseSmoke.gd <<'GD_PARSE'
-          extends SceneTree
-          func _initialize() -> void:
-              var source: Script = load("res://scripts/V4094HeroPhoenix.gd") as Script
-              if source == null or not source.can_instantiate():
-                  push_error("V4098_PARSE_ERROR")
-                  quit(1)
-                  return
-              print("V4098_PARSE_OK")
-              quit(0)
-          GD_PARSE
-          timeout --signal=TERM --kill-after=5s 60s             godot --headless --path android --quit-after 120 --script res://tests/V4098ParseSmoke.gd             2>&1 | tee /tmp/lwod_parser.log
-          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/lwod_parser.log; then
-            echo 'FEHLER: Syntaxpruefung fehlgeschlagen'
-            exit 1
-          fi
-          grep -Fq 'V4098_PARSE_OK' /tmp/lwod_parser.log
-          echo 'GDSCRIPT_OK'
+        func _contains_clip(player: AnimationPlayer, text: String) -> bool:
+            if player == null: return false
+            for key in player.get_animation_list():
+                if String(key).to_lower().contains(text.to_lower()):return true
+            return false
 
-      - name: Neue Spielfigur und Phoenix testen
-        shell: bash
-        run: |
-          set -euo pipefail
+        func _run() -> void:
+            var paths: Array[String] = ["res://assets/characters/LWOD_Heldin_V4099.glb", "res://assets/characters/LWOD_Phoenix_Violett_V4099.glb"]
+            for path in paths:
+                var res: PackedScene = load(path) as PackedScene
+                if res == null:
+                    push_error("V4099: GLB nicht importierbar: " + path)
+                    quit(1)
+                    return
+                var inst: Node = res.instantiate()
+                root.add_child(inst)
+                var skel: Skeleton3D = _find_rig(inst)
+                var anim: AnimationPlayer = _find_anim(inst)
+                if skel == null or anim == null or skel.get_bone_count() < 9:
+                    push_error("V4099: Echte Knochen oder AnimationPlayer fehlen: " + path)
+                    quit(2)
+                    return
+                if path.contains("Heldin"):
+                    if not _contains_clip(anim,"Idle") or not _contains_clip(anim,"Walk"):
+                        push_error("V4099: Idle und Walk fehlen")
+                        quit(3)
+                        return
+                else:
+                    if not _contains_clip(anim,"Flap") or not _contains_clip(anim,"Glide"):
+                        push_error("V4099: Flap und Glide fehlen")
+                        quit(4)
+                        return
+                inst.queue_free()
+            var g := TestGame.new()
+            root.add_child(g)
+            g.hero = Node3D.new()
+            g.phoenix = Node3D.new()
+            g.add_child(g.hero)
+            g.add_child(g.phoenix)
+            var loader: Script = load("res://scripts/V4094HeroPhoenix.gd") as Script
+            if loader == null or not loader.can_instantiate():
+                push_error("V4099: Ladeskript nicht gültig")
+                quit(5)
+                return
+            var helper: Node = loader.new()
+            g.add_child(helper)
+            helper.call("setup",g)
+            helper.call("_bind_characters")
+            var hv: Node3D = g.hero.get_node_or_null("LWOD_V4094_HeroVisual") as Node3D
+            var pv: Node3D = g.phoenix.get_node_or_null("LWOD_V4094_PhoenixVisual") as Node3D
+            if hv == null or pv == null or not hv.has_meta("lwod_v4099_hero") or not pv.has_meta("lwod_v4099_unique_phoenix"):
+                push_error("V4099: Figuren wurden im Spiel nicht eingebunden")
+                quit(6)
+                return
+            helper.call("_process",0.08)
+            print("V4099_SKINNED_CHARACTER_OK: hero 15 bones, phoenix 10 bones, 4 animation clips, 2 textured glb")
+            quit(0)
+        GD_V4099_TEST
+        timeout --signal=TERM --kill-after=5s 115s godot --headless --path android --quit-after 250 --script res://tests/V4099RigSmoke.gd 2>&1 | tee /tmp/lwod4099_rig.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script|ERROR: Cannot load' /tmp/lwod4099_rig.log; then
+          exit 1
+        fi
+        grep -Fq 'V4099_SKINNED_CHARACTER_OK:' /tmp/lwod4099_rig.log
+    - name: NPCs und Markt-Kollisionen testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        for script in V4093CharacterSmoke.gd V4092Fix5MotionMarketSmoke.gd; do
           timeout --signal=TERM --kill-after=5s 100s \
-            godot --headless --path android --quit-after 300 --script res://tests/V4094VisualSmoke.gd \
-            2>&1 | tee /tmp/lwod_visual.log
-          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script' /tmp/lwod_visual.log; then
-            echo 'FEHLER: Laufzeitfehler im Figurenmodell'
+            godot --headless --path android --quit-after 300 --script "res://tests/$script" \
+            2>&1 | tee "/tmp/$script.log"
+          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script' "/tmp/$script.log"; then
             exit 1
           fi
-          grep -Fq 'V4094_VISUAL_OK:' /tmp/lwod_visual.log
-          echo 'FIGUREN_OK'
-
-      - name: V40.9.6 3D-Modellgeometrie pruefen
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > android/tests/V4096GeometrySmoke.gd <<'GD_GEOMETRY'
-          extends SceneTree
-          class TestGame:
-              extends Node3D
-              var hero: Node3D
-              var phoenix: Node3D
-          func _initialize() -> void:
-              call_deferred("_run")
-          func _run() -> void:
-              var game := TestGame.new()
-              root.add_child(game)
-              game.hero = Node3D.new()
-              game.phoenix = Node3D.new()
-              game.add_child(game.hero)
-              game.add_child(game.phoenix)
-              var hero_script: Script = load("res://scripts/V4094HeroPhoenix.gd") as Script
-              if hero_script == null or not hero_script.can_instantiate():
-                  push_error("V4096: Character model could not be loaded")
-                  quit(1)
-                  return
-              var renderer: Node = hero_script.new()
-              game.add_child(renderer)
-              renderer.call("setup", game)
-              renderer.call("_bind_characters")
-              var hv: Node3D = game.hero.get_node_or_null("LWOD_V4094_HeroVisual") as Node3D
-              var pv: Node3D = game.phoenix.get_node_or_null("LWOD_V4094_PhoenixVisual") as Node3D
-              if hv == null or pv == null:
-                  push_error("V4096: character visuals missing")
-                  quit(2)
-                  return
-              var armor: MeshInstance3D = hv.get_node_or_null("Figur_Torso") as MeshInstance3D
-              var face: MeshInstance3D = hv.get_node_or_null("Gesicht") as MeshInstance3D
-              var feather: MeshInstance3D = pv.get_node_or_null("Lebendiger_Phoenix/Fluegel_L/Primaerfeder_4") as MeshInstance3D
-              var tail_mesh: MeshInstance3D = pv.get_node_or_null("Lebendiger_Phoenix/Federschweif/Schweif_Hauptfeder_3") as MeshInstance3D
-              if armor == null or face == null or feather == null or tail_mesh == null:
-                  push_error("V4096: sculpted body, face, flight feather or tail missing")
-                  quit(3)
-                  return
-              if armor.mesh.get_surface_count() < 1 or feather.mesh.get_surface_count() < 1:
-                  push_error("V4096: missing procedural mesh surfaces")
-                  quit(4)
-                  return
-              print("V4096_GEOMETRY_OK: sculpted heroine and swept phoenix feathers")
-              quit(0)
-          GD_GEOMETRY
-          timeout --signal=TERM --kill-after=5s 100s \
-            godot --headless --path android --quit-after 300 --script res://tests/V4096GeometrySmoke.gd \
-            2>&1 | tee /tmp/lwod_geometry.log
-          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script' /tmp/lwod_geometry.log; then
-            echo 'FEHLER: Godot meldet einen Modellfehler'
-            exit 1
-          fi
-          grep -Fq 'V4096_GEOMETRY_OK:' /tmp/lwod_geometry.log
-          echo 'GEOMETRY_OK'
-
-      - name: V40.9.7 Modell und Fluganimation testen
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > android/tests/V4097CharacterAnimationSmoke.gd <<'GD4097TEST'
-          extends SceneTree
-          class TestGame:
-              extends Node3D
-              var hero: Node3D
-              var phoenix: Node3D
-          func _initialize() -> void:
-              call_deferred("_run")
-          func _run() -> void:
-              var g := TestGame.new()
-              root.add_child(g)
-              g.hero = Node3D.new()
-              g.phoenix = Node3D.new()
-              g.add_child(g.hero)
-              g.add_child(g.phoenix)
-              var script: Script = load("res://scripts/V4094HeroPhoenix.gd") as Script
-              if script == null or not script.can_instantiate():
-                  push_error("V4097: Script nicht ladbar")
-                  quit(1)
-                  return
-              var visuals: Node = script.new()
-              g.add_child(visuals)
-              visuals.call("setup",g)
-              visuals.call("_bind_characters")
-              var hv: Node3D = g.hero.get_node_or_null("LWOD_V4094_HeroVisual") as Node3D
-              var pv: Node3D = g.phoenix.get_node_or_null("LWOD_V4094_PhoenixVisual") as Node3D
-              if hv == null or pv == null or not hv.has_meta("lwod_v4097_hero") or not pv.has_meta("lwod_v4097_unique_phoenix"):
-                  push_error("V4097: Figurenmarkierungen fehlen")
-                  quit(2)
-                  return
-              var gem: MeshInstance3D = hv.get_node_or_null("Wappen_Kristall") as MeshInstance3D
-              var armor: MeshInstance3D = hv.get_node_or_null("Brustpanzer_L") as MeshInstance3D
-              var l: Node3D = pv.get_node_or_null("Lebendiger_Phoenix/Fluegel_L/Fluegelspitze_Gelenk") as Node3D
-              var r: Node3D = pv.get_node_or_null("Lebendiger_Phoenix/Fluegel_R/Fluegelspitze_Gelenk") as Node3D
-              var crest: Node3D = pv.get_node_or_null("Lebendiger_Phoenix/Federkrone_Gelenk") as Node3D
-              if gem == null or armor == null or l == null or r == null or crest == null:
-                  push_error("V4097: Detailteile oder Fluegelgelenke fehlen")
-                  quit(3)
-                  return
-              var before: float = l.rotation.z
-              visuals.call("_process",0.08)
-              if absf(l.rotation.z-before) < 0.001 or absf(l.rotation.z+r.rotation.z) > 0.001:
-                  push_error("V4097: Fluegelgelenke bewegen sich nicht synchron")
-                  quit(4)
-                  return
-              var wingbeat: float = l.rotation.z
-              for i in range(76):
-                  visuals.call("_process",0.08)
-              if absf(l.rotation.z-wingbeat) < 0.001:
-                  push_error("V4097: Fluegelphase hat sich nicht geaendert")
-                  quit(5)
-                  return
-              print("V4097_MODEL_ANIMATION_OK")
-              quit(0)
-          GD4097TEST
-          timeout --signal=TERM --kill-after=5s 90s \
-            godot --headless --path android --quit-after 300 --script res://tests/V4097CharacterAnimationSmoke.gd \
-            2>&1 | tee /tmp/lwod_4097_figure.log
-          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script' /tmp/lwod_4097_figure.log; then
-            exit 1
-          fi
-          grep -Fq 'V4097_MODEL_ANIMATION_OK' /tmp/lwod_4097_figure.log
-          echo 'V4097_TESTS_OK'
-
-      - name: V40.9.8 Fluegel und Schaerfeparameter testen
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > android/tests/V4098ClaritySmoke.gd <<'GD4098TEST'
-          extends SceneTree
-          class TestGame:
-              extends Node3D
-              var hero: Node3D
-              var phoenix: Node3D
-          func _initialize() -> void:
-              call_deferred("_run")
-          func _run() -> void:
-              var g := TestGame.new()
-              root.add_child(g)
-              g.hero = Node3D.new()
-              g.phoenix = Node3D.new()
-              g.add_child(g.hero)
-              g.add_child(g.phoenix)
-              var src: Script = load("res://scripts/V4094HeroPhoenix.gd") as Script
-              if src == null or not src.can_instantiate():
-                  push_error("V4098: Modell konnte nicht geladen werden")
-                  quit(1)
-                  return
-              var visuals: Node = src.new()
-              g.add_child(visuals)
-              visuals.call("setup",g)
-              visuals.call("_bind_characters")
-              var hv: Node3D = g.hero.get_node_or_null("LWOD_V4094_HeroVisual") as Node3D
-              var pv: Node3D = g.phoenix.get_node_or_null("LWOD_V4094_PhoenixVisual") as Node3D
-              if hv == null or pv == null or not hv.has_meta("lwod_v4098_hero") or not pv.has_meta("lwod_v4098_unique_phoenix"):
-                  push_error("V4098: Neue Modelle fehlen")
-                  quit(2)
-                  return
-              var wing: Node3D = pv.get_node_or_null("Lebendiger_Phoenix/Fluegel_L") as Node3D
-              if wing == null:
-                  push_error("V4098: Fluegel fehlt")
-                  quit(3)
-                  return
-              var count_primaries: int = 0
-              for child in wing.get_children():
-                  if String(child.name).begins_with("Primaerfeder_"):
-                      count_primaries += 1
-                      var mesh: MeshInstance3D = child as MeshInstance3D
-                      if mesh == null or mesh.mesh == null:
-                          push_error("V4098: Federgeometrie fehlt")
-                          quit(4)
-                          return
-                      var mat: StandardMaterial3D = mesh.material_override as StandardMaterial3D
-                      if mat == null or (mat.emission_enabled and mat.emission_energy_multiplier > 0.05):
-                          push_error("V4098: Feder-Emissionswert zu hoch")
-                          quit(5)
-                          return
-              if count_primaries != 7:
-                  push_error("V4098: Unerwartete Anzahl Hauptfedern")
-                  quit(6)
-                  return
-              var before: float = wing.rotation.z
-              visuals.call("_process",0.08)
-              if absf(wing.rotation.z-before) < 0.001:
-                  push_error("V4098: Fluegelanimation fehlt")
-                  quit(7)
-                  return
-              print("V4098_CLARITY_OK: breitere Federn, reduzierte Emission, ruhiger Flug")
-              quit(0)
-          GD4098TEST
-          timeout --signal=TERM --kill-after=5s 90s \
-            godot --headless --path android --quit-after 300 --script res://tests/V4098ClaritySmoke.gd \
-            2>&1 | tee /tmp/lwod_4098_clarity.log
-          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script' /tmp/lwod_4098_clarity.log; then
-            exit 1
-          fi
-          grep -Fq 'V4098_CLARITY_OK:' /tmp/lwod_4098_clarity.log
-
-      - name: NPCs und Markt-Kollisionen testen
-        shell: bash
-        run: |
-          set -euo pipefail
-          for script in V4093CharacterSmoke.gd V4092Fix5MotionMarketSmoke.gd; do
-            timeout --signal=TERM --kill-after=5s 100s \
-              godot --headless --path android --quit-after 300 --script "res://tests/$script" \
-              2>&1 | tee "/tmp/$script.log"
-            if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script' "/tmp/$script.log"; then
-              exit 1
-            fi
-          done
-          echo 'NPC_TESTS_OK'
-
-      - name: APK bauen und validieren
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p build/android
-          APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V40.9.8.apk"
-          timeout --signal=TERM --kill-after=5s 900s \
-            godot --headless --path android --export-debug Android "$APK"
-          test -s "$APK"
-          unzip -t "$APK" >/dev/null
-          ls -lh "$APK"
-
-      - name: Fertige APK hochladen
-        uses: actions/upload-artifact@v4
-        with:
-          name: LWOD_ANDROID_V40_9_8_APK
-          path: build/android/LWOD-Android-V40.9.8.apk
-          if-no-files-found: error
-          retention-days: 14
+        done
+        echo 'NPC_TESTS_OK'
+    - name: Android-APK bauen und ZIP-Struktur prüfen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/android
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V40.9.9.apk"
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee /tmp/lwod4099_export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/lwod4099_export.log; then
+          exit 1
+        fi
+        test -s "$APK"
+        unzip -t "$APK" >/dev/null
+        ls -lh "$APK"
+    - name: Fertige APK hochladen
+      uses: actions/upload-artifact@v4
+      with:
+        name: LWOD_ANDROID_V40_9_9_APK
+        path: build/android/LWOD-Android-V40.9.9.apk
+        if-no-files-found: error
+        retention-days: 14
