@@ -1,452 +1,115 @@
-name: LWOD Android V40.9.4 Spielfigur und Phönix
-'on':
-  workflow_dispatch: {}
+name: LWOD Android V40.9.4 FIX1 Spielfigur und Phoenix
+
+on:
+  workflow_dispatch:
   push:
     branches:
-    - main
+      - main
     paths:
-    - .github/workflows/blank-ps1.yml
+      - .github/workflows/blank-ps1.yml
+
 permissions:
   contents: read
+
 jobs:
   android:
-    name: LWOD Android V40.9.4 APK
+    name: LWOD Android V40.9.4 FIX1 APK
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 40
     container:
       image: barichello/godot-ci:4.7.2
     env:
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       ANDROID_HOME: /usr/lib/android-sdk
     steps:
-    - name: Repository laden
-      uses: actions/checkout@v4
-    - name: Python YAML bereitstellen
-      shell: bash
-      run: |
-        set -euo pipefail
-        if ! python3 -c 'import yaml' >/dev/null 2>&1; then
-          apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-yaml
-        fi
-    - name: V40.9.2 FIX5 unveraenderlich wiederherstellen
-      shell: bash
-      run: |
-        set -euo pipefail
-        wget -q --tries=3 --timeout=60 --https-only -O "$RUNNER_TEMP/lwod_4093_base.yml" 'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/319c331849f1fb679438320c4d8ccff04a6a8414/.github/workflows/blank-ps1.yml'
-        printf '%s  %s\n' '720b27c7c31010a2abd8f70c4bfa3c39dffaf202f56ccb3434410ad92a805d60' "$RUNNER_TEMP/lwod_4093_base.yml" | sha256sum -c -
-        python3 - <<'PYREBUILD'
-        import yaml,subprocess,os
-        from pathlib import Path
-        p=Path(os.environ['RUNNER_TEMP'])/'lwod_4093_base.yml'
-        steps=yaml.safe_load(p.read_text())['jobs']['android']['steps']
-        assert len(steps)==28
-        assert steps[23]['name'].startswith('V40.9.2 FIX5')
-        for index in range(2,25):
-            item=steps[index]
-            script=item.get('run')
-            if not script:
-                raise SystemExit('V4093: erwarteter Basisschritt ohne Skript: '+str(index))
-            print('V4093_REBUILD: '+str(index)+' '+item['name'],flush=True)
-            subprocess.run(['bash','-e','-u','-o','pipefail','-c',script],check=True)
-        print('V4093_REBUILD_OK: V40.9.2 FIX5 bereit',flush=True)
-        PYREBUILD
-    - name: V40.9.3 Detaillierte NPCs und Haendler installieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p android/scripts android/tests
-        base64 -d <<'LWOD_V4093_REGIONS' | gzip -dc > android/scripts/V408Regions.gd
-        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
-        NvubJZb982/fid/ERK7Mk/8DBCzstOq2AAA=
-        LWOD_V4093_REGIONS
-        base64 -d <<'LWOD_V4093_TEST' | gzip -dc > android/tests/V4093CharacterSmoke.gd
-        H4sIAAAAAAAC/6VWXU/bMBR951fchZdEC6HQUqBaJ/E1Ia0DBNP2MCHLjW8aj9TubAcov352vkppimDrQ+v449xzzr2+KT4aFEzDTYwCvyvE
-        jU340etEh1EX4pQqGhtUoKfyDsGgNgO45zqnGaQcFVVxOg/hniqOxg7iTJo0BCr4lBouRbSR5CIGwgU3nGb8Cf0Atj7DveRssAH2E9MsIwwT
-        VAqZ7xGVCy/YqI7Zh5f7bSiYUkEnqAZwIRnCEDJJ7VGFerC9rWPFZ0ZvWwkH1zixHHQ0YV4QCXzwgwbCqpKKUBgMC5Duaev6eO36FK1yKkzr
-        BiWliShjJE55xvwq1itr49a1Oka5WImOnGHOJ5kLxpM5aXLkhVWgsBOeyEwq39vs7fX3D3a94J0Q43CngaAHfbrffwdETTvsNhgHtL/X63pB
-        aFSOJVAiFcxQaSmAC/hVU6/j1yC3ZdZr28vSG1SW29SXENEEDRF2jtjDInfURj8vT8m1o4fsWLK5FwDV1bkGkid1MQ+H4M6BrGO0QJ4jtYX0
-        pq1ncxwtti40uM8s1ymx5e6csVV62B1AQmN0eGNLFKZcay4mXrB06k/Ojb+zPKfQ5Eo0U4WlVJnCUO9ITa/4vTQjL2zG13Y8wkkzX4+vvdtl
-        jo0xq9pchDXK1qirBMFvye2F8T4WCCsHC4G7q/PPRFpWVZ28IeHbX5QNim1ZaOGYUq60mWcIRy0JKLh1F89tnMZv4TSSYnJuQ43eTet4Ha3e
-        Olr1FXoLr6OZkmK5toU0yxBTNNT3sgfJSD1PZG4SbrwwoZnG4FUpTcekLtY6NXutatzVT5wT9qrYZm/sxS9+/efl8IzfA83uyCylGr2wE3Xa
-        e1f5ksLWBhp1dvrue7e/aPkaYynYfzGwWSlR4NOwFOSc5po8oZKEzqwzj/4qrkteWzE1NzmIlDTlC/cxeD0NE8rN4v0MTKIuUp3ILJMPwLg2
-        VMT4Mi/91rz8g6ONEe+zDz4M6wS8po4ze1We/WtJZZ6xQp9DdI1xltFVdfut6ma2gZgKmlxcnZBvl6dnoxty+XUAu4urqcOmtu2wV7Y5O6qt
-        3BpbGawwvopbxLRO/AWYtNVMewkAAA==
-        LWOD_V4093_TEST
-        printf '%s  %s\n' 'fc6c4907edae782b13f4736610d476d2f188386dd8a7e80e97bad767903fa9c5' 'android/scripts/V408Regions.gd' | sha256sum -c -
-        printf '%s  %s\n' 'a904957339fd866109c048451d7b1a4207cbb85feb439b4d8c42574a7ae68fe7' 'android/tests/V4093CharacterSmoke.gd' | sha256sum -c -
-        grep -Fq 'func _animate_sonnental_residents' android/scripts/V408Regions.gd
-        grep -Fq 'func _animate_character' android/scripts/V408Regions.gd
-        printf 'V4093_INSTALL_OK: Frisuren, Gesicht, Haendler-Schuerzen, Arm- und Bein-Gelenke\n'
-    - name: V40.9.3 FIX2 Sonnental Haendler richtig ausrichten
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 - <<'PYFACE'
-        from pathlib import Path
-        import hashlib
-        path = Path('android/scripts/V408Regions.gd')
-        source = path.read_text(encoding='utf-8')
-        before = '            if is_instance_valid(merchant):\n                _roundify_character(merchant,j+3,coats[j],true)'
-        after = '            if is_instance_valid(merchant):\n                _roundify_character(merchant,j+3,coats[j],true)\n                # Only rotate the visible 3D body. Do not alter shop triggers.\n                var visible_body: Node3D = merchant.get_node_or_null("LWOD_RoundedBody") as Node3D\n                if visible_body != null:\n                    visible_body.rotation.y = PI'
-        expected_sha = 'fc6c4907edae782b13f4736610d476d2f188386dd8a7e80e97bad767903fa9c5'
-        actual_sha = hashlib.sha256(source.encode()).hexdigest()
-        if actual_sha != expected_sha:
-            raise SystemExit('FIX2: Basisdatei anders als erwartet, keine unsichere Aenderung: '+actual_sha)
-        if source.count(before) != 1:
-            raise SystemExit('FIX2: Sonnental Haendler-Code nicht eindeutig gefunden')
-        updated = source.replace(before,after)
-        path.write_text(updated,encoding='utf-8')
-        new_sha = hashlib.sha256(updated.encode()).hexdigest()
-        if new_sha != 'f847f0e7851abe7ce0c6f91dc26e2260605477b6597b9497965f1056e99fea6f':
-            raise SystemExit('FIX2: korrigierte Datei hat unerwartete Pruefsumme')
-        print('V4093_FIX2_PATCH_OK: Nur Sonnental-Haendler 180 Grad gedreht')
-        PYFACE
-        cat > android/tests/V4093MerchantFacingSmoke.gd <<'GDFACE'
-        extends SceneTree
-        # V40.9.3 FIX2: Sonnental merchants must face customers after visuals are installed.
-        class FakeSonnental:
-            extends Node3D
-            var merchant_stalls: Array = []
-            var market_npcs: Array = []
-        
-        func _initialize() -> void:
-            call_deferred("_test")
-        
-        func _test() -> void:
-            var regions: Node = load("res://scripts/V408Regions.gd").new()
-            var game_root := Node3D.new()
-            game_root.name = "Game"
-            root.add_child(game_root)
-            var market := FakeSonnental.new()
-            market.name = "V403Fix5Sonnental"
-            game_root.add_child(market)
-            var original_rotations: Array[float] = [0.0,0.35,-0.42]
-            for i in range(3):
-                var merchant := Node3D.new()
-                merchant.name = "SonnentalMerchant%d" % i
-                merchant.position = Vector3(float(i)*3.0,0.0,1.0)
-                merchant.rotation.y = original_rotations[i]
-                market.add_child(merchant)
-                market.market_npcs.append(merchant)
-            regions.set("game",game_root)
-            regions.call("_polish_existing_sonnental")
-            regions.call("_polish_existing_sonnental")
-            for i in range(3):
-                var merchant: Node3D = market.market_npcs[i] as Node3D
-                var body: Node3D = merchant.get_node_or_null("LWOD_RoundedBody") as Node3D
-                if body == null or absf(angle_difference(body.rotation.y,PI)) > 0.01:
-                    push_error("FIX2: Sonnental merchant not facing customer: %d" % i)
-                    quit(1)
-                    return
-                if absf(angle_difference(merchant.rotation.y,original_rotations[i])) > 0.001:
-                    push_error("FIX2: Merchant interaction/root rotation unexpectedly changed")
-                    quit(2)
-                    return
-                if not merchant.has_meta("lwod_merchant_outfit"):
-                    push_error("FIX2: Merchant model was lost")
-                    quit(3)
-                    return
-            # Regional character visuals must not be rotated by this Sonnental-only change.
-            var resident := Node3D.new()
-            game_root.add_child(resident)
-            regions.call("_roundify_character",resident,0,Color("#557788"))
-            var resident_body: Node3D = resident.get_node("LWOD_RoundedBody") as Node3D
-            if absf(resident_body.rotation.y) > 0.001:
-                push_error("FIX2: Regional NPC orientation modified")
-                quit(4)
-                return
-            print("V4093_FIX2_OK: 3 Sonnental merchants front-facing, shop roots unchanged")
-            quit(0)
-        GDFACE
-        godot --headless --path android --script res://tests/V4093MerchantFacingSmoke.gd
-    - name: V40.9.4 Spielfigur und violetten Phoenix neu gestalten
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p android/scripts android/tests
-        base64 -d <<'LWOD_V4094_HERO' | gzip -dc > android/scripts/V4094HeroPhoenix.gd
-        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
-        LWOD_V4094_HERO
-        base64 -d <<'LWOD_V4094_VISUAL_TEST' | gzip -dc > android/tests/V4094VisualSmoke.gd
-        H4sIAAAAAAAC/41W32/bNhB+z1/BaS8SZstOk3aYMRcoEKQrkrYDsmWPBC2dJcI06ZKU3eav31ES9dtO9WKQ993dd5/vToLvFmRqyFMCEv7R
-        AFe/ki9QALm5m39WKQgBxIJB0IyoXAJ5OnAQe0hyJvkOJEGMJg9KCG64knjxUpAN6AJyDTK+SgQzhtyzHXxke1hdEXygzvkFfW/uyqsj0yQH
-        rVbDy0OuQPLvzf3VtpAJoVxyy5ngLxBGZP6eHBVPq+AJE4KmsAWtIQ0D6sgHkfdzp6GHS5MhObJaN0RjCacwKs1ZeXT2NQmcLSivtVI2ZmlK
-        k5yLNHSoDt7VgviK9DCYMzYR/8JD0Nr6EUtox7NW42zk2t4E/7s6n49fO0SNEEqktCSPYnwGk3+SxjKZ9HN5UJPng7BQNsaWZ4UO+qA9hkHQ
-        0wFP4GJO6tES8459Ur7013gNJXDUdE+HLupVbh7YpzeSDb3okZuCCVO1KgYVimEDajCrxcIkmh+sWTzfLv+4dX95zSjO0iAa5mxzdcJW9s5F
-        7Do9DAzY4hDM2v4bQ+iGSxeRaZagGCZoeVdA2h09ZN7+KxlYKvGaKk1l4YI9/vf1jpZlUFfHcxkgiAgbzXMdezDBPrwX9mKGWqUzSfi2y5+s
-        18QFIGqY2luqcXfPoTA5xQ2hdBiUmVakbd9qpdWp2z1ItpALW2vnnm8Ft+F1e9b4T2jpmUllu+zinBm6B8vCQJxUSo9lfc6CZSHjDtwrM+lR
-        SP6tAI8Joos1+QUueZJbslO4EneW7JnecdCjUt6cK6WZZCTINxhP9UbSX1+kwnAMyUdQWJDmnhErTAboKVMYsbmZZOP66sRl1ummgWoT/QQb
-        zMAz0L6fFveigAwEfZzqKRf/p1oG34B7FHLDNPZLHXK6S27PFvODnerp2+K+sL3h08oyiy/V+EcP3gxUz8PXP+G0ga3S0OJdgS3uZbCID8pw
-        Z0DgMyRW6ZtwGb+ZLePlbL6Mr9+e3TIHrRIwJnDQd5FXk23MNhxknFeMIvInQez1RZG9rhs4QWaJwcapumeo8dtz7VsymFJ17sWPyHtHZHnt
-        OruFjyWdd/RvnC6vFYsfU7qQmUk15PhLjriBIQdphSsFT8z1/3gc303W89PbHQsfr/Hz6/uXde9d8OqmBF3tyj1+520ZFoKZLS6bURm/T5Zx
-        0FzaOiJ9/vT074dH+vVhRRwn8hsBLvf4dYcji6yUAGvbjTwj94B64feob41CpuQBa9Vs0ciNlyNpSz7L6Op/yjYL1/QKAAA=
-        LWOD_V4094_VISUAL_TEST
-        printf '%s  %s\n' 'df166341e0b9a7e07c09c3c454a55bde7b44e1006babfa80f8584ecf2180cec4' 'android/scripts/V4094HeroPhoenix.gd' | sha256sum -c -
-        printf '%s  %s\n' '4a83088770b519b8055b427a0705b86a0413e6c14c3cdca597d5d410a88fe823' 'android/tests/V4094VisualSmoke.gd' | sha256sum -c -
-        python3 - <<'PY_MAIN4094'
-        from pathlib import Path
-        p=Path('android/scripts/Main.gd')
-        s=p.read_text(encoding='utf-8')
-        anchor='    v4081.setup(self)'
-        addon="""    var v4094: Variant = load("res://scripts/V4094HeroPhoenix.gd").new()
-            add_child(v4094)
-            v4094.setup(self)"""
-        if s.count(anchor) != 1:
-            raise SystemExit('V4094: Einfuegepunkt fuer Grafik-Addon nicht eindeutig vorhanden')
-        if 'v4094.setup(self)' in s:
-            raise SystemExit('V4094: Grafikerweiterung bereits in Main.gd')
-        s=s.replace(anchor,anchor+'\n'+addon)
-        p.write_text(s,encoding='utf-8')
-        print('V4094_MAIN_OK: Charaktere via Main.gd gestartet')
-        PY_MAIN4094
-        grep -Fqx '    v4094.setup(self)' android/scripts/Main.gd
-        printf 'V4094_INSTALL_OK: Spielfigur, Phoenix und Animation installiert\n'
-    - name: V40.9.4 Neue Spielfigur und Phoenix testen
-      shell: bash
-      run: |
-        set -euo pipefail
-        godot --headless --path android --script res://tests/V4094VisualSmoke.gd
-        grep -Fq 'res://scripts/V4094HeroPhoenix.gd' android/scripts/Main.gd
-        printf 'V4094_SMOKE_OK: Neue Figuren verbunden\n'
-    - name: V40.9.3 Neue NPCs und bisherige Kollisionen testen
-      shell: bash
-      run: |
-        set -euo pipefail
-        godot --headless --path android --script res://tests/V4093CharacterSmoke.gd
-        godot --headless --path android --script res://tests/V4092Fix5MotionMarketSmoke.gd
-    - name: V40.9.3 APK erstellen und pruefen
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p build/android
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V40.9.4.apk"
-        godot --headless --path android --export-debug 'Android' "$APK"
-        test -s "$APK"
-        unzip -t "$APK" >/dev/null
-        ls -lh "$APK"
-    - name: V40.9.3 APK hochladen
-      uses: actions/upload-artifact@v4
-      with:
-        name: LWOD_ANDROID_V40_9_4_APK
-        path: build/android/LWOD-Android-V40.9.4.apk
-        if-no-files-found: error
-        retention-days: 14
+      - name: Repository laden
+        uses: actions/checkout@v4
+
+      - name: Python YAML bereitstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python3 -c 'import yaml' >/dev/null 2>&1; then
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-yaml
+          fi
+
+      - name: Vollstaendiges Spiel rekonstruieren, Fehler reparieren und APK bauen
+        shell: bash
+        run: |
+          set -euo pipefail
+          ORIGINAL="$RUNNER_TEMP/lwod_v4094_original.yml"
+          wget -q --tries=3 --timeout=60 --https-only -O "$ORIGINAL" \
+            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/71e1462a498cf34943c37807df9bc1b2cdece637/.github/workflows/blank-ps1.yml'
+
+          python3 - <<'PY'
+          import hashlib
+          import os
+          import subprocess
+          from pathlib import Path
+          import yaml
+
+          original = Path(os.environ['RUNNER_TEMP']) / 'lwod_v4094_original.yml'
+          data = original.read_bytes()
+          git_blob_sha = hashlib.sha1(
+              ('blob %d\0' % len(data)).encode() + data
+          ).hexdigest()
+          if git_blob_sha != 'df81453c567051bb0813926abca84d6ba2467196':
+              raise SystemExit('FEHLER: Originaldatei stimmt nicht mit dem geprueften Stand ueberein')
+
+          steps = yaml.safe_load(data)['jobs']['android']['steps']
+          expected = [
+              'V40.9.2 FIX5 unveraenderlich wiederherstellen',
+              'V40.9.3 Detaillierte NPCs und Haendler installieren',
+              'V40.9.3 FIX2 Sonnental Haendler richtig ausrichten',
+              'V40.9.4 Spielfigur und violetten Phoenix neu gestalten',
+              'V40.9.4 Neue Spielfigur und Phoenix testen',
+              'V40.9.3 Neue NPCs und bisherige Kollisionen testen',
+              'V40.9.3 APK erstellen und pruefen',
+          ]
+          if len(steps) != 10 or [s['name'] for s in steps[2:9]] != expected:
+              raise SystemExit('FEHLER: Basis-Workflow hat eine unerwartete Struktur')
+
+          def repair_hero():
+              p = Path('android/scripts/V4094HeroPhoenix.gd')
+              content = p.read_text(encoding='utf-8')
+              old = '    for i,p in enumerate([hero_left_arm,hero_right_arm]):'
+              new = (
+                  '    for i in range(2):\n'
+                  '        var p: Node3D = hero_left_arm if i == 0 else hero_right_arm'
+              )
+              if content.count(old) != 1:
+                  raise SystemExit('FEHLER: Die defekte Zeile wurde nicht eindeutig gefunden')
+              p.write_text(content.replace(old, new), encoding='utf-8')
+              print('FIX1_OK: Godot-Syntaxfehler in Zeile 180 beseitigt', flush=True)
+
+          for i in range(2, 9):
+              step = steps[i]
+              name = step['name']
+              if i == 6:
+                  repair_hero()
+              print('STARTE:', name, flush=True)
+              seconds = 1200 if i == 2 else (900 if i == 8 else 180)
+              subprocess.run(
+                  ['timeout', '--signal=TERM', '--kill-after=5s',
+                   f'{seconds}s', 'bash', '-e', '-u', '-o', 'pipefail',
+                   '-c', step['run']],
+                  cwd=os.environ['GITHUB_WORKSPACE'], check=True
+              )
+              print('OK:', name, flush=True)
+
+          old_apk = Path('build/android/LWOD-Android-V40.9.4.apk')
+          new_apk = Path('build/android/LWOD-Android-V40.9.4-FIX1.apk')
+          if not old_apk.is_file() or old_apk.stat().st_size == 0:
+              raise SystemExit('FEHLER: APK wurde nicht erstellt')
+          old_apk.replace(new_apk)
+          print('ERFOLG: APK erstellt:', new_apk, flush=True)
+          PY
+
+      - name: Fertige APK hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: LWOD_ANDROID_V40_9_4_FIX1_APK
+          path: build/android/LWOD-Android-V40.9.4-FIX1.apk
+          if-no-files-found: error
+          retention-days: 14
