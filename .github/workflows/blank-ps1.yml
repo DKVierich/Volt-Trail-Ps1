@@ -1,5 +1,4 @@
-
-name: LWOD Android V40.9.4 FIX1 Spielfigur und Phoenix
+name: LWOD Android V40.9.4 FIX2 Spielfigur und Phoenix
 
 on:
   workflow_dispatch:
@@ -14,7 +13,7 @@ permissions:
 
 jobs:
   android:
-    name: LWOD Android V40.9.4 FIX1 APK
+    name: LWOD Android V40.9.4 FIX2 APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:
@@ -74,33 +73,72 @@ jobs:
           def repair_hero():
               p = Path('android/scripts/V4094HeroPhoenix.gd')
               content = p.read_text(encoding='utf-8')
-              old = '    for i,p in enumerate([hero_left_arm,hero_right_arm]):'
-              new = (
-                  '    for i in range(2):\n'
-                  '        var p: Node3D = hero_left_arm if i == 0 else hero_right_arm'
-              )
-              if content.count(old) != 1:
-                  raise SystemExit('FEHLER: Die defekte Zeile wurde nicht eindeutig gefunden')
-              p.write_text(content.replace(old, new), encoding='utf-8')
-              print('FIX1_OK: Godot-Syntaxfehler in Zeile 180 beseitigt', flush=True)
+              patches = [
+                  (
+                      '    for i,p in enumerate([hero_left_arm,hero_right_arm]):\n'
+                      '        sign := -1.0 if i == 0 else 1.0',
+                      '    for i in range(2):\n'
+                      '        var p: Node3D = hero_left_arm if i == 0 else hero_right_arm\n'
+                      '        var sign: float = -1.0 if i == 0 else 1.0'
+                  ),
+                  (
+                      '    for i,wing in enumerate([phoenix_left_wing,phoenix_right_wing]):',
+                      '    for i in range(2):\n'
+                      '        var wing: Node3D = phoenix_left_wing if i == 0 else phoenix_right_wing'
+                  ),
+              ]
+              for old, new in patches:
+                  if content.count(old) != 1:
+                      raise SystemExit('FIX2: Patch-Stelle fehlt oder ist doppelt: ' + old[:55])
+                  content = content.replace(old, new)
+              if 'enumerate(' in content:
+                  raise SystemExit('FIX2: Nicht unterstuetztes enumerate verblieben')
+              p.write_text(content, encoding='utf-8')
+              print('FIX2_OK: Arme, Richtungsvariablen und Phoenixfluegel korrigiert', flush=True)
+
+          def preflight():
+              cmd = [
+                  'timeout', '--signal=TERM', '--kill-after=5s', '60s',
+                  'godot', '--headless', '--path', 'android',
+                  '--check-only', '--script', 'res://scripts/V4094HeroPhoenix.gd'
+              ]
+              result = subprocess.run(cmd, text=True, stdout=subprocess.PIPE,
+                                      stderr=subprocess.STDOUT)
+              print(result.stdout, flush=True)
+              if result.returncode != 0 or 'Parse Error:' in result.stdout:
+                  raise SystemExit('FIX2: Der Godot-Parser meldet weiterhin einen Fehler')
+              print('FIX2_CHECK_OK: Figuren-Skript erfolgreich geprueft', flush=True)
 
           for i in range(2, 9):
               step = steps[i]
               name = step['name']
               if i == 6:
                   repair_hero()
+                  preflight()
               print('STARTE:', name, flush=True)
-              seconds = 1200 if i == 2 else (900 if i == 8 else 180)
-              subprocess.run(
+              seconds = 1200 if i == 2 else (900 if i == 8 else 120)
+              script = step['run']
+              if i in (6, 7):
+                  script = script.replace(
+                      'godot --headless --path android --script',
+                      'godot --headless --path android --quit-after 180 --script'
+                  )
+              result = subprocess.run(
                   ['timeout', '--signal=TERM', '--kill-after=5s',
                    f'{seconds}s', 'bash', '-e', '-u', '-o', 'pipefail',
-                   '-c', step['run']],
-                  cwd=os.environ['GITHUB_WORKSPACE'], check=True
+                   '-c', script],
+                  cwd=os.environ['GITHUB_WORKSPACE'], text=True,
+                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT
               )
+              print(result.stdout, flush=True)
+              if result.returncode != 0:
+                  raise SystemExit(f'FEHLER bei {name}: Exit-Code {result.returncode}')
+              if i == 6 and 'V4094_VISUAL_OK:' not in result.stdout:
+                  raise SystemExit('FEHLER: Figuren-Test hat keine Erfolgsmeldung geliefert')
               print('OK:', name, flush=True)
 
           old_apk = Path('build/android/LWOD-Android-V40.9.4.apk')
-          new_apk = Path('build/android/LWOD-Android-V40.9.4-FIX1.apk')
+          new_apk = Path('build/android/LWOD-Android-V40.9.4-FIX2.apk')
           if not old_apk.is_file() or old_apk.stat().st_size == 0:
               raise SystemExit('FEHLER: APK wurde nicht erstellt')
           old_apk.replace(new_apk)
@@ -110,7 +148,7 @@ jobs:
       - name: Fertige APK hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V40_9_4_FIX1_APK
-          path: build/android/LWOD-Android-V40.9.4-FIX1.apk
+          name: LWOD_ANDROID_V40_9_4_FIX2_APK
+          path: build/android/LWOD-Android-V40.9.4-FIX2.apk
           if-no-files-found: error
           retention-days: 14
