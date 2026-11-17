@@ -1,4 +1,4 @@
-name: LWOD Android V40.9.3 FIX1 NPC Grafiken und Animationen
+name: LWOD Android V40.9.3 FIX2 Sonnental Haendler
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V40.9.3 FIX1 APK
+    name: LWOD Android V40.9.3 FIX2 APK
     runs-on: ubuntu-latest
     timeout-minutes: 75
     container:
@@ -242,6 +242,88 @@ jobs:
         grep -Fq 'func _animate_sonnental_residents' android/scripts/V408Regions.gd
         grep -Fq 'func _animate_character' android/scripts/V408Regions.gd
         printf 'V4093_INSTALL_OK: Frisuren, Gesicht, Haendler-Schuerzen, Arm- und Bein-Gelenke\n'
+    - name: V40.9.3 FIX2 Sonnental Haendler richtig ausrichten
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PYFACE'
+        from pathlib import Path
+        import hashlib
+        path = Path('android/scripts/V408Regions.gd')
+        source = path.read_text(encoding='utf-8')
+        before = '            if is_instance_valid(merchant):\n                _roundify_character(merchant,j+3,coats[j],true)'
+        after = '            if is_instance_valid(merchant):\n                _roundify_character(merchant,j+3,coats[j],true)\n                # Only rotate the visible 3D body. Do not alter shop triggers.\n                var visible_body: Node3D = merchant.get_node_or_null("LWOD_RoundedBody") as Node3D\n                if visible_body != null:\n                    visible_body.rotation.y = PI'
+        expected_sha = 'fc6c4907edae782b13f4736610d476d2f188386dd8a7e80e97bad767903fa9c5'
+        actual_sha = hashlib.sha256(source.encode()).hexdigest()
+        if actual_sha != expected_sha:
+            raise SystemExit('FIX2: Basisdatei anders als erwartet, keine unsichere Aenderung: '+actual_sha)
+        if source.count(before) != 1:
+            raise SystemExit('FIX2: Sonnental Haendler-Code nicht eindeutig gefunden')
+        updated = source.replace(before,after)
+        path.write_text(updated,encoding='utf-8')
+        new_sha = hashlib.sha256(updated.encode()).hexdigest()
+        if new_sha != 'f847f0e7851abe7ce0c6f91dc26e2260605477b6597b9497965f1056e99fea6f':
+            raise SystemExit('FIX2: korrigierte Datei hat unerwartete Pruefsumme')
+        print('V4093_FIX2_PATCH_OK: Nur Sonnental-Haendler 180 Grad gedreht')
+        PYFACE
+        cat > android/tests/V4093MerchantFacingSmoke.gd <<'GDFACE'
+        extends SceneTree
+        # V40.9.3 FIX2: Sonnental merchants must face customers after visuals are installed.
+        class FakeSonnental:
+            extends Node3D
+            var merchant_stalls: Array = []
+            var market_npcs: Array = []
+        
+        func _initialize() -> void:
+            call_deferred("_test")
+        
+        func _test() -> void:
+            var regions: Node = load("res://scripts/V408Regions.gd").new()
+            var game_root := Node3D.new()
+            game_root.name = "Game"
+            root.add_child(game_root)
+            var market := FakeSonnental.new()
+            market.name = "V403Fix5Sonnental"
+            game_root.add_child(market)
+            var original_rotations: Array[float] = [0.0,0.35,-0.42]
+            for i in range(3):
+                var merchant := Node3D.new()
+                merchant.name = "SonnentalMerchant%d" % i
+                merchant.position = Vector3(float(i)*3.0,0.0,1.0)
+                merchant.rotation.y = original_rotations[i]
+                market.add_child(merchant)
+                market.market_npcs.append(merchant)
+            regions.set("game",game_root)
+            regions.call("_polish_existing_sonnental")
+            regions.call("_polish_existing_sonnental")
+            for i in range(3):
+                var merchant: Node3D = market.market_npcs[i] as Node3D
+                var body: Node3D = merchant.get_node_or_null("LWOD_RoundedBody") as Node3D
+                if body == null or absf(angle_difference(body.rotation.y,PI)) > 0.01:
+                    push_error("FIX2: Sonnental merchant not facing customer: %d" % i)
+                    quit(1)
+                    return
+                if absf(angle_difference(merchant.rotation.y,original_rotations[i])) > 0.001:
+                    push_error("FIX2: Merchant interaction/root rotation unexpectedly changed")
+                    quit(2)
+                    return
+                if not merchant.has_meta("lwod_merchant_outfit"):
+                    push_error("FIX2: Merchant model was lost")
+                    quit(3)
+                    return
+            # Regional character visuals must not be rotated by this Sonnental-only change.
+            var resident := Node3D.new()
+            game_root.add_child(resident)
+            regions.call("_roundify_character",resident,0,Color("#557788"))
+            var resident_body: Node3D = resident.get_node("LWOD_RoundedBody") as Node3D
+            if absf(resident_body.rotation.y) > 0.001:
+                push_error("FIX2: Regional NPC orientation modified")
+                quit(4)
+                return
+            print("V4093_FIX2_OK: 3 Sonnental merchants front-facing, shop roots unchanged")
+            quit(0)
+        GDFACE
+        godot --headless --path android --script res://tests/V4093MerchantFacingSmoke.gd
     - name: V40.9.3 Neue NPCs und bisherige Kollisionen testen
       shell: bash
       run: |
@@ -253,7 +335,7 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p build/android
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V40.9.3.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V40.9.3-FIX2.apk"
         godot --headless --path android --export-debug 'Android' "$APK"
         test -s "$APK"
         unzip -t "$APK" >/dev/null
@@ -261,7 +343,7 @@ jobs:
     - name: V40.9.3 APK hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V40_9_3_APK
-        path: build/android/LWOD-Android-V40.9.3.apk
+        name: LWOD_ANDROID_V40_9_3_FIX2_APK
+        path: build/android/LWOD-Android-V40.9.3-FIX2.apk
         if-no-files-found: error
         retention-days: 14
