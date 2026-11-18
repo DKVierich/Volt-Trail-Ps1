@@ -1,16 +1,16 @@
-name: LWOD Android V41.2 Violet Hair and Phoenix Wings
+name: LWOD Android V41.3 Gesicht Haare Fluegel und Skinning
 'on':
   workflow_dispatch: {}
   push:
     branches:
-    - main
+      - main
     paths:
-    - .github/workflows/blank-ps1.yml
+      - .github/workflows/blank-ps1.yml
 permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.2 APK
+    name: LWOD Android V41.3 APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:
@@ -19,244 +19,454 @@ jobs:
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       ANDROID_HOME: /usr/lib/android-sdk
     steps:
-    - name: Repository laden
-      uses: actions/checkout@v4
-    - name: Grundpakete bereitstellen
-      shell: bash
-      run: "set -euo pipefail\nif ! python3 -c 'import yaml' >/dev/null 2>&1; then\n  apt-get update -qq\n  DEBIAN_FRONTEND=noninteractive\
-        \ apt-get install -y -qq python3-yaml\nfi\n"
-    - name: Bestehendes Spiel inklusive NPCs und Sonnental wiederherstellen
-      shell: bash
-      run: "set -euo pipefail\nwget -q --tries=3 --timeout=60 --https-only -O \"$RUNNER_TEMP/lwod_4094_original.yml\" \\\n  'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/71e1462a498cf34943c37807df9bc1b2cdece637/.github/workflows/blank-ps1.yml'\n\
-        python3 - <<'PY_REBUILD'\nfrom pathlib import Path\nimport subprocess, os, yaml, hashlib\np = Path(os.environ['RUNNER_TEMP'])\
-        \ / 'lwod_4094_original.yml'\ndata = p.read_bytes()\nblob_sha = hashlib.sha1(('blob %d\\0' % len(data)).encode() + data).hexdigest()\n\
-        assert blob_sha == 'df81453c567051bb0813926abca84d6ba2467196', 'Unerwarteter Basisstand'\nsteps = yaml.safe_load(data)['jobs']['android']['steps']\n\
-        assert len(steps) == 10\nfor i in (2,3,4,5):\n    name = steps[i]['name']\n    print('REKONSTRUKTION:', name, flush=True)\n\
-        \    subprocess.run(['timeout','--signal=TERM','--kill-after=5s','1200s',\n        'bash','-e','-u','-o','pipefail','-c',steps[i]['run']],check=True)\n\
-        print('BASIS_OK: Alle bisherigen Spielinhalte vorhanden',flush=True)\nPY_REBUILD\n"
-    - name: 3D-Modell-Werkzeuge bereitstellen
-      shell: bash
-      run: "set -euo pipefail\nif ! python3 -c 'import numpy, PIL' >/dev/null 2>&1; then\n  apt-get update -qq\n  DEBIAN_FRONTEND=noninteractive\
-        \ apt-get install -y -qq python3-numpy python3-pil\nfi\npython3 -c 'import numpy, PIL; print(\"MODEL_DEPENDENCIES_OK\"\
-        )'\n"
-    - name: V41.2 Neue Charaktermodelle und echte violette Haarmaterialien bauen
-      shell: bash
-      run: "set -euo pipefail\nmkdir -p android/assets/characters android/scripts android/tests\nbase64 -d <<'LWOD4120_GEN' | gzip\
-        \ -dc > \"$RUNNER_TEMP/lwod4120_generator.py\"\nH4sIAAAAAAAC/7V9a5PbNrLo9/kVPOtKkZQoii+9ZpYf7CR2vOXYKc9c+1TpqFSURGnooUQdktJITvm/3+4GSAIkNR4792azGgkEGo1Gv9FgXvxX/5Cl/UW064e7\n\
-        o7I/5/fJzr3617/+9e7zh98UzzadayWNlvdhqhyjJA5zBb4m0S40lHWU5+FKWSZZftjC7zQ8Rhk0BMco2CmP0W6TKcFupWyCKDev3ifKqzjcrQDQKtzjl93ybCpv\n\
-        wmQb5um5n4en/JCGSpDHQWYoX2COHP5Gu2OYZmEPMFwp2yAHXMLMuAp2EfyIkp2yjKM9zAMjF4fdKob5o52ShfsgDfJQMTfxAhCNw8xUPhzy/SFXokyJtvskzYNF\n\
-        HGJnjlb/TbJKAFFY+xXroCSAAExzD+hkyc5Qsjw9LHNDuQ+y+zhaAHbJ1TpNtsoeOkEDB6z8BT/Zg7/evisa326DDVCJ/vyWBo/FJLvDdn9WgkzZ7a+uPn74cOfj\n\
-        cC3JTNiRKE125ibMNRX3Y/7y9vb3u/lvbz+qhqL2t7u8vwryoH/0bGf+mKQP/cUhileqrhMgc/uwilINSBECLf279ADzh6coy+fJA/3Ur3798O7Dx1v/7ytFzR6i\n\
-        nXqtvgjHi2UwVA1qmGf3wSrE5uVk4o0H0Bye6bfrDFeBDb8f76OcWtbD9WBtqQbAug+iFJvGjjNaTqATNszjaHOfY3Mw8oLVumheBekDtg5GjoUzwPhlnOT3NIvr\n\
-        LccAk7VUEEb2JFjaZXsBwhm7g8GIQGwSoAQ0rdxgPFjgcvIwjAmpZRAsh0VLOdYbDO0xQz8OYQtCWoEHED3svEgSmtkZOBPPg4b9Id3HtPCh53pBQCOZkGDjJBjY\n\
-        K0CFN5XTuBPHHoQ4Pj5saYa1sxqx0Ws2b7XMhTsahjR7GNDoVbh0xwHbhWrVth24Y0a4NMwYiSeDxRJJDGtZEz7jobVcQUOwXAI/0E67sKkj9erb1buXr35/d+vH\n\
-        wBsaYwlijVt/CJz0+dZHKTCXYRRrICwa6633sYd+dff23e/+ZHh19/t/zz8b+PmHj086+MDA4fTt6moVrpl4a/r1lQL/RNuNT/Jg7sJHTf345pVqaAIY4GPsto9O\n\
-        YZz50NuMk2ClsdZ0t/F3ezMFFZNsTYAdHOJ8Dq2aZ00mrM86SZVodTJ2wZZEPQRhC1ExFEtgeOA/yyROUj8/wJZqi3MOCgMF+D48cXpMEcbMBBUQ7TX1BciYXo7N\n\
-        T0Z+9jWY6RciCVs5/u73q4ay+y4BPekDpuYuSbdBrFmGbdqwchyFHwJoXMH5jLjDQjch9RGwLrqcTk92wX9eKLeH3WOQrpR1sAA12ufMpmzSYBUBR4DKzu9BWe5C\n\
-        ZRcGaYyzgkaPUE1Cn2hnNmCuTv7p1McJb1Zn/3zuS+ss/smSde7bpjXqWqblDDqa3QsWmbY69SzTG+gdR++xB6sz9rDGHWK3LNpBH/Z9H3U8Xeky0k3PZ+N0mvWd\n\
-        waAxF+OVaX7qnnBTuufzjG/qNjgBobcAFMYZaQLWQjt2EDfYSiLiEWlIfMDovzis/SgxXyE3vP2g6TfIgVlwBAY5rI017l3uq3+9f6MayT6PttHXkGtVHK2hCu4z\n\
-        vX3HjNtLZH5zv9uouvmYgtacE6chOFTyxyA+hBrf/DSEETtFfnR19fLu3ctbn0sRE6ltsN+Hq/nhqMXBIoyNg3Hk27/zGZubYDyBkekxg770d8SqN6m/Yzx6xXjE\n\
-        258U2PBw1dunSR4uycbCv2GwvFdyMKSGsonvXiv/55OSpNEGCLZI8hwsXRyuc4JxOPnakhi+63WJGXtjvbMGyc01kFe019rBAJYHsvdJ2GnY8ezbPS39zsCjOPAP\n\
-        kVDTw8k4nmdXV0sgTVb6FYwQSKb5PNpF+XyuZWG8FuQDf5p7fzq7oW+HY/n1S/ntsfwGlEQPpPxNNJ0XrX9/K6fDTQEOw04GuDDgy6wDdF3YHi0S8KAOx8x/j18e\n\
-        Q9T37IeIWR6kuY8Kl+FYaYVPqPmCNA3OGoO9ys/70CdaybojMvay4vtUUw0MtMnRnTJyn5hAkFLZz/QbaUS0VgBz9KMQ36ai2e78TybKWQCuhm/pN9sTNoD4FQ3K\n\
-        6ogLgKZoe9hq21NvuwMVGPY8vQEN9kNjSGn7qTWDnvCp91dH/GOUT2x6YrMn8EcGBCohvEZQgPg0mjUJcDgWFKhLU+dwrAGD9fMNI/c2QiLxhiYxot0aJHe3DH3e\n\
-        pT49/sOcXWZ9ywFNUoASqHcySTFkmt7s/dVHkmdAXxynE30HzW6M04vVawyVLhAXFO702oPNZxJQ9pge+18rdYmwZ9DdLPs3Cf+dOackDBb+rzHb1DYNi/87kzkb\n\
-        DDEiQFIlTxEYC2PpayQ+XViOxM4wrLGdKGJ/06hvuu+7FxDmQm6CLidC0AD9AkUlvWBmYc4dFM5V05neCgc1RwwmiemNjOlfSWlk0QoUje0Y4PhCtMUMToUxRC+3\n\
-        fNS1op2N9GSkX43lyVh+Bbk7BukZ4jLYFlCmebQMYlDfqzMYvV2eHNLMxOCnZDfULKjoUE/BH6I0fKnpl9oksrYpVtDisjxUHgutqWu3OC0B8zzz4NB56FO3plQg\n\
-        miW/LE/dlPsMEJhqgW6cAatu+rXyKQJ91qZmKhh8JiPqowTZBtPAfCE9W68xYlQtpN7z+6tuXXPUKUnSfbhZ+EGX/2z0pT0pOGlKrBTAKEODT/i+6ErYAqszrmni\n\
-        FWXzPCFTMX0NIh0ayFezJnJf/NoaESgfjMKuWI0hJ7/oPv3S1H0Yi4QpQaWd1G/kDT1N3ZlxAn0EH94MFIS4U5Y5ML58f5d+cAPYJnwRN6G1T7nya74PhYpkazIC\n\
-        2gu9dSyzSO3DYOsCYRjpE97nsidR6Q8S7iyJuPPBoaKTH7UqkhQzNf5YjIVAklFsfDb2BuUbpPyrT0AExBi16zpBIDHBbkg2l2pw6h/61KNmkBnYii7nXnqWZBp3\n\
-        HAIF2yhkncm1+OCr/IAppxpRuaa9oGQriuaHRciIuQhANPJob6SWkdot5LRkXfwfNKe9BQYbSh7swxQTZuc4ojwYUMnt/SbpXIRf+XY0m+ja3cDU1WPEo9XxIz8L\n\
-        nvYQwA0Ixia/90tHGmYPYhZ7kkem6zc0AD9IltiAukOGC8S5l2mSZTTQmKLRtk1Zw9RmwGH6v01rcN0OAA38rDYLfvTb4NwkGLHWgNCTNqt10WjlKA2k6zTwLFIL\n\
-        9KXpQkxodcyJ0zUhAE1Rh5qjgWG6Vie1uubIYm2ALvyd/f8zZ/vcx13rasX+6Z28C+h2NEEAOji2KzB4hwijP20c9zlqz4aZy2v27Eu1EvfnLNhRVp43R8c/PteE\n\
-        HY2jYxzJhsEn/XBkK/YsfVgJL09zcI8KfUIS4MdoBTwujFkAPN8yLSN7DMM9fpNF+VWaANMsD+kRZZjMKIqv8r+HKI7Bs9qFLIGSBpQFR9WZgn+VRitM++6SXFnH\n\
-        QY7+J9AOE9Ki3AeVVDMUubwvZGnnrSSu2qIXVERZRSnTY0yM28T8giSXI7k4P0ea7esnYNg/INAV/uEedFQJEB8aJVT9hj2mzzocavyu/N+890eXvLb3DVnN/aj/\n\
-        /qrFTQkweZXr3QUIJU3c0ZBvKltTGLZcx3QVLgMkARmqtYs8KdoHn1swx9AaA7S80zFHI13HP0P4A7iY9qCTy3AeH31i7g4B7JhykuyFkj8mwJXbTNnHh4zxJwWy\n\
-        BzRKiLHiK/l9tHzYhZmsn/ZIWUaJHi3t8ZG7F5wYj48d0xkUbXKXHuvC1mcz+euY1oihqc+aiqaeuoDp9WtZo9UUmttQZuI2P63MvAuuuEcuuBYBk9D3gDVqD9Dw\n\
-        i3ezqJ7xpmc56QH66PhtsfgHuo1pozmetXH9hnJTda4FhtsEzISyDLYLdEQMxf1NWUTpqofjleSQx1GhxAJK2oKyCqKYAkZgEklhVb6fsFzNdMYG/r8H+2rALlvw\n\
-        MQbzKvXxoI87hD429rHAxtpuvc/IMUzPgT6uDX0Iqj2u9ZkMoY+NfaCzBfbbdIYjuY9t2sVkDvS2EKxTR8g2PYtjbQ8QG0TbGbj1XvTMw7U5Fn7DCe2RwLjfDZjT\n\
-        5BEc7Xr8fDIghDBYGtX4uk4hFje+LoLlw/NjacFk4xytvkfuf+njw7aDAcYYi+QRDFd2SBFxAEenA/l9sEN2iNBoMRO2T+LzJmk5Djj7sJJCQ9J6QE1iat9u034t\n\
-        GSu2eg6BaNDJ8Wxg8DwAkm4gG9I5QfwPfr8YNWpRvxGoG7n+D4L6GvkvxfR8a7pfbhSM6dnPp7WF1hrS/4PgcA9+Ssx0xZ4dsQs9meuCro89kFXHy2LTwaPhx0dB\n\
-        uoWlx8EZgkvu1RyAO0I8X9pxVyikw/uVgjspqY9lkqSrrHJuOC61OGZJWeIw2Gmsv1EkkNm5WTWcPJeeFIlwYVx2Wd8OW9usO93LLbSBe3byg3PUxLkLIHoNEL1n\n\
-        gtitKbHBVqe3ByOCCdqt68wl5QfAteo+wP81Zmigd82DkLvv1sAw8OEIA9jvhx9iIL08U4kXF45T6IC1fqaCbT5+sJzuJky2fnEso/FEL8KvDlPKqo6SSDgT9qlm\n\
-        MVg5Azs4wcNuX6PUsS5MH61O1bEJTSFOVxGoAmeUrIQgpahaoBU/agLw1TEPoCwgx0PnJShNkDNRE7xQikZ/yrLsczyZptIRkJ9oCzRXpv97CPI+WN1dFrPyliMo\n\
-        niTNZoKZqZFKXk4dAVHylw8MU7D0AmIbv9yeKhzJMmAFZWPuWQVPkfumXxUlq58VOiWMfcLkO2N0BVicrNBIlHUdVMtyn8Ox2elKPCapwfxSdT8ASe2hflMcpkn9\n\
-        Hp8Ay6RS6s6XKwMXxzD5p1FfQ4hY5nH0AA5qkslWhFL75SmFCbx1D86u1rONemR9rGIfgDJdzHr4J5gZ+GdZ/KqdxHEs4EHXP94UvxbSryX+KkcBexDSYgDFezLl\n\
-        ajfXWHToC0d2CGd6baAQzihRBOEI0A/JpbXR+AU7Nd4lK+AaMpmkEq8VgdchFgnx2zFU8kRhcln5GI9JGq9E3UmwGscRIFKSXKM4N/yoUitc10+C2KjybHMTJ4sg\n\
-        npOawQ9zmexRd8XJEswPtjRPu8QxhPSUAZ11senSUOpZiLIAQq9t+KrSX3+ruFD1mparCoRUr+mQcBvs2cmpQXPq+jf98nIxP0FLpikKlMWDK3V5H8UraFbp9Ioj\n\
-        AQQXBHSZHHbsxJrA6FdPIl5aia46LwyDaqigCe/Va8vgBWmWgHYGoWQ4T8FbhZ2PuAO9uLi9uMTF1J4V+wmmm6FYMc3bV382mIhMOW2IzB9blJzwDKFiiybbTq9d\n\
-        w535vb00BuGXR8vmnYkONHh24oEtdKk8GezfhF5qDoa+AXquShkDs/hYR8IA6DfHKHwkm4qFXlkG1kNcoFCbgLWDRh6kmzCvlx5QT3jsswIV/KrfJGvmzuCMMith\n\
-        S+GyUl+Zt4FxQqUc+Yt3Tf05FlaNK7ntplXAYvy/1cVhvcZiPGAJROfDep1hiR2gwxrekc0DrodhNPu3Op+zRUp8fpyqrFWd+eyLrI9x+tIv0m9qpr+k5HIJHvoy\n\
-        2e4BJmxMgDsn0tRAR3hOBwCZTydrjbMQsjx4AhttDsmB26AaCREdn2MTmHnCtkXnM8l9v5Yk+wSj1Gsca6gljneAoXpdoawSS6nXeFAemMRmVFqh5tSRVtQgqLCq\n\
-        ZrDzdapuQXJn5L1jerrw2wFx0kz6DXYJTrwLVoY0urQyRcnResXcxSZ9bd0ksJvzwMdtgm/GwHaGhvrp919d1XC9ydChY06KJ3ivwhg2elYIHY68LzgrZTen6HaD\n\
-        lo13IIcF+7jUx2uAesx5T+60VPDKvhQ08F7MM4c+A0O9/fXlu5cfWS9XSNkutrwzaBIO7s+Xd55addmn0TZCM0tKAty2EIK3uKEFKQBATchqyBqmkj1HeYI+G7ng\n\
-        4ZrYeXcI5UFYhVbQWXS3pLFT+jVr+F5Pr5syHNDR59WaDIicvVykIBlgZYI4jpavA3SsQamYoFbS5LC5x3Rn1TpxZabHWr/CcFFRH9Zcq10WJqmr5LCIw9toFa7U\n\
-        ayq0VmG6P/lcHwvw6jW0fmunJFBRY3XTUrW0WCPdXtVZ1LpnIDmrHtUvKjim2mhD2WEkrmTBdh9jspdOi1gtLhX1KYszqjJAX3S5yrBnswBrC+oBCTx9uH7oOjM0\n\
-        QViAaVpVEKuBW2sM9OYZPyx6quJZ1q+IHKfxzAe43altWrOWVf2JZpKWcQ08poTbKMvQM3wMsnuIXwxYC8g6pRv4vYQ03AYgbkpRsgoIrYIzEdF8Rk2SjCMv2AQk\n\
-        /1aJbdEPkfkhWpFKKuVHv1HK71UxWU03V7JXOUOw0jRaHEChq9d/q399uH179/bDe2AVVF2G+v7Dxz9fvgM3D3WUod79/t+/fvjw8be5pV6jJjLU/3x4+/7uFn8z\n\
-        1WOon39/++YP1oQa5pvRWoIg/KNy2UMrQDIKXhhfi3oNK4WfCd4C8ARfLNpu5qJZosrU6vEmztd4raCaA4PKHJeISSFyU1XHxNL+DTh1sJUod2p57UT59R7Yepkj\n\
-        n0KU+dd9Eu6ik/JbmEUb6K5Ki1LJMWROI36DhUxBWNHpBDezchq/zaRRvAP9kcGB58lgsDiFe9QsS8N8MF1HBzUEzsOVwMT8psoroOCf/J4KkBPVsdHi736MNmoN\n\
-        G/R7C8wb/W8Bo124+hN9Y9AtJRsBm5Tfa/CYtKcM4jbYvI7iHN2oyciZGGihy4bJeGSoj2mwv1WvXdca2ezXHf9Vgxthxb6IJ9u0ar9IghQqdkZ3PtqGzOdgI/tY\n\
-        /2xIHkrBSrWJ+JUgNlWWHNIl32K2MBTJGgUL+QOmLb5KHao0BcCciUhkzE/K2PUIcizA9ym+ljC+SSYSS5LnbWkXdgdJyovIGgdHluakAiPuGaBXgMNf35pZZ2RN\n\
-        g/JHLH3EakEpD8kHtpwCZKX55afK27Al4OCeAze2zUx7QnephCpkmvqJJIswcA4IEBIMiOjzsJg0v/d9MMk5C2ZZWRlzxVqKLRnB5qS3SCEjNacVIVvKwOo9KlUc\n\
-        7QAh9RocMZUhB1EGQxjlGzhqnxQhtvru7fvfgTbfLsEvN0+AX3KuhLZRRCLXTGcxX5y2F5QM0gOkHD6/1eZCFTsVebqcCTGQVfGU8zp08kGa6mETBWbfKkP8JfPx\n\
-        ypu5Omz3mYYADH6nDsNJDeTXABLouhnuloCx4K5/ybr+QlVUpaNomtdD4F8yiPnw3ypmjXZBeubBpRxO3ofBKkx9dtXOpKSl+m8ve/tWNRYqJpFUwzFspzvuctD8\n\
-        GwMphNWwcdIlCwa4KwN+64GK4oAA/n9uwfDqXVjDhW58Fuj66u37/zlZFvTmbfUs8d985wAScjrsJKbXmVlghwIZBllFOQhrJA9f7/ddvG9GdoxH/LLqwnrIqqS5\n\
-        pmlmLCrOiHfNDMRI0+HPPIu+QiBHV0YwzcyKp2hy7lcGJzELSo/LghM/ODWLSqSbKvzqQIC4CbV3CL/v6EWpPjy2n37sPPG4KoEqHszYglhCHXSG9oUiSSOnpRUZ\n\
-        Po4iPKz0CnaZVoQQa8Rx5IzfrsHrrsV9tdf+m3jBr2J+8uz5H+wqLFdLr4rrH6+m6ke8LDjzX1MiSmM/9eLhH9E+Ex7ST6McZNB1MDrRKAbc7nGWagT7bZSgcIjp\n\
-        jsUh78PlgzCCfhoVKBrhjcQRf4B8iFjhT6OERANsTxqAsYowgEKXEhAbMDZMa1gNeReu85fpVhhVtEi49UwXF+SIs2HH10kaBo3hRashToBALDzSB18HvtkVoI8Y\n\
-        EchIlE0SFi1IUMcmFlKzIc0BYNrRQEzfhZvaWrBF3Nce1RlYdULc3lN+RRxJTYYIGHegR9UWeJwrr0GeuWwSp27OTN1qU1dthgT7wuS/BnuRkelnnS2x5MMe8TEb\n\
-        6FseTb1Q/jhsg12PklQrhScZkgMEsWCWEqMssd0Bz1LYwO+oY8wYY3UTiwQ3rPJ3qqGcmQ5WcthDXCwhi0WeNuDgYNkJVoQI7a6LRR/YnzfrcmyFZSLYhWpFRkQ+\n\
-        HDYcYSEpto3dsnE0KjoOGKEboMYeVqMMsIiG9Zjx+84SzeyxXl8VVsQ4VHzj4ME4AKEZcTscLJSxLdbsNOccUh3NBCcuxroMXRw3QWSGY/agwqfIVYhY8RT1C+U1\n\
-        24M9FgdQIVFmKu8TJUafR8n2oGDpIkq5R0pfWRzihzN4giu+YaiZqTINsww92xCLMDYmq2mYsoIP0wJFaGMBEQidg6izZge16pBE0fb0loi46AfcYKNqxI5OOdwa\n\
-        YLPLml1cOLtOLi7ZtKyJ4HWZReVpAdkdlCg4owryCPFlNUoucBksANxhur0uA7c9/eKibULPRvQsYc1DB1thXmh+ctG4uUNSUYNBOZxYb0iDx07bXnNVAagNn1o3\n\
-        w82iqrCRgBxw44haxxNctmcJy2agC8aurjSQcRxg1ZfjeVijbY1A3qwJKhoHGhqEexLEcEAgPA+5eoILgR2Xsm9NQJXqGBTSNHFJGTCxxiwl1ymTYSnsKI3AjqgV\n\
-        rEKUi7cMCKQsCNnA13ZR4iaILlXV4YZZrrRgkWQvFLA+7LUYGX/rBqpD8DkjdH6wJOeswOSF4sQ0bhytUU6Dx+AsS52hHCCsSI04eWS3FqYog5K1rRtoXHPNEDbM\n\
-        p1hFX+dnJisjh5hvVImhO0RhGU6IVceDJ1jas2mbxw5BEGQC+AXaRwPeXmdrtlTgBPcplh5NSJSRiaxJhZ5nOdWk45HM1SXksQiZ7pYUq3NGBmlgq1rwGJfhWdQG\n\
-        c+G2w+SFGWAwZc0gQeTDBYgeRNs22i/UCaRvRlgaORgLDEk7XQMrMGQBiBzVSQkJJQnlcIL1mANP5ye4rdBqBHU9g6wk8Lg7EchJunhCxmaIqA5tiZqXFaKLG8QU\n\
-        n6BzPK9sHT7JPEgih3TT0BbQQcIx1rMEE0Dr02WReUJimH8keXKSuJTPBX9LlhWugswB+gfkVoCPyXW2x7jHxE0lBY76SHrWWDXqMvS5XBziOVLvmfSGlVZ+K7BB\n\
-        JwUwIdfBraPjVOjY30OHrcvGEY5bx4Zew/I8BqUSXYvt15A0J1UKjyfk2+lPwaq5FLgyxobOsNIktth42baSnRgQa1e8hGQqG2fSq2hEfgLvKViG10q2DeIYCy2x\n\
-        LBtYankfhg/ZjYIlIvhqDqzm3qTB/j5aUkkaOFrnMKNj2uSQK/guh/SwwkruBQBqusGjMVVqsw/ie2tCdmviMoVDFqd4MCskuwoPC/IJMJkaGFUOI1lXfIBl2LZF\n\
-        H0P+pC6NmoMiysusbXckAHAorLSJSTyHIzVqjif3HWM4zC+yXgMajnyOepk+iuHimngE63itxtghfsDIzCWdR2XszrjwHoS3JgmwbKeAVWo+dNVGCI3cNnvAoNWb\n\
-        kOAXgOrf9Y3BDYi3yW5VREwFi5TMgZXdjLWUKI1YQV+gLMEQ7JjRBzc9u+/hxQDzsniAWoVNGVVEKTxbB9vJStre5AkZQc2AEOhWgFvpaxvCZmgfeiRlT3mwtoV0\n\
-        Q27BuQS/fUiQvTGn56x4X5WwN0Di4ZOKBPcbgAxI2AekSugOgEWXCpCr6KVYLdv9HYCE1ZBtvEX+J12J8HTh/U4iVOsJE2p5NlGbaDUQaOiydgrZPPIiAHfhVLnO\n\
-        UBeg4044DoNuCdBx7x2b6UFyJ0D5fxd6U1eDjnCYa2uNmSCgRI3w+geyTkM4C1q8UF5FG2WZAK5Yyla8pA7Pv5fBHhQmXr5CxbfGm8bgy+L1pzWoWGzDE2MlTpYP\n\
-        dY3o4F0SzAqgxz5g7j2pftAemAOwx0LOoKH+oZdnjZl6IqNDvUY03HNxn9F2WKTVUHUgV96X6TNKqxmOJbzCqioRF+vyT74W9RwdmXzUtnMnoKjnuOSjIu6nLnEs\n\
-        buOArmWMOlr0C8gKZ0J0WduOisWAiC69+77NT2XqWMOiLP0ZIXuNu4CjAC2XDJCgQJDK6O1bBteF2NAy59B5gnPRxgBsSl8MxhXsAbnwlO7A9AjQyGuEfuUM3qhQ\n\
-        34XqI5ohYPQpKDtEekpq4FEMu080Zh4Itgygo9lUZwhTfq5hTmBIMBiIWdvynYriJ0Zucgjxo53oyBguY23ii47N0yN0PwrDLaDpE9QYlrL3srgYtAIp63HhA7kL\n\
-        leQYpnEQrZiZyQ6LHF8jBq67koXBtpS3ipyOyyM+oKPDqFdrwMQgOioORVygbihngQRvo6T4VOtJg2d1BcXSkkIi44e4F7UiEA+3feRVkRtOiF7ehGU3JkKoXs7n\n\
-        8Dfy3PnTCDMldXGf8Gqa13S+o6lvVzHYGXAQjPLeXXX0IWSLpja9Tse4M6aYOGq7PcVuwuNUd7OKfhI0rmr5vWAObNwCrGt6z4LHGEhCzmsFN3oOOE5FCZw7aIU3\n\
-        fg68Kp0hgRwMUG86rXCd58AVkiA1wL1/BlhKuUiwbXyNge385L7LeZoa4N4PAOY2/zO/cpDtIZjBFD+oXrdW6rm/x1dfxMF2sQqU/Nop3/uX982JJAOfgxikFmAU\n\
-        ItCgCYugC7Q/A9ruqMKYZtJyXUD4c0WJJiEa0Ho/C64K+CXkvAndirZMo9eE+lwsn4T7U2Cb4vC54Fpn+PPkbAXZ/VmQ7SJAUD0QgUGHv/bxp+n6DOA/t2ulquba\n\
-        lcDak5+iQk1RE49CQPFzsGQlzVbbAkrW+Zeg1XQ0QrMtoJ03bIPotkGcSWUGr1lNhvByzT/CeAXR8SfPdix837PKT+73rGTw0uH9J/ZaXl5Y+KNn+K+S1Vl4SD/l\n\
-        M3wTcxvfP5BngGgAC67sHzqSd1jEK0z0K70BWDhjpd/1g3lKMpdjPoMT904Yw36L6LEjeczJSee5d9FeHEc/jQogjhs7xXHFeCDP+LE240dpxosTfpQn/FhO+JGG\n\
-        tc93F0SxOA5/yuSnM3rwftsPnl8q60MclwfM+NoEdnbC/dt7epV3cey8o+LkWMFbFsEyp6KmWoTZg0iQDmIp+YHsMtELMuM5EcYOdNBTjy3ZuxVcPDh2XauKTLE6\n\
-        g5xOZ8RGWo2cGj9ap8CWJb5c5lhj1mE8Ls+FLRZp8BdcC2RqHDUzolm4SyzHRyeuPVqXY+MCbd7uNLGxXbZUzFBQH4tFTeyAmh9642siCBv+Zm0Rm2ENGz4U1+fw\n\
-        E26XSEOZbXprg8PProdeAx08u8BDb0qpUyc8wWHZaJ4bZXjakzp5iiRoA6GBzYbBhyuucYgbgblRe+BwujWSCOaIIjTs6bH8p+MRQgiPpcfty4PH7IAQIw/eyXFq\n\
-        WBeZlHERzd3GYfigRMckPSv4wnF2v5fnBzFneE0HhXly7uF9Vzym39DbQc4QAEbZsozqygDJwiNe1FAunvHizyEl5AcjTETZWGlMbzaXsnHF0dvTQVgzhYS7PKI3\n\
-        dLDZKOgCZnbY4bn8JvbnJ+tsDyM5PNLzLJaqo2Sva7EDf/EE9pnw3AIe5bNRwVEoaLA89o+n/jCXYQ4x0eOMq9Sng7vvDbkEMcEQpaikt9eaaXLrmSYbM00jqzWh\n\
-        0MGTfHNMh9R4LEs5BVjmZDjsUcyIL/xGEMXRG6notlyT/Ar8WrpJwJ6bOeE89YUivaLL/Y3+GxSgmmEHshtlHT7SmyrwzUb4Bet5N+wGCZbQB8DzfG7Oxi+Uu/sQ\n\
-        y0iB+QFYHu3xAmGQ58HyPkTtj8nz4vINmhVsAscjSbd05Vu4elIeCyJGBkGqzgQLW1ma0+I0sLBppdmTTwGll/8g8FK2seni60wG9XdM+FHfM+XXdtY5DJSjC0H5\n\
-        qLOmnesCR3XWVHbRRW2JzReumBTjh17Xhp3HnsClCGGMEJzB9wCYrkdM8G+X8QCZtwt9C/6gAb84vm9xvhEJQ6x3kTpuC3Wc71MHwoEho47DIoM1HSuNv08XG+g6\n\
-        ZmSxJl18H9aa+QJoGi+t81lCwhc7tP7fLtZmwc+ErRbYwnIRZfv7i7XNgdPFFyoSF1kDBoWTbPgUD4DClfa2Wmyxs/h2PDwuKFQBOnhME2T09hn6Dx8EGXtfDXtH\n\
-        Dat6ofNToKLCqrPBaduF4Qrfz1f3dPBAgtwDyufjK6vQ/aGjSO5Qma7V9NbIUFuFVwH+Ellh/G9/GKVfWpqMJ2R15Uc9p035rvAAAI2eS+6rgQ0OnrmNR0hXpntX\n\
-        QPJJ+w7BwAFRld/hcwwIwwpZa9XR8lY4rLNW7AWXPr5BMqvqwppN23uOnRfLWdj5nssiHkNqpIIuKh7h9VzIM6VvwT3Gsd589Q7OaBn11zo1bawwi2eLk3cf8HiM\n\
-        nk7IGaO6H3fSmL5I9crJMAdfLAbesZwOQ+GF4XmVEVPKeFnMjeFoXUqPvY6DvcqgtibICnMjZnVtkEBn1Ckm1S5kCRtwPspwkDS9HwbEjF4Nn87F1fZwxc+C2oLd\n\
-        PwfLeFdKibuDH1tw4bpIyWBncBm37kXctIq3pTeAIMwp5SAwDzwU8TP41ZEClJhjeVPjTdd0DHtUY82C0d7EEZYjYJ9nMdob3FhmL1pX6kpJ7zfPZLs3tLFu7x+C\n\
-        rfYVX19KuILl/CcQ67tMIJ0fBXlxg9+IG+xchipt9xt5uy+m1HhSjOfIcjm3FuHLv/C64nzu++p8jofo87nK9Ce40nh3rbo7NmUXaIwyGzczwl12SMN5kC2jiL0T\n\
-        w8B7cLvcd3T96v8CzAnRfJNuAAA=\nLWOD4120_GEN\nbase64 -d <<'LWOD4120_LOADER' | gzip -dc > android/scripts/V4094HeroPhoenix.gd\n\
-        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\nLWOD4120_LOADER\nprintf '%s  %s\\n' 'ea26e585cfe8c9b967a5bb34d86d4729da2cff8343dc9d7309dc66b8da27c927'\
-        \ \"$RUNNER_TEMP/lwod4120_generator.py\" | sha256sum -c -\nprintf '%s  %s\\n' '7221a7f4b1f32cff66b9fc88786d6af4ca6afc0e8bad401e6fc6ac9f1de2ace4'\
-        \ android/scripts/V4094HeroPhoenix.gd | sha256sum -c -\nexport LWOD_ASSET_DIR=\"$GITHUB_WORKSPACE/android/assets/characters\"\
-        \npython3 \"$RUNNER_TEMP/lwod4120_generator.py\"\npython3 - <<'PY_CHECK_4120'\nfrom pathlib import Path\nimport json,struct\n\
-        import numpy as np\nroot=Path('android/assets/characters')\nexpected={'LWOD_Heldin_V4120.glb':(15,{'Idle','Walk'}),\n \
-        \         'LWOD_Phoenix_Violett_V4120.glb':(10,{'Flap','Glide'})}\nfor filename,(bone_count,clips) in expected.items():\n\
-        \    raw=(root/filename).read_bytes()\n    assert raw[:4]==b'glTF' and struct.unpack_from('<I',raw,4)[0]==2\n    assert\
-        \ struct.unpack_from('<I',raw,8)[0]==len(raw)\n    length,chunk=struct.unpack_from('<I4s',raw,12)\n    assert chunk==b'JSON'\n\
-        \    model=json.loads(raw[20:20+length])\n    assert len(model['skins'])==1\n    assert len(model['skins'][0]['joints'])==bone_count\n\
-        \    assert {a['name'] for a in model['animations']}==clips\n    assert model['images'] and model['textures'] and len(model['materials'])>=6\n\
-        \    prims=model['meshes'][0]['primitives']\n    assert len(prims)>=6\n    for prim in prims:\n        assert {'POSITION','NORMAL','JOINTS_0','WEIGHTS_0','TEXCOORD_0'}<=set(prim['attributes'])\n\
-        \    def values(accessor):\n        a=model['accessors'][accessor]\n        v=model['bufferViews'][a['bufferView']]\n \
-        \       start=20+length+8+v.get('byteOffset',0)+a.get('byteOffset',0)\n        kind={'SCALAR':1,'VEC4':4,'VEC3':3}[a['type']]\n\
-        \        assert a['componentType']==5126\n        return np.frombuffer(raw,dtype='<f4',count=a['count']*kind,offset=start).reshape(-1,kind)\n\
-        \    names=[n.get('name','') for n in model['nodes']]\n    if filename.startswith('LWOD_Heldin'):\n        materials={m['name']:m\
-        \ for m in model['materials']}\n        for key in ('LWOD412_hair','LWOD412_hair_light','LWOD412_hair_dark'):\n       \
-        \     assert key in materials\n            m=materials[key]\n            assert 'emissiveFactor' not in m or sum(m['emissiveFactor'])<0.001\n\
-        \            rgba=m['pbrMetallicRoughness']['baseColorFactor']\n            assert rgba[2]>rgba[0]*1.30, 'hair not violet\
-        \ enough'\n            assert rgba[2]>rgba[1]*1.35, 'hair not violet enough'\n            assert 'baseColorTexture' not\
-        \ in m['pbrMetallicRoughness']\n        assert {'Hair','Head','LeftLeg','RightLeg','LeftArm','RightArm'}<=set(names)\n\
-        \    else:\n        assert {'WingL','WingR','TipL','TipR','Tail'}<=set(names)\n        for anim in model['animations']:\n\
-        \            targets={names[c['target']['node']] for c in anim['channels'] if c['target']['path']=='rotation'}\n      \
-        \      assert {'WingL','WingR'}<=targets\n        # Test that the authored flap angles actually change across keyframes.\n\
-        \        flap=next(a for a in model['animations'] if a['name']=='Flap')\n        wing_channel=next(c for c in flap['channels']\
-        \ if names[c['target']['node']]=='WingL' and c['target']['path']=='rotation')\n        rotation=values(flap['samplers'][wing_channel['sampler']]['output'])\n\
-        \        assert float(np.max(rotation[:,2])-np.min(rotation[:,2]))>0.18\n    print('V4120_GLB_OK:',filename,'bones:',bone_count,'clips:',sorted(clips))\n\
-        PY_CHECK_4120\n"
-    - name: V41.2 GLB Dateien in Godot importieren
-      shell: bash
-      run: "set -euo pipefail\ntimeout --signal=TERM --kill-after=5s 240s godot --headless --editor --path android --import 2>&1\
-        \ | tee /tmp/lwod4120_import.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to import|Error importing' /tmp/lwod4120_import.log;\
-        \ then\n  echo 'GLB-IMPORTFEHLER'; exit 1\nfi\nfor file in LWOD_Heldin_V4120.glb LWOD_Phoenix_Violett_V4120.glb; do\n \
-        \ test -s \"android/assets/characters/$file\"\ndone\necho V4120_IMPORT_OK\n"
-    - name: V41.2 Skinning, Animation und Einbindung testen
-      shell: bash
-      run: "set -euo pipefail\ncat > android/tests/V4120RigSmoke.gd <<'GD_V4120_TEST'\nextends SceneTree\nclass TestGame:\n   \
-        \ extends Node3D\n    var hero: Node3D\n    var phoenix: Node3D\n\nfunc _initialize() -> void:\n    call_deferred(\"_run\"\
-        )\n\nfunc _find_rig(n: Node) -> Skeleton3D:\n    if n is Skeleton3D:\n        return n as Skeleton3D\n    for c in n.get_children():\n\
-        \        var rig: Skeleton3D = _find_rig(c)\n        if rig != null: return rig\n    return null\n\nfunc _find_anim(n:\
-        \ Node) -> AnimationPlayer:\n    if n is AnimationPlayer:\n        return n as AnimationPlayer\n    for c in n.get_children():\n\
-        \        var a: AnimationPlayer = _find_anim(c)\n        if a != null: return a\n    return null\n\nfunc _contains_clip(player:\
-        \ AnimationPlayer, text: String) -> bool:\n    if player == null: return false\n    for key in player.get_animation_list():\n\
-        \        if String(key).to_lower().contains(text.to_lower()):return true\n    return false\n\nfunc _run() -> void:\n  \
-        \  var paths: Array[String] = [\"res://assets/characters/LWOD_Heldin_V4120.glb\", \"res://assets/characters/LWOD_Phoenix_Violett_V4120.glb\"\
-        ]\n    for path in paths:\n        var res: PackedScene = load(path) as PackedScene\n        if res == null:\n        \
-        \    push_error(\"V4120: GLB nicht importierbar: \" + path)\n            quit(1)\n            return\n        var inst:\
-        \ Node = res.instantiate()\n        root.add_child(inst)\n        var skel: Skeleton3D = _find_rig(inst)\n        var anim:\
-        \ AnimationPlayer = _find_anim(inst)\n        if skel == null or anim == null or skel.get_bone_count() < 9:\n         \
-        \   push_error(\"V4120: Echte Knochen oder AnimationPlayer fehlen: \" + path)\n            quit(2)\n            return\n\
-        \        if path.contains(\"Heldin\"):\n            if not _contains_clip(anim,\"Idle\") or not _contains_clip(anim,\"\
-        Walk\"):\n                push_error(\"V4120: Idle und Walk fehlen\")\n                quit(3)\n                return\n\
-        \        else:\n            if not _contains_clip(anim,\"Flap\") or not _contains_clip(anim,\"Glide\"):\n             \
-        \   push_error(\"V4120: Flap und Glide fehlen\")\n                quit(4)\n                return\n        # Check that\
-        \ skinned joints actually move when animation advances.\n        var bone_name: String = \"LeftLeg\" if path.contains(\"\
-        Heldin\") else \"WingL\"\n        var clip_name: String = \"Walk\" if path.contains(\"Heldin\") else \"Flap\"\n       \
-        \ var bone_index: int = skel.find_bone(bone_name)\n        if bone_index < 0:\n            push_error(\"V4120: Animierter\
-        \ Knochen fehlt: \" + bone_name)\n            quit(7)\n            return\n        var matching_clip: String = \"\"\n \
-        \       for c in anim.get_animation_list():\n            if String(c).to_lower().contains(clip_name.to_lower()):\n    \
-        \            matching_clip = String(c)\n                break\n        if matching_clip.is_empty():\n            push_error(\"\
-        V4120: Clip nicht gefunden: \" + clip_name)\n            quit(8)\n            return\n        anim.play(matching_clip)\n\
-        \        anim.advance(0.22)\n        var pose_a: Quaternion = skel.get_bone_pose_rotation(bone_index)\n        anim.advance(0.41)\n\
-        \        var pose_b: Quaternion = skel.get_bone_pose_rotation(bone_index)\n        if pose_a.angle_to(pose_b) < 0.025:\n\
-        \            push_error(\"V4120: Knochen bewegt sich nicht: \" + bone_name)\n            quit(9)\n            return\n\
-        \        inst.queue_free()\n    var g := TestGame.new()\n    root.add_child(g)\n    g.hero = Node3D.new()\n    g.phoenix\
-        \ = Node3D.new()\n    g.add_child(g.hero)\n    g.add_child(g.phoenix)\n    var loader: Script = load(\"res://scripts/V4094HeroPhoenix.gd\"\
-        ) as Script\n    if loader == null or not loader.can_instantiate():\n        push_error(\"V4120: Ladeskript nicht gültig\"\
-        )\n        quit(5)\n        return\n    var helper: Node = loader.new()\n    g.add_child(helper)\n    helper.call(\"setup\"\
-        ,g)\n    helper.call(\"_bind_characters\")\n    var hv: Node3D = g.hero.get_node_or_null(\"LWOD_V4094_HeroVisual\") as\
-        \ Node3D\n    var pv: Node3D = g.phoenix.get_node_or_null(\"LWOD_V4094_PhoenixVisual\") as Node3D\n    if hv == null or\
-        \ pv == null or not hv.has_meta(\"lwod_v4120_hero\") or not pv.has_meta(\"lwod_v4120_unique_phoenix\"):\n        push_error(\"\
-        V4120: Figuren wurden im Spiel nicht eingebunden\")\n        quit(6)\n        return\n    helper.call(\"_process\",0.08)\n\
-        \    print(\"V4120_SKINNED_CHARACTER_OK: 15 und 10 Knochen, 4 Clips, echte Pose-Bewegung\")\n    quit(0)\nGD_V4120_TEST\n\
-        timeout --signal=TERM --kill-after=5s 115s godot --headless --path android --quit-after 250 --script res://tests/V4120RigSmoke.gd\
-        \ 2>&1 | tee /tmp/lwod4100_rig.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script|ERROR:\
-        \ Cannot load' /tmp/lwod4100_rig.log; then\n  exit 1\nfi\ngrep -Fq 'V4120_SKINNED_CHARACTER_OK:' /tmp/lwod4100_rig.log\n"
-    - name: NPCs und Markt-Kollisionen testen
-      shell: bash
-      run: "set -euo pipefail\nfor script in V4093CharacterSmoke.gd V4092Fix5MotionMarketSmoke.gd; do\n  timeout --signal=TERM\
-        \ --kill-after=5s 100s \\\n    godot --headless --path android --quit-after 300 --script \"res://tests/$script\" \\\n \
-        \   2>&1 | tee \"/tmp/$script.log\"\n  if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script' \"\
-        /tmp/$script.log\"; then\n    exit 1\n  fi\ndone\necho 'NPC_TESTS_OK'\n"
-    - name: V41.2 APK bauen und pruefen
-      shell: bash
-      run: "set -euo pipefail\nmkdir -p build/android\nAPK=\"$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.2.apk\"\ntimeout\
-        \ --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android \"$APK\" 2>&1 | tee /tmp/lwod4120_export.log\n\
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/lwod4120_export.log; then\n  exit 1\nfi\ntest -s \"\
-        $APK\"\nunzip -t \"$APK\" >/dev/null\nls -lh \"$APK\"\n"
-    - name: Fertige APK hochladen
-      uses: actions/upload-artifact@v4
-      with:
-        name: LWOD_ANDROID_V41_2_APK
-        path: build/android/LWOD-Android-V41.2.apk
-        if-no-files-found: error
-        retention-days: 14
+      - name: Repository laden
+        uses: actions/checkout@v4
+      - name: Grundpakete bereitstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python3 -c 'import yaml' >/dev/null 2>&1; then
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-yaml
+          fi
+      - name: Bestehendes Spiel inklusive NPCs und Sonnental wiederherstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          wget -q --tries=3 --timeout=60 --https-only -O "$RUNNER_TEMP/lwod_4094_original.yml" \
+            'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/71e1462a498cf34943c37807df9bc1b2cdece637/.github/workflows/blank-ps1.yml'
+          python3 - <<'PY_REBUILD'
+          from pathlib import Path
+          import subprocess, os, yaml, hashlib
+          p = Path(os.environ['RUNNER_TEMP']) / 'lwod_4094_original.yml'
+          data = p.read_bytes()
+          blob_sha = hashlib.sha1(('blob %d\0' % len(data)).encode() + data).hexdigest()
+          assert blob_sha == 'df81453c567051bb0813926abca84d6ba2467196', 'Unerwarteter Basisstand'
+          steps = yaml.safe_load(data)['jobs']['android']['steps']
+          assert len(steps) == 10
+          for i in (2,3,4,5):
+              name = steps[i]['name']
+              print('REKONSTRUKTION:', name, flush=True)
+              subprocess.run(['timeout','--signal=TERM','--kill-after=5s','1200s',
+                  'bash','-e','-u','-o','pipefail','-c',steps[i]['run']],check=True)
+          print('BASIS_OK: Alle bisherigen Spielinhalte vorhanden',flush=True)
+          PY_REBUILD
+      - name: 3D-Modell-Werkzeuge bereitstellen
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python3 -c 'import numpy, PIL' >/dev/null 2>&1; then
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-numpy python3-pil
+          fi
+          python3 -c 'import numpy, PIL; print("MODEL_DEPENDENCIES_OK")'
+      - name: V41.3 Neue 3D-Modelle mit weicher Gelenkgewichtung erzeugen
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/assets/characters android/scripts android/tests
+          base64 -d <<'LWOD4130_GEN' | gzip -dc > "$RUNNER_TEMP/lwod4130_generator.py"
+          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
+          DliE/wfRBBrDxHgAAA==
+          LWOD4130_GEN
+          base64 -d <<'LWOD4130_LOADER' | gzip -dc > android/scripts/V4094HeroPhoenix.gd
+          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
+          LWOD4130_LOADER
+          printf '%s  %s\n' '4635fe3f6db6501a3b54b4770080cbedd13f53afcd97a8becfe4606b4f564053' "$RUNNER_TEMP/lwod4130_generator.py" | sha256sum -c -
+          printf '%s  %s\n' '7161bf908f565e7837dedcfe2b180a95d7b10feba2b91205c2f1774f1aecd064' android/scripts/V4094HeroPhoenix.gd | sha256sum -c -
+          export LWOD_ASSET_DIR="$GITHUB_WORKSPACE/android/assets/characters"
+          python3 "$RUNNER_TEMP/lwod4130_generator.py"
+          python3 - <<'PY_CHECK_4130'
+          from pathlib import Path
+          import json,struct
+          import numpy as np
+          root=Path('android/assets/characters')
+          expected={'LWOD_Heldin_V4130.glb':(15,{'Idle','Walk'}),
+                    'LWOD_Phoenix_Violett_V4130.glb':(10,{'Flap','Glide'})}
+          for filename,(bone_count,clips) in expected.items():
+              raw=(root/filename).read_bytes()
+              assert raw[:4]==b'glTF' and struct.unpack_from('<I',raw,4)[0]==2
+              assert struct.unpack_from('<I',raw,8)[0]==len(raw)
+              length,chunk=struct.unpack_from('<I4s',raw,12)
+              assert chunk==b'JSON'
+              model=json.loads(raw[20:20+length])
+              assert len(model['skins'])==1
+              assert len(model['skins'][0]['joints'])==bone_count
+              assert {a['name'] for a in model['animations']}==clips
+              assert model['images'] and model['textures'] and len(model['materials'])>=6
+              prims=model['meshes'][0]['primitives']
+              assert len(prims)>=6
+              for prim in prims:
+                  assert {'POSITION','NORMAL','JOINTS_0','WEIGHTS_0','TEXCOORD_0'}<=set(prim['attributes'])
+              def values(accessor):
+                  a=model['accessors'][accessor]
+                  v=model['bufferViews'][a['bufferView']]
+                  start=20+length+8+v.get('byteOffset',0)+a.get('byteOffset',0)
+                  kind={'SCALAR':1,'VEC4':4,'VEC3':3}[a['type']]
+                  assert a['componentType']==5126
+                  return np.frombuffer(raw,dtype='<f4',count=a['count']*kind,offset=start).reshape(-1,kind)
+              names=[n.get('name','') for n in model['nodes']]
+              if filename.startswith('LWOD_Heldin'):
+                  materials={m['name']:m for m in model['materials']}
+                  for key in ('LWOD413_hair','LWOD413_hair_light','LWOD413_hair_dark'):
+                      assert key in materials
+                      m=materials[key]
+                      assert 'emissiveFactor' not in m or sum(m['emissiveFactor'])<0.001
+                      rgba=m['pbrMetallicRoughness']['baseColorFactor']
+                      assert rgba[2]>rgba[0]*1.30, 'hair not violet enough'
+                      assert rgba[2]>rgba[1]*1.35, 'hair not violet enough'
+                      assert 'baseColorTexture' not in m['pbrMetallicRoughness']
+                  assert {'Hair','Head','LeftLeg','RightLeg','LeftArm','RightArm'}<=set(names)
+              else:
+                  assert {'WingL','WingR','TipL','TipR','Tail'}<=set(names)
+                  for anim in model['animations']:
+                      targets={names[c['target']['node']] for c in anim['channels'] if c['target']['path']=='rotation'}
+                      assert {'WingL','WingR'}<=targets
+                  # Test that the authored flap angles actually change across keyframes.
+                  flap=next(a for a in model['animations'] if a['name']=='Flap')
+                  wing_channel=next(c for c in flap['channels'] if names[c['target']['node']]=='WingL' and c['target']['path']=='rotation')
+                  rotation=values(flap['samplers'][wing_channel['sampler']]['output'])
+                  assert float(np.max(rotation[:,2])-np.min(rotation[:,2]))>0.18
+              print('V4130_GLB_OK:',filename,'bones:',bone_count,'clips:',sorted(clips))
+          PY_CHECK_4130
+      - name: V41.3 Gewichtete Gelenke und GLB-Struktur pruefen
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY_WEIGHTS_4130'
+          import json, struct
+          from pathlib import Path
+          import numpy as np
+          root=Path('android/assets/characters')
+          files=[('LWOD_Heldin_V4130.glb', 15, [('LeftArm','LeftForearm'),('RightArm','RightForearm'),('LeftLeg','LeftShin'),('RightLeg','RightShin')]),
+                 ('LWOD_Phoenix_Violett_V4130.glb',10,[('WingL','TipL'),('WingR','TipR'),('Body','Tail')])]
+          for filename, bones, pairs in files:
+              raw=(root/filename).read_bytes()
+              assert raw[:4]==b'glTF' and struct.unpack_from('<I',raw,8)[0]==len(raw)
+              json_len=struct.unpack_from('<I',raw,12)[0]
+              data=json.loads(raw[20:20+json_len])
+              bin_start=20+json_len+8
+              assert len(data['skins'][0]['joints'])==bones
+              name_to_i={n.get('name',''):i for i,n in enumerate(data['nodes'])}
+              skin_nodes=data['skins'][0]['joints']
+              joint_names={i:data['nodes'][node].get('name','') for i,node in enumerate(skin_nodes)}
+              prim=data['meshes'][0]['primitives'][0]
+              def accessor(idx):
+                  a=data['accessors'][idx]; view=data['bufferViews'][a['bufferView']]
+                  typ={'VEC4':4,'VEC3':3,'VEC2':2,'SCALAR':1}[a['type']]
+                  dtype={5126:'<f4',5123:'<u2',5125:'<u4'}[a['componentType']]
+                  start=bin_start+view.get('byteOffset',0)+a.get('byteOffset',0)
+                  return np.frombuffer(raw,dtype=dtype,count=a['count']*typ,offset=start).reshape(-1,typ)
+              joint=accessor(prim['attributes']['JOINTS_0'])
+              weight=accessor(prim['attributes']['WEIGHTS_0'])
+              assert np.all(np.isfinite(weight))
+              assert np.allclose(weight.sum(axis=1),1.0,atol=2.e-5)
+              assert np.all(joint< bones)
+              total_mixed=int(np.count_nonzero(np.sum(weight>0.05,axis=1)>1))
+              assert total_mixed>120, f'{filename}: only {total_mixed} mixed vertices'
+              for first,second in pairs:
+                  ia=skin_nodes.index(name_to_i[first]); ib=skin_nodes.index(name_to_i[second])
+                  present_a=(joint==ia)&(weight>0.07)
+                  present_b=(joint==ib)&(weight>0.07)
+                  both=np.any(present_a,axis=1)&np.any(present_b,axis=1)
+                  count=int(both.sum())
+                  assert count>12, f'{filename}: joint blend missing: {first}/{second} ({count})'
+                  print('BLEND_OK',first,second,count)
+              print('V4130_WEIGHT_OK',filename,'mixed_vertices',total_mixed)
+          PY_WEIGHTS_4130
+      - name: V41.3 GLB Dateien in Godot importieren
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=5s 240s godot --headless --editor --path android --import 2>&1 | tee /tmp/lwod4130_import.log
+          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to import|Error importing' /tmp/lwod4130_import.log; then
+            echo 'GLB-IMPORTFEHLER'; exit 1
+          fi
+          for file in LWOD_Heldin_V4130.glb LWOD_Phoenix_Violett_V4130.glb; do
+            test -s "android/assets/characters/$file"
+          done
+          echo V4130_IMPORT_OK
+      - name: V41.3 Skinning, Animation und Einbindung testen
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > android/tests/V4130RigSmoke.gd <<'GD_V4130_TEST'
+          extends SceneTree
+          class TestGame:
+              extends Node3D
+              var hero: Node3D
+              var phoenix: Node3D
+
+          func _initialize() -> void:
+              call_deferred("_run")
+
+          func _find_rig(n: Node) -> Skeleton3D:
+              if n is Skeleton3D:
+                  return n as Skeleton3D
+              for c in n.get_children():
+                  var rig: Skeleton3D = _find_rig(c)
+                  if rig != null: return rig
+              return null
+
+          func _find_anim(n: Node) -> AnimationPlayer:
+              if n is AnimationPlayer:
+                  return n as AnimationPlayer
+              for c in n.get_children():
+                  var a: AnimationPlayer = _find_anim(c)
+                  if a != null: return a
+              return null
+
+          func _contains_clip(player: AnimationPlayer, text: String) -> bool:
+              if player == null: return false
+              for key in player.get_animation_list():
+                  if String(key).to_lower().contains(text.to_lower()):return true
+              return false
+
+          func _run() -> void:
+              var paths: Array[String] = ["res://assets/characters/LWOD_Heldin_V4130.glb", "res://assets/characters/LWOD_Phoenix_Violett_V4130.glb"]
+              for path in paths:
+                  var res: PackedScene = load(path) as PackedScene
+                  if res == null:
+                      push_error("V4130: GLB nicht importierbar: " + path)
+                      quit(1)
+                      return
+                  var inst: Node = res.instantiate()
+                  root.add_child(inst)
+                  var skel: Skeleton3D = _find_rig(inst)
+                  var anim: AnimationPlayer = _find_anim(inst)
+                  if skel == null or anim == null or skel.get_bone_count() < 9:
+                      push_error("V4130: Echte Knochen oder AnimationPlayer fehlen: " + path)
+                      quit(2)
+                      return
+                  if path.contains("Heldin"):
+                      if not _contains_clip(anim,"Idle") or not _contains_clip(anim,"Walk"):
+                          push_error("V4130: Idle und Walk fehlen")
+                          quit(3)
+                          return
+                  else:
+                      if not _contains_clip(anim,"Flap") or not _contains_clip(anim,"Glide"):
+                          push_error("V4130: Flap und Glide fehlen")
+                          quit(4)
+                          return
+                  # Check that skinned joints actually move when animation advances.
+                  var bone_name: String = "LeftLeg" if path.contains("Heldin") else "WingL"
+                  var clip_name: String = "Walk" if path.contains("Heldin") else "Flap"
+                  var bone_index: int = skel.find_bone(bone_name)
+                  if bone_index < 0:
+                      push_error("V4130: Animierter Knochen fehlt: " + bone_name)
+                      quit(7)
+                      return
+                  var matching_clip: String = ""
+                  for c in anim.get_animation_list():
+                      if String(c).to_lower().contains(clip_name.to_lower()):
+                          matching_clip = String(c)
+                          break
+                  if matching_clip.is_empty():
+                      push_error("V4130: Clip nicht gefunden: " + clip_name)
+                      quit(8)
+                      return
+                  anim.play(matching_clip)
+                  anim.advance(0.22)
+                  var pose_a: Quaternion = skel.get_bone_pose_rotation(bone_index)
+                  anim.advance(0.41)
+                  var pose_b: Quaternion = skel.get_bone_pose_rotation(bone_index)
+                  if pose_a.angle_to(pose_b) < 0.025:
+                      push_error("V4130: Knochen bewegt sich nicht: " + bone_name)
+                      quit(9)
+                      return
+                  inst.queue_free()
+              var g := TestGame.new()
+              root.add_child(g)
+              g.hero = Node3D.new()
+              g.phoenix = Node3D.new()
+              g.add_child(g.hero)
+              g.add_child(g.phoenix)
+              var loader: Script = load("res://scripts/V4094HeroPhoenix.gd") as Script
+              if loader == null or not loader.can_instantiate():
+                  push_error("V4130: Ladeskript nicht gültig")
+                  quit(5)
+                  return
+              var helper: Node = loader.new()
+              g.add_child(helper)
+              helper.call("setup",g)
+              helper.call("_bind_characters")
+              var hv: Node3D = g.hero.get_node_or_null("LWOD_V4094_HeroVisual") as Node3D
+              var pv: Node3D = g.phoenix.get_node_or_null("LWOD_V4094_PhoenixVisual") as Node3D
+              if hv == null or pv == null or not hv.has_meta("lwod_v4130_hero") or not pv.has_meta("lwod_v4130_unique_phoenix"):
+                  push_error("V4130: Figuren wurden im Spiel nicht eingebunden")
+                  quit(6)
+                  return
+              helper.call("_process",0.08)
+              print("V4130_SKINNED_CHARACTER_OK: 15 und 10 Knochen, 4 Clips, echte Pose-Bewegung")
+              quit(0)
+          GD_V4130_TEST
+          timeout --signal=TERM --kill-after=5s 115s godot --headless --path android --quit-after 250 --script res://tests/V4130RigSmoke.gd 2>&1 | tee /tmp/lwod4100_rig.log
+          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script|ERROR: Cannot load' /tmp/lwod4100_rig.log; then
+            exit 1
+          fi
+          grep -Fq 'V4130_SKINNED_CHARACTER_OK:' /tmp/lwod4100_rig.log
+      - name: NPCs und Markt-Kollisionen testen
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in V4093CharacterSmoke.gd V4092Fix5MotionMarketSmoke.gd; do
+            timeout --signal=TERM --kill-after=5s 100s \
+              godot --headless --path android --quit-after 300 --script "res://tests/$script" \
+              2>&1 | tee "/tmp/$script.log"
+            if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid call|Failed to load script' "/tmp/$script.log"; then
+              exit 1
+            fi
+          done
+          echo 'NPC_TESTS_OK'
+      - name: V41.3 APK bauen und pruefen
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/android
+          APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.3.apk"
+          timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee /tmp/lwod4130_export.log
+          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/lwod4130_export.log; then
+            exit 1
+          fi
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          ls -lh "$APK"
+      - name: Fertige APK hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: LWOD_ANDROID_V41_3_APK
+          path: build/android/LWOD-Android-V41.3.apk
+          if-no-files-found: error
+          retention-days: 14
