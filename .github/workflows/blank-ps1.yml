@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX4 Echte Landschaften und Vulkan Aschefurt
+name: LWOD Android V41.7 FIX5 Exakte Staedte Wege und Regionsgrenzen
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX4 APK
+    name: LWOD Android V41.7 FIX5 APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:
@@ -23,21 +23,19 @@ jobs:
       uses: actions/checkout@v4
     - name: Python 3 und PyYAML zuerst installieren
       shell: bash
-      run: "set -euo pipefail\n# The Godot CI container may not ship python3; bootstrap it before V41.6 replay.\nif ! command\
-        \ -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1; then\n  apt-get update -qq\n  DEBIAN_FRONTEND=noninteractive\
-        \ apt-get install -y -qq python3 python3-yaml\nfi\npython3 -c 'import yaml, sys; print(\"V417_FIX2_PYTHON_OK\", sys.version.split()[0],\
-        \ yaml.__version__)'\n"
+      run: "set -euo pipefail\n# The Godot CI container may not ship python3; bootstrap it before V41.6 replay.\nif ! command -v python3\
+        \ >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1; then\n  apt-get update -qq\n  DEBIAN_FRONTEND=noninteractive apt-get\
+        \ install -y -qq python3 python3-yaml\nfi\npython3 -c 'import yaml, sys; print(\"V417_FIX2_PYTHON_OK\", sys.version.split()[0], yaml.__version__)'\n"
     - name: Stabiles V41.6-Spiel wiederherstellen
       shell: bash
-      run: "set -euo pipefail\n# Freeze the confirmed working V41.6 version; this is only a source for replaying the original\
-        \ build steps.\nwget --quiet --tries=3 --timeout=60 --https-only -O \"$RUNNER_TEMP/lwod_v416.yml\" \\\n  'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/0f29ac00fe9a7a2037ed39b8df994a37fd0672f8/.github/workflows/blank-ps1.yml'\n\
+      run: "set -euo pipefail\n# Freeze the confirmed working V41.6 version; this is only a source for replaying the original build steps.\n\
+        wget --quiet --tries=3 --timeout=60 --https-only -O \"$RUNNER_TEMP/lwod_v416.yml\" \\\n  'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/0f29ac00fe9a7a2037ed39b8df994a37fd0672f8/.github/workflows/blank-ps1.yml'\n\
         python3 - <<'PYREPLAY'\nimport hashlib,os,subprocess\nfrom pathlib import Path\np=Path(os.environ['RUNNER_TEMP'])/'lwod_v416.yml'\n\
         data=p.read_bytes()\nsha=hashlib.sha1(('blob %d\\0'%len(data)).encode()+data).hexdigest()\nif sha!='9331c8c07ba758bda5dc9ec6068534330e7dc3b8':\n\
-        \    raise SystemExit('V41.6 Basis-Workflow hat eine unerwartete Prüfsumme')\ntry:\n    import yaml\nexcept ImportError:\n\
-        \    subprocess.run(['apt-get','update','-qq'],check=True)\n    subprocess.run(['apt-get','install','-y','-qq','python3-yaml'],check=True)\n\
-        \    import yaml\nsteps=yaml.safe_load(data)['jobs']['android']['steps']\nif len(steps)!=16 or 'V41.6' not in steps[10]['name']:\n\
-        \    raise SystemExit('V41.6 Installationsschritte haben sich unerwartet verändert')\nfor i in range(1,13):\n    step=steps[i]\n\
-        \    print('WIEDERHERSTELLEN',i,step['name'],flush=True)\n    subprocess.run(['timeout','--signal=TERM','--kill-after=5s','1200s','bash','-e','-o','pipefail','-c',step['run']],check=True)\n\
+        \    raise SystemExit('V41.6 Basis-Workflow hat eine unerwartete Prüfsumme')\ntry:\n    import yaml\nexcept ImportError:\n    subprocess.run(['apt-get','update','-qq'],check=True)\n\
+        \    subprocess.run(['apt-get','install','-y','-qq','python3-yaml'],check=True)\n    import yaml\nsteps=yaml.safe_load(data)['jobs']['android']['steps']\n\
+        if len(steps)!=16 or 'V41.6' not in steps[10]['name']:\n    raise SystemExit('V41.6 Installationsschritte haben sich unerwartet verändert')\n\
+        for i in range(1,13):\n    step=steps[i]\n    print('WIEDERHERSTELLEN',i,step['name'],flush=True)\n    subprocess.run(['timeout','--signal=TERM','--kill-after=5s','1200s','bash','-e','-o','pipefail','-c',step['run']],check=True)\n\
         print('V416_BASIS_OK',flush=True)\nPYREPLAY"
     - name: V41.7 FIX3 Regionen und 3D-Landschaften installieren
       shell: bash
@@ -77,8 +75,8 @@ jobs:
 
         V417_FIX3_TERRITORIES
 
-        printf ''%s  %s\n'' ''8e1e2c5edb525ca63ccaa09da0755cf3d46d799bb67b408ac9a48c6577d1f254'' ''android/scripts/V417Territories.gd''
-        | sha256sum -c -
+        printf ''%s  %s\n'' ''8e1e2c5edb525ca63ccaa09da0755cf3d46d799bb67b408ac9a48c6577d1f254'' ''android/scripts/V417Territories.gd'' |
+        sha256sum -c -
 
         base64 -d <<''V417_FIX3_INSTALL'' | gzip -dc > ''/tmp/V417Fix3Install.py''
 
@@ -148,8 +146,8 @@ jobs:
 
         V417_FIX3_INSTALL
 
-        printf ''%s  %s\n'' ''fd9e46463518ce4e75cf1e51c3ef262f3e66ed3191679334cf99f8b83b24d0e8'' ''/tmp/V417Fix3Install.py''
-        | sha256sum -c -
+        printf ''%s  %s\n'' ''fd9e46463518ce4e75cf1e51c3ef262f3e66ed3191679334cf99f8b83b24d0e8'' ''/tmp/V417Fix3Install.py'' | sha256sum
+        -c -
 
         base64 -d <<''V417_FIX3_LANDMARKS'' | gzip -dc > ''android/scripts/V417Landmarks.gd''
 
@@ -219,8 +217,8 @@ jobs:
 
         V417_FIX3_LANDMARKS
 
-        printf ''%s  %s\n'' ''9002b114857f244c2de6e73cc6e51353e5dfa95a286f72de3e8d4a49ff6948d3'' ''android/scripts/V417Landmarks.gd''
-        | sha256sum -c -
+        printf ''%s  %s\n'' ''9002b114857f244c2de6e73cc6e51353e5dfa95a286f72de3e8d4a49ff6948d3'' ''android/scripts/V417Landmarks.gd'' | sha256sum
+        -c -
 
         base64 -d <<''V417_FIX3_SMOKE'' | gzip -dc > ''android/tests/V417WorldSmoke.gd''
 
@@ -260,8 +258,8 @@ jobs:
 
         V417_FIX3_SMOKE
 
-        printf ''%s  %s\n'' ''80a3c1d1207818e6ac0620abfc11fbc67eb6402843d86b1b24060c5785ca63e2'' ''android/tests/V417WorldSmoke.gd''
-        | sha256sum -c -
+        printf ''%s  %s\n'' ''80a3c1d1207818e6ac0620abfc11fbc67eb6402843d86b1b24060c5785ca63e2'' ''android/tests/V417WorldSmoke.gd'' | sha256sum
+        -c -
 
         python3 /tmp/V417Fix3Install.py
 
@@ -314,8 +312,8 @@ jobs:
 
         FIX4_TERRITORY
 
-        printf ''%s  %s\n'' ''35bf69cb5315afb70703ffcae03afda33fa49d1c6f983c33d2b867895e4ee5f7'' ''android/scripts/V417Territories.gd''
-        | sha256sum -c -
+        printf ''%s  %s\n'' ''35bf69cb5315afb70703ffcae03afda33fa49d1c6f983c33d2b867895e4ee5f7'' ''android/scripts/V417Territories.gd'' |
+        sha256sum -c -
 
         base64 -d <<''FIX4_INSTALL'' | gzip -dc > ''/tmp/V417Fix4Install.py''
 
@@ -371,8 +369,8 @@ jobs:
 
         FIX4_INSTALL
 
-        printf ''%s  %s\n'' ''58339cc6e0a8af6864b0dd56b64bd42241df367e75ef9789925eb833d000dd7f'' ''/tmp/V417Fix4Install.py''
-        | sha256sum -c -
+        printf ''%s  %s\n'' ''58339cc6e0a8af6864b0dd56b64bd42241df367e75ef9789925eb833d000dd7f'' ''/tmp/V417Fix4Install.py'' | sha256sum
+        -c -
 
         base64 -d <<''FIX4_WORLD_SMOKE'' | gzip -dc > ''android/tests/V417Fix4Smoke.gd''
 
@@ -406,14 +404,265 @@ jobs:
 
         FIX4_WORLD_SMOKE
 
-        printf ''%s  %s\n'' ''22568a92cd58d257d08253d08a06ee5c8a939dd4044eff975f08d3279d0e6d6f'' ''android/tests/V417Fix4Smoke.gd''
-        | sha256sum -c -
+        printf ''%s  %s\n'' ''22568a92cd58d257d08253d08a06ee5c8a939dd4044eff975f08d3279d0e6d6f'' ''android/tests/V417Fix4Smoke.gd'' | sha256sum
+        -c -
 
         python3 -m py_compile /tmp/V417Fix4Install.py
 
         python3 /tmp/V417Fix4Install.py
 
         echo V417_FIX4_PATCH_OK
+
+        '
+    - name: V41.7 FIX5 Exakte Stadtkoordinaten Regionsgrenzen und Gehwege installieren
+      shell: bash
+      run: 'set -euo pipefail
+
+        mkdir -p android/scripts android/tests build/diagnose
+
+        base64 -d <<''V417_TERRITORY_FIX5'' | gzip -dc > ''android/scripts/V417Territories.gd''
+
+        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
+
+        V417_TERRITORY_FIX5
+
+        printf ''%s  %s\n'' ''ca9f213d5dfe44bb8240482984df64ff6b701bfc0b6893225620f3b4fb09e7ad'' ''android/scripts/V417Territories.gd'' |
+        sha256sum -c -
+
+        base64 -d <<''V417_SKETCHMAP_FIX5'' | gzip -dc > ''android/scripts/V417SketchMap.gd''
+
+        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
+
+        V417_SKETCHMAP_FIX5
+
+        printf ''%s  %s\n'' ''7d0b4f8a53cfcda21242f8375ca1504ed8c9fe68e8de521874688d34f795e6fc'' ''android/scripts/V417SketchMap.gd'' | sha256sum
+        -c -
+
+        base64 -d <<''V417_INSTALL_FIX5'' | gzip -dc > ''/tmp/V417Fix5Install.py''
+
+        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
+
+        V417_INSTALL_FIX5
+
+        printf ''%s  %s\n'' ''7818681066ec5e16d6b8459e1fc5b2e8ae5569335ec923fea943b659515d8e9d'' ''/tmp/V417Fix5Install.py'' | sha256sum
+        -c -
+
+        base64 -d <<''V417_TEST_FIX5'' | gzip -dc > ''android/tests/V417Fix5Smoke.gd''
+
+        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
+
+        V417_TEST_FIX5
+
+        printf ''%s  %s\n'' ''af2033fa6d0d40d49afc1f34db55d80e3ec9ff6baba2934bd5399ff3f014d2b2'' ''android/tests/V417Fix5Smoke.gd'' | sha256sum
+        -c -
+
+        python3 -m py_compile /tmp/V417Fix5Install.py
+
+        python3 /tmp/V417Fix5Install.py
+
+        echo V417_FIX5_INSTALLER_OK
 
         '
     - name: Godot-Gelaende neu importieren
@@ -434,8 +683,7 @@ jobs:
         timeout --signal=TERM --kill-after=5s 125s godot --headless --path android --quit-after 300 --script res://tests/V417WorldSmoke.gd
         2>&1 | tee /tmp/lwod417fix3_smoke.log
 
-        if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call'' /tmp/lwod417fix3_smoke.log; then exit
-        1; fi
+        if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call'' /tmp/lwod417fix3_smoke.log; then exit 1; fi
 
         grep -Fq ''V417_FIX3_TERRITORIES_OK:'' /tmp/lwod417fix3_smoke.log
 
@@ -451,22 +699,27 @@ jobs:
         timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V417Fix4Smoke.gd
         2>&1 | tee /tmp/v417_fix4_world.log
 
-        if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call'' /tmp/v417_fix4_world.log; then exit
-        1; fi
+        if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call'' /tmp/v417_fix4_world.log; then exit 1; fi
 
         grep -Fq ''V417_FIX4_WORLD_OK:'' /tmp/v417_fix4_world.log
 
         '
-    - name: V41.7 FIX4 Android-APK bauen und pruefen
+    - name: V41.7 FIX5 Kartenstandorte und Gehwege in der 3D-Welt testen
+      shell: bash
+      run: "set -euo pipefail\n# Godot only returns a success code when 3D cities, 16 actual road routes,\n# borders, map projection, volcano\
+        \ and existing menu integration are coherent.\ntimeout --signal=TERM --kill-after=5s 135s \\\n  godot --headless --path android --quit-after\
+        \ 300 --script res://tests/V417Fix5Smoke.gd \\\n  2>&1 | tee /tmp/lwod_417_fix5_map.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Invalid\
+        \ call|Failed to load script' /tmp/lwod_417_fix5_map.log; then\n  exit 1\nfi\ngrep -Fq 'V417_FIX5_OK:' /tmp/lwod_417_fix5_map.log\n\
+        mkdir -p build/diagnose\ncp /tmp/lwod_417_fix5_map.log build/diagnose/V417_FIX5_MAP_TEST.log\n"
+    - name: V41.7 FIX5 Android-APK bauen und pruefen
       shell: bash
       run: 'set -euo pipefail
 
         mkdir -p build/android
 
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX4.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX5.apk"
 
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee
-        /tmp/lwod417fix3_export.log
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee /tmp/lwod417fix3_export.log
 
         if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script'' /tmp/lwod417fix3_export.log; then exit 1; fi
 
@@ -477,18 +730,18 @@ jobs:
         ls -lh "$APK"
 
         '
-    - name: V41.7 FIX4 Android-APK bereitstellen
+    - name: V41.7 FIX5 APK bereitstellen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX4_APK
-        path: build/android/LWOD-Android-V41.7-FIX4.apk
+        name: LWOD_ANDROID_V41_7_FIX5_APK
+        path: build/android/LWOD-Android-V41.7-FIX5.apk
         if-no-files-found: error
         retention-days: 14
     - name: Welt-Testprotokoll
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V41_7_FIX3_DIAGNOSE
+        name: LWOD_V41_7_FIX5_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
