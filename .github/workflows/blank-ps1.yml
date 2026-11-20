@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX10 Bergrelief Texturtest repariert
+name: LWOD Android V41.7 FIX11 Bergwand Kamera Sichtweite
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX10 APK
+    name: LWOD Android V41.7 FIX11 APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:
@@ -534,6 +534,92 @@ jobs:
             p.write_text(s,encoding='utf-8')
         print('FIX10_MAP_OK: renderer and smoke test use the same WebP texture')
         PYMAP9
+    - name: V41.7 FIX11 Bergwand Sichtweite und Kameradrehung korrigieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PYFIX11'
+        from pathlib import Path
+        import re
+
+        def replace_once(s, old, new, name):
+            assert s.count(old)==1, f'FIX11: unexpected source in {name}: {old[:80]}'
+            return s.replace(old,new,1)
+
+        p=Path('android/scripts/V417MountainWall.gd')
+        s=p.read_text(encoding='utf-8')
+        s=replace_once(s,'var have_safe: bool = false\n','''var have_safe: bool = false
+        # 100 x 100 map units at 210 m per unit: diagonal approx. 29.7 km.
+        # Constant view depth avoids direction-dependent far-plane clipping.
+        const MOUNTAIN_VIEW_FAR: float = 35000.0
+        ''',p)
+        s=replace_once(s,'    visual.material_override = mat\n','''    visual.material_override = mat
+            # Keep the exact same geometry, but make its renderer bounds explicit.
+            visual.custom_aabb = mesh.get_aabb().grow(24.0)
+            visual.extra_cull_margin = 16.0
+            visual.ignore_occlusion_culling = true
+            visual.visibility_range_begin = 0.0
+            visual.visibility_range_end = 0.0
+        ''',p)
+        s=replace_once(s,'func _process(_delta: float) -> void:\n    _guard()\n','''func _ensure_mountain_view() -> void:
+            if not is_instance_valid(game) or int(game.get("state")) != 2:
+                return
+            # Only the actual gameplay camera; no camera angle, position or FOV changes.
+            var camera: Camera3D = get_viewport().get_camera_3d()
+            if is_instance_valid(camera) and camera.far < MOUNTAIN_VIEW_FAR:
+                camera.far = MOUNTAIN_VIEW_FAR
+
+        func _process(_delta: float) -> void:
+            # Priority 1000 runs after ordinary camera updates, also after camera swaps.
+            _ensure_mountain_view()
+            _guard()
+        ''',p)
+        p.write_text(s,encoding='utf-8')
+
+        p=Path('android/tests/V417Fix7Smoke.gd')
+        s=p.read_text(encoding='utf-8')
+        anchor='    # Cross the western edge by ordinary displacement. The actual guard must reject it.\n'
+        code='''    # Verify actual renderer bounds and the camera range without removing old checks.
+            if not visual.ignore_occlusion_culling or visual.visibility_range_begin != 0.0 or visual.visibility_range_end != 0.0:
+                fail("FIX11: unwanted mountain visibility culling")
+                return
+            if not visual.custom_aabb.encloses(visual.mesh.get_aabb()):
+                fail("FIX11: renderer bounds cut off the mountain")
+                return
+            var cam := Camera3D.new()
+            g.add_child(cam)
+            cam.make_current()
+            var peak: Vector3 = visual.global_transform * visual.mesh.get_aabb().get_center()
+            for city in T.CITIES:
+                var city_pos: Vector2 = T.city_world(String(city))
+                cam.global_position = Vector3(city_pos.x,6.0,city_pos.y)
+                cam.look_at(peak,Vector3.UP)
+                # Simulate the old short far plane and a camera controller resetting it.
+                cam.far = 4000.0
+                var old_transform: Transform3D = cam.global_transform
+                wall.call("_ensure_mountain_view")
+                if cam.far < 35000.0 or cam.far <= cam.global_position.distance_to(peak) or cam.global_transform != old_transform:
+                    fail("FIX11: camera range or camera transform at "+String(city))
+                    return
+                cam.rotate_y(PI)
+                cam.far = 4000.0
+                wall.call("_ensure_mountain_view")
+                if cam.far < 35000.0 or not visual.visible:
+                    fail("FIX11: camera rotation changed mountain visibility settings")
+                    return
+            cam.queue_free()
+            print("V417_FIX11_VIEW_OK: all city viewpoints, fixed camera range, persistent mountain renderer bounds")
+        '''
+        s=replace_once(s,anchor,code+anchor,p)
+        p.write_text(s,encoding='utf-8')
+        p=Path('android/export_presets.cfg')
+        if p.exists():
+            s=p.read_text(encoding='utf-8')
+            s,n=re.subn(r'(?m)^version/code=\d+$','version/code=4181',s,count=1);assert n==1
+            s,n=re.subn(r'(?m)^version/name="[^"]+"$','version/name="4.1.7.11"',s,count=1);assert n==1
+            p.write_text(s,encoding='utf-8')
+        print('FIX11_VIEW_INSTALLED: 35 km camera range, explicit mesh AABB, no occlusion/distance cutoff')
+        PYFIX11
     - name: Godot-Gelaende neu importieren
       shell: bash
       run: |
@@ -572,7 +658,7 @@ jobs:
         grep -Fq 'V417_FIX5_OK:' /tmp/lwod_417_fix5_map.log
         mkdir -p build/diagnose
         cp /tmp/lwod_417_fix5_map.log build/diagnose/V417_FIX5_MAP_TEST.log
-    - name: V41.7 FIX10 Bergwand Gehwege und WebP Textur testen
+    - name: V41.7 FIX11 Bergwand Gehwege und WebP Textur testen
       shell: bash
       run: |
         set -euo pipefail
@@ -581,29 +667,31 @@ jobs:
         grep -Fq 'V417_FIX7_MOUNTAIN_OK:' /tmp/lwod417fix7_mountain.log
         mkdir -p build/diagnose
         cp /tmp/lwod417fix7_mountain.log build/diagnose/V417_FIX7_Bergwand.log
-    - name: V41.7 FIX10 Android-APK bauen und pruefen
+
+        grep -Fq 'V417_FIX11_VIEW_OK:' /tmp/lwod417fix7_mountain.log
+    - name: V41.7 FIX11 Android-APK bauen und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX10.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX11.apk"
         timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee /tmp/lwod417fix3_export.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/lwod417fix3_export.log; then exit 1; fi
         test -s "$APK"
         unzip -t "$APK" >/dev/null
         ls -lh "$APK"
-    - name: V41.7 FIX10 APK bereitstellen
+    - name: V41.7 FIX11 APK bereitstellen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX10_APK
-        path: build/android/LWOD-Android-V41.7-FIX10.apk
+        name: LWOD_ANDROID_V41_7_FIX11_APK
+        path: build/android/LWOD-Android-V41.7-FIX11.apk
         if-no-files-found: error
         retention-days: 14
-    - name: V41.7 FIX10 Testprotokoll
+    - name: V41.7 FIX11 Testprotokoll
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V41_7_FIX10_TESTPROTOKOLLE
+        name: LWOD_V41_7_FIX11_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
