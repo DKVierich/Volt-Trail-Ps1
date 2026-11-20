@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX17 Dorfstore Einzelwege und Testkorrektur
+name: LWOD Android V41.7 FIX18 Dorfstore Einzelwege und Testkorrektur
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX17 APK
+    name: LWOD Android V41.7 FIX18 APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:
@@ -1097,6 +1097,119 @@ jobs:
         assert 'center.distance_to(Vector2(16800,826)) > 0.01' in test
         print('FIX17_TEST_SYNC_OK')
         PYFIX17
+    - name: V41.7 FIX18 Teleportmenue und Ruinenweg korrigieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PYFIX18'
+        from pathlib import Path
+        import re
+        B=Path('android/scripts')
+        def once(s,a,b):
+            assert s.count(a)==1, 'FIX18 unexpected anchor: '+a[:100]
+            return s.replace(a,b,1)
+        # Compact the actual destinations only; keep the prompt and cancel button unchanged.
+        p=B/'V408Teleport.gd'
+        s=p.read_text(encoding='utf-8')
+        s=once(s,'var b := _button(V416Roads.travel_label(destination))','''var b := _button(V416Roads.travel_label(destination))
+                b.custom_minimum_size = Vector2(290, 36)
+                b.add_theme_font_size_override("font_size", 19)
+                for state_name in ["normal", "hover", "pressed", "disabled", "focus"]:
+                    var compact: StyleBoxFlat = _style(Color("#241439"))
+                    if state_name == "hover":
+                        compact.bg_color = Color("#50356c")
+                    elif state_name == "pressed":
+                        compact.bg_color = Color("#463064")
+                    elif state_name == "disabled":
+                        compact.bg_color = Color("#1c1525")
+                    compact.set_content_margin_all(4.0)
+                    b.add_theme_stylebox_override(state_name, compact)''')
+        s=once(s,'travel_list.add_theme_constant_override("separation", 5)','travel_list.add_theme_constant_override("separation", 3)')
+        s=once(s,'scroller.custom_minimum_size = Vector2(500, 393)','scroller.custom_minimum_size = Vector2(500, 408)')
+        s=once(s,'    dialog.show()\n    prompt.hide()','''    dialog.show()
+            var scroll: ScrollContainer = travel_list.get_parent() as ScrollContainer
+            if is_instance_valid(scroll):
+                scroll.scroll_vertical = 0
+            prompt.hide()''')
+        s=once(s,'func _menus_open() -> bool:\n    if dialog_open:', '''func _v418_map_open() -> bool:
+            var world_map: Node = game.get_node_or_null("V27CameraWorldMap")
+            return world_map != null and bool(world_map.get("map_open"))
+
+        func _menus_open() -> bool:
+            if _v418_map_open():
+                return true
+            if dialog_open:''')
+        s=once(s,'    if dialog_open:\n        game.set("joystick_axis",Vector2.ZERO)\n        prompt.hide()\n        return','''    if _v418_map_open():
+                prompt.hide()
+                if dialog_open:
+                    _close_dialog()
+                return
+            if dialog_open:
+                game.set("joystick_axis",Vector2.ZERO)
+                prompt.hide()
+                return''')
+        p.write_text(s,encoding='utf-8')
+        # Road near the ruins: refine each already-existing 8 m strip only locally.
+        # No new meshes, routes, gates, or map coordinates. Sample the actual terrain
+        # surface at the added vertices; clearance reduces terrain clipping.
+        p=B/'V408Regions.gd'
+        s=p.read_text(encoding='utf-8')
+        s=once(s,'    st.add_vertex(Vector3(p.x,_ground(p.x,p.y)+0.09,p.y))','''    var clearance: float = 0.09
+            var ruin: Vector2 = V417Territories.city_world("Ruine")
+            var distance_to_ruin: float = p.distance_to(ruin)
+            if distance_to_ruin < 210.0:
+                clearance += 0.21*(1.0-smoothstep(170.0,210.0,distance_to_ruin))
+            st.add_vertex(Vector3(p.x,_ground(p.x,p.y)+clearance,p.y))''')
+        s=once(s,'    var spine := PackedVector2Array([points[0]])','    var spine := PackedVector2Array([points[0]])\n    var ruin: Vector2 = V417Territories.city_world("Ruine")')
+        s=once(s,'            if spine[spine.size()-1].distance_squared_to(p)>0.00001:\n                spine.append(p)','''            var prev_point: Vector2 = spine[spine.size()-1]
+                    if prev_point.distance_squared_to(p)>0.00001:
+                        if prev_point.distance_to(ruin)<210.0 or p.distance_to(ruin)<210.0:
+                            for sub in range(1,4):
+                                spine.append(prev_point.lerp(p,float(sub)*0.25))
+                        spine.append(p)''')
+        p.write_text(s,encoding='utf-8')
+        # Extend the existing functional smoke test, keeping all route and teleport checks.
+        p=Path('android/tests/V416RoadsSmoke.gd')
+        s=p.read_text(encoding='utf-8')
+        s=once(s,'class FakeTerrain:', '''class FakeMap:
+            extends Node
+            var map_open: bool = false
+        class FakeTerrain:''')
+        s=once(s,'    var tele := Teleport.new()','''    var map := FakeMap.new()
+            map.name = "V27CameraWorldMap"
+            g.add_child(map)
+            var tele := Teleport.new()''')
+        s=once(s,'    tele.call("_teleport_to","Sonnental")','''    var scroll: ScrollContainer = tele.travel_list.get_parent() as ScrollContainer
+            var total_height: float = 0.0
+            for item in tele.travel_list.get_children():
+                total_height += (item as Button).get_combined_minimum_size().y
+            total_height += float(tele.travel_list.get_theme_constant("separation")*8)
+            if total_height > scroll.custom_minimum_size.y:
+                fail("FIX18: nine destinations do not fit the menu")
+                return
+            map.map_open = true
+            tele.call("_process",0.0)
+            if tele.prompt.visible or tele.dialog_open:
+                fail("FIX18: teleport UI overlays map")
+                return
+            tele.call("_open_dialog")
+            if tele.dialog_open:
+                fail("FIX18: teleport opens through map")
+                return
+            map.map_open = false
+            tele.call("_open_dialog")
+            if not tele.dialog_open:
+                fail("FIX18: teleport does not reopen after map")
+                return
+            tele.call("_teleport_to","Sonnental")''')
+        p.write_text(s,encoding='utf-8')
+        p=Path('android/export_presets.cfg')
+        s=p.read_text(encoding='utf-8')
+        s=once(s,'version/code=4187','version/code=4188')
+        s=once(s,'version/name="4.1.7.17"','version/name="4.1.7.18"')
+        p.write_text(s,encoding='utf-8')
+        print('FIX18_OK: compact nine destinations, map modal isolation, local road refinement')
+        PYFIX18
     - name: Godot-Gelaende neu importieren
       shell: bash
       run: |
@@ -1178,29 +1291,29 @@ jobs:
         timeout --signal=TERM --kill-after=5s 135s godot --headless --path android --quit-after 300 --script res://tests/V416RoadsSmoke.gd 2>&1 | tee build/diagnose/V417_FIX16_Wege_Tore_Teleport.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX16: ' build/diagnose/V417_FIX16_Wege_Tore_Teleport.log; then exit 1; fi
         grep -Fq 'V417_FIX16_OK:' build/diagnose/V417_FIX16_Wege_Tore_Teleport.log
-    - name: V41.7 FIX17 Android-APK bauen und pruefen
+    - name: V41.7 FIX18 Android-APK bauen und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX17.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX18.apk"
         timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee /tmp/lwod417fix3_export.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/lwod417fix3_export.log; then exit 1; fi
         test -s "$APK"
         unzip -t "$APK" >/dev/null
         ls -lh "$APK"
-    - name: V41.7 FIX17 APK bereitstellen
+    - name: V41.7 FIX18 APK bereitstellen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX17_APK
-        path: build/android/LWOD-Android-V41.7-FIX17.apk
+        name: LWOD_ANDROID_V41_7_FIX18_APK
+        path: build/android/LWOD-Android-V41.7-FIX18.apk
         if-no-files-found: error
         retention-days: 14
-    - name: V41.7 FIX17 Testprotokoll
+    - name: V41.7 FIX18 Testprotokoll
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V41_7_FIX17_TESTPROTOKOLLE
+        name: LWOD_V41_7_FIX18_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
