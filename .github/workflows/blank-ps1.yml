@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX9 Kompakter Bergrelief Build
+name: LWOD Android V41.7 FIX10 Bergrelief Texturtest repariert
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX9 APK
+    name: LWOD Android V41.7 FIX10 APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:
@@ -346,7 +346,7 @@ jobs:
             p.write_bytes(result)
         print('FIX9_MODEL_SCRIPTS_OK')
         PYMESH9
-    - name: FIX9 Weltkartenrelief installieren
+    - name: FIX10 Weltkartenrelief und Texturtest synchronisieren
       shell: bash
       run: |
         set -euo pipefail
@@ -518,14 +518,21 @@ jobs:
         b=base64.b64decode(''.join(payload.split()),validate=True)
         assert hashlib.sha256(b).hexdigest()=='d3fbfc6e6cad609cf90006618aef19760309a494dd7f238bde0fc75e9431e9be', 'FIX9 Karte unvollstaendig'
         p=Path('android/assets/maps/LWOD_Bergrelief.webp');p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b)
-        p=Path('android/scripts/V417SketchMap.gd');s=p.read_text(encoding='utf-8');old='res://assets/maps/LWOD_Bergrelief.png';assert s.count(old)==1;p.write_text(s.replace(old,'res://assets/maps/LWOD_Bergrelief.webp'),encoding='utf-8')
+        # The renderer and the smoke test must reference the same installed WebP resource.
+        old='res://assets/maps/LWOD_Bergrelief.png'
+        new='res://assets/maps/LWOD_Bergrelief.webp'
+        for filename in ('android/scripts/V417SketchMap.gd','android/tests/V417Fix7Smoke.gd'):
+            p=Path(filename);s=p.read_text(encoding='utf-8')
+            assert s.count(old)==1, filename
+            p.write_text(s.replace(old,new),encoding='utf-8')
+            assert old not in p.read_text(encoding='utf-8'), filename
         p=Path('android/export_presets.cfg')
         if p.exists():
             s=p.read_text(encoding='utf-8')
-            s,n=re.subn(r'(?m)^version/code=\d+$','version/code=4179',s,count=1);assert n==1
-            s,n=re.subn(r'(?m)^version/name="[^"]+"$','version/name="4.1.7.9"',s,count=1);assert n==1
+            s,n=re.subn(r'(?m)^version/code=\d+$','version/code=4180',s,count=1);assert n==1
+            s,n=re.subn(r'(?m)^version/name="[^"]+"$','version/name="4.1.7.10"',s,count=1);assert n==1
             p.write_text(s,encoding='utf-8')
-        print('FIX9_MAP_OK')
+        print('FIX10_MAP_OK: renderer and smoke test use the same WebP texture')
         PYMAP9
     - name: Godot-Gelaende neu importieren
       shell: bash
@@ -565,7 +572,7 @@ jobs:
         grep -Fq 'V417_FIX5_OK:' /tmp/lwod_417_fix5_map.log
         mkdir -p build/diagnose
         cp /tmp/lwod_417_fix5_map.log build/diagnose/V417_FIX5_MAP_TEST.log
-    - name: V41.7 FIX7 Bergwand und Gehwege testen
+    - name: V41.7 FIX10 Bergwand Gehwege und WebP Textur testen
       shell: bash
       run: |
         set -euo pipefail
@@ -574,29 +581,29 @@ jobs:
         grep -Fq 'V417_FIX7_MOUNTAIN_OK:' /tmp/lwod417fix7_mountain.log
         mkdir -p build/diagnose
         cp /tmp/lwod417fix7_mountain.log build/diagnose/V417_FIX7_Bergwand.log
-    - name: V41.7 FIX9 Android-APK bauen und pruefen
+    - name: V41.7 FIX10 Android-APK bauen und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX9.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX10.apk"
         timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee /tmp/lwod417fix3_export.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/lwod417fix3_export.log; then exit 1; fi
         test -s "$APK"
         unzip -t "$APK" >/dev/null
         ls -lh "$APK"
-    - name: V41.7 FIX9 APK bereitstellen
+    - name: V41.7 FIX10 APK bereitstellen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX9_APK
-        path: build/android/LWOD-Android-V41.7-FIX9.apk
+        name: LWOD_ANDROID_V41_7_FIX10_APK
+        path: build/android/LWOD-Android-V41.7-FIX10.apk
         if-no-files-found: error
         retention-days: 14
-    - name: V41.7 FIX9 Testprotokoll
+    - name: V41.7 FIX10 Testprotokoll
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V41_7_FIX9_TESTPROTOKOLLE
+        name: LWOD_V41_7_FIX10_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
