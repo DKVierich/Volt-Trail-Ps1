@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX12 Weltgrenzen Aschefurt und Fernlandschaft
+name: LWOD Android V41.7 FIX13 Himmel und Vulkanebene
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX12 APK
+    name: LWOD Android V41.7 FIX13 APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:
@@ -683,6 +683,168 @@ jobs:
         printf '%s  %s\n' '8f07feff362a4c1961074e9cc6531d29697621e76f3b0bc4c6da0e96d41d3c02' /tmp/LWOD_FIX12.py | sha256sum -c -
         python3 -m py_compile /tmp/LWOD_FIX12.py
         python3 /tmp/LWOD_FIX12.py
+    - name: V41.7 FIX13 Himmelskoerper und Vulkanflaechen korrigieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > /tmp/LWOD_FIX13.py <<'PYFIX13'
+        from pathlib import Path
+        import re
+        B = Path('android/scripts')
+        def once(s, old, new):
+            if s.count(old) != 1:
+                raise SystemExit('FIX13: unexpected source: '+old[:160])
+            return s.replace(old,new,1)
+
+        def write(p,s):
+            p.write_text(s,encoding='utf-8')
+
+        # The V36 celestial meshes were only 2-3 km away, inside today's world.
+        # Put them at a fixed angular distance from the actual camera, independent
+        # of camera rotation. The existing FIX11 far plane is 35 km. Keep ordinary
+        # depth testing: terrain and mountains MUST occlude the disks.
+        p=B/'V26SkyWorldMap.gd'
+        s=p.read_text(encoding='utf-8')
+        s=once(s,'        sun_node.position = Vector3(cos(angle)*3190.0, 154.0 + elevation*2035.0, -198.0)',
+               '        _v413_place_sky_body(sun_node, Vector3(cos(angle)*3190.0, 154.0 + elevation*2035.0, -198.0), 264.0)')
+        s=once(s,'        moon_node.position = Vector3(cos(moon_angle)*3135.0, 176.0 + sin(moon_angle)*2035.0, 264.0)',
+               '        _v413_place_sky_body(moon_node, Vector3(cos(moon_angle)*3135.0, 176.0 + sin(moon_angle)*2035.0, 264.0), 209.0)')
+        s=once(s,'func _apply_day_night() -> void:\n','''const V413_CELESTIAL_DISTANCE: float = 32000.0
+
+        func _v413_place_sky_body(body: MeshInstance3D, old_offset: Vector3, old_scale: float) -> void:
+            var origin: Vector3 = sky_root.global_position
+            var camera: Camera3D = get_viewport().get_camera_3d()
+            if is_instance_valid(camera):
+                origin = camera.global_position
+            # Normalize before scaling: identical east/west direction and angular size.
+            var factor: float = V413_CELESTIAL_DISTANCE / old_offset.length()
+            body.global_position = origin + old_offset * factor
+            body.scale = Vector3.ONE * old_scale * factor
+            body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            # Do not disable depth testing. Only skip optional occlusion culling.
+            body.ignore_occlusion_culling = true
+            var mat: StandardMaterial3D = body.material_override as StandardMaterial3D
+            if mat != null:
+                mat.no_depth_test = false
+
+        func _apply_day_night() -> void:
+        ''')
+        write(p,s)
+
+        # Delete only the obsolete river/bridge/platform group left over from the
+        # abandoned Eschefurt meadow design. Real volcanic terrain, lava, and
+        # all town/road/map coordinates are deliberately left unchanged.
+        p=B/'V417Landmarks.gd'
+        s=p.read_text(encoding='utf-8')
+        m=re.search(r'(?ms)^    elif id == "Aschefurt":\n(.*?)(?=^    elif id == "Sandhafen":)',s)
+        assert m, 'FIX13: volcanic landmark missing'
+        block=m.group(0)
+        start='        # Keep the old river and bridge at the edge of the volcanic region.\n'
+        assert block.count(start)==1, 'FIX13: old river branch missing'
+        retained, obsolete=block.split(start,1)
+        for needle in ('#4c9eaa','#b6ab96','#9a9386','Vector2(125.0,1680.0)'):
+            assert needle in obsolete, 'FIX13: expected obsolete model missing: '+needle
+        assert '#b24f31' in retained and 'range(9)' in retained, 'FIX13: volcanic peaks or lava lost'
+        s=s[:m.start()]+retained+s[m.end():]
+        write(p,s)
+
+        p=Path('android/export_presets.cfg')
+        s=p.read_text(encoding='utf-8')
+        s,n=re.subn(r'(?m)^version/code=4182$', 'version/code=4183',s,count=1);assert n==1
+        s,n=re.subn(r'(?m)^version/name="4\.1\.7\.12"$', 'version/name="4.1.7.13"',s,count=1);assert n==1
+        write(p,s)
+        print('FIX13_INSTALL_OK: far celestial bodies with depth test; obsolete Aschefurt river, bridge and platform removed; volcano and map retained')
+        PYFIX13
+        python3 -m py_compile /tmp/LWOD_FIX13.py
+        python3 /tmp/LWOD_FIX13.py
+        mkdir -p android/tests
+        cat > android/tests/V417Fix13Smoke.gd <<'GDFIX13'
+        extends SceneTree
+        const SkyScript = preload("res://scripts/V26SkyWorldMap.gd")
+        const Landmarks = preload("res://scripts/V417Landmarks.gd")
+        const T = preload("res://scripts/V417Territories.gd")
+
+        func _initialize() -> void:
+            call_deferred("_run")
+
+        func fail(message: String) -> void:
+            push_error("FIX13: " + message)
+            quit(1)
+
+        func _run() -> void:
+            var g := Node3D.new()
+            root.add_child(g)
+            var camera := Camera3D.new()
+            g.add_child(camera)
+            camera.far = 35000.0
+            camera.make_current()
+            var sky := SkyScript.new()
+            g.add_child(sky)
+            sky.game = g
+            # Use the real sky creation and day/night update, not mock spheres.
+            sky.call("_build_sky")
+            camera.global_position = Vector3(16800.0, 65.0, 826.0)
+            for i in range(48):
+                sky.day_clock = float(i)/48.0
+                sky.call("_apply_day_night")
+                for body in [sky.sun_node,sky.moon_node]:
+                    var mesh_body: MeshInstance3D = body as MeshInstance3D
+                    var dist: float = mesh_body.global_position.distance_to(camera.global_position)
+                    var radius: float = mesh_body.scale.x * mesh_body.mesh.get_aabb().size.x * 0.5
+                    if absf(dist-32000.0) > 0.3 or dist-radius < 29700.0 or dist+radius >= camera.far:
+                        fail("celestial geometry intersects map or far clip")
+                        return
+                    var material: StandardMaterial3D = mesh_body.material_override as StandardMaterial3D
+                    if material == null or material.no_depth_test:
+                        fail("mountain depth test disabled")
+                        return
+                var before: Vector3 = sky.sun_node.global_position
+                camera.rotate_y(0.21)
+                sky.call("_apply_day_night")
+                if sky.sun_node.global_position.distance_to(before) > 0.1:
+                    fail("sun follows camera rotation")
+                    return
+            sky.day_clock = 0.05
+            sky.call("_apply_day_night")
+            if sky.sun_node.global_position.x <= camera.global_position.x or not sky.sun_node.visible:
+                fail("sunrise no longer east")
+                return
+            sky.day_clock = 0.45
+            sky.call("_apply_day_night")
+            if sky.sun_node.global_position.x >= camera.global_position.x or not sky.sun_node.visible:
+                fail("sunset no longer west")
+                return
+            var landscape := Landmarks.new()
+            g.add_child(landscape)
+            var center: Vector2 = T.city_world("Aschefurt")
+            var volcano: Node3D = landscape.call("_create", "Aschefurt",center) as Node3D
+            var peaks: int = 0
+            var lava: int = 0
+            for item in volcano.get_children():
+                var obj: MeshInstance3D = item as MeshInstance3D
+                if obj == null:
+                    fail("unexpected remnant in volcano")
+                    return
+                var mat: StandardMaterial3D = obj.material_override as StandardMaterial3D
+                if mat == null:
+                    fail("missing volcanic material")
+                    return
+                if obj.mesh is CylinderMesh:
+                    peaks += 1
+                elif obj.mesh is BoxMesh and mat.albedo_color.is_equal_approx(Color("#b24f31")):
+                    lava += 1
+                else:
+                    fail("obsolete water, bridge or other slab at Aschefurt")
+                    return
+            if peaks != 18 or lava != 7:
+                fail("volcanic formations or lava missing")
+                return
+            if center.distance_to(Vector2(16800,826)) > 0.01 or T.ROUTES.size() != 14:
+                fail("world map changed")
+                return
+            print("V417_FIX13_OK: 48 sky phases, camera rotation, depth test, volcano peaks and lava, no legacy river or slabs")
+            quit(0)
+        GDFIX13
     - name: Godot-Gelaende neu importieren
       shell: bash
       run: |
@@ -740,29 +902,37 @@ jobs:
         timeout --signal=TERM --kill-after=5s 180s godot --headless --path android --quit-after 300 --script res://tests/V417Fix12WorldSmoke.gd 2>&1 | tee build/diagnose/V417_FIX12_World.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call' build/diagnose/V417_FIX12_World.log; then exit 1; fi
         grep -Fq 'V417_FIX12_WORLD_OK:' build/diagnose/V417_FIX12_World.log
-    - name: V41.7 FIX12 Android-APK bauen und pruefen
+    - name: V41.7 FIX13 Himmel und Vulkanmodelle testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V417Fix13Smoke.gd 2>&1 | tee build/diagnose/V417_FIX13_SkyVolcano.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call' build/diagnose/V417_FIX13_SkyVolcano.log; then exit 1; fi
+        grep -Fq 'V417_FIX13_OK:' build/diagnose/V417_FIX13_SkyVolcano.log
+    - name: V41.7 FIX13 Android-APK bauen und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX12.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX13.apk"
         timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee /tmp/lwod417fix3_export.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/lwod417fix3_export.log; then exit 1; fi
         test -s "$APK"
         unzip -t "$APK" >/dev/null
         ls -lh "$APK"
-    - name: V41.7 FIX12 APK bereitstellen
+    - name: V41.7 FIX13 APK bereitstellen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX12_APK
-        path: build/android/LWOD-Android-V41.7-FIX12.apk
+        name: LWOD_ANDROID_V41_7_FIX13_APK
+        path: build/android/LWOD-Android-V41.7-FIX13.apk
         if-no-files-found: error
         retention-days: 14
-    - name: V41.7 FIX12 Testprotokoll
+    - name: V41.7 FIX13 Testprotokoll
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V41_7_FIX12_TESTPROTOKOLLE
+        name: LWOD_V41_7_FIX13_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
