@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX16 Dorfstore und Einzelwege
+name: LWOD Android V41.7 FIX17 Dorfstore Einzelwege und Testkorrektur
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX16 APK
+    name: LWOD Android V41.7 FIX17 APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:
@@ -839,8 +839,13 @@ jobs:
             if peaks != 18 or lava != 7:
                 fail("volcanic formations or lava missing")
                 return
-            if center.distance_to(Vector2(16800,826)) > 0.01 or T.ROUTES.size() != 14:
-                fail("world map changed")
+            if center.distance_to(Vector2(16800,826)) > 0.01:
+                fail("Aschefurt position changed")
+                return
+            # FIX17: FIX16 intentionally replaced 14 routes with 10 unique roads.
+            # The separate FIX16 smoke test checks connectivity, crossings and gates.
+            if T.ROUTES.size() != 10:
+                fail("expected 10 intercity roads after FIX16")
                 return
             print("V417_FIX13_OK: 48 sky phases, camera rotation, depth test, volcano peaks and lava, no legacy river or slabs")
             quit(0)
@@ -1074,6 +1079,24 @@ jobs:
         printf '%s  %s\n' '62dbdedd2b9975244ff0524d6a946aaa666f719077a5e07caa9166e2fb7d57a4' 'android/tests/V416RoadsSmoke.gd' | sha256sum -c -
         python3 -m py_compile /tmp/lwod_fix16.py
         python3 /tmp/lwod_fix16.py
+    - name: V41.7 FIX17 Version und Teststand pruefen
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PYFIX17'
+        from pathlib import Path
+        p = Path('android/export_presets.cfg')
+        s = p.read_text(encoding='utf-8')
+        for old, new in [('version/code=4186','version/code=4187'),('version/name="4.1.7.16"','version/name="4.1.7.17"')]:
+            assert s.count(old) == 1, 'FIX17: unexpected export version: ' + old
+            s = s.replace(old,new,1)
+        p.write_text(s,encoding='utf-8')
+        test = Path('android/tests/V417Fix13Smoke.gd').read_text(encoding='utf-8')
+        assert 'T.ROUTES.size() != 10' in test
+        assert 'T.ROUTES.size() != 14' not in test
+        assert 'center.distance_to(Vector2(16800,826)) > 0.01' in test
+        print('FIX17_TEST_SYNC_OK')
+        PYFIX17
     - name: Godot-Gelaende neu importieren
       shell: bash
       run: |
@@ -1101,7 +1124,7 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        # Godot only returns a success code when 3D cities, 14 actual road routes,
+        # Godot only returns a success code when 3D cities, 10 actual road routes,
         # borders, map projection, volcano and existing menu integration are coherent.
         timeout --signal=TERM --kill-after=5s 135s \
           godot --headless --path android --quit-after 300 --script res://tests/V417Fix5Smoke.gd \
@@ -1155,29 +1178,29 @@ jobs:
         timeout --signal=TERM --kill-after=5s 135s godot --headless --path android --quit-after 300 --script res://tests/V416RoadsSmoke.gd 2>&1 | tee build/diagnose/V417_FIX16_Wege_Tore_Teleport.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX16: ' build/diagnose/V417_FIX16_Wege_Tore_Teleport.log; then exit 1; fi
         grep -Fq 'V417_FIX16_OK:' build/diagnose/V417_FIX16_Wege_Tore_Teleport.log
-    - name: V41.7 FIX16 Android-APK bauen und pruefen
+    - name: V41.7 FIX17 Android-APK bauen und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX16.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX17.apk"
         timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee /tmp/lwod417fix3_export.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/lwod417fix3_export.log; then exit 1; fi
         test -s "$APK"
         unzip -t "$APK" >/dev/null
         ls -lh "$APK"
-    - name: V41.7 FIX16 APK bereitstellen
+    - name: V41.7 FIX17 APK bereitstellen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX16_APK
-        path: build/android/LWOD-Android-V41.7-FIX16.apk
+        name: LWOD_ANDROID_V41_7_FIX17_APK
+        path: build/android/LWOD-Android-V41.7-FIX17.apk
         if-no-files-found: error
         retention-days: 14
-    - name: V41.7 FIX16 Testprotokoll
+    - name: V41.7 FIX17 Testprotokoll
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_V41_7_FIX16_TESTPROTOKOLLE
+        name: LWOD_V41_7_FIX17_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
