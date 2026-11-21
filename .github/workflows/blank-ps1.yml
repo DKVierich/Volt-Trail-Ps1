@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX21 Kartenrand und neue Wege
+name: LWOD Android V41.7 FIX22 HD Weltkarte
 'on':
   workflow_dispatch: {}
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX21 APK
+    name: LWOD Android V41.7 FIX22 APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
     container:
@@ -410,6 +410,229 @@ jobs:
           PYFIX21
           python3 -m py_compile "$RUNNER_TEMP/lwod_fix21.py"
           python3 "$RUNNER_TEMP/lwod_fix21.py"
+      - name: FIX22 HD-Weltkarte aus echten Regionen und Koordinaten erzeugen
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python3 -c 'import numpy; from PIL import Image' >/dev/null 2>&1; then
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-numpy python3-pil
+          fi
+          # Import FIX21 first, so its existing resources and scripts are available to the map baker.
+          bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix21_steps/13.sh"
+          cat > android/tests/V422AtlasBake.gd <<'GDBAKE422'
+          extends SceneTree
+          const T = preload("res://scripts/V417Territories.gd")
+          func _initialize() -> void:
+              var out: String = OS.get_environment("RUNNER_TEMP")
+              var pixels := PackedByteArray()
+              pixels.resize(768*312*3)
+              for y in range(312):
+                  for x in range(768):
+                      var uv := Vector2((float(x)+0.5)*100.0/768.0,(float(y)+0.5)*100.0/312.0)
+                      var region: int = T.region_index_at_map(uv)
+                      var i: int = (y*768+x)*3
+                      pixels[i] = region+1
+                      pixels[i+1] = 255 if T.mountain_at_map(uv) else 0
+                      pixels[i+2] = roundi(clampf(T.gorge_depth(uv)/455.0,0.0,1.0)*255.0)
+              var img := Image.create_from_data(768,312,false,Image.FORMAT_RGB8,pixels)
+              if img.save_png(out.path_join("lwod422_mask.png")) != OK:
+                  push_error("FIX22: mask write failed")
+                  quit(1)
+                  return
+              var paths: Array = []
+              for road in T.ROUTES:
+                  var line: Array = []
+                  line.append([T.CITIES[road["from"]].x,T.CITIES[road["from"]].y])
+                  for p in road["via"]:
+                      line.append([p.x,p.y])
+                  line.append([T.CITIES[road["to"]].x,T.CITIES[road["to"]].y])
+                  paths.append(line)
+              var cities: Array = []
+              for city in T.CITIES:
+                  var p: Vector2 = T.CITIES[city]
+                  cities.append([p.x,p.y])
+              var f := FileAccess.open(out.path_join("lwod422_geo.json"),FileAccess.WRITE)
+              if f == null:
+                  push_error("FIX22: geography write failed")
+                  quit(1)
+                  return
+              f.store_string(JSON.stringify({"roads":paths,"cities":cities}))
+              f.close()
+              print("FIX22_MASK_OK: ",img.get_size()," / ",paths.size()," roads")
+              quit(0)
+          GDBAKE422
+          timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --script res://tests/V422AtlasBake.gd 2>&1 | tee "$RUNNER_TEMP/fix22_bake.log"
+          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call' "$RUNNER_TEMP/fix22_bake.log"; then exit 1; fi
+          grep -Fq 'FIX22_MASK_OK:' "$RUNNER_TEMP/fix22_bake.log"
+          cat > "$RUNNER_TEMP/lwod422_art.py" <<'PYART422'
+          from pathlib import Path
+          import os, json, math, random
+          import numpy as np
+          from PIL import Image, ImageDraw, ImageFilter
+          work=Path(os.environ['RUNNER_TEMP']); target=Path('android/assets/maps/LWOD_Atlas_HD.webp')
+          W,H=3072,1248
+          rng=np.random.default_rng(422); rnd=random.Random(422)
+          res=Image.Resampling
+          raw=Image.open(work/'lwod422_mask.png').convert('RGB')
+          assert raw.size==(768,312)
+          a=np.asarray(raw); assert a[:,:,0].min()>=1 and a[:,:,0].max()<=12
+          geo=json.loads((work/'lwod422_geo.json').read_text()); assert len(geo['roads'])==9 and len(geo['cities'])==11
+          idx=np.asarray(raw.getchannel('R').resize((W,H),res.NEAREST),dtype=np.int16)-1
+          rock=np.asarray(raw.getchannel('G').resize((W,H),res.BILINEAR),dtype=np.float32)/255
+          gorge=np.asarray(raw.getchannel('B').resize((W,H),res.BILINEAR),dtype=np.float32)/255
+          # Deterministic, layered relief: the region geometry is supplied by Godot, never by hand.
+          def noise(w,h):
+              seed=rng.integers(0,256,(h,w),dtype=np.uint8)
+              return np.asarray(Image.fromarray(seed).resize((W,H),res.BICUBIC),dtype=np.float32)/255-.5
+          n1=noise(13,7); n2=noise(42,21); n3=noise(130,65); n4=noise(480,240)
+          Y,X=np.ogrid[:H,:W]
+          palette=np.array([[80,125,66],[71,108,62],[134,158,83],[126,121,108],[141,132,112],[150,139,116],[136,126,110],[92,48,40],[48,100,87],[48,102,57],[198,157,80],[196,218,224]],dtype=np.uint8)
+          base=np.asarray(Image.fromarray(palette[idx]).filter(ImageFilter.GaussianBlur(2.2)),dtype=np.float32)
+          relief=(n1*37+n2*29+n3*16+n4*7)
+          base+=relief[:,:,None]
+          # Distinct biome relief, not extra paths or waterways.
+          desert=idx==10; dunes=np.sin(Y*.062+X*.014+n1*8+n2*3); base[desert]+=np.repeat((dunes*12)[desert,None],3,axis=1)
+          snow=idx==11; snowline=np.sin(X*.021+Y*.039+n2*9); blue=np.stack([snowline*-9,snowline*-3,snowline*4],axis=2); base[snow]+=blue[snow]
+          moor=idx==8; wet=np.clip((n2+n3*.6+.10)*40,0,28); base[moor]+=np.stack([-wet*.4,wet*.35,wet*.6],axis=2)[moor]
+          volcano=idx==7; veins=np.abs(np.sin(X*.019+Y*.026+n1*12+n2*7)); fire=np.clip((.095-veins)/.095,0,1)*np.clip(n2*2+.27,0,1); base[volcano]+=np.stack([fire*145,fire*46,fire*4],axis=2)[volcano]
+          # Continuous rugged mountain relief incl. all four perimeter faces.
+          ridge=1-np.abs(np.sin(X*.028+Y*.009+n1*9+n2*5)); ridge2=1-np.abs(np.sin(X*.058-Y*.026+n2*8+n3*2))
+          height=(ridge*.55+ridge2*.22+n1*.65+n2*.25+n3*.11)
+          shade=np.clip((-np.gradient(height,axis=1)*950-np.gradient(height,axis=0)*820),-46,49)
+          rocklight=np.clip(120+shade+n2*53+n3*22+n4*12+ridge*23,55,209)
+          rock_rgb=np.stack([rocklight*1.03,rocklight,rocklight*.91],axis=2)
+          base=base*(1-rock[:,:,None])+rock_rgb*rock[:,:,None]
+          # Gorge stays dry and follows its real depth profile. No bridge art.
+          gdepth=np.clip(gorge*1.22,0,1); cliff=np.stack([124-86*gdepth,110-83*gdepth,91-63*gdepth],axis=2)+n3[:,:,None]*15
+          alpha=np.clip(gorge*6,0,1)
+          base=base*(1-alpha[:,:,None])+cliff*alpha[:,:,None]
+          # A subtle atlas vignette.
+          edge=((X-W/2)/(W/2))**2+((Y-H/2)/(H/2))**2
+          base-=np.clip(edge-.45,0,1.2)[:,:,None]*10
+          img=Image.fromarray(np.uint8(np.clip(base,0,255)),'RGB')
+          d=ImageDraw.Draw(img,'RGBA')
+          # Map symbols are decorative only; keep them away from real paths, towns, mountains and canyon.
+          blocked=Image.new('L',(W,H)); bd=ImageDraw.Draw(blocked)
+          def px(p):return (p[0]*W/100,p[1]*H/100)
+          for route in geo['roads']:bd.line([px(p) for p in route],fill=255,width=35,joint='curve')
+          for p in geo['cities']:
+              x,y=px(p);bd.ellipse((x-43,y-40,x+43,y+40),fill=255)
+          blocked=np.asarray(blocked)
+          def tree(x,y,s,kind):
+              if kind=='snow': dark=(68,103,116,225); lit=(218,235,234,245); mid=(111,150,157,240)
+              elif kind=='moor': dark=(24,61,52,220); lit=(96,139,78,235); mid=(50,102,65,230)
+              else: dark=(23,64,36,235); lit=(115,153,66,235); mid=(54,103,43,235)
+              d.ellipse((x-s*.62,y+s*.24,x+s*.76,y+s*.65),fill=(11,25,16,75))
+              d.line((x,y-s*.1,x,y+s*.45),fill=(84,62,41,215),width=max(1,int(s*.12)))
+              for k in range(3):
+                  top=y-s*(1.12-k*.41); width=s*(.35+k*.14); bot=top+s*.75
+                  d.polygon([(x,top),(x-width,bot),(x+width,bot)],fill=dark)
+                  d.polygon([(x,top),(x-width,bot),(x,bot-s*.13)],fill=mid)
+                  d.line((x,top,x-width*.7,bot-s*.12),fill=lit,width=max(1,int(s*.12)))
+          for _ in range(24000):
+              x=rnd.randrange(18,W-18); y=rnd.randrange(23,H-18); i=int(idx[y,x]); s=rnd.uniform(4.5,10.5)
+              if blocked[y,x] or rock[y,x]>.05 or gorge[y,x]>.01:continue
+              density={0:.32,1:.38,2:.13,8:.15,9:.67,11:.22}.get(i,0)
+              density*=max(.08,min(1.5,.86+float(n1[y,x])*2.4+float(n2[y,x])*1.8))
+              if rnd.random()<density:tree(x,y,s,'snow' if i==11 else 'moor' if i==8 else 'green')
+              elif i==10 and rnd.random()<.09:
+                  d.arc((x-14,y-5,x+14,y+9),185,340,fill=(250,213,136,140),width=2)
+              elif i in (4,5,6,7) and rnd.random()<.16:
+                  d.polygon([(x-s,y+s*.3),(x-s*.2,y-s*.65),(x+s*.55,y-s*.2),(x+s,y+s*.4)],fill=(52,44,36,100))
+                  d.line((x-s,y+s*.3,x-s*.2,y-s*.65,x+s*.55,y-s*.2),fill=(210,185,144,105),width=2)
+          # Drawn separately in-engine: borders, roads, all town labels, live player marker and menu.
+          target.parent.mkdir(parents=True,exist_ok=True)
+          img.save(target,'WEBP',quality=91,method=4)
+          with Image.open(target) as check:
+              assert check.size==(W,H);check.load()
+          assert target.stat().st_size>100000
+          print('FIX22_ATLAS_OK:',target, W,H,target.stat().st_size)
+          PYART422
+          cat > "$RUNNER_TEMP/lwod422_patch.py" <<'PYPATCH422'
+          from pathlib import Path
+          import re
+          p=Path('android/scripts/V417SketchMap.gd')
+          s=p.read_text(encoding='utf-8')
+          def once(s,a,b):
+              assert s.count(a)==1, 'FIX22 anchor: '+a[:100]
+              return s.replace(a,b,1)
+          def fun(s,name,replacement):
+              pattern=r'(?ms)^func '+re.escape(name)+r'\([^\n]*\n.*?(?=^(?:func |static func |const |var |class |@|extends )|\Z)'
+              s,n=re.subn(pattern,lambda _:replacement.rstrip()+'\n\n',s,count=1)
+              assert n==1,'FIX22 missing function '+name
+              return s
+          s=once(s,'const L = preload("res://scripts/V417Territories.gd")','const L = preload("res://scripts/V417Territories.gd")\nconst ATLAS_HD = preload("res://assets/maps/LWOD_Atlas_HD.webp")')
+          s=once(s,'    set_process(true)\n    queue_redraw()','    texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR\n    set_process(true)\n    call_deferred("_v422_style_frame")\n    queue_redraw()')
+          s=fun(s,'_draw','func _draw() -> void:\n    var area: Rect2 = _layout()\n    if area.size.x < 20.0 or area.size.y < 20.0:\n        return\n    draw_texture_rect(ATLAS_HD,area,false)\n    var scale_ui: float = clampf(area.size.x/1300.0,0.63,2.0)\n    # Only actual region edges, not decorative rivers or extra roads.\n    for border in L.BORDER_LINES:\n        for i in range(border.size()-1):\n            var a: Vector2 = border[i]\n            var b: Vector2 = border[i+1]\n            var count: int = maxi(1,ceili(a.distance_to(b)*2.0))\n            for j in range(count):\n                var u: Vector2 = a.lerp(b,float(j)/float(count))\n                var v: Vector2 = a.lerp(b,float(j+1)/float(count))\n                var m: Vector2 = (u+v)*0.5\n                if L.mountain_at_map(m) or L.gorge_depth(m)>0.5:\n                    continue\n                draw_line(_point(u,area),_point(v,area),Color(0.12,0.17,0.15,0.66),2.3*scale_ui,true)\n                draw_line(_point(u,area),_point(v,area),Color(0.96,0.89,0.69,0.83),1.2*scale_ui,true)\n    for road in L.ROUTES:\n        _stroke_route(road,area)\n    _draw_v419_crossings(area)\n    var font: Font = get_theme_default_font()\n    var fontsize: int = clampi(roundi(area.size.x/64.0),12,32)\n    for city in L.CITIES.keys():\n        var uv: Vector2 = L.CITIES[city]\n        var pos: Vector2 = _point(uv,area)\n        draw_circle(pos,6.5*scale_ui,Color(0.07,0.10,0.16,0.88),true,-1.0,true)\n        draw_circle(pos,4.9*scale_ui,Color("#c39346"),true,-1.0,true)\n        draw_circle(pos,3.1*scale_ui,Color("#fff0bd"),true,-1.0,true)\n        if font != null:\n            var label: String = String(city)\n            var off: Vector2 = LABEL_OFFSETS.get(city,Vector2(7,-10))\n            var w: float = font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,fontsize).x\n            var origin := pos+Vector2(10.0*scale_ui if off.x>=0.0 else -w-9.0*scale_ui, -9.0*scale_ui if off.y<0.0 else float(fontsize)+6.0*scale_ui)\n            origin.x = clampf(origin.x,area.position.x+8.0,area.end.x-w-8.0)\n            origin.y = clampf(origin.y,area.position.y+float(fontsize)+3.0,area.end.y-8.0)\n            draw_string_outline(font,origin,label,HORIZONTAL_ALIGNMENT_LEFT,-1,fontsize,4,Color("#142023"))\n            draw_string(font,origin,label,HORIZONTAL_ALIGNMENT_LEFT,-1,fontsize,Color("#fff1d5"))\n    if font != null:\n        _v422_feature_label(font,area,Vector2(48,53),"Bergwand",fontsize)\n    _v422_frame(area)\n    # The live marker is always based on the actual player location, not a baked icon.\n    if is_instance_valid(game):\n        var hero: Node3D = game.get("hero") as Node3D\n        if is_instance_valid(hero):\n            var world_pos := Vector2(hero.global_position.x,hero.global_position.z)\n            var uv: Vector2 = L.world_to_map(world_pos)\n            if uv.x >= 0.0 and uv.x <= 100.0 and uv.y >= 0.0 and uv.y <= 100.0:\n                var marker: Vector2 = _point(uv,area)\n                draw_circle(marker,10.5*scale_ui,Color(0.23,0.06,0.37,0.65),true,-1.0,true)\n                draw_circle(marker,6.7*scale_ui,Color("#321b56"),true,-1.0,true)\n                draw_circle(marker,5.1*scale_ui,Color("#fff1fd"),true,-1.0,true)\n                draw_circle(marker,3.4*scale_ui,Color("#b963ff"),true,-1.0,true)\n\nfunc _v422_feature_label(font: Font, area: Rect2, uv: Vector2, label: String, fs: int) -> void:\n    var p: Vector2 = _point(uv,area)\n    var w: float = font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,fs).x\n    p.x = clampf(p.x-w*0.5,area.position.x+10.0,area.end.x-w-10.0)\n    draw_string_outline(font,p,label,HORIZONTAL_ALIGNMENT_LEFT,-1,fs,4,Color("#202223"))\n    draw_string(font,p,label,HORIZONTAL_ALIGNMENT_LEFT,-1,fs,Color("#f0dfb5"))\n\nfunc _v422_frame(area: Rect2) -> void:\n    draw_rect(area.grow(3.0),Color("#0a1325"),false,6.0,true)\n    draw_rect(area.grow(1.8),Color("#784b25"),false,3.4,true)\n    draw_rect(area.grow(0.5),Color("#e0ba67"),false,1.8,true)\n    draw_rect(area.grow(-3.0),Color(0.99,0.85,0.53,0.70),false,1.0,true)\n    for i in range(4):\n        var p := area.position+Vector2(0 if i%2==0 else area.size.x,0 if i<2 else area.size.y)\n        var sx: float = 1.0 if i%2==0 else -1.0\n        var sy: float = 1.0 if i<2 else -1.0\n        var arm := PackedVector2Array([p+Vector2(sx*24,sy*3),p+Vector2(sx*12,sy*3),p+Vector2(sx*3,sy*12),p+Vector2(sx*3,sy*24)])\n        draw_polyline(arm,Color("#462d20"),5.0,true)\n        draw_polyline(arm,Color("#e9c97f"),2.1,true)\n        var gem: Vector2 = p+Vector2(sx*6,sy*6)\n        draw_colored_polygon(PackedVector2Array([gem+Vector2(0,-5),gem+Vector2(5,0),gem+Vector2(0,5),gem+Vector2(-5,0)]),Color("#d8bc71"))\n        draw_colored_polygon(PackedVector2Array([gem+Vector2(0,-3),gem+Vector2(3,0),gem+Vector2(0,3),gem+Vector2(-3,0)]),Color("#427ba6"))\n')
+          s=fun(s,'_stroke_route','func _stroke_route(route: Dictionary, rect: Rect2) -> void:\n    var a: String = String(route["from"])\n    var b: String = String(route["to"])\n    var path := PackedVector2Array()\n    path.append(_point(L.CITIES[a],rect))\n    for p in route["via"]:\n        path.append(_point(p,rect))\n    path.append(_point(L.CITIES[b],rect))\n    var k: float = clampf(rect.size.x/1300.0,0.63,2.0)\n    draw_polyline(path,Color(0.14,0.09,0.06,0.54),7.5*k,true)\n    draw_polyline(path,Color("#5a351e"),5.8*k,true)\n    draw_polyline(path,Color("#c49148"),3.8*k,true)\n    draw_polyline(path,Color("#ffe1a3"),1.8*k,true)\n    for i in range(1,path.size()-1):\n        draw_circle(path[i],1.9*k,Color("#c49148"),true,-1.0,true)\n        draw_circle(path[i],0.93*k,Color("#ffe1a3"),true,-1.0,true)\n')
+          s=fun(s,'_draw_v419_crossings','func _draw_v419_crossings(area: Rect2) -> void:\n    var a: Vector2 = _point(Vector2(L.TUNNEL_X,23.0),area)\n    var b: Vector2 = _point(Vector2(L.TUNNEL_X,43.0),area)\n    var k: float = clampf(area.size.x/1300.0,0.63,2.0)\n    draw_line(a,b,Color("#483324"),13.0*k,true)\n    draw_line(a,b,Color("#151b25"),9.0*k,true)\n    draw_dashed_line(a,b,Color("#f6cd83"),2.6*k,7.0*k,true)\n    for p in [a,b]:\n        var outer := Rect2(p-Vector2(9,5)*k,Vector2(18,10)*k)\n        draw_rect(outer,Color("#36281d"),true)\n        draw_rect(outer.grow(-1.5*k),Color("#c69a55"),true)\n        draw_rect(outer.grow(-3.2*k),Color("#15202a"),true)\n        draw_line(p+Vector2(-6,-3)*k,p+Vector2(6,-3)*k,Color("#ffda94"),1.2*k,true)\n    var font: Font = get_theme_default_font()\n    var fs: int = clampi(roundi(area.size.x/77.0),11,25)\n    if font != null:\n        _v422_feature_label(font,area,Vector2(L.TUNNEL_X+4.3,30.0),"Tunnel",fs)\n        _v422_feature_label(font,area,Vector2(75.1,74.0),"Schlucht",fs)\n')
+          s+="\n"+'func _v422_style_frame() -> void:\n    # The original menu and button signals are retained; only style is changed.\n    var view: Control = get_parent() as Control\n    if view == null:\n        return\n    var panel: Panel = view.get_parent() as Panel\n    if panel == null:\n        return\n    var frame := StyleBoxFlat.new()\n    frame.bg_color = Color("#111e34")\n    frame.border_color = Color("#dcb66e")\n    frame.set_border_width_all(3)\n    frame.set_corner_radius_all(13)\n    frame.shadow_color = Color(0.0,0.0,0.0,0.6)\n    frame.shadow_size = 8\n    frame.shadow_offset = Vector2(0,4)\n    panel.add_theme_stylebox_override("panel",frame)\n    for child in panel.get_children():\n        if child is Label and String(child.text).begins_with("LYDRA"):\n            child.add_theme_color_override("font_color",Color("#f1d59b"))\n            child.add_theme_color_override("font_outline_color",Color("#080e1a"))\n            child.add_theme_constant_override("outline_size",4)\n            child.add_theme_font_size_override("font_size",24)\n        elif child is Button and String(child.text).begins_with("Zur"):\n            child.text = "Zurück zum Spiel"\n            child.offset_left = -235.0\n            child.add_theme_color_override("font_color",Color("#fff0c8"))\n            child.add_theme_font_size_override("font_size",18)\n            for mode in ["normal","hover","pressed","focus"]:\n                var st := StyleBoxFlat.new()\n                st.bg_color = Color("#28466a") if mode=="hover" else Color("#10233e")\n                st.border_color = Color("#d1a75e")\n                st.set_border_width_all(2)\n                st.set_corner_radius_all(7)\n                child.add_theme_stylebox_override(mode,st)\n'
+          p.write_text(s,encoding='utf-8')
+          p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
+          s=once(s,'version/code=4191','version/code=4192')
+          s=once(s,'version/name="4.1.7.21"','version/name="4.1.7.22"')
+          p.write_text(s,encoding='utf-8')
+          print('FIX22_UI_INSTALL_OK: geometry unchanged; HD atlas and live map layers')
+          PYPATCH422
+          cat > android/tests/V422AtlasSmoke.gd <<'GDSMOKE422'
+          extends SceneTree
+          const Map = preload("res://scripts/V417SketchMap.gd")
+          const T = preload("res://scripts/V417Territories.gd")
+          class FakeGame:
+              extends Node
+              var hero: Node3D
+          func _initialize() -> void:
+              call_deferred("_run")
+          func fail(s: String) -> void:
+              push_error("FIX22: "+s)
+              quit(1)
+          func _run() -> void:
+              var texture: Texture2D = load("res://assets/maps/LWOD_Atlas_HD.webp") as Texture2D
+              if texture==null or texture.get_width()!=3072 or texture.get_height()!=1248:
+                  fail("HD atlas missing or wrong dimensions")
+                  return
+              if T.ROUTES.size()!=9 or T.CITIES.size()!=11:
+                  fail("world geography changed")
+                  return
+              var game := FakeGame.new()
+              root.add_child(game)
+              game.hero = Node3D.new()
+              game.add_child(game.hero)
+              var start: Vector2 = T.city_world("Sonnental")
+              game.hero.position = Vector3(start.x,0.0,start.y)
+              var panel := Panel.new()
+              root.add_child(panel)
+              panel.size = Vector2(1340,650)
+              var title := Label.new()
+              title.text = "LYDRA - FARBIGE WELTKARTE"
+              panel.add_child(title)
+              var close := Button.new()
+              close.text = "Zurueck zum Spiel"
+              panel.add_child(close)
+              var view := Control.new()
+              panel.add_child(view)
+              view.size = Vector2(1300,530)
+              var atlas: Control = Map.new()
+              view.add_child(atlas)
+              atlas.size = view.size
+              atlas.call("setup",game)
+              await process_frame
+              await process_frame
+              var area: Rect2 = atlas.call("_layout")
+              var pin: Vector2 = atlas.call("_point",T.world_to_map(start),area)
+              var expected: Vector2 = area.position+Vector2(0.12,0.18)*area.size
+              if pin.distance_to(expected)>0.01 or close.text!="Zurück zum Spiel":
+                  fail("marker projection or menu theme")
+                  return
+              print("FIX22_ATLAS_SMOKE_OK: HD texture, UI frame, live coordinates and nine roads")
+              quit(0)
+          GDSMOKE422
+          python3 -m py_compile "$RUNNER_TEMP/lwod422_art.py" "$RUNNER_TEMP/lwod422_patch.py"
+          python3 "$RUNNER_TEMP/lwod422_art.py"
+          python3 "$RUNNER_TEMP/lwod422_patch.py"
+          mkdir -p build/diagnose
+          cp "$RUNNER_TEMP/fix22_bake.log" build/diagnose/FIX22_Atlas_Bake.log
       - name: Alle Godot-Tests einschliesslich FIX21 ausfuehren
         shell: bash
         run: |
@@ -419,15 +642,22 @@ jobs:
             bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix21_steps/$i.sh"
             echo '::endgroup::'
           done
-      - name: FIX21 Android APK exportieren und pruefen
+      - name: FIX22 HD-Karte und Spielerposition testen
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=5s 90s godot --headless --path android --script res://tests/V422AtlasSmoke.gd 2>&1 | tee build/diagnose/FIX22_Atlas_Test.log
+          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX22: ' build/diagnose/FIX22_Atlas_Test.log; then exit 1; fi
+          grep -Fq 'FIX22_ATLAS_SMOKE_OK:' build/diagnose/FIX22_Atlas_Test.log
+      - name: FIX22 Android APK exportieren und pruefen
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/android build/diagnose
-          APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX21.apk"
+          APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX22.apk"
           rm -f "$APK"
-          timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX21_APK_Export.log
-          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX21_APK_Export.log; then
+          timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX22_APK_Export.log
+          if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX22_APK_Export.log; then
             exit 1
           fi
           test -s "$APK"
@@ -435,12 +665,12 @@ jobs:
           unzip -Z1 "$APK" | grep -Fx 'AndroidManifest.xml' >/dev/null
           ls -lh "$APK"
           sha256sum "$APK"
-      - name: FIX21 APK als Download hochladen
+      - name: FIX22 APK als Download hochladen
         id: apk_upload
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_ANDROID_V41_7_FIX21_APK
-          path: build/android/LWOD-Android-V41.7-FIX21.apk
+          name: LWOD_ANDROID_V41_7_FIX22_APK
+          path: build/android/LWOD-Android-V41.7-FIX22.apk
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -453,12 +683,12 @@ jobs:
           set -euo pipefail
           test -n "$APK_ARTIFACT_ID"
           test -n "$APK_ARTIFACT_URL"
-          printf '### Android APK Download\n\n[FIX21 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-      - name: FIX21 Testprotokolle hochladen
+          printf '### Android APK Download\n\n[FIX22 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: FIX22 Testprotokolle hochladen
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: LWOD_FIX21_TESTPROTOKOLLE
+          name: LWOD_FIX22_TESTPROTOKOLLE
           path: build/diagnose
           if-no-files-found: warn
           retention-days: 14
