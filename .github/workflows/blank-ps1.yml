@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX18 Dorfstore Einzelwege und Testkorrektur
+name: LWOD Android V41.7 FIX19 Bergtunnel und Schlucht
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX18 APK
+    name: LWOD Android V41.7 FIX19 APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:
@@ -1210,6 +1210,94 @@ jobs:
         p.write_text(s,encoding='utf-8')
         print('FIX18_OK: compact nine destinations, map modal isolation, local road refinement')
         PYFIX18
+    - name: V41.7 FIX19 Nordbergwand Tunnel und Schlucht installieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PYFIX19'
+        FEATURES = '# FIX19 - shared coordinates for landscape, map and traversable passages.\nconst NORTH_RIDGE = [Vector2(55.6,0),Vector2(81.7,0),Vector2(81.5,6.9),Vector2(78,8.2),Vector2(73,8.8),Vector2(68,7.9),Vector2(62,8.3),Vector2(56.1,7.4)]\nconst TUNNEL_X: float = 65.7\nconst TUNNEL_HALF: float = 0.24\nconst GORGE_SPINE = [Vector2(80.2,43.5),Vector2(80.2,59.5),Vector2(77.7,65.0),Vector2(73.5,71.0),Vector2(71.0,80.0),Vector2(67.5,93.5),Vector2(66.7,102.0)]\nconst GORGE_HALF: float = 1.48\nstatic func north_at_map(uv: Vector2) -> bool:\n    return uv.y >= 0.0 and uv.y <= 9.0 and uv.x >= 55.6 and uv.x <= 81.7 and Geometry2D.is_point_in_polygon(uv,PackedVector2Array(NORTH_RIDGE))\n\nstatic func tunnel_at_map(uv: Vector2) -> bool:\n    return absf(uv.x-TUNNEL_X) < TUNNEL_HALF and uv.y >= 22.0 and uv.y <= 44.0\n\nstatic func gorge_distance(uv: Vector2) -> float:\n    if uv.x < 64.0 or uv.x > 83.0 or uv.y < 40.0:\n        return 100.0\n    var d: float = INF\n    for i in range(GORGE_SPINE.size()-1):\n        var a: Vector2 = GORGE_SPINE[i]\n        var b: Vector2 = GORGE_SPINE[i+1]\n        d = minf(d,uv.distance_to(Geometry2D.get_closest_point_to_segment(uv,a,b)))\n    return d\n\nstatic func gorge_depth(uv: Vector2) -> float:\n    var d: float = gorge_distance(uv)\n    if d >= GORGE_HALF:\n        return 0.0\n    return 455.0*(1.0-smoothstep(0.43,GORGE_HALF,d))*smoothstep(42.0,46.0,uv.y)\n\nstatic func bridge_at(p: Vector2) -> bool:\n    var uv: Vector2 = world_to_map(p)\n    if gorge_depth(uv) <= 0.0:\n        return false\n    for link in ROUTES:\n        if not (link["from"] == "Moordorf" and link["to"] == "Sandhafen") and not (link["from"] == "Wurzelheim" and link["to"] == "Frostholm"):\n            continue\n        var path: PackedVector2Array = road_world(link)\n        for i in range(path.size()-1):\n            if p.distance_to(Geometry2D.get_closest_point_to_segment(p,path[i],path[i+1])) <= 4.8:\n                return true\n    return false\n'
+        WALL = '# Extra northern ridge, tunnel gates and bridge supports. The existing relief stays intact.\nfunc _v419_piece(parent: Node3D, pos: Vector3, dimensions: Vector3, tint: Color, label: String, solid: bool = false) -> MeshInstance3D:\n    var item := MeshInstance3D.new()\n    item.name = label\n    var box := BoxMesh.new()\n    box.size = dimensions\n    item.mesh = box\n    var material := StandardMaterial3D.new()\n    material.albedo_color = tint\n    material.roughness = 1.0\n    item.material_override = material\n    item.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF\n    parent.add_child(item)\n    item.position = pos\n    if solid:\n        var body := StaticBody3D.new()\n        var shape := CollisionShape3D.new()\n        var bounds := BoxShape3D.new()\n        bounds.size = dimensions\n        shape.shape = bounds\n        body.add_child(shape)\n        item.add_child(body)\n    return item\n\nfunc _v419_north() -> void:\n    var st := SurfaceTool.new()\n    st.begin(Mesh.PRIMITIVE_TRIANGLES)\n    var previous := PackedVector3Array()\n    var colors := PackedColorArray()\n    for i in range(105):\n        var x: float = lerpf(55.6,81.7,float(i)/104.0)\n        var edge: float = 7.5+0.65*sin(x*0.55)+0.28*sin(x*2.7)\n        var row := PackedVector3Array()\n        var tones := PackedColorArray()\n        for j in range(13):\n            var t: float = float(j)/12.0\n            var p: Vector2 = T.map_to_world(Vector2(x,edge*t))\n            var ridge: float = pow(maxf(0.0,sin(t*PI)),0.58)\n            var h: float = ridge*(850.0+290.0*sin(x*1.79)+180.0*sin(x*4.1+t*2.4))\n            row.append(Vector3(p.x,_ground(p)+h-35.0,p.y))\n            var shade: float = clampf(0.45+0.22*ridge+0.07*sin(x*7.2+t*19.0),0.0,1.0)\n            tones.append(Color(shade,shade*0.98,shade*0.94))\n        if not previous.is_empty():\n            for j in range(12):\n                for v in [previous[j],row[j],row[j+1],previous[j],row[j+1],previous[j+1]]:\n                    var k: Vector3 = v\n                    st.set_color(Color(0.54,0.52,0.49).lerp(Color(0.74,0.72,0.69),clampf(k.y/1500.0,0.0,1.0)))\n                    st.add_vertex(k)\n        previous = row\n        colors = tones\n    st.generate_normals()\n    var mountain := MeshInstance3D.new()\n    mountain.name = "Nordbergwand"\n    mountain.mesh = st.commit()\n    var mat := StandardMaterial3D.new()\n    mat.vertex_color_use_as_albedo = true\n    mat.cull_mode = BaseMaterial3D.CULL_DISABLED\n    mat.roughness = 1.0\n    mountain.material_override = mat\n    mountain.ignore_occlusion_culling = true\n    mountain.custom_aabb = mountain.mesh.get_aabb().grow(20.0)\n    mountain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF\n    add_child(mountain)\n\nfunc _v419_tunnel() -> void:\n    var tunnel := Node3D.new()\n    tunnel.name = "Bergtunnel"\n    add_child(tunnel)\n    var a: Vector2 = T.map_to_world(Vector2(T.TUNNEL_X,23.0))\n    var b: Vector2 = T.map_to_world(Vector2(T.TUNNEL_X,43.0))\n    var half: float = T.TUNNEL_HALF*T.METRES_PER_PERCENT\n    var n: int = ceili(a.distance_to(b)/40.0)\n    # Segment the walls and ceiling to follow the existing terrain.\n    for i in range(n):\n        var q: Vector2 = a.lerp(b,(float(i)+0.5)/float(n))\n        var length: float = a.distance_to(b)/float(n)+1.0\n        var h: float = _ground(q)\n        for sign_value in [-1.0,1.0]:\n            var side: float = float(sign_value)\n            _v419_piece(tunnel,Vector3(q.x+side*(half+2),h+13,q.y),Vector3(4,36,length),Color("#514b49"),"Felsseite",true)\n        _v419_piece(tunnel,Vector3(q.x,h+32,q.y),Vector3(half*2+8,6,length),Color("#514d49"),"Felsdecke",true)\n        if i%8 == 0:\n            for sign_value in [-1.0,1.0]:\n                var side: float = float(sign_value)\n                var lamp := _v419_piece(tunnel,Vector3(q.x+side*(half-4),h+6,q.y),Vector3(1.2,2.4,1.2),Color("#e6b86b"),"Tunnellicht")\n                var glow: StandardMaterial3D = lamp.material_override as StandardMaterial3D\n                glow.emission_enabled = true\n                glow.emission = Color("#e6b86b")\n    # Two open masonry portals, no closed door or teleport required.\n    for q in [a,b]:\n        var p: Vector2 = q\n        var h: float = _ground(p)\n        var gate := Node3D.new()\n        gate.name = "Tunneltor_Nord" if p == a else "Tunneltor_Sued"\n        tunnel.add_child(gate)\n        for sign_value in [-1.0,1.0]:\n            var side: float = float(sign_value)\n            _v419_piece(gate,Vector3(p.x+side*(half+3),h+10,p.y),Vector3(8,28,12),Color("#81786a"),"Torpfosten",true)\n            _v419_piece(gate,Vector3(p.x+side*(half+3),h+25,p.y),Vector3(12,4,15),Color("#aa977a"),"Kapitell")\n        _v419_piece(gate,Vector3(p.x,h+29,p.y),Vector3(half*2+14,7,14),Color("#81786a"),"Torsturz",true)\n\nfunc _v419_bridges() -> void:\n    var root := Node3D.new()\n    root.name = "Schluchtbruecken"\n    add_child(root)\n    for link in T.ROUTES:\n        if not (link["from"] == "Moordorf" and link["to"] == "Sandhafen") and not (link["from"] == "Wurzelheim" and link["to"] == "Frostholm"):\n            continue\n        var path: PackedVector2Array = T.road_world(link)\n        for i in range(path.size()-1):\n            var a: Vector2 = path[i]\n            var b: Vector2 = path[i+1]\n            var count: int = maxi(1,ceili(a.distance_to(b)/12.0))\n            var d: Vector2 = (b-a).normalized()\n            var side := Vector2(-d.y,d.x)\n            for j in range(count):\n                var p: Vector2 = a.lerp(b,(float(j)+0.5)/float(count))\n                if T.gorge_depth(T.world_to_map(p)) < 4.0:\n                    continue\n                var h: float = _ground(p)\n                var length: float = a.distance_to(b)/float(count)+0.18\n                var deck := _v419_piece(root,Vector3(p.x,h-0.7,p.y),Vector3(7.2,1.4,length),Color("#746455"),"Brueckendeck",true)\n                deck.rotation.y = atan2(d.x,d.y)\n                for sign_value in [-1.0,1.0]:\n                    var r: Vector2 = p+side*float(sign_value)*3.7\n                    var rail := _v419_piece(root,Vector3(r.x,h+0.65,r.y),Vector3(0.45,1.3,length),Color("#6c6058"),"Brueckengelaender",true)\n                    rail.rotation.y = atan2(d.x,d.y)\n'
+        MAP = 'func _draw_v419_features(area: Rect2) -> void:\n    var ridge := PackedVector2Array()\n    for uv in L.NORTH_RIDGE:\n        ridge.append(_point(uv,area))\n    draw_colored_polygon(ridge,Color("#77736c"))\n    var tris: PackedInt32Array = Geometry2D.triangulate_polygon(ridge)\n    for i in range(0,tris.size(),3):\n        var a: Vector2 = ridge[tris[i]]\n        var b: Vector2 = ridge[tris[i+1]]\n        var c: Vector2 = ridge[tris[i+2]]\n        var m: Vector2 = (a+b+c)/3.0\n        draw_colored_polygon(PackedVector2Array([a,b,m]),Color("#918d84"))\n        draw_colored_polygon(PackedVector2Array([b,c,m]),Color("#65615c"))\n        draw_colored_polygon(PackedVector2Array([c,a,m]),Color("#797570"))\n    for i in range(58,81,2):\n        var x: float = float(i)\n        var a: Vector2 = _point(Vector2(x,1.0),area)\n        var b: Vector2 = _point(Vector2(x+0.7,6.2),area)\n        draw_line(a,b,Color("#4e4b45"),2.0,true)\n    ridge.append(ridge[0])\n    draw_polyline(ridge,Color("#49433b"),1.4,true)\n    var gorge := PackedVector2Array()\n    for uv in L.GORGE_SPINE:\n        gorge.append(_point(Vector2(uv.x,minf(uv.y,99.0)),area))\n    var w: float = 2.0*L.GORGE_HALF*area.size.x/100.0\n    draw_polyline(gorge,Color("#8b7c68"),w,true)\n    draw_polyline(gorge,Color("#514941"),w*0.73,true)\n    draw_polyline(gorge,Color("#282832"),w*0.38,true)\n\nfunc _draw_v419_crossings(area: Rect2) -> void:\n    var a: Vector2 = _point(Vector2(L.TUNNEL_X,23.0),area)\n    var b: Vector2 = _point(Vector2(L.TUNNEL_X,43.0),area)\n    draw_line(a,b,Color("#2a2522"),12.0,true)\n    draw_dashed_line(a,b,Color("#e8c58a"),4.0,7.0,true)\n    for p in [a,b]:\n        draw_rect(Rect2(p-Vector2(8,4),Vector2(16,8)),Color("#c7ae85"),true)\n        draw_rect(Rect2(p-Vector2(5,3),Vector2(10,6)),Color("#3d332e"),true)\n    var font: Font = get_theme_default_font()\n    if font != null:\n        draw_string_outline(font,a+Vector2(11,30),"Tunnel",HORIZONTAL_ALIGNMENT_LEFT,-1,13,3,Color("#28211f"))\n        draw_string(font,a+Vector2(11,30),"Tunnel",HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("#fff1d6"))\n        draw_string_outline(font,_point(Vector2(73,74),area),"Schlucht",HORIZONTAL_ALIGNMENT_LEFT,-1,13,3,Color("#28211f"))\n        draw_string(font,_point(Vector2(73,74),area),"Schlucht",HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("#fff1d6"))\n    for link in L.ROUTES:\n        if not (link["from"]=="Moordorf" and link["to"]=="Sandhafen") and not (link["from"]=="Wurzelheim" and link["to"]=="Frostholm"):\n            continue\n        var path: PackedVector2Array = L.road_world(link)\n        for i in range(path.size()-1):\n            var u: Vector2 = L.world_to_map(path[i])\n            var v: Vector2 = L.world_to_map(path[i+1])\n            for j in range(100):\n                var p: Vector2 = u.lerp(v,float(j)/100.0)\n                var q: Vector2 = u.lerp(v,float(j+1)/100.0)\n                if L.gorge_depth((p+q)*0.5)>3.0:\n                    draw_line(_point(p,area),_point(q,area),Color("#e4c79c"),5.5,true)\n'
+        TEST = 'extends SceneTree\nconst T = preload("res://scripts/V417Territories.gd")\nconst Wall = preload("res://scripts/V417MountainWall.gd")\nclass FakeGame:\n    extends Node3D\n    var state: int = 2\n    var hero: Node3D\nfunc _initialize() -> void:\n    call_deferred("_run")\nfunc fail(s: String) -> void:\n    push_error("FIX19: "+s)\n    quit(1)\nfunc _run() -> void:\n    if not T.mountain_at_map(Vector2(70,4)) or T.mountain_at_map(Vector2(71,20)):\n        fail("north ridge or city position")\n        return\n    var a: Vector2 = T.map_to_world(Vector2(T.TUNNEL_X,23))\n    var b: Vector2 = T.map_to_world(Vector2(T.TUNNEL_X,43))\n    if T.mountain_crosses(a,b) or not T.mountain_at_map(Vector2(T.TUNNEL_X+1,32)):\n        fail("tunnel must be clear and surrounded by rock")\n        return\n    if T.gorge_depth(Vector2(80.2,55)) < 400 or T.gorge_depth(T.CITIES["Frostholm"])!=0.0:\n        fail("gorge depth or town")\n        return\n    var crossings: int = 0\n    for road in T.ROUTES:\n        var path: PackedVector2Array = T.road_world(road)\n        var bridge: bool = false\n        for i in range(path.size()-1):\n            for j in range(101):\n                var p: Vector2 = path[i].lerp(path[i+1],float(j)/100.0)\n                if T.bridge_at(p):\n                    bridge = true\n        if bridge:\n            crossings += 1\n    if crossings!=2:\n        fail("both road crossings require bridges")\n        return\n    var g := FakeGame.new()\n    root.add_child(g)\n    g.hero = Node3D.new()\n    g.add_child(g.hero)\n    var wall := Wall.new()\n    g.add_child(wall)\n    wall.setup(g)\n    if not wall.has_node("Nordbergwand") or not wall.has_node("Bergtunnel/Tunneltor_Nord") or not wall.has_node("Bergtunnel/Tunneltor_Sued") or wall.get_node("Schluchtbruecken").get_child_count()==0:\n        fail("missing 3D features")\n        return\n    print("FIX19_LANDSCAPE_OK")\n    quit(0)\n'
+        from pathlib import Path
+        import re
+        B=Path('android/scripts')
+        def once(s,a,b):
+            assert s.count(a)==1, 'FIX19 anchor: '+a[:90]
+            return s.replace(a,b,1)
+        def edit(name,f):
+            p=B/name;s=p.read_text();p.write_text(f(s),encoding='utf-8')
+        def territory(s):
+            s=once(s,'static func mountain_at_map(uv: Vector2) -> bool:\n','static func mountain_at_map(uv: Vector2) -> bool:\n    if tunnel_at_map(uv):\n        return false\n    if north_at_map(uv):\n        return true\n')
+            start=s.index('static func mountain_crosses(');end=s.index('static func mountain_exit(',start)
+            s=s[:start]+'''static func mountain_crosses(a: Vector2, b: Vector2) -> bool:
+            var u: Vector2 = world_to_map(a)
+            var v: Vector2 = world_to_map(b)
+            if maxf(u.x,v.x)<40.0 or minf(u.x,v.x)>83.0 or minf(u.y,v.y)>79.0 or maxf(u.y,v.y)<0.0:
+                return false
+            var n: int = maxi(1,ceili(u.distance_to(v)/0.06))
+            for i in range(n+1):
+                if mountain_at_map(u.lerp(v,float(i)/float(n))):
+                    return true
+            return false
+
+        '''+s[end:]
+            s=once(s,'    var uv: Vector2 = world_to_map(p)\n    var outline: PackedVector2Array = mountain_polygon()', '''    var uv: Vector2 = world_to_map(p)
+            if north_at_map(uv):
+                return map_to_world(Vector2(maxf(57.0,uv.x),9.1))
+            var outline: PackedVector2Array = mountain_polygon()''')
+            return s+'\n'+FEATURES
+        edit('V417Territories.gd',territory)
+        def wall(s):
+            s=once(s,'    _build_cliff()\n    set_process(true)','    _build_cliff()\n    _v419_north()\n    _v419_tunnel()\n    _v419_bridges()\n    set_process(true)')
+            # Remove the buried skirt and collision curtain ONLY at the two portals.
+            s=once(s,'        var va: Vector3 = verts[a]\n        var vb: Vector3 = verts[b]','''        var va: Vector3 = verts[a]
+                var vb: Vector3 = verts[b]
+                var ua: Vector2 = T.world_to_map(Vector2(va.x,va.z))
+                var ub: Vector2 = T.world_to_map(Vector2(vb.x,vb.z))
+                if minf(ua.y,ub.y)>22.0 and maxf(ua.y,ub.y)<44.0 and minf(ua.x,ub.x)<T.TUNNEL_X+T.TUNNEL_HALF and maxf(ua.x,ub.x)>T.TUNNEL_X-T.TUNNEL_HALF:
+                    continue''')
+            s=once(s,'    var p := Vector2(current.x,current.z)\n    if T.mountain_at(p):','''    var p := Vector2(current.x,current.z)
+            var uv: Vector2 = T.world_to_map(p)
+            if T.tunnel_at_map(uv) and uv.y>24.5 and uv.y<41.0:
+                var ceiling: float = _ground(p)+24.0
+                if current.y>ceiling:
+                    current.y = ceiling
+                    hero.global_position = current
+            if T.mountain_at(p):''')
+            return s+'\n'+WALL
+        edit('V417MountainWall.gd',wall)
+        def terrain(s):
+            s=once(s,'func height_at(x: float, z: float) -> float:', 'func _v419_base_height_at(x: float, z: float) -> float:')
+            s=once(s,'func surface_height_at(x: float, z: float) -> float:\n','''func height_at(x: float, z: float) -> float:
+            return _v419_base_height_at(x,z)-V417Territories.gorge_depth(V417Territories.world_to_map(Vector2(x,z)))
+
+        func surface_height_at(x: float, z: float) -> float:
+            if V417Territories.bridge_at(Vector2(x,z)):
+                return _v419_base_height_at(x,z)
+        ''')
+            s=once(s,'func color_at(x: float, z: float, height: float) -> Color:\n','''func color_at(x: float, z: float, height: float) -> Color:
+            var gorge: float = V417Territories.gorge_depth(V417Territories.world_to_map(Vector2(x,z)))
+            if gorge>3.0:
+                return Color("#817361").lerp(Color("#423c39"),clampf(gorge/455.0,0.0,1.0))
+        ''')
+            return s
+        edit('V27Terrain.gd',terrain)
+        # Keep the legacy infinite green platform below the gorge floor, not across its opening.
+        def oldground(s):
+            return s.replace('Vector3(0.0,-0.52,0.0), Vector3(WORLD_SIZE,1.0,WORLD_SIZE)', 'Vector3(0.0,-1500.0,0.0), Vector3(WORLD_SIZE,1.0,WORLD_SIZE)')
+        edit('V21World.gd',oldground)
+        def mapedit(s):
+            s=once(s,'    _draw_mountain(area)\n','    _draw_mountain(area)\n    _draw_v419_features(area)\n')
+            # Draw crossings after the road so their deck symbols are visible.
+            s=once(s,'        _stroke_route(road,area)\n','        _stroke_route(road,area)\n    _draw_v419_crossings(area)\n')
+            return s+'\n'+MAP
+        edit('V417SketchMap.gd',mapedit)
+        p=Path('android/export_presets.cfg');s=p.read_text();s=once(s,'version/code=4188','version/code=4189');s=once(s,'version/name="4.1.7.18"','version/name="4.1.7.19"');p.write_text(s)
+        p=Path('android/tests/V419LandscapeSmoke.gd');p.write_text(TEST)
+        print('FIX19_INSTALL_OK: northern rock wall, open tunnel gates, real gorge heights and two bridge crossings')
+
+        PYFIX19
     - name: Godot-Gelaende neu importieren
       shell: bash
       run: |
@@ -1291,29 +1379,23 @@ jobs:
         timeout --signal=TERM --kill-after=5s 135s godot --headless --path android --quit-after 300 --script res://tests/V416RoadsSmoke.gd 2>&1 | tee build/diagnose/V417_FIX16_Wege_Tore_Teleport.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX16: ' build/diagnose/V417_FIX16_Wege_Tore_Teleport.log; then exit 1; fi
         grep -Fq 'V417_FIX16_OK:' build/diagnose/V417_FIX16_Wege_Tore_Teleport.log
-    - name: V41.7 FIX18 Android-APK bauen und pruefen
+    - name: V41.7 FIX19 Landschaft Tunnel und Bruecken testen
+      shell: bash
+      run: |
+        set -euo pipefail
+         timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script res://tests/V419LandscapeSmoke.gd 2>&1 | tee /tmp/lwod419.log
+         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call' /tmp/lwod419.log; then exit 1; fi
+         grep -Fq 'FIX19_LANDSCAPE_OK' /tmp/lwod419.log
+         mkdir -p build/diagnose
+         cp /tmp/lwod419.log build/diagnose/V419_Landschaft.log
+    - name: V41.7 FIX19 Android-APK bauen und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX18.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX19.apk"
         timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee /tmp/lwod417fix3_export.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' /tmp/lwod417fix3_export.log; then exit 1; fi
         test -s "$APK"
         unzip -t "$APK" >/dev/null
-        ls -lh "$APK"
-    - name: V41.7 FIX18 APK bereitstellen
-      uses: actions/upload-artifact@v4
-      with:
-        name: LWOD_ANDROID_V41_7_FIX18_APK
-        path: build/android/LWOD-Android-V41.7-FIX18.apk
-        if-no-files-found: error
-        retention-days: 14
-    - name: V41.7 FIX18 Testprotokoll
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: LWOD_V41_7_FIX18_TESTPROTOKOLLE
-        path: build/diagnose
-        if-no-files-found: warn
-        retention-days: 14
+ 
