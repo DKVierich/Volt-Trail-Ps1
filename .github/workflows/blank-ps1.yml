@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX39 Sichtweite und vorausschauendes Laden
+name: LWOD Android V41.7 FIX40 Ruinengebiet und Untergrund-Dungeon
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX39 APK
+    name: LWOD Android V41.7 FIX40 APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
     container:
@@ -1151,12 +1151,12 @@ jobs:
             print("FIX38_OLD_BOUNDARY_OK: old visual and collision constructors inactive; current map perimeter retained")
             quit(0)
         GDFIX38
-    - name: FIX39 Sichtweite und Terrain-Vorladen installieren
+    - name: FIX40 Sichtweite und Terrain-Vorladen installieren
       shell: bash
       run: |
         set -euo pipefail
-        cat > /tmp/lwod_fix39_stream.gd <<'GDFIX39STREAM'
-        # FIX39: prepare one real terrain chunk per interval, ahead of the actor.
+        cat > /tmp/lwod_fix39_stream.gd <<'GDFIX40STREAM'
+        # FIX40: prepare one real terrain chunk per interval, ahead of the actor.
         # Cached chunks live under an invisible, disabled parent until promoted.
         const V439_CACHE_LIMIT: int = 16
         const V439_PREFETCH_INTERVAL: float = 0.12
@@ -1252,13 +1252,13 @@ jobs:
                 return
             var p := Vector2(actor.global_position.x,actor.global_position.z)
             _v439_prefetch_one(p,direction)
-        GDFIX39STREAM
-        python3 - <<'PYFIX39'
+        GDFIX40STREAM
+        python3 - <<'PYFIX40'
         from pathlib import Path
         import re
         B=Path('android/scripts')
         def one(s,a,b):
-            assert s.count(a)==1,'FIX39 source anchor: '+a[:100]
+            assert s.count(a)==1,'FIX40 source anchor: '+a[:100]
             return s.replace(a,b,1)
         p=B/'V27Terrain.gd';s=p.read_text(encoding='utf-8')
         assert 'func _v437_prepare_grid()' in s and 'func _v412_stream_near(' in s and 'func _v425_forest(' in s
@@ -1274,14 +1274,14 @@ jobs:
         p.write_text(s,encoding='utf-8')
         p=B/'V408Regions.gd';s=p.read_text(encoding='utf-8')
         for name,old,new in [('LOAD_DISTANCE','650','1100.0'),('UNLOAD_DISTANCE','950','1550.0')]:
-            s,n=re.subn(r'(?m)^(const '+name+r'\s*(?::\s*float\s*)?[:=]+\s*)'+old+r'(?:\.0)?\s*$',lambda m:m[1]+new,s);assert n==1,'FIX39 missing '+name
+            s,n=re.subn(r'(?m)^(const '+name+r'\s*(?::\s*float\s*)?[:=]+\s*)'+old+r'(?:\.0)?\s*$',lambda m:m[1]+new,s);assert n==1,'FIX40 missing '+name
         p.write_text(s,encoding='utf-8')
         p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
         s=one(s,'version/code=4208','version/code=4209');s=one(s,'version/name="4.1.7.38"','version/name="4.1.7.39"');p.write_text(s,encoding='utf-8')
-        print('FIX39_INSTALL_OK: 7x7 active cells, 16 bounded prefetched cells, 45000 camera far, early town streaming')
-        PYFIX39
+        print('FIX40_INSTALL_OK: 7x7 active cells, 16 bounded prefetched cells, 45000 camera far, early town streaming')
+        PYFIX40
         mkdir -p android/tests
-        cat > android/tests/V439StreamSmoke.gd <<'GDFIX39TEST'
+        cat > android/tests/V439StreamSmoke.gd <<'GDFIX40TEST'
         extends SceneTree
         const T = preload("res://scripts/V417Territories.gd")
         const Terrain = preload("res://scripts/V27Terrain.gd")
@@ -1296,7 +1296,7 @@ jobs:
             call_deferred("_run")
 
         func _fail(message: String) -> void:
-            push_error("FIX39: "+message)
+            push_error("FIX40: "+message)
             quit(1)
 
         func _run() -> void:
@@ -1343,9 +1343,9 @@ jobs:
             if not terrain.v439_cache.is_empty() or not terrain.chunks.has(terrain.current_cell):
                 _fail("cache leaked across teleport")
                 return
-            print("FIX39_STREAM_OK: 49 active cells, capped hidden prefetch, actual reuse, teleport and camera range")
+            print("FIX40_STREAM_OK: 49 active cells, capped hidden prefetch, actual reuse, teleport and camera range")
             quit(0)
-        GDFIX39TEST
+        GDFIX40TEST
     - name: FIX31 bis FIX33 Godot-Tests
       shell: bash
       run: |
@@ -1389,23 +1389,23 @@ jobs:
         timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V438OldBoundarySmoke.gd 2>&1 | tee build/diagnose/FIX38_Weltgrenzen.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX38: ' build/diagnose/FIX38_Weltgrenzen.log; then exit 1; fi
         grep -Fq 'FIX38_OLD_BOUNDARY_OK:' build/diagnose/FIX38_Weltgrenzen.log
-    - name: FIX39 Sichtweite und Chunk-Vorladen testen
+    - name: FIX40 Sichtweite und Chunk-Vorladen testen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 180s godot --headless --path android --quit-after 300 --script res://tests/V439StreamSmoke.gd 2>&1 | tee build/diagnose/FIX39_Sichtweite.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX39: ' build/diagnose/FIX39_Sichtweite.log; then exit 1; fi
-        grep -Fq 'FIX39_STREAM_OK:' build/diagnose/FIX39_Sichtweite.log
-    - name: FIX39 Android APK exportieren und pruefen
+        timeout --signal=TERM --kill-after=5s 180s godot --headless --path android --quit-after 300 --script res://tests/V439StreamSmoke.gd 2>&1 | tee build/diagnose/FIX40_Sichtweite.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX40: ' build/diagnose/FIX40_Sichtweite.log; then exit 1; fi
+        grep -Fq 'FIX40_STREAM_OK:' build/diagnose/FIX40_Sichtweite.log
+    - name: FIX40 Android APK exportieren und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX39.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX40.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX39_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX39_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX40_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX40_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -1413,12 +1413,12 @@ jobs:
         unzip -Z1 "$APK" | grep -Fx 'AndroidManifest.xml' >/dev/null
         ls -lh "$APK"
         sha256sum "$APK"
-    - name: FIX39 APK als Download hochladen
+    - name: FIX40 APK als Download hochladen
       id: apk_upload
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX39_APK
-        path: build/android/LWOD-Android-V41.7-FIX39.apk
+        name: LWOD_ANDROID_V41_7_FIX40_APK
+        path: build/android/LWOD-Android-V41.7-FIX40.apk
         if-no-files-found: error
         compression-level: 0
         retention-days: 14
@@ -1431,12 +1431,12 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX39 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-    - name: FIX39 Testprotokolle hochladen
+        printf '### Android APK Download\n\n[FIX40 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+    - name: FIX40 Testprotokolle hochladen
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_FIX39_TESTPROTOKOLLE
+        name: LWOD_FIX40_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
