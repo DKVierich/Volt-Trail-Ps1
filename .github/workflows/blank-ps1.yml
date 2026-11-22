@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX35 Moordorf Suempfe und Nebel
+name: LWOD Android V41.7 FIX36 Wueste bereinigen
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX35 APK
+    name: LWOD Android V41.7 FIX36 APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
     container:
@@ -877,6 +877,73 @@ jobs:
         PYFIX35
         python3 -m py_compile "$RUNNER_TEMP/lwod_fix35.py"
         python3 "$RUNNER_TEMP/lwod_fix35.py"
+    - name: FIX36 Alte Wasserplatte in der Wueste entfernen
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PYFIX36'
+        from pathlib import Path
+        import re
+
+        # Remove only the obsolete artificial water plate beside Sandhafen.
+        p = Path('android/scripts/V417Landmarks.gd')
+        s = p.read_text(encoding='utf-8')
+        pattern = r'(?ms)^    elif id == "Sandhafen":\n.*?(?=^    elif |^    return root)'
+        matches = list(re.finditer(pattern, s))
+        assert len(matches) == 1, 'FIX36: Sandhafen landmark branch not unique'
+        m = matches[0]
+        old = '        _water(root,center+Vector2(610.0,0.0),Vector2(410.0,1540.0),"#45a5a9")\n'
+        assert m.group().count(old) == 1, 'FIX36: legacy desert plate not found'
+        branch = m.group().replace(old, '        # FIX36: obsolete flat water plate removed; continuous desert terrain remains.\n', 1)
+        assert '_water(' not in branch and '_stone(' in branch, 'FIX36: unexpected desert landmarks'
+        s = s[:m.start()] + branch + s[m.end():]
+        p.write_text(s, encoding='utf-8')
+
+        cfg = Path('android/export_presets.cfg')
+        s = cfg.read_text(encoding='utf-8')
+        for old, new in [('version/code=4205','version/code=4206'), ('version/name="4.1.7.35"','version/name="4.1.7.36"')]:
+            assert s.count(old) == 1, 'FIX36: unexpected export version'
+            s = s.replace(old, new, 1)
+        cfg.write_text(s, encoding='utf-8')
+        print('FIX36_INSTALL_OK: obsolete 410 x 1540 water plate removed only at Sandhafen')
+        PYFIX36
+        mkdir -p android/tests
+        cat > android/tests/V436DesertSmoke.gd <<'GDFIX36'
+        extends SceneTree
+        const Landmarks = preload("res://scripts/V417Landmarks.gd")
+        const T = preload("res://scripts/V417Territories.gd")
+
+        func _initialize() -> void:
+            call_deferred("_run")
+
+        func _run() -> void:
+            var landmarks := Landmarks.new()
+            root.add_child(landmarks)
+            var center: Vector2 = T.city_world("Sandhafen")
+            var desert: Node3D = landmarks._create("Sandhafen",center)
+            var rocks: int = 0
+            for child in desert.get_children():
+                if child is MeshInstance3D:
+                    var view := child as MeshInstance3D
+                    if view.mesh is BoxMesh:
+                        var size: Vector3 = (view.mesh as BoxMesh).size
+                        if size.x >= 400.0 and size.z >= 1500.0:
+                            push_error("FIX36: obsolete desert water plate still present")
+                            landmarks.free()
+                            quit(1)
+                            return
+                    if view.mesh is CylinderMesh:
+                        rocks += 1
+            if rocks != 4:
+                push_error("FIX36: desert rock landmarks changed")
+                landmarks.free()
+                quit(1)
+                return
+            landmarks.free()
+            print("FIX36_DESERT_OK: obsolete water plate absent; four desert rock landmarks retained")
+            quit(0)
+        GDFIX36
+
     - name: FIX31 bis FIX33 Godot-Tests
       shell: bash
       run: |
@@ -896,15 +963,24 @@ jobs:
         timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V435MarshSmoke.gd 2>&1 | tee build/diagnose/FIX35_Moordorf.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX35: ' build/diagnose/FIX35_Moordorf.log; then exit 1; fi
         grep -Fq 'FIX35_MARSH_OK:' build/diagnose/FIX35_Moordorf.log
-    - name: FIX35 Android APK exportieren und pruefen
+    - name: FIX36 Wuestenobjekt und Felsen testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V436DesertSmoke.gd 2>&1 | tee build/diagnose/FIX36_Wueste.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX36: ' build/diagnose/FIX36_Wueste.log; then exit 1; fi
+        grep -Fq 'FIX36_DESERT_OK:' build/diagnose/FIX36_Wueste.log
+
+    - name: FIX36 Android APK exportieren und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX35.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX36.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX35_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX35_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX36_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX36_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -912,12 +988,12 @@ jobs:
         unzip -Z1 "$APK" | grep -Fx 'AndroidManifest.xml' >/dev/null
         ls -lh "$APK"
         sha256sum "$APK"
-    - name: FIX35 APK als Download hochladen
+    - name: FIX36 APK als Download hochladen
       id: apk_upload
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX35_APK
-        path: build/android/LWOD-Android-V41.7-FIX35.apk
+        name: LWOD_ANDROID_V41_7_FIX36_APK
+        path: build/android/LWOD-Android-V41.7-FIX36.apk
         if-no-files-found: error
         compression-level: 0
         retention-days: 14
@@ -930,12 +1006,12 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX35 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-    - name: FIX35 Testprotokolle hochladen
+        printf '### Android APK Download\n\n[FIX36 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+    - name: FIX36 Testprotokolle hochladen
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_FIX35_TESTPROTOKOLLE
+        name: LWOD_FIX36_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
