@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX34 Moordorf Suempfe und Nebel
+name: LWOD Android V41.7 FIX35 Moordorf Suempfe und Nebel
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX34 APK
+    name: LWOD Android V41.7 FIX35 APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
     container:
@@ -317,11 +317,11 @@ jobs:
         printf '%s  %s\n' 53d660ed5c64227458a14b8cf5e7028d5278b371b414bb63c837625e338c40b4 "$RUNNER_TEMP/lwod_fix32.py" | sha256sum -c -
         python3 -m py_compile "$RUNNER_TEMP/lwod_fix32.py"
         python3 "$RUNNER_TEMP/lwod_fix32.py"
-    - name: FIX34 Wurzelheim Moordorf Suempfe und Nebel korrigieren
+    - name: FIX33 Wurzelheim Kurven und Touch-Ernte korrigieren
       shell: bash
       run: |
         set -euo pipefail
-        base64 -d <<'FIX34_PAYLOAD' | gzip -dc > "$RUNNER_TEMP/lwod_fix33.py"
+        base64 -d <<'FIX33_PAYLOAD' | gzip -dc > "$RUNNER_TEMP/lwod_fix33.py"
         H4sIAAAAAAAC/7W97XIdyXE2+H+u4hgKBwkPGurq6k/adMRYkl9PWNbImpFfx44mECBxSCIEAnwBcEbjX3sPezv7b+9kr2TzyaoGOp9M8FC73omQ
         wDr5UdXV1VmZWZlZb25v3u8+nN+/u7p8tbt8/+Hm9n73e2l+Uf99u//in17ih+fPzq8vbm8uL3559/r28sP93bPjv9/9O4Hu93cAfHGxf7O7uX69
         f353cn7y6vjFFzv57/zubi8c705f33y8vn9+fvzyZTrZPfvnr/8z59359et3N7e795d3d5fXb3fyz/P3ry7ffrz5ePdi9+zL8+9fpK79Qfnc7u8/
@@ -599,11 +599,285 @@ jobs:
         22OxhFJ0zOXfIc480aFY9PfCVDTa67vLi7I8RZKpR+zo2LNybzR6s5tdO599980ff/UvZ3/45qtff6tb9+1evoXy4TXlw6v76Qlv1yeiYd3v6zBl
         jEf2CLNbfnV+ffPh58czzHJ6+eHl72Vjfv5MuN7eXF78cv8XOJzP8Pnsxe56/ebts+O/31VVp4Zc3L1QZWBVbmDV6vcrO+vLvmu7Z/63/Oz48cdr
         2dJfHvWn6RT1y4+ePQHJR8+OZYA6Pc/K9Hz9u2+/k1enU3P3XnShd+Wpzz/IZnf++t3+rmgyetZX9ZBVRMl0/D/gBrCXQIoBAA==
-        FIX34_PAYLOAD
+        FIX33_PAYLOAD
         printf '%s  %s\n' dfc5c83e32c38c8b04794795ca055aaf558aa7ffa6e30dafbf71bfae82b152e4 "$RUNNER_TEMP/lwod_fix33.py" | sha256sum -c -
         python3 -m py_compile "$RUNNER_TEMP/lwod_fix33.py"
         python3 "$RUNNER_TEMP/lwod_fix33.py"
-    - name: FIX31 bis FIX34 Godot-Tests
+    - name: FIX35 Moordorf Suempfe, Totholz und Nebel installieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > "$RUNNER_TEMP/lwod_fix35.py" <<'PYFIX35'
+        from pathlib import Path
+        import re
+        B = Path('android/scripts')
+        Q = Path('android/tests')
+        
+        def once(s, old, new):
+            n=s.count(old)
+            if n != 1:
+                raise RuntimeError(f'FIX35: expected one anchor, got {n}: {old[:140]}')
+            return s.replace(old,new,1)
+        
+        def terrain(s):
+            # Preserve original colour generation: the swamp layer is on the existing terrain mesh.
+            s=once(s,'func color_at(x: float, z: float, height: float) -> Color:', 'func _v435_base_color_at(x: float, z: float, height: float) -> Color:')
+            s=once(s,'func _process(delta: float) -> void:\n','func _process(delta: float) -> void:\n    _v435_update_fog(delta)\n')
+            s=once(s,'            if rng.randf() > chance:\n', '            if marsh: chance = lerpf(0.76,0.95,grove)\n            if rng.randf() > chance:\n')
+            s=once(s,'            # Choose sizes before testing road/town/mountain clearance.', '''            if marsh:
+                        # About 43% tree sites, 43% shrub sites, other sites remain varied.
+                        tree_cut = 0.43
+                        bush_cut = 0.86
+                    # Choose sizes before testing road/town/mountain clearance.''')
+            s=once(s,'                _v427_tree(batches,local,h,width,wood,green,rot,frozen or rng.randf()<0.43)', '''                if marsh and rng.randf()<0.82:
+                            _v435_dead_tree(batches,local,h,rot,rng)
+                        else:
+                            _v427_tree(batches,local,h,width,wood,green,rot,frozen or rng.randf()<0.43)''')
+            # The village itself retains planted living trees; wild trees immediately outside use swamp models.
+            s=once(s,'    _v427_tree(batches,local,h,width,wood,green,rot,city == "Frostholm" or rng.randf()<0.43)', '''    if city == "Moordorf" and outside and serial%5!=0:
+                _v435_dead_tree(batches,local,h,rot,rng)
+            else:
+                _v427_tree(batches,local,h,width,wood,green,rot,city == "Frostholm" or rng.randf()<0.43)''')
+            # Existing vegetation generator owns its meshes, no extra per-tree nodes.
+            return s+'\n'+TERRAIN
+        
+        TERRAIN = r'''
+        # FIX35: deterministic marshes, sharing the existing terrain and forest batches.
+        # There are no additional flat slabs or overlapping water colliders.
+        var v435_fog_env: Environment
+        var v435_old_fog_enabled: bool = false
+        var v435_old_fog_density: float = 0.0
+        var v435_old_fog_color: Color = Color.WHITE
+        var v435_fog_amount: float = 0.0
+        
+        func v435_swamp_strength(p: Vector2) -> float:
+            if V417Territories.region_index(p) != 8:
+                return 0.0
+            # Large, irregular bog pools and dry islands. Coordinates are continuous across chunks.
+            var a: float = sin(p.x*0.023 + 1.25*sin(p.y*0.016))
+            var b: float = cos(p.y*0.028 + 0.95*sin(p.x*0.019))
+            var c: float = sin((p.x+p.y)*0.046)*0.18
+            var field: float = (a*0.55+b*0.45+c)
+            var wet: float = smoothstep(-0.05,0.54,field)
+            if wet<=0.001:
+                return 0.0
+            # Keep all settlements, entrances, mountain walls, gorge edges and footpaths dry.
+            wet *= smoothstep(62.0,92.0,p.distance_to(V417Territories.city_world("Moordorf")))
+            wet *= smoothstep(55.0,82.0,p.distance_to(V417Territories.city_world("Steinland")))
+            if wet<=0.001 or V417Territories.v421_no_decoration(p,5.0):
+                return 0.0
+            _v425_prepare()
+            for segment in v425_road_segments:
+                var start: Vector2 = segment[0]
+                var finish: Vector2 = segment[1]
+                if p.x<minf(start.x,finish.x)-24.0 or p.x>maxf(start.x,finish.x)+24.0 or p.y<minf(start.y,finish.y)-24.0 or p.y>maxf(start.y,finish.y)+24.0:
+                    continue
+                var d: float = p.distance_to(Geometry2D.get_closest_point_to_segment(p,start,finish))
+                wet *= smoothstep(10.0,24.0,d)
+                if wet<=0.001:
+                    return 0.0
+            return clampf(wet,0.0,1.0)
+        
+        func color_at(x: float, z: float, height: float) -> Color:
+            var original: Color = _v435_base_color_at(x,z,height)
+            var wet: float = v435_swamp_strength(Vector2(x,z))
+            if wet<=0.0: return original
+            # Wet earth at the edge, olive/brown water and mud in the centre.
+            var mud: Color = Color("#35413a").lerp(Color("#263d36"),smoothstep(0.35,0.9,wet))
+            var shimmer: float = 0.5+0.5*sin(x*0.16+sin(z*0.08)*2.0)
+            mud = mud.lerp(Color("#546857"),shimmer*0.16)
+            return original.lerp(mud,wet*0.91)
+        
+        func _v435_wood_segment(batches: Dictionary, a: Vector3, b: Vector3, diameter: float, color: Color) -> void:
+            var axis: Vector3 = (b-a).normalized()
+            var across: Vector3 = axis.cross(Vector3.FORWARD).normalized()
+            if across.length_squared()<0.1: across = axis.cross(Vector3.RIGHT).normalized()
+            var frame := Basis(across,axis,across.cross(axis).normalized())
+            _v425_add(batches,"Holz",(a+b)*0.5,Vector3(diameter,a.distance_to(b),diameter),color,frame)
+        
+        func _v435_dead_tree(batches: Dictionary, local: Vector3, h: float, turn: Basis, rng: RandomNumberGenerator) -> void:
+            var height: float = h*rng.randf_range(0.70,0.98)
+            var color: Color = Color("#50483a").lerp(Color("#827b65"),rng.randf()*0.62)
+            var lean: Vector3 = turn*Vector3(height*0.13,0,height*0.06)
+            var base: Vector3 = local-Vector3.UP*0.15
+            var mid: Vector3 = base+Vector3.UP*height*0.54+lean*0.40
+            var top: Vector3 = base+Vector3.UP*height+lean
+            _v435_wood_segment(batches,base,mid,height*0.11,color.darkened(0.12))
+            _v435_wood_segment(batches,mid,top,height*0.065,color)
+            for i in range(3):
+                var angle: float = float(i)*2.39996+rng.randf_range(-0.4,0.4)
+                var side: Vector3 = turn*Vector3(cos(angle),0,sin(angle))
+                var start: Vector3 = mid.lerp(top,0.12+float(i)*0.21)
+                var elbow: Vector3 = start+side*height*0.17+Vector3.UP*height*0.13
+                var tip: Vector3 = elbow+side*height*0.11+Vector3.UP*height*rng.randf_range(0.08,0.17)
+                _v435_wood_segment(batches,start,elbow,height*0.036,color)
+                _v435_wood_segment(batches,elbow,tip,height*0.015,color.lightened(0.12))
+            # No green crowns: jagged broken trunks and bare branches are visibly rotten.
+        
+        func _v435_restore_fog() -> void:
+            if is_instance_valid(v435_fog_env):
+                v435_fog_env.fog_density = v435_old_fog_density
+                v435_fog_env.fog_light_color = v435_old_fog_color
+                v435_fog_env.fog_enabled = v435_old_fog_enabled
+            v435_fog_env = null
+            v435_fog_amount = 0.0
+        
+        func _v435_update_fog(delta: float) -> void:
+            if not is_instance_valid(game) or not is_instance_valid(game.hero) or not is_inside_tree():
+                _v435_restore_fog()
+                return
+            var p: Vector3 = game.hero.global_position
+            var in_marsh: bool = game.state == 2 and V417Territories.region_index(Vector2(p.x,p.z))==8
+            if not in_marsh and not is_instance_valid(v435_fog_env): return
+            var world: World3D = get_world_3d()
+            var env: Environment = world.environment if world!=null else null
+            var camera: Camera3D = get_viewport().get_camera_3d()
+            if is_instance_valid(camera) and camera.environment!=null: env = camera.environment
+            if env==null:
+                _v435_restore_fog()
+                return
+            if v435_fog_env!=env:
+                _v435_restore_fog()
+                if not in_marsh: return
+                v435_fog_env = env
+                v435_old_fog_enabled = env.fog_enabled
+                v435_old_fog_density = env.fog_density
+                v435_old_fog_color = env.fog_light_color
+            v435_fog_amount = move_toward(v435_fog_amount,1.0 if in_marsh else 0.0,delta*0.75)
+            if not in_marsh and v435_fog_amount<=0.0:
+                _v435_restore_fog()
+                return
+            var original_density: float = v435_old_fog_density if v435_old_fog_enabled else 0.0
+            env.fog_enabled = true
+            env.fog_density = lerpf(original_density,maxf(original_density,0.0023),v435_fog_amount)
+            env.fog_light_color = v435_old_fog_color.lerp(Color("#9cae9b"),v435_fog_amount*0.85)
+        '''
+        
+        MOTION = r'''
+        # FIX35: only normal walking is impaired; flight uses its original movement branch.
+        func v435_swamp(p: Vector3) -> float:
+            if not is_instance_valid(terrain): return 0.0
+            return float(terrain.call("v435_swamp_strength",Vector2(p.x,p.z)))
+        
+        func v435_before_move(hero: CharacterBody3D) -> void:
+            if not is_instance_valid(hero): return
+            var factor: float = lerpf(1.0,0.48,v435_swamp(hero.global_position))
+            hero.velocity.x *= factor
+            hero.velocity.z *= factor
+        '''
+        
+        def motion(s):
+            # A maximum 34 cm of visual immersion; not a new collider or altered floor plane.
+            s=once(s,'    p.y = _floor_at(p) + 0.085','    p.y = _floor_at(p) + 0.085 - 0.34*v435_swamp(p)')
+            return s+'\n'+MOTION
+        
+        def main(s):
+            a='        var v431_previous: Vector3 = hero.global_position\n        hero.move_and_slide()'
+            return once(s,a,'        var v431_previous: Vector3 = hero.global_position\n        if terrain_motion != null:\n            terrain_motion.call("v435_before_move",hero)\n        hero.move_and_slide()')
+        
+        def landmarks(s):
+            # Old swamp trees are replaced by the same chunk vegetation used everywhere.
+            pat=r'(?ms)^    elif id == "Moordorf":\n.*?(?=^    elif |^    return root)'
+            s,n=re.subn(pat,'    elif id == "Moordorf":\n        pass # FIX35: terrain batches own all swamp trees and ground details.\n',s,count=1)
+            if n!=1: raise RuntimeError('FIX35: old Moordorf landmark branch missing')
+            return s
+        
+        SMOKE = r'''
+        extends SceneTree
+        const T = preload("res://scripts/V417Territories.gd")
+        const Terrain = preload("res://scripts/V27Terrain.gd")
+        const Motion = preload("res://scripts/V31TerrainMotion.gd")
+        
+        func _initialize() -> void:
+            call_deferred("_run")
+        
+        func fail(message: String) -> void:
+            push_error("FIX35: "+message)
+            quit(1)
+        
+        func _run() -> void:
+            var terrain := Terrain.new()
+            var center: Vector2 = T.city_world("Moordorf")
+            var target: Vector2 = center
+            var maximum: float = 0.0
+            var wet_count: int = 0
+            var dry_count: int = 0
+            for iz in range(-14,15):
+                for ix in range(-14,15):
+                    var p: Vector2 = center+Vector2(ix*32.0,iz*32.0)
+                    var wet: float = terrain.v435_swamp_strength(p)
+                    if wet>0.65: wet_count+=1
+                    if wet<0.05: dry_count+=1
+                    if wet>maximum:
+                        maximum = wet
+                        target = p
+            if wet_count<20 or dry_count<20 or maximum<0.92:
+                terrain.free()
+                fail("marsh pools and dry islands missing")
+                return
+            if terrain.v435_swamp_strength(center)>0.001 or terrain.v435_swamp_strength(T.city_world("Sonnental"))>0.001:
+                terrain.free()
+                fail("mud affects villages or another region")
+                return
+            for route in T.ROUTES:
+                var points: PackedVector2Array = T.road_world(route,true)
+                for i in range(points.size()-1):
+                    var a: Vector2 = points[i]
+                    var b: Vector2 = points[i+1]
+                    if terrain.v435_swamp_strength(a.lerp(b,0.5))>0.001:
+                        terrain.free()
+                        fail("mud on road")
+                        return
+            var batches: Dictionary = {"Holz":[],"Laub":[],"Nadeln":[],"Fels":[],"Busch":[]}
+            var rng := RandomNumberGenerator.new()
+            rng.seed = 435
+            terrain._v435_dead_tree(batches,Vector3.ZERO,12.0,Basis.IDENTITY,rng)
+            if batches["Holz"].size()!=8 or not batches["Laub"].is_empty() or not batches["Nadeln"].is_empty():
+                terrain.free()
+                fail("bare branches not generated")
+                return
+            var motion := Motion.new()
+            motion.terrain = terrain
+            var hero := CharacterBody3D.new()
+            root.add_child(hero)
+            hero.global_position = Vector3(target.x,0,target.y)
+            hero.velocity = Vector3(10,0,0)
+            motion.v435_before_move(hero)
+            var reduced: float = hero.velocity.x
+            if reduced<4.7 or reduced>5.3 or motion.v435_swamp(hero.global_position)<0.92:
+                hero.free(); motion.free(); terrain.free()
+                fail("walking slowdown is not applied")
+                return
+            hero.global_position = Vector3(center.x,0,center.y)
+            hero.velocity = Vector3(10,0,0)
+            motion.v435_before_move(hero)
+            if not is_equal_approx(hero.velocity.x,10.0):
+                hero.free(); motion.free(); terrain.free()
+                fail("dry walking changed")
+                return
+            hero.free(); motion.free(); terrain.free()
+            print("FIX35_MARSH_OK: wet=",wet_count," dry=",dry_count," walking=",reduced," bare branches and dry roads")
+            quit(0)
+        '''
+        
+        def install():
+            for name,fn in [('V27Terrain.gd',terrain),('V31TerrainMotion.gd',motion),('Main.gd',main),('V417Landmarks.gd',landmarks)]:
+                p=B/name
+                src=p.read_text(encoding='utf-8')
+                p.write_text(fn(src),encoding='utf-8')
+            (Q/'V435MarshSmoke.gd').write_text(SMOKE,encoding='utf-8')
+            p=Path('android/export_presets.cfg')
+            s=p.read_text(encoding='utf-8')
+            s=once(s,'version/code=4203','version/code=4205')
+            s=once(s,'version/name="4.1.7.33"','version/name="4.1.7.35"')
+            p.write_text(s,encoding='utf-8')
+            print('FIX35_INSTALL_OK: real swamp terrain, walking, fog and bare trees')
+        
+        if __name__=='__main__': install()
+        PYFIX35
+        python3 -m py_compile "$RUNNER_TEMP/lwod_fix35.py"
+        python3 "$RUNNER_TEMP/lwod_fix35.py"
+    - name: FIX31 bis FIX33 Godot-Tests
       shell: bash
       run: |
         set -euo pipefail
@@ -613,16 +887,24 @@ jobs:
           echo "::endgroup::"
         done
         grep -Fq "FIX32_GARDEN_OK:" build/diagnose/FIX31_Wurzelheim_Test.log
-        grep -Fq "FIX34_TOUCH_ROADS_OK:" build/diagnose/FIX31_Wurzelheim_Test.log
-    - name: FIX34 Android APK exportieren und pruefen
+        grep -Fq "FIX33_TOUCH_ROADS_OK:" build/diagnose/FIX31_Wurzelheim_Test.log
+    - name: FIX35 Suempfe und Laufgeschwindigkeit testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V435MarshSmoke.gd 2>&1 | tee build/diagnose/FIX35_Moordorf.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX35: ' build/diagnose/FIX35_Moordorf.log; then exit 1; fi
+        grep -Fq 'FIX35_MARSH_OK:' build/diagnose/FIX35_Moordorf.log
+    - name: FIX35 Android APK exportieren und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX34.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX35.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX34_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX34_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX35_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX35_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -630,12 +912,12 @@ jobs:
         unzip -Z1 "$APK" | grep -Fx 'AndroidManifest.xml' >/dev/null
         ls -lh "$APK"
         sha256sum "$APK"
-    - name: FIX34 APK als Download hochladen
+    - name: FIX35 APK als Download hochladen
       id: apk_upload
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX34_APK
-        path: build/android/LWOD-Android-V41.7-FIX34.apk
+        name: LWOD_ANDROID_V41_7_FIX35_APK
+        path: build/android/LWOD-Android-V41.7-FIX35.apk
         if-no-files-found: error
         compression-level: 0
         retention-days: 14
@@ -648,12 +930,12 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX34 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-    - name: FIX34 Testprotokolle hochladen
+        printf '### Android APK Download\n\n[FIX35 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+    - name: FIX35 Testprotokolle hochladen
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_FIX34_TESTPROTOKOLLE
+        name: LWOD_FIX35_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
