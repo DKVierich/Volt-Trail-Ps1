@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX38 Alte Gebirgskette entfernen
+name: LWOD Android V41.7 FIX39 Sichtweite und vorausschauendes Laden
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX38 APK
+    name: LWOD Android V41.7 FIX39 APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
     container:
@@ -1151,6 +1151,201 @@ jobs:
             print("FIX38_OLD_BOUNDARY_OK: old visual and collision constructors inactive; current map perimeter retained")
             quit(0)
         GDFIX38
+    - name: FIX39 Sichtweite und Terrain-Vorladen installieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > /tmp/lwod_fix39_stream.gd <<'GDFIX39STREAM'
+        # FIX39: prepare one real terrain chunk per interval, ahead of the actor.
+        # Cached chunks live under an invisible, disabled parent until promoted.
+        const V439_CACHE_LIMIT: int = 16
+        const V439_PREFETCH_INTERVAL: float = 0.12
+        var v439_cache: Dictionary = {}
+        var v439_cache_root: Node3D
+        var v439_clock: float = 0.0
+        var v439_hits: int = 0
+
+        func _v439_valid_cell(id: Vector2i) -> bool:
+            return absf(float(id.x)*CHUNK) <= EDGE and absf(float(id.y)*CHUNK) <= EDGE
+
+        func _v439_take(id: Vector2i) -> Node3D:
+            if v439_cache.has(id):
+                var prepared: Node3D = v439_cache[id] as Node3D
+                v439_cache.erase(id)
+                if is_instance_valid(prepared):
+                    prepared.reparent(self,true)
+                    v439_hits += 1
+                    return prepared
+            return _make_chunk(id.x,id.y)
+
+        func _v439_trim(cell: Vector2i) -> void:
+            for key in v439_cache.keys():
+                var id: Vector2i = key
+                if maxi(absi(id.x-cell.x),absi(id.y-cell.y)) > RADIUS+1 or chunks.has(id):
+                    var old: Node3D = v439_cache[id] as Node3D
+                    v439_cache.erase(id)
+                    if is_instance_valid(old):
+                        old.queue_free()
+
+        func _v439_score(id: Vector2i, target: Vector2) -> float:
+            var p := Vector2((float(id.x)+0.5)*CHUNK,(float(id.y)+0.5)*CHUNK)
+            return p.distance_squared_to(target)
+
+        func _v439_prefetch_one(p: Vector2, direction: Vector2) -> void:
+            if direction.length_squared() < 0.01:
+                return
+            var cell := Vector2i(floori(p.x/CHUNK),floori(p.y/CHUNK))
+            if cell != current_cell:
+                return # regular streamer owns the active area during a teleport or crossing
+            _v439_trim(cell)
+            var target: Vector2 = p+direction.normalized()*CHUNK*float(RADIUS+1)
+            var chosen := cell
+            var best: float = INF
+            for ix in range(cell.x-RADIUS-1,cell.x+RADIUS+2):
+                for iz in range(cell.y-RADIUS-1,cell.y+RADIUS+2):
+                    var id := Vector2i(ix,iz)
+                    if maxi(absi(ix-cell.x),absi(iz-cell.y)) != RADIUS+1:
+                        continue
+                    if not _v439_valid_cell(id) or chunks.has(id) or v439_cache.has(id):
+                        continue
+                    var score: float = _v439_score(id,target)
+                    if score < best:
+                        chosen = id
+                        best = score
+            if chosen == cell:
+                return
+            if v439_cache.size() >= V439_CACHE_LIMIT:
+                var worst_id := cell
+                var worst: float = -1.0
+                for key in v439_cache.keys():
+                    var id: Vector2i = key
+                    var score: float = _v439_score(id,target)
+                    if score > worst:
+                        worst = score
+                        worst_id = id
+                if best >= worst:
+                    return
+                var old: Node3D = v439_cache[worst_id] as Node3D
+                v439_cache.erase(worst_id)
+                if is_instance_valid(old):
+                    old.queue_free()
+            if not is_instance_valid(v439_cache_root):
+                v439_cache_root = Node3D.new()
+                v439_cache_root.name = "V439TerrainVorladen"
+                v439_cache_root.visible = false
+                v439_cache_root.process_mode = Node.PROCESS_MODE_DISABLED
+                add_child(v439_cache_root)
+            var prepared: Node3D = _make_chunk(chosen.x,chosen.y)
+            prepared.reparent(v439_cache_root,true)
+            v439_cache[chosen] = prepared
+
+        func _v439_tick(delta: float) -> void:
+            v439_clock += delta
+            if v439_clock < V439_PREFETCH_INTERVAL:
+                return
+            v439_clock = 0.0
+            var actor: CharacterBody3D = game.hero as CharacterBody3D
+            if not is_instance_valid(actor):
+                return
+            var direction := Vector2(actor.velocity.x,actor.velocity.z)
+            if direction.length_squared() < 0.36:
+                return
+            var p := Vector2(actor.global_position.x,actor.global_position.z)
+            _v439_prefetch_one(p,direction)
+        GDFIX39STREAM
+        python3 - <<'PYFIX39'
+        from pathlib import Path
+        import re
+        B=Path('android/scripts')
+        def one(s,a,b):
+            assert s.count(a)==1,'FIX39 source anchor: '+a[:100]
+            return s.replace(a,b,1)
+        p=B/'V27Terrain.gd';s=p.read_text(encoding='utf-8')
+        assert 'func _v437_prepare_grid()' in s and 'func _v412_stream_near(' in s and 'func _v425_forest(' in s
+        s=one(s,'const RADIUS: int = 2','const RADIUS: int = 3')
+        s=one(s,'chunks[id] = _make_chunk(ix,iz)','chunks[id] = _v439_take(id)')
+        s=one(s,'    if stream_clock >= 0.5:\n        stream_clock=0.0\n        _stream()','    if stream_clock >= 0.15:\n        stream_clock=0.0\n        _stream()\n    _v439_tick(delta)')
+        s=one(s,'    _v412_stream_near(force)\n','    _v412_stream_near(force)\n    if force or prev != current_cell:\n        _v439_trim(current_cell)\n')
+        # The existing horizon uses RADIUS for its exact hole and seam. Keep this geometry.
+        s+='\n'+Path('/tmp/lwod_fix39_stream.gd').read_text(encoding='utf-8')+'\n'
+        p.write_text(s,encoding='utf-8')
+        p=B/'V417MountainWall.gd';s=p.read_text(encoding='utf-8')
+        s=one(s,'const MOUNTAIN_VIEW_FAR: float = 35000.0','const MOUNTAIN_VIEW_FAR: float = 45000.0')
+        p.write_text(s,encoding='utf-8')
+        p=B/'V408Regions.gd';s=p.read_text(encoding='utf-8')
+        for name,old,new in [('LOAD_DISTANCE','650','1100.0'),('UNLOAD_DISTANCE','950','1550.0')]:
+            s,n=re.subn(r'(?m)^(const '+name+r'\s*(?::\s*float\s*)?[:=]+\s*)'+old+r'(?:\.0)?\s*$',lambda m:m[1]+new,s);assert n==1,'FIX39 missing '+name
+        p.write_text(s,encoding='utf-8')
+        p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
+        s=one(s,'version/code=4208','version/code=4209');s=one(s,'version/name="4.1.7.38"','version/name="4.1.7.39"');p.write_text(s,encoding='utf-8')
+        print('FIX39_INSTALL_OK: 7x7 active cells, 16 bounded prefetched cells, 45000 camera far, early town streaming')
+        PYFIX39
+        mkdir -p android/tests
+        cat > android/tests/V439StreamSmoke.gd <<'GDFIX39TEST'
+        extends SceneTree
+        const T = preload("res://scripts/V417Territories.gd")
+        const Terrain = preload("res://scripts/V27Terrain.gd")
+        const Wall = preload("res://scripts/V417MountainWall.gd")
+        const Regions = preload("res://scripts/V408Regions.gd")
+        class TestGame:
+            extends Node3D
+            var hero: CharacterBody3D
+            var state: int = 2
+
+        func _initialize() -> void:
+            call_deferred("_run")
+
+        func _fail(message: String) -> void:
+            push_error("FIX39: "+message)
+            quit(1)
+
+        func _run() -> void:
+            var g := TestGame.new()
+            root.add_child(g)
+            g.hero = CharacterBody3D.new()
+            g.add_child(g.hero)
+            var city: Vector2 = T.city_world("Sandhafen")
+            var cell := Vector2i(floori(city.x/Terrain.CHUNK),floori(city.y/Terrain.CHUNK))
+            var start := Vector2((float(cell.x)+0.5)*Terrain.CHUNK,(float(cell.y)+0.5)*Terrain.CHUNK)
+            g.hero.position = Vector3(start.x,100.0,start.y)
+            var terrain := Terrain.new()
+            g.add_child(terrain)
+            terrain.setup(g,null,null,null)
+            if Terrain.RADIUS != 3 or Wall.MOUNTAIN_VIEW_FAR < 45000.0 or Regions.LOAD_DISTANCE < 1100.0:
+                _fail("view distance settings missing")
+                return
+            if terrain.chunks.size()!=49:
+                _fail("expected 49 active terrain cells")
+                return
+            # Prepare leading cells one by one; they cannot render over the existing horizon.
+            for i in range(20):
+                terrain._v439_prefetch_one(start,Vector2.RIGHT)
+            if terrain.v439_cache.size() != Terrain.V439_CACHE_LIMIT or terrain.v439_cache_root.visible:
+                _fail("cache budget or hidden parent incorrect")
+                return
+            var expected := cell+Vector2i(Terrain.RADIUS+1,0)
+            if not terrain.v439_cache.has(expected):
+                _fail("leading cell not prefetched")
+                return
+            var original: Node3D = terrain.v439_cache[expected]
+            g.hero.position.x += Terrain.CHUNK
+            terrain._stream()
+            if terrain.v439_hits < 1 or terrain.chunks.get(expected) != original or original.get_parent()!=terrain or not original.is_visible_in_tree():
+                _fail("prefetched mesh not reused on crossing")
+                return
+            if terrain.chunks.size()!=49 or terrain.v439_cache.has(expected):
+                _fail("duplicate or missing active cells")
+                return
+            # Teleport must discard stale cached nodes and load the destination normally.
+            var next: Vector2 = T.city_world("Moordorf")
+            g.hero.position = Vector3(next.x,100.0,next.y)
+            terrain._stream(true)
+            if not terrain.v439_cache.is_empty() or not terrain.chunks.has(terrain.current_cell):
+                _fail("cache leaked across teleport")
+                return
+            print("FIX39_STREAM_OK: 49 active cells, capped hidden prefetch, actual reuse, teleport and camera range")
+            quit(0)
+        GDFIX39TEST
     - name: FIX31 bis FIX33 Godot-Tests
       shell: bash
       run: |
@@ -1194,15 +1389,23 @@ jobs:
         timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V438OldBoundarySmoke.gd 2>&1 | tee build/diagnose/FIX38_Weltgrenzen.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX38: ' build/diagnose/FIX38_Weltgrenzen.log; then exit 1; fi
         grep -Fq 'FIX38_OLD_BOUNDARY_OK:' build/diagnose/FIX38_Weltgrenzen.log
-    - name: FIX38 Android APK exportieren und pruefen
+    - name: FIX39 Sichtweite und Chunk-Vorladen testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 180s godot --headless --path android --quit-after 300 --script res://tests/V439StreamSmoke.gd 2>&1 | tee build/diagnose/FIX39_Sichtweite.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX39: ' build/diagnose/FIX39_Sichtweite.log; then exit 1; fi
+        grep -Fq 'FIX39_STREAM_OK:' build/diagnose/FIX39_Sichtweite.log
+    - name: FIX39 Android APK exportieren und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX38.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX39.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX38_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX38_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX39_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX39_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -1210,12 +1413,12 @@ jobs:
         unzip -Z1 "$APK" | grep -Fx 'AndroidManifest.xml' >/dev/null
         ls -lh "$APK"
         sha256sum "$APK"
-    - name: FIX38 APK als Download hochladen
+    - name: FIX39 APK als Download hochladen
       id: apk_upload
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX38_APK
-        path: build/android/LWOD-Android-V41.7-FIX38.apk
+        name: LWOD_ANDROID_V41_7_FIX39_APK
+        path: build/android/LWOD-Android-V41.7-FIX39.apk
         if-no-files-found: error
         compression-level: 0
         retention-days: 14
@@ -1228,12 +1431,12 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX38 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-    - name: FIX38 Testprotokolle hochladen
+        printf '### Android APK Download\n\n[FIX39 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+    - name: FIX39 Testprotokolle hochladen
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_FIX38_TESTPROTOKOLLE
+        name: LWOD_FIX39_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
