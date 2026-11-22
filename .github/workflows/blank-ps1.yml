@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX24 Technische Bereinigung
+name: LWOD Android V41.7 FIX25 Technische Bereinigung
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX24 APK
+    name: LWOD Android V41.7 FIX25 APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
     container:
@@ -902,6 +902,120 @@ jobs:
         s=s.replace(a,b+a,1)
         p.write_text(s,encoding='utf-8')
         PYTEST24
+    - name: FIX25 Natur und alte Aussenposten korrigieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > "$RUNNER_TEMP/lwod_fix25.py" <<'PYFIX25'
+        NATURE='# FIX25: One vegetation system on the exact rendered terrain triangles.\n# Shared low-poly resources; each chunk owns at most five MultiMeshes.\nvar v425_meshes: Dictionary = {}\nvar v425_mat: StandardMaterial3D\nvar v425_road_segments: Array[PackedVector2Array] = []\n\nfunc _v425_prepare() -> void:\n    if not v425_meshes.is_empty():\n        return\n    var bark := CylinderMesh.new()\n    bark.top_radius = 0.33\n    bark.bottom_radius = 0.50\n    bark.height = 1.0\n    bark.radial_segments = 7\n    v425_meshes["Holz"] = bark\n    var crown := SphereMesh.new()\n    crown.radius = 0.5\n    crown.height = 1.0\n    crown.radial_segments = 9\n    crown.rings = 5\n    v425_meshes["Laub"] = crown\n    var pine := CylinderMesh.new()\n    pine.top_radius = 0.07\n    pine.bottom_radius = 0.50\n    pine.height = 1.0\n    pine.radial_segments = 8\n    v425_meshes["Nadeln"] = pine\n    var rock := SphereMesh.new()\n    rock.radius = 0.5\n    rock.height = 1.0\n    rock.radial_segments = 6\n    rock.rings = 3\n    v425_meshes["Fels"] = rock\n    var shrub := SphereMesh.new()\n    shrub.radius = 0.5\n    shrub.height = 1.0\n    shrub.radial_segments = 7\n    shrub.rings = 4\n    v425_meshes["Busch"] = shrub\n    v425_mat = StandardMaterial3D.new()\n    v425_mat.vertex_color_use_as_albedo = true\n    v425_mat.roughness = 0.95\n    for route in V417Territories.ROUTES:\n        var path: PackedVector2Array = V417Territories.road_world(route,true)\n        for i in range(path.size()-1):\n            v425_road_segments.append(PackedVector2Array([path[i],path[i+1]]))\n\nfunc _v425_allowed(p: Vector2, clearance: float) -> bool:\n    var uv: Vector2 = V417Territories.world_to_map(p)\n    if V417Territories.v421_border_at(uv) or V417Territories.v421_no_decoration(p,clearance):\n        return false\n    # Check footprints, not just the centre, at the mountain and outer boundary.\n    for off in [Vector2(clearance,0),Vector2(-clearance,0),Vector2(0,clearance),Vector2(0,-clearance)]:\n        var q: Vector2 = p+off\n        if V417Territories.v421_border_at(V417Territories.world_to_map(q)) or V417Territories.mountain_at(q):\n            return false\n    for city in V417Territories.CITIES:\n        var limit: float = 68.0\n        if city == "Sonnental": limit = 110.0\n        elif city == "Ruine" or city == "Tor": limit = 160.0\n        elif city == "Steinland": limit = 55.0\n        if p.distance_squared_to(V417Territories.city_world(String(city))) < pow(limit+clearance,2):\n            return false\n    for segment in v425_road_segments:\n        var a: Vector2 = segment[0]\n        var b: Vector2 = segment[1]\n        var pad: float = clearance+4.5\n        if p.x < minf(a.x,b.x)-pad or p.x > maxf(a.x,b.x)+pad or p.y < minf(a.y,b.y)-pad or p.y > maxf(a.y,b.y)+pad:\n            continue\n        var near: Vector2 = Geometry2D.get_closest_point_to_segment(p,a,b)\n        if near.distance_squared_to(p) < pad*pad:\n            return false\n    return true\n\n# Reuse the vertex heights that _emit_vertex just calculated for this chunk.\nfunc _v425_ground(p: Vector2) -> float:\n    var step: float = CHUNK/float(RESOLUTION)\n    var a := Vector2(floor(p.x/step)*step,floor(p.y/step)*step)\n    var b: Vector2 = a+Vector2(step,0)\n    var c: Vector2 = a+Vector2(0,step)\n    var d: Vector2 = a+Vector2(step,step)\n    if not (v414_vertex_cache.has(a) and v414_vertex_cache.has(b) and v414_vertex_cache.has(c) and v414_vertex_cache.has(d)):\n        return surface_height_at(p.x,p.y)\n    var f: Vector2 = (p-a)/step\n    var h0: float = float(v414_vertex_cache[a][0])\n    var h1: float = float(v414_vertex_cache[b][0])\n    var h2: float = float(v414_vertex_cache[c][0])\n    var h3: float = float(v414_vertex_cache[d][0])\n    if f.x+f.y<=1.0:\n        return h0+(h1-h0)*f.x+(h2-h0)*f.y\n    return h3+(h2-h3)*(1.0-f.x)+(h1-h3)*(1.0-f.y)\n\nfunc _v425_add(data: Dictionary, kind: String, at: Vector3, dimensions: Vector3, tint: Color, turn: Basis = Basis.IDENTITY) -> void:\n    var shape: Basis = turn.scaled_local(dimensions)\n    data[kind].append([Transform3D(shape,at),tint])\n\nfunc _v425_forest(root: Node3D, cx: int, cz: int) -> void:\n    _v425_prepare()\n    var batches: Dictionary = {"Holz":[],"Laub":[],"Nadeln":[],"Fels":[],"Busch":[]}\n    var rng := RandomNumberGenerator.new()\n    rng.seed = int(425001+cx*73856093+cz*19349663)\n    var origin := Vector2(float(cx)*CHUNK,float(cz)*CHUNK)\n    var step: float = CHUNK/14.0\n    var trees: int = 0\n    var shrubs: int = 0\n    var rocks: int = 0\n    var logs: int = 0\n    for iz in range(14):\n        for ix in range(14):\n            var p: Vector2 = origin+Vector2((float(ix)+rng.randf_range(0.30,0.70))*step,(float(iz)+rng.randf_range(0.30,0.70))*step)\n            var region: int = V417Territories.region_index(p)\n            var dry: bool = region == 7 or region == 10\n            var stone_land: bool = region == 3 or region == 4 or region == 5 or region == 6\n            var frozen: bool = region == 11\n            var forest: bool = region == 9 or region == 0 or region == 1\n            var marsh: bool = region == 8\n            var chance: float = 0.91 if forest else (0.72 if marsh or frozen else (0.43 if dry or stone_land else 0.82))\n            if rng.randf() > chance:\n                continue\n            if region == 7 and p.distance_to(V417Territories.city_world("Aschefurt")+Vector2(550,-900)) < 720.0:\n                continue\n            var pick: float = rng.randf()\n            var tree_cut: float = 0.0 if dry or stone_land else (0.56 if forest else 0.36)\n            var bush_cut: float = tree_cut + (0.06 if region == 7 or frozen else (0.18 if dry or stone_land else 0.27))\n            var clearance: float = 6.5 if pick < tree_cut else 3.5\n            if not _v425_allowed(p,clearance):\n                continue\n            var y: float = _v425_ground(p)\n            var local := Vector3(p.x-origin.x,y,p.y-origin.y)\n            var yaw: float = rng.randf_range(0.0,TAU)\n            var rot := Basis(Vector3.UP,yaw)\n            var wood := Color("#72503a").lerp(Color("#473629"),rng.randf()*0.65)\n            var green := Color("#285737").lerp(Color("#65934c"),rng.randf())\n            if marsh: green = Color("#315743").lerp(Color("#60846a"),rng.randf())\n            if frozen: green = Color("#567c85").lerp(Color("#dbe8eb"),rng.randf_range(0.3,0.8))\n            if pick < tree_cut:\n                var h: float = rng.randf_range(8.0,16.0) if not forest else rng.randf_range(10.0,20.0)\n                var width: float = h*rng.randf_range(0.32,0.47)\n                var stem: float = h*0.66\n                var diameter: float = h*0.075\n                _v425_add(batches,"Holz",local+Vector3(0,stem*0.5-0.16,0),Vector3(diameter,stem+0.32,diameter),wood,rot)\n                if frozen or rng.randf()<0.43:\n                    for layer in range(3):\n                        var factor: float = 1.0-float(layer)*0.24\n                        _v425_add(batches,"Nadeln",local+Vector3(0,h*(0.43+float(layer)*0.19),0),Vector3(width*factor,h*0.39,width*factor),green.lightened(float(layer)*0.045),rot)\n                else:\n                    _v425_add(batches,"Laub",local+Vector3(0,h*0.73,0),Vector3(width,h*0.52,width*0.91),green,rot)\n                    _v425_add(batches,"Laub",local+rot*Vector3(width*0.24,h*0.79,-width*0.12),Vector3(width*0.69,h*0.42,width*0.72),green.lightened(0.08),rot)\n                    _v425_add(batches,"Laub",local+rot*Vector3(-width*0.25,h*0.64,width*0.15),Vector3(width*0.63,h*0.36,width*0.67),green.darkened(0.08),rot)\n                trees += 1\n            elif pick < bush_cut and region != 7:\n                var size: float = rng.randf_range(0.9,2.3)\n                var shade: Color = green if not dry else Color("#8e9270")\n                _v425_add(batches,"Busch",local+Vector3(0,size*0.34,0),Vector3(size*1.35,size*0.9,size),shade,rot)\n                _v425_add(batches,"Busch",local+rot*Vector3(size*0.47,size*0.26,0),Vector3(size*0.87,size*0.68,size*0.8),shade.lightened(0.10),rot)\n                shrubs += 1\n            elif not dry and not stone_land and not frozen and pick>0.92:\n                var length: float = rng.randf_range(5.0,10.0)\n                var direction := Vector2(cos(yaw),sin(yaw))\n                var end_a: Vector2 = p-direction*length*0.5\n                var end_b: Vector2 = p+direction*length*0.5\n                if not _v425_allowed(p,length*0.5+1.0):\n                    continue\n                var radius: float = rng.randf_range(0.35,0.65)\n                var a := Vector3(end_a.x-origin.x,_v425_ground(end_a)+radius,end_a.y-origin.y)\n                var b := Vector3(end_b.x-origin.x,_v425_ground(end_b)+radius,end_b.y-origin.y)\n                var axis: Vector3 = (b-a).normalized()\n                var across: Vector3 = axis.cross(Vector3.UP).normalized()\n                if across.length_squared()<0.01: continue\n                var log_basis := Basis(across,axis,across.cross(axis).normalized())\n                _v425_add(batches,"Holz",(a+b)*0.5,Vector3(radius*2.0,a.distance_to(b),radius*2.0),wood,log_basis)\n                logs += 1\n            else:\n                var size: float = rng.randf_range(0.55,1.6) if rng.randf()<0.64 else rng.randf_range(2.0,5.0)\n                var shade := Color("#797b70").lerp(Color("#a5a294"),rng.randf())\n                if region == 7: shade = Color("#403839").lerp(Color("#79534a"),rng.randf())\n                if frozen: shade = shade.lerp(Color("#c4d2d8"),0.5)\n                _v425_add(batches,"Fels",local+Vector3(0,size*0.29,0),Vector3(size*rng.randf_range(0.9,1.5),size*0.72,size),shade,rot)\n                rocks += 1\n    var decor := Node3D.new()\n    decor.name = "V425Natur"\n    decor.set_meta("trees",trees)\n    decor.set_meta("shrubs",shrubs)\n    decor.set_meta("rocks",rocks)\n    decor.set_meta("logs",logs)\n    root.add_child(decor)\n    for key in batches:\n        var entries: Array = batches[key]\n        if entries.is_empty(): continue\n        var mm := MultiMesh.new()\n        mm.transform_format = MultiMesh.TRANSFORM_3D\n        mm.use_colors = true\n        mm.mesh = v425_meshes[key] as Mesh\n        mm.instance_count = entries.size()\n        for i in range(entries.size()):\n            mm.set_instance_transform(i,entries[i][0])\n            mm.set_instance_color(i,entries[i][1])\n        var inst := MultiMeshInstance3D.new()\n        inst.name = String(key)\n        inst.multimesh = mm\n        inst.material_override = v425_mat\n        inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF\n        decor.add_child(inst)\n'
+        from pathlib import Path
+        import re
+        B=Path('android/scripts')
+        Q=Path('android/tests')
+        notes=[]
+        def note(s):
+            print('FIX25:',s,flush=True);notes.append(s)
+        def once(s,a,b):
+            assert s.count(a)==1, 'FIX25 source anchor not unique: '+a[:120]
+            return s.replace(a,b,1)
+        def function(s,name):
+            m=re.search(r'(?ms)^func '+re.escape(name)+r'\([^\n]*\n.*?(?=^(?:func |static func |const |var |class |@|extends )|\Z)',s)
+            assert m, 'FIX25 function missing: '+name
+            return m
+        def disable(s,name):
+            m=function(s,name)
+            header=m.group().splitlines()[0]
+            # These methods are legacy void decoration builders only.
+            assert header.endswith('-> void:')
+            note('Disable obsolete '+name)
+            return s[:m.start()]+header+'\n    pass # FIX25: superseded by current map/terrain.\n\n'+s[m.end():]
+        def edit(name,fn):
+            p=B/name; old=p.read_text(encoding='utf-8');new=fn(old);p.write_text(new,encoding='utf-8')
+        # Exact legacy decoration calls: no deletions based on mesh color/shape alone.
+        edit('V21World.gd',lambda s:disable(s,'_stream_chunks'))
+        edit('V24Regions.gd',lambda s:disable(disable(s,'_make_landmarks'),'_load_nearby'))
+        edit('V17Visual.gd',lambda s:disable(s,'_detail_ground'))
+        # Keep current regional landmarks but remove the bare rectangular swamp pads
+        # and outdated pier planks, NOT the actual village gates, ruins or volcano.
+        def landmarks(s):
+            a='            _block(root,p+Vector2(5.0,-7.0),Vector3(15,1.5,22),"#55756b")\n'
+            b='        for i in range(4):\n            _block(root,center+Vector2(250.0+float(i)*32.0,130.0),Vector3(28,3,95),"#8c6842")\n'
+            for old in (a,b):
+                if old in s:
+                    s=once(s,old,'');note('Removed old isolated rectangular decoration')
+            return s
+        edit('V417Landmarks.gd',landmarks)
+        # Six people from deleted V22 outposts still spawn at obsolete coordinates.
+        # Keep all 14 identities/indices and dialogs; move the six into Sonnental.
+        # V38 builds its daytime/nighttime arrays from these original spawn entries.
+        def people(s):
+            m=function(s,'_build_people');q=m.group()
+            places={'Nela':(-10,-7),'Keno':(9,-7),'Lio':(-8,-19),'Yara':(8,-16),'Dorin':(-7,-36),'Ari':(8,-42)}
+            for label,(x,z) in places.items():
+                pat=r'(_person\("'+label+r'",\s*)Vector2\([^)]*\)'
+                q,n=re.subn(pat,lambda a:a[1]+f'Vector2({x}.0, {z}.0)',q,count=1)
+                assert n==1, 'Missing old outpost NPC: '+label
+            s=s[:m.start()]+q+s[m.end():]
+            note('Six former outpost residents relocated; all original NPC IDs preserved')
+            return s
+        edit('V37VillageQuests.gd',people)
+        # Attach the new multimesh system to the actual detailed terrain chunks.
+        def terrain(s):
+            s=once(s,'    _place_region_details(root,cx,cz)\n','    _place_region_details(root,cx,cz)\n    _v425_forest(root,cx,cz)\n')
+            assert 'func surface_height_at(' in s and 'var v414_vertex_cache' in s and 'const V417Territories' in s
+            return s+'\n'+NATURE+'\n'
+        edit('V27Terrain.gd',terrain)
+        # APK keeps identical application ID/signature.
+        p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
+        s=once(s,'version/code=4194','version/code=4195');s=once(s,'version/name="4.1.7.24"','version/name="4.1.7.25"');p.write_text(s,encoding='utf-8')
+        Path('build/diagnose').mkdir(parents=True,exist_ok=True)
+        Path('build/diagnose/FIX25_Natur_Installation.log').write_text('\n'.join(notes)+'\n',encoding='utf-8')
+        print('FIX25_INSTALL_OK')
+
+        PYFIX25
+        python3 -m py_compile "$RUNNER_TEMP/lwod_fix25.py"
+        python3 "$RUNNER_TEMP/lwod_fix25.py"
+        cat > android/tests/V425NatureSmoke.gd <<'GDFIX25'
+        extends SceneTree
+        const T = preload("res://scripts/V417Territories.gd")
+        const Terrain = preload("res://scripts/V27Terrain.gd")
+        class TestGame:
+            extends Node3D
+            var hero: CharacterBody3D
+            var state: int = 2
+        func _initialize() -> void:
+            call_deferred("_run")
+        func _run() -> void:
+            var g := TestGame.new()
+            root.add_child(g)
+            g.hero = CharacterBody3D.new()
+            g.add_child(g.hero)
+            var p: Vector2 = T.map_to_world(Vector2(18,36))
+            g.hero.position = Vector3(p.x,0,p.y)
+            var terrain := Terrain.new()
+            g.add_child(terrain)
+            terrain.setup(g,null,null,null)
+            var counts := Vector4i.ZERO
+            var cells: Dictionary = terrain.get("chunks")
+            for chunk in cells.values():
+                var nature := (chunk as Node3D).get_node_or_null("V425Natur")
+                if nature == null or nature.get_child_count()>5:
+                    push_error("FIX25: missing batched nature")
+                    quit(1)
+                    return
+                counts += Vector4i(int(nature.get_meta("trees")),int(nature.get_meta("shrubs")),int(nature.get_meta("rocks")),int(nature.get_meta("logs")))
+                for view in nature.get_children():
+                    if not view is MultiMeshInstance3D or (view as MultiMeshInstance3D).multimesh.instance_count<=0:
+                        push_error("FIX25: invalid nature batch")
+                        quit(1)
+                        return
+            if counts.x<20 or counts.y<20 or counts.z<10 or counts.w<1:
+                push_error("FIX25: too little natural detail: "+str(counts))
+                quit(1)
+                return
+            print("FIX25_NATURE_OK: ",counts)
+            quit(0)
+        GDFIX25
     - name: Alle Godot-Tests einschliesslich FIX21 ausfuehren
       shell: bash
       run: |
@@ -918,15 +1032,24 @@ jobs:
         timeout --signal=TERM --kill-after=5s 90s godot --headless --path android --script res://tests/V422AtlasSmoke.gd 2>&1 | tee build/diagnose/FIX22_Atlas_Test.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX22: ' build/diagnose/FIX22_Atlas_Test.log; then exit 1; fi
         grep -Fq 'FIX22_ATLAS_SMOKE_OK:' build/diagnose/FIX22_Atlas_Test.log
-    - name: FIX24 Android APK exportieren und pruefen
+    - name: FIX25 Vegetation und Gelande testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        timeout --signal=TERM --kill-after=5s 180s godot --headless --path android --script res://tests/V425NatureSmoke.gd 2>&1 | tee build/diagnose/FIX25_Natur_Test.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX25: ' build/diagnose/FIX25_Natur_Test.log; then
+          exit 1
+        fi
+        grep -Fq 'FIX25_NATURE_OK:' build/diagnose/FIX25_Natur_Test.log
+    - name: FIX25 Android APK exportieren und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX24.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX25.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX24_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX24_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX25_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX25_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -934,12 +1057,12 @@ jobs:
         unzip -Z1 "$APK" | grep -Fx 'AndroidManifest.xml' >/dev/null
         ls -lh "$APK"
         sha256sum "$APK"
-    - name: FIX24 APK als Download hochladen
+    - name: FIX25 APK als Download hochladen
       id: apk_upload
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX24_APK
-        path: build/android/LWOD-Android-V41.7-FIX24.apk
+        name: LWOD_ANDROID_V41_7_FIX25_APK
+        path: build/android/LWOD-Android-V41.7-FIX25.apk
         if-no-files-found: error
         compression-level: 0
         retention-days: 14
@@ -952,12 +1075,12 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX24 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-    - name: FIX24 Testprotokolle hochladen
+        printf '### Android APK Download\n\n[FIX25 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+    - name: FIX25 Testprotokolle hochladen
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_FIX24_TESTPROTOKOLLE
+        name: LWOD_FIX25_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
