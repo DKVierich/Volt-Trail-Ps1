@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX52 Dungeon-Kamera freie Neigung und mehr Abstand
+name: LWOD Android V41.7 FIX53 Dungeon-Kamera direkter Touch-Winkel
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX52 APK
+    name: LWOD Android V41.7 FIX53 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -61,12 +61,12 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX52 Dungeon-Kamerasteuerung und Phoenix installieren
+    - name: FIX53 Dungeon-Kamerasteuerung und Phoenix installieren
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p android/scripts android/tests
-        cat > 'android/scripts/V441Layout.gd' <<'FIX52_V441LAYOUT'
+        cat > 'android/scripts/V441Layout.gd' <<'FIX53_V441LAYOUT'
         extends RefCounted
         # Shared coordinates for ruin, dungeon, player ground and camera.
         const T = preload("res://scripts/V417Territories.gd")
@@ -176,7 +176,7 @@ jobs:
 
         static func camera_focus(actor: Vector3,pitch: float) -> Vector3:
             # Keep the actor in the frame even if the roof limits the actual orbit height.
-            return actor+Vector3.UP*clampf(1.26-(pitch-0.32)*0.65,0.75,1.85)
+            return actor+Vector3.UP*clampf(1.26-(pitch-0.32)*1.45,0.10,2.65)
 
         static func camera_floor(terrain: Node,q: Vector2) -> float:
             if in_stair(q): return base(terrain)+level(q)
@@ -244,8 +244,8 @@ jobs:
             if not solved and have_fallback: best=fallback
             cam.global_position=best
             cam.look_at(focus)
-        FIX52_V441LAYOUT
-        cat > 'android/scripts/V441Castle.gd' <<'FIX52_V441CASTLE'
+        FIX53_V441LAYOUT
+        cat > 'android/scripts/V441Castle.gd' <<'FIX53_V441CASTLE'
         extends Node3D
         const L = preload("res://scripts/V441Layout.gd")
         var game: Node
@@ -529,8 +529,8 @@ jobs:
             colors.clear()
 
 
-        FIX52_V441CASTLE
-        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX52_V441RUINESMOKE'
+        FIX53_V441CASTLE
+        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX53_V441RUINESMOKE'
         extends SceneTree
         const L = preload("res://scripts/V441Layout.gd")
         const Landmarks = preload("res://scripts/V417Landmarks.gd")
@@ -541,22 +541,18 @@ jobs:
             extends Node3D
             func surface_height_at(_x: float,_z: float) -> float: return 12.0
             func v435_swamp_strength(_p: Vector2) -> float: return 0.0
-        class TestCameraStick:
-            extends Control
-            var camera_id: int = -1
-            var camera_axis: Vector2 = Vector2.ZERO
-            var look: Node
-            func _process(_delta: float) -> void: pass
+        const RealTouch = preload("res://scripts/V33TouchCamera.gd")
         class TestGame:
             extends Node3D
             var state: int = 2
             var hero: CharacterBody3D
             var camera_node: Camera3D
             var phoenix: Node3D
+            var joystick_axis: Vector2 = Vector2.ZERO
         func _initialize() -> void:
             call_deferred("_run")
         func fail(msg: String) -> void:
-            push_error("FIX52: "+msg)
+            push_error("FIX53: "+msg)
             quit(1)
         func _run() -> void:
             var g := TestGame.new()
@@ -707,37 +703,65 @@ jobs:
             if indoor.global_position.y-low<2.0:
                 fail("touch pitch did not change the active dungeon view")
                 return
-            # Raw camera-stick test: an outdoor writer resets the shared pitch every frame.
-            var stick := TestCameraStick.new()
-            stick.look=control
+            # Drive the real V33 input owner, through actual screen-drag events.
+            var stick := RealTouch.new()
             g.add_child(stick)
-            stick.set_process(true)
-            control.call("_v452_find_stick")
-            if control.get("v452_stick")!=stick:
-                fail("active vertical stick not bound")
-                return
-            stick.camera_id=3
-            stick.camera_axis=Vector2(0,-1)
-            for i in range(8):
+            stick.set("game",g)
+            stick.set("old_look",control)
+            stick.set("terrain",t)
+            stick.set("camera_yaw",0.0)
+            stick.set("view_pitch",-0.31)
+            stick.set_process(false)
+            stick.set_physics_process(false)
+            stick.set("camera_id",3)
+            stick.set("camera_center",Vector2(400,220))
+            var drag := InputEventScreenDrag.new()
+            drag.index=3
+            drag.position=Vector2(400,120)
+            stick.call("_input",drag)
+            for i in range(10):
                 control.set("pitch",0.32)
-                control.call("_process",0.12)
-            var raw_low: float=indoor.global_position.y
-            stick.camera_axis=Vector2(0,1)
-            for i in range(12):
-                control.set("pitch",0.32)
-                control.call("_process",0.12)
-            var raw_high: float=indoor.global_position.y
-            if raw_high-raw_low<2.0:
-                fail("raw joystick vertical travel blocked by legacy pitch")
+                stick.call("_physics_process",0.12)
+                stick.call("_process",0.016)
+            var up_height: float=indoor.global_position.y
+            var up_angle: float=(-indoor.global_transform.basis.z).y
+            if not bool(control.get("v453_touch_active")) or root.get_camera_3d()!=indoor:
+                fail("real V33 input never reached active dungeon camera")
                 return
-            stick.camera_id=-1
-            stick.camera_axis=Vector2.ZERO
-            control.call("_process",0.12)
-            if absf(indoor.global_position.y-raw_high)>0.08:
-                fail("released camera stick did not hold its angle")
+            drag.position=Vector2(400,320)
+            stick.call("_input",drag)
+            for i in range(16):
+                control.set("pitch",0.32)
+                stick.call("_physics_process",0.12)
+                stick.call("_process",0.016)
+            var down_height: float=indoor.global_position.y
+            var down_angle: float=(-indoor.global_transform.basis.z).y
+            if down_height-up_height<2.0 or up_angle-down_angle<0.20:
+                fail("real V33 screen drags did not tilt the live camera")
+                return
+            var release := InputEventScreenTouch.new()
+            release.index=3
+            release.pressed=false
+            stick.call("_input",release)
+            control.set("pitch",0.32)
+            stick.call("_physics_process",0.12)
+            stick.call("_process",0.016)
+            if absf(indoor.global_position.y-down_height)>0.08 or absf((-indoor.global_transform.basis.z).y-down_angle)>0.02:
+                fail("released real camera stick did not hold its angle")
+                return
+            # Stair test: even if the overhead roof limits position, view direction must respond.
+            g.hero.global_position=L.at(t,Vector2(0,middle),true)
+            stick.set("view_pitch",-1.05)
+            stick.call("_process",0.016)
+            var stair_down: float=(-indoor.global_transform.basis.z).y
+            stick.set("view_pitch",1.43)
+            stick.call("_process",0.016)
+            var stair_up: float=(-indoor.global_transform.basis.z).y
+            if root.get_camera_3d()!=indoor or stair_up-stair_down<0.08:
+                fail("covered staircase still ignores vertical view angle")
                 return
             stick.free()
-            control.call("_v452_find_stick")
+            control.set("v453_touch_active",false)
             control.set("yaw_offset",0.0)
             control.set("pitch",0.32)
             # Simulate legacy controller overwriting the outdoor camera and making it current.
@@ -812,9 +836,9 @@ jobs:
                 fail("could not verify actual cutout edges")
                 return
             world.free()
-            print("FIX52_RUINE_OK: wide camera, raw vertical joystick, unchanged companion spacing, 66 stair frames")
+            print("FIX53_RUINE_OK: wide camera, real V33 touch drag, staircase tilt, companion spacing, 66 stair frames")
             quit(0)
-        FIX52_V441RUINESMOKE
+        FIX53_V441RUINESMOKE
         cat > '/tmp/lwod_fix41.py' <<'FIX41_PATCH'
         from pathlib import Path
         import re, os
@@ -862,14 +886,14 @@ jobs:
         a='    if is_instance_valid(terrain) and terrain.has_method("surface_height_at"):\n'
         s=once(s,a,a+'        if V441Layout.in_stair(V441Layout.local(p)):\n            return V441Layout.dungeon_floor(terrain,p)+0.085\n')
         p.write_text(s,encoding='utf-8')
-        # FIX52: independent current camera, not the outdoor camera shared by legacy controllers.
+        # FIX53: independent current camera, not the outdoor camera shared by legacy controllers.
         p=B/'V27CameraMap.gd'
         s=p.read_text(encoding='utf-8')
         anchor='func _physics_process(delta: float) -> void:\n'
         s=once(s,anchor,anchor+"""    if _v442_indoor_camera(true):
                 return
         """)
-        s=once(s,'func _process(_delta: float) -> void:\n','func _process(_delta: float) -> void:\n    _v452_read_stick(_delta)\n    _v447_present()\n')
+        s=once(s,'func _process(_delta: float) -> void:\n','func _process(_delta: float) -> void:\n    _v447_present()\n')
         s=once(s,'    name = "V27CameraWorldMap"\n','    name = "V27CameraWorldMap"\n    process_priority = 2000\n')
         s += r'''
         const V441Layout = preload("res://scripts/V441Layout.gd")
@@ -880,36 +904,26 @@ jobs:
         var v449_last_yaw: float = INF
         var v449_last_pitch: float = INF
         var v449_last_actor: Vector3 = Vector3(INF,INF,INF)
-        var v452_stick: Node
-        var v452_pitch: float = 0.32
         var v452_view_pitch: float = 0.32
-        var v452_stick_checked: bool = false
+        var v453_touch_active: bool = false
+        var v453_touch_pitch: float = 0.32
 
-        func _v452_find_stick() -> void:
-            v452_stick=null
-            v452_stick_checked=true
-            # V29IndependentSticks supplies camera_axis; later versions retain the same
-            # right-hand look stick. Only bind the active controller linked to THIS camera.
-            for n in game.find_children("*","Control",true,false):
-                if not n.is_processing(): continue
-                if "camera_axis" in n and "camera_id" in n and "look" in n and n.get("look")==self:
-                    v452_stick=n
-                    return
-
-        func _v452_read_stick(delta: float) -> void:
-            if not v442_indoor_active or not is_instance_valid(game): return
-            if int(game.get("state"))!=2 or map_open: return
-            if not v452_stick_checked or (is_instance_valid(v452_stick) and not v452_stick.is_processing()):
-                _v452_find_stick()
-            if not is_instance_valid(v452_stick): return
-            if int(v452_stick.get("camera_id"))<0: return
-            var axis: Vector2 = v452_stick.get("camera_axis")
-            if absf(axis.y)<0.07: return
-            v452_pitch=clampf(v452_pitch+axis.y*1.75*clampf(delta,0.0,0.12),-0.55,1.08)
+        # V33 supplies ABSOLUTE view direction after handling the real touch event.
+        # Looking up in V33 is positive, whereas a higher orbit looks down.
+        func v453_touch_camera(yaw: float, vertical: float) -> bool:
+            if not is_instance_valid(game) or not is_instance_valid(terrain): return false
+            var actor: CharacterBody3D = game.get("hero") as CharacterBody3D
+            if int(game.get("state"))!=2 or not is_instance_valid(actor) or not V441Layout.in_dungeon(terrain,actor.global_position):
+                _v442_indoor_camera(false)
+                return false
+            if map_open: return true
+            yaw_offset=yaw
+            v453_touch_active=true
+            v453_touch_pitch=clampf(0.32-(vertical+0.31)*1.25,-0.55,1.08)
+            return _v442_indoor_camera(false)
 
         func _v452_effective_pitch() -> float:
-            if is_instance_valid(v452_stick): return v452_pitch
-            return clampf(pitch,-0.55,1.08)
+            return v453_touch_pitch if v453_touch_active else clampf(pitch,-0.55,1.08)
 
         func _v449_companion(actor: CharacterBody3D) -> void:
             if not ("phoenix" in game): return
@@ -978,8 +992,7 @@ jobs:
                     v449_last_yaw=INF
                     v449_last_pitch=INF
                     v449_last_actor=Vector3(INF,INF,INF)
-                    v452_stick=null
-                    v452_stick_checked=false
+                    v453_touch_active=false
                 return false
             if not is_instance_valid(v447_camera):
                 v447_camera=Camera3D.new()
@@ -1002,8 +1015,6 @@ jobs:
             if not v442_indoor_active:
                 v442_indoor_active=true
                 v447_offset=Vector3(sin(yaw_offset)*4.5,3.55,cos(yaw_offset)*4.5)
-                v452_pitch=0.32
-                _v452_find_stick()
                 apply_view=true
             # Use the raw right-stick vertical axis independently of the legacy pitch.
             # The external camera still owns its unchanged yaw/movement input.
@@ -1031,7 +1042,14 @@ jobs:
             _v442_indoor_camera(false)
         '''
         p.write_text(s,encoding='utf-8')
-        print('FIX52 independent current indoor camera installed')
+        print('FIX53 independent current indoor camera installed')
+        # Actual touch owner: V33 disables V29 and keeps its own view_pitch.
+        # Forward the real final yaw/pitch from BOTH render and physics paths.
+        p=B/'V33TouchCamera.gd'; s=p.read_text(encoding='utf-8')
+        assert 'var view_pitch:' in s and 'var camera_yaw:' in s and 'var old_look:' in s, 'FIX53: unexpected V33 touch source'
+        s=once(s,'func _update_camera(delta: float) -> void:\n','func _update_camera(delta: float) -> void:\n    if is_instance_valid(old_look) and old_look.has_method("v453_touch_camera"):\n        if bool(old_look.call("v453_touch_camera",camera_yaw,view_pitch)):\n            return\n')
+        p.write_text(s,encoding='utf-8')
+        print('FIX53: V33 real touch controller connected to dungeon camera')
         # Old decoration exclusion was 160 m around Ruine, covering entire 128 x 144 m castle.
         # Preserve it, existing map / teleporter / landscape and the old streaming fixes.
         p=B/'V27Terrain.gd';s=p.read_text(encoding='utf-8');assert 'city == "Ruine"' in s
@@ -1040,7 +1058,7 @@ jobs:
         s += '\nconst V443Shaft = preload("res://scripts/V441Layout.gd")\n\nfunc _v443_triangle(st: SurfaceTool,a: Vector2,b: Vector2,c: Vector2,origin: Vector2) -> void:\n    # Cheap broad-phase: for all other regions emit original vertices exactly as before.\n    var centre: Vector2 = V443Shaft.centre()\n    if a.distance_squared_to(centre)>36000.0 and b.distance_squared_to(centre)>36000.0 and c.distance_squared_to(centre)>36000.0:\n        for p in [a,b,c]: _emit_vertex(st,p.x,p.y,origin)\n        return\n    var qa: Vector2 = V443Shaft.local(Vector3(a.x,0,a.y))\n    var qb: Vector2 = V443Shaft.local(Vector3(b.x,0,b.y))\n    var qc: Vector2 = V443Shaft.local(Vector3(c.x,0,c.y))\n    if minf(qa.x,minf(qb.x,qc.x))>=V443Shaft.HALF_WIDTH or maxf(qa.x,maxf(qb.x,qc.x))<=-V443Shaft.HALF_WIDTH or minf(qa.y,minf(qb.y,qc.y))>=V443Shaft.START_Z or maxf(qa.y,maxf(qb.y,qc.y))<=V443Shaft.END_Z:\n        for p in [a,b,c]: _emit_vertex(st,p.x,p.y,origin)\n        return\n    # Fill the normal chunk vertex cache even when a triangle crosses the shaft.\n    var poly := PackedVector3Array()\n    for p in [a,b,c]:\n        if not v414_vertex_cache.has(p):\n            var h: float = height_at(p.x,p.y)\n            v414_vertex_cache[p]=[h,color_at(p.x,p.y,h)]\n        var q: Vector2 = V443Shaft.local(Vector3(p.x,0,p.y))\n        poly.append(Vector3(q.x,float(v414_vertex_cache[p][0]),q.y))\n    for piece in V443Shaft.cut_triangle(poly):\n        for i in range(1,piece.size()-1):\n            var v0: Vector3 = piece[0]\n            var v1: Vector3 = piece[i]\n            var v2: Vector3 = piece[i+1]\n            if (v1-v0).cross(v2-v0).length_squared()<0.000001: continue\n            for v in [v0,v1,v2]:\n                var p: Vector2 = V443Shaft.world(Vector2(v.x,v.z))\n                st.set_color(color_at(p.x,p.y,v.y))\n                st.add_vertex(Vector3(p.x-origin.x,v.y,p.y-origin.y))\n'
         p.write_text(s,encoding='utf-8')
         p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
-        s=once(s,'version/code=4209','version/code=4222');s=once(s,'version/name="4.1.7.39"','version/name="4.1.7.52"');p.write_text(s,encoding='utf-8')
+        s=once(s,'version/code=4209','version/code=4223');s=once(s,'version/name="4.1.7.39"','version/name="4.1.7.53"');p.write_text(s,encoding='utf-8')
         print('FIX41_INSTALL_OK: old pillars removed; real castle and underground layout linked to player and flight')
         FIX41_PATCH
         python3 -m py_compile /tmp/lwod_fix41.py
@@ -1054,22 +1072,22 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX52 Aktive Dungeon-Kamera und Treppenlauf testen
+    - name: FIX53 Aktive Dungeon-Kamera und Treppenlauf testen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX52_Ruine.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX52: ' build/diagnose/FIX52_Ruine.log; then exit 1; fi
-        grep -Fq 'FIX52_RUINE_OK:' build/diagnose/FIX52_Ruine.log
-    - name: FIX52 Android APK exportieren und pruefen
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX53_Ruine.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX53: ' build/diagnose/FIX53_Ruine.log; then exit 1; fi
+        grep -Fq 'FIX53_RUINE_OK:' build/diagnose/FIX53_Ruine.log
+    - name: FIX53 Android APK exportieren und pruefen
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX52.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX53.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX52_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX52_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX53_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX53_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -1079,13 +1097,13 @@ jobs:
         sha256sum "$APK"
       shell: bash
     - id: apk_upload
-      name: FIX52 APK als Download hochladen
+      name: FIX53 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX52_APK
-        path: build/android/LWOD-Android-V41.7-FIX52.apk
+        name: LWOD_ANDROID_V41_7_FIX53_APK
+        path: build/android/LWOD-Android-V41.7-FIX53.apk
         retention-days: 14
     - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
@@ -1095,13 +1113,13 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX52 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        printf '### Android APK Download\n\n[FIX53 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
       shell: bash
     - if: always()
-      name: FIX52 Testprotokolle hochladen
+      name: FIX53 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX52_TESTPROTOKOLLE
+        name: LWOD_FIX53_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
