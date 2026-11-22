@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX45 Dungeon Dach und Kameratest repariert
+name: LWOD Android V41.7 FIX46 Burgruinen-Dach und grosser Dungeon
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX45 APK
+    name: LWOD Android V41.7 FIX46 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -61,12 +61,12 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX45 Ueberdachten Eingang und Innenkamera installieren
+    - name: FIX46 Burgruinen-Dach und grossen Dungeon installieren
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p android/scripts android/tests
-        cat > 'android/scripts/V441Layout.gd' <<'FIX45_V441LAYOUT'
+        cat > 'android/scripts/V441Layout.gd' <<'FIX46_V441LAYOUT'
         extends RefCounted
         # Shared coordinates for ruin, dungeon, player ground and camera.
         const T = preload("res://scripts/V417Territories.gd")
@@ -74,10 +74,10 @@ jobs:
         const OUTER_Z: float = 72.0
         # Open-air stairwell, physically cut out of the terrain. No portal movement.
         const START_Z: float = -24.0
-        const END_Z: float = -48.0
-        const DEPTH: float = 14.0
+        const END_Z: float = -56.0
+        const DEPTH: float = 18.0
         const HALF_WIDTH: float = 5.2
-        const HALL_BACK: float = -94.0
+        const HALL_BACK: float = -128.0
         const ENTRY: Vector2 = Vector2(0,START_Z)
 
         static func centre() -> Vector2:
@@ -168,34 +168,44 @@ jobs:
             return pieces
 
         static func dungeon_camera(terrain: Node,hero: CharacterBody3D,cam: Camera3D,yaw: float,pitch: float) -> void:
-            # Never clamp the indoor camera to the OUTDOOR terrain height.
+            # Tight follow camera for stairs and dungeon hall. It tracks the actor height directly.
             var actor: Vector3 = hero.global_position
-            var focus: Vector3 = actor+Vector3.UP*1.26
-            var back := Vector3(sin(yaw),0.0,cos(yaw))
+            var focus: Vector3 = actor + Vector3.UP*1.18
+            var back := Vector3(sin(yaw),0.0,cos(yaw)).normalized()
             var q: Vector2 = local(actor)
-            var desired: Vector3 = focus+back*0.25+Vector3.UP*0.14
+            var desired: Vector3 = focus + back*2.15 + Vector3.UP*0.82
             var space: PhysicsDirectSpaceState3D = hero.get_world_3d().direct_space_state
-            # Shorten the orbit when the rising staircase or a side wall blocks the view.
-            # The vertical offset always follows the actor, including when descending.
-            for distance in [3.2,2.8,2.4,2.0,1.6,1.2,0.8,0.4,0.2]:
-                var candidate: Vector3 = focus+back*float(distance)+Vector3.UP*(0.62+clampf(pitch,-0.4,0.6)*0.28)
-                var c: Vector2 = local(candidate)
-                var is_shaft: bool = c.y>=END_Z and c.y<=START_Z+4.5
-                if is_shaft and (in_stair(q) or q.y>=START_Z):
-                    if absf(c.x)>HALF_WIDTH-0.55: continue
-                    var ground: float = base(terrain)+level(c) if in_stair(c) else outside_height(terrain,c)
-                    if candidate.y<ground+0.40: continue
-                elif q.y<END_Z and (absf(c.x)>33.35 or c.y<HALL_BACK+0.65):
-                    continue
-                var ray := PhysicsRayQueryParameters3D.create(focus,candidate,0xffffffff,[hero.get_rid()])
-                ray.hit_from_inside = true
-                if not space.intersect_ray(ray).is_empty(): continue
-                desired=candidate
-                break
-            cam.global_position=desired
+            var stair_zone: bool = in_stair(q) or q.y >= START_Z-0.4
+            if stair_zone:
+                desired.y = actor.y + 0.92
+                for distance in [2.25,1.95,1.65,1.35,1.05,0.80,0.55,0.35]:
+                    var candidate: Vector3 = focus + back*float(distance) + Vector3.UP*0.74
+                    candidate.y = actor.y + 0.92
+                    var c: Vector2 = local(candidate)
+                    if absf(c.x)>HALF_WIDTH-0.72: continue
+                    var ray := PhysicsRayQueryParameters3D.create(focus,candidate,0xffffffff,[hero.get_rid()])
+                    ray.hit_from_inside = true
+                    if not space.intersect_ray(ray).is_empty(): continue
+                    desired = candidate
+                    break
+            else:
+                desired = focus + back*3.1 + Vector3.UP*1.00
+                desired.y = actor.y + 1.00
+                for distance in [3.1,2.7,2.3,1.9,1.5,1.1,0.7]:
+                    var candidate: Vector3 = focus + back*float(distance) + Vector3.UP*1.00
+                    candidate.y = actor.y + 1.00
+                    var c: Vector2 = local(candidate)
+                    if absf(c.x)>32.6 or c.y<HALL_BACK+1.2 or c.y>END_Z+1.0: continue
+                    var ray := PhysicsRayQueryParameters3D.create(focus,candidate,0xffffffff,[hero.get_rid()])
+                    ray.hit_from_inside = true
+                    if not space.intersect_ray(ray).is_empty(): continue
+                    desired = candidate
+                    break
+            desired.y = clampf(desired.y, actor.y+0.58, actor.y+1.08)
+            cam.global_position = desired
             cam.look_at(focus)
-        FIX45_V441LAYOUT
-        cat > 'android/scripts/V441Castle.gd' <<'FIX45_V441CASTLE'
+        FIX46_V441LAYOUT
+        cat > 'android/scripts/V441Castle.gd' <<'FIX46_V441CASTLE'
         extends Node3D
         const L = preload("res://scripts/V441Layout.gd")
         var game: Node
@@ -414,8 +424,8 @@ jobs:
                 for x in [-L.HALF_WIDTH,0.0,L.HALF_WIDTH]:
                     roof_bottom=maxf(roof_bottom,_ground(Vector2(float(x),z))+4.5)
             var roof_y: float = roof_bottom+0.65
-            _roof_seal("EingangsVordach",Vector3(0,roof_y,L.START_Z+2.25),Vector3(L.HALF_WIDTH*2.0+2.5,1.3,4.5))
-            _roof_seal("TreppenDach",Vector3(0,roof_y,(L.START_Z+L.END_Z)*0.5),Vector3(L.HALF_WIDTH*2.0+2.5,1.3,shaft_length))
+            _roof_seal("EingangsVordach",Vector3(0,roof_y,L.START_Z+2.25),Vector3(L.HALF_WIDTH*2.0+4.2,1.8,5.8))
+            _roof_seal("TreppenDach",Vector3(0,roof_y,(L.START_Z+L.END_Z)*0.5),Vector3(L.HALF_WIDTH*2.0+4.0,1.8,shaft_length+1.1))
             var sections: int = maxi(1,ceili(shaft_length/2.0))
             for i in range(sections):
                 var a: float = lerpf(L.START_Z,L.END_Z,float(i)/float(sections))
@@ -438,15 +448,15 @@ jobs:
                     var d: float = hall_length/24.0
                     var q := Vector2(-34.0+(float(ix)+0.5)*w,L.HALL_BACK+(float(iz)+0.5)*d)
                     _stone(Vector3(q.x,floor_y-0.04,q.y),Vector3(w-0.035,0.08,d-0.035),Color("#59534d").lerp(Color("#71685b"),rng.randf()*0.65))
-            _wall(Vector2(-34,L.END_Z),Vector2(-L.HALF_WIDTH,L.END_Z),8,2,false,true,floor_y)
-            _wall(Vector2(L.HALF_WIDTH,L.END_Z),Vector2(34,L.END_Z),8,2,false,true,floor_y)
-            _wall(Vector2(-34,L.END_Z),Vector2(-34,L.HALL_BACK),8,2,false,true,floor_y)
-            _wall(Vector2(34,L.END_Z),Vector2(34,L.HALL_BACK),8,2,false,true,floor_y)
-            _wall(Vector2(-34,L.HALL_BACK),Vector2(34,L.HALL_BACK),8,2,false,true,floor_y)
+            _wall(Vector2(-34,L.END_Z),Vector2(-L.HALF_WIDTH,L.END_Z),11.5,2.4,false,true,floor_y)
+            _wall(Vector2(L.HALF_WIDTH,L.END_Z),Vector2(34,L.END_Z),11.5,2.4,false,true,floor_y)
+            _wall(Vector2(-34,L.END_Z),Vector2(-34,L.HALL_BACK),11.5,2.4,false,true,floor_y)
+            _wall(Vector2(34,L.END_Z),Vector2(34,L.HALL_BACK),11.5,2.4,false,true,floor_y)
+            _wall(Vector2(-34,L.HALL_BACK),Vector2(34,L.HALL_BACK),11.5,2.4,false,true,floor_y)
             for x in [-15.0,15.0]:
-                _wall(Vector2(x,L.END_Z),Vector2(x,L.END_Z-12.0),7.9,1.6,false,true,floor_y)
-                _wall(Vector2(x,L.END_Z-18.0),Vector2(x,L.HALL_BACK+12.0),7.9,1.6,false,true,floor_y)
-                _wall(Vector2(x,L.HALL_BACK+6.0),Vector2(x,L.HALL_BACK),7.9,1.6,false,true,floor_y)
+                _wall(Vector2(x,L.END_Z),Vector2(x,L.END_Z-12.0),11.4,1.9,false,true,floor_y)
+                _wall(Vector2(x,L.END_Z-18.0),Vector2(x,L.HALL_BACK+12.0),11.4,1.9,false,true,floor_y)
+                _wall(Vector2(x,L.HALL_BACK+6.0),Vector2(x,L.HALL_BACK),11.4,1.9,false,true,floor_y)
             _roof_seal("HallenDecke",Vector3(0,floor_y+8.0,center_z),Vector3(70,1.5,hall_length))
             # Stone face above the lower doorway, preventing daylight through the earth wall.
             var top: float = roof_bottom+1.3
@@ -498,8 +508,8 @@ jobs:
             else:
                 # Safe fallback if the old controller is not available.
                 L.dungeon_camera(terrain,hero,cam,hero.global_rotation.y,0.0)
-        FIX45_V441CASTLE
-        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX45_V441RUINESMOKE'
+        FIX46_V441CASTLE
+        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX46_V441RUINESMOKE'
         extends SceneTree
         const L = preload("res://scripts/V441Layout.gd")
         const Landmarks = preload("res://scripts/V417Landmarks.gd")
@@ -518,7 +528,7 @@ jobs:
         func _initialize() -> void:
             call_deferred("_run")
         func fail(msg: String) -> void:
-            push_error("FIX45: "+msg)
+            push_error("FIX46: "+msg)
             quit(1)
         func _run() -> void:
             var g := TestGame.new()
@@ -667,9 +677,9 @@ jobs:
                 fail("could not verify actual cutout edges")
                 return
             world.free()
-            print("FIX45_RUINE_OK: full roof, 48 steps, live camera controller and render update")
+            print("FIX46_RUINE_OK: ruin style roof, larger hall and low follow camera")
             quit(0)
-        FIX45_V441RUINESMOKE
+        FIX46_V441RUINESMOKE
         cat > '/tmp/lwod_fix41.py' <<'FIX41_PATCH'
         from pathlib import Path
         import re, os
@@ -787,22 +797,22 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX45 Ueberdachten Eingang und Kamera testen
+    - name: FIX46 Burgruinen-Dach und Kamera testen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX45_Ruine.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX45: ' build/diagnose/FIX45_Ruine.log; then exit 1; fi
-        grep -Fq 'FIX45_RUINE_OK:' build/diagnose/FIX45_Ruine.log
-    - name: FIX45 Android APK exportieren und pruefen
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX46_Ruine.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX46: ' build/diagnose/FIX46_Ruine.log; then exit 1; fi
+        grep -Fq 'FIX46_RUINE_OK:' build/diagnose/FIX46_Ruine.log
+    - name: FIX46 Android APK exportieren und pruefen
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX45.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX46.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX45_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX45_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX46_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX46_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -812,13 +822,13 @@ jobs:
         sha256sum "$APK"
       shell: bash
     - id: apk_upload
-      name: FIX45 APK als Download hochladen
+      name: FIX46 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX45_APK
-        path: build/android/LWOD-Android-V41.7-FIX45.apk
+        name: LWOD_ANDROID_V41_7_FIX46_APK
+        path: build/android/LWOD-Android-V41.7-FIX46.apk
         retention-days: 14
     - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
@@ -828,13 +838,13 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX45 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        printf '### Android APK Download\n\n[FIX46 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
       shell: bash
     - if: always()
-      name: FIX45 Testprotokolle hochladen
+      name: FIX46 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX45_TESTPROTOKOLLE
+        name: LWOD_FIX46_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
