@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX36 Wueste bereinigen
+name: LWOD Android V41.7 FIX37 Fernlandschaft und Altlasten
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX36 APK
+    name: LWOD Android V41.7 FIX37 APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
     container:
@@ -612,13 +612,13 @@ jobs:
         import re
         B = Path('android/scripts')
         Q = Path('android/tests')
-        
+
         def once(s, old, new):
             n=s.count(old)
             if n != 1:
                 raise RuntimeError(f'FIX35: expected one anchor, got {n}: {old[:140]}')
             return s.replace(old,new,1)
-        
+
         def terrain(s):
             # Preserve original colour generation: the swamp layer is on the existing terrain mesh.
             s=once(s,'func color_at(x: float, z: float, height: float) -> Color:', 'func _v435_base_color_at(x: float, z: float, height: float) -> Color:')
@@ -640,7 +640,7 @@ jobs:
                 _v427_tree(batches,local,h,width,wood,green,rot,city == "Frostholm" or rng.randf()<0.43)''')
             # Existing vegetation generator owns its meshes, no extra per-tree nodes.
             return s+'\n'+TERRAIN
-        
+
         TERRAIN = r'''
         # FIX35: deterministic marshes, sharing the existing terrain and forest batches.
         # There are no additional flat slabs or overlapping water colliders.
@@ -649,7 +649,7 @@ jobs:
         var v435_old_fog_density: float = 0.0
         var v435_old_fog_color: Color = Color.WHITE
         var v435_fog_amount: float = 0.0
-        
+
         func v435_swamp_strength(p: Vector2) -> float:
             if V417Territories.region_index(p) != 8:
                 return 0.0
@@ -677,7 +677,7 @@ jobs:
                 if wet<=0.001:
                     return 0.0
             return clampf(wet,0.0,1.0)
-        
+
         func color_at(x: float, z: float, height: float) -> Color:
             var original: Color = _v435_base_color_at(x,z,height)
             var wet: float = v435_swamp_strength(Vector2(x,z))
@@ -687,14 +687,14 @@ jobs:
             var shimmer: float = 0.5+0.5*sin(x*0.16+sin(z*0.08)*2.0)
             mud = mud.lerp(Color("#546857"),shimmer*0.16)
             return original.lerp(mud,wet*0.91)
-        
+
         func _v435_wood_segment(batches: Dictionary, a: Vector3, b: Vector3, diameter: float, color: Color) -> void:
             var axis: Vector3 = (b-a).normalized()
             var across: Vector3 = axis.cross(Vector3.FORWARD).normalized()
             if across.length_squared()<0.1: across = axis.cross(Vector3.RIGHT).normalized()
             var frame := Basis(across,axis,across.cross(axis).normalized())
             _v425_add(batches,"Holz",(a+b)*0.5,Vector3(diameter,a.distance_to(b),diameter),color,frame)
-        
+
         func _v435_dead_tree(batches: Dictionary, local: Vector3, h: float, turn: Basis, rng: RandomNumberGenerator) -> void:
             var height: float = h*rng.randf_range(0.70,0.98)
             var color: Color = Color("#50483a").lerp(Color("#827b65"),rng.randf()*0.62)
@@ -713,7 +713,7 @@ jobs:
                 _v435_wood_segment(batches,start,elbow,height*0.036,color)
                 _v435_wood_segment(batches,elbow,tip,height*0.015,color.lightened(0.12))
             # No green crowns: jagged broken trunks and bare branches are visibly rotten.
-        
+
         func _v435_restore_fog() -> void:
             if is_instance_valid(v435_fog_env):
                 v435_fog_env.fog_density = v435_old_fog_density
@@ -721,7 +721,7 @@ jobs:
                 v435_fog_env.fog_enabled = v435_old_fog_enabled
             v435_fog_env = null
             v435_fog_amount = 0.0
-        
+
         func _v435_update_fog(delta: float) -> void:
             if not is_instance_valid(game) or not is_instance_valid(game.hero) or not is_inside_tree():
                 _v435_restore_fog()
@@ -752,49 +752,49 @@ jobs:
             env.fog_density = lerpf(original_density,maxf(original_density,0.0023),v435_fog_amount)
             env.fog_light_color = v435_old_fog_color.lerp(Color("#9cae9b"),v435_fog_amount*0.85)
         '''
-        
+
         MOTION = r'''
         # FIX35: only normal walking is impaired; flight uses its original movement branch.
         func v435_swamp(p: Vector3) -> float:
             if not is_instance_valid(terrain): return 0.0
             return float(terrain.call("v435_swamp_strength",Vector2(p.x,p.z)))
-        
+
         func v435_before_move(hero: CharacterBody3D) -> void:
             if not is_instance_valid(hero): return
             var factor: float = lerpf(1.0,0.48,v435_swamp(hero.global_position))
             hero.velocity.x *= factor
             hero.velocity.z *= factor
         '''
-        
+
         def motion(s):
             # A maximum 34 cm of visual immersion; not a new collider or altered floor plane.
             s=once(s,'    p.y = _floor_at(p) + 0.085','    p.y = _floor_at(p) + 0.085 - 0.34*v435_swamp(p)')
             return s+'\n'+MOTION
-        
+
         def main(s):
             a='        var v431_previous: Vector3 = hero.global_position\n        hero.move_and_slide()'
             return once(s,a,'        var v431_previous: Vector3 = hero.global_position\n        if terrain_motion != null:\n            terrain_motion.call("v435_before_move",hero)\n        hero.move_and_slide()')
-        
+
         def landmarks(s):
             # Old swamp trees are replaced by the same chunk vegetation used everywhere.
             pat=r'(?ms)^    elif id == "Moordorf":\n.*?(?=^    elif |^    return root)'
             s,n=re.subn(pat,'    elif id == "Moordorf":\n        pass # FIX35: terrain batches own all swamp trees and ground details.\n',s,count=1)
             if n!=1: raise RuntimeError('FIX35: old Moordorf landmark branch missing')
             return s
-        
+
         SMOKE = r'''
         extends SceneTree
         const T = preload("res://scripts/V417Territories.gd")
         const Terrain = preload("res://scripts/V27Terrain.gd")
         const Motion = preload("res://scripts/V31TerrainMotion.gd")
-        
+
         func _initialize() -> void:
             call_deferred("_run")
-        
+
         func fail(message: String) -> void:
             push_error("FIX35: "+message)
             quit(1)
-        
+
         func _run() -> void:
             var terrain := Terrain.new()
             var center: Vector2 = T.city_world("Moordorf")
@@ -859,7 +859,7 @@ jobs:
             print("FIX35_MARSH_OK: wet=",wet_count," dry=",dry_count," walking=",reduced," bare branches and dry roads")
             quit(0)
         '''
-        
+
         def install():
             for name,fn in [('V27Terrain.gd',terrain),('V31TerrainMotion.gd',motion),('Main.gd',main),('V417Landmarks.gd',landmarks)]:
                 p=B/name
@@ -872,7 +872,7 @@ jobs:
             s=once(s,'version/name="4.1.7.33"','version/name="4.1.7.35"')
             p.write_text(s,encoding='utf-8')
             print('FIX35_INSTALL_OK: real swamp terrain, walking, fog and bare trees')
-        
+
         if __name__=='__main__': install()
         PYFIX35
         python3 -m py_compile "$RUNNER_TEMP/lwod_fix35.py"
@@ -943,7 +943,129 @@ jobs:
             print("FIX36_DESERT_OK: obsolete water plate absent; four desert rock landmarks retained")
             quit(0)
         GDFIX36
+    - name: FIX37 Fernlandschaft und alte Weltbodenplatte korrigieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PYFIX37'
+        from pathlib import Path
+        import re
+        B=Path('android/scripts')
+        p=B/'V27Terrain.gd'
+        s=p.read_text(encoding='utf-8')
+        pattern=r'(?ms)^func _v412_rebuild_horizon\(\) -> void:\n.*?(?=^(?:func |static func |var |const |class |@|extends )|\Z)'
+        matches=list(re.finditer(pattern,s))
+        assert len(matches)==1,'FIX37: horizon function not unique'
+        m=matches[0]
+        assert 'for pad in' in m.group() and 'v412_horizon.mesh = mesh' in m.group(),'FIX37: unexpected old horizon'
+        s=s[:m.start()]+s[m.end():]
+        assert '_v412_rebuild_horizon()' in s and 'var v412_horizon: MeshInstance3D' in s
+        s+='\n'+'# FIX37: world-aligned, indexed distant terrain. Long triangles that used to\n# drag gorge colours/heights across the entire map are confined outside it.\nvar v437_grid_x: PackedFloat32Array = PackedFloat32Array()\nvar v437_grid_z: PackedFloat32Array = PackedFloat32Array()\nvar v437_grid_vertices: PackedVector3Array = PackedVector3Array()\nvar v437_grid_colors: PackedColorArray = PackedColorArray()\nvar v437_grid_normals: PackedVector3Array = PackedVector3Array()\nvar v437_min_cell: Vector2i\nvar v437_max_cell: Vector2i\n\nfunc _v437_prepare_grid() -> void:\n    if not v437_grid_vertices.is_empty():\n        return\n    var lo: Vector2 = V417Territories.map_to_world(Vector2.ZERO)\n    var hi: Vector2 = V417Territories.map_to_world(Vector2(100,100))\n    v437_min_cell = Vector2i(floori(lo.x/CHUNK)-2,floori(lo.y/CHUNK)-2)\n    v437_max_cell = Vector2i(ceili(hi.x/CHUNK)+2,ceili(hi.y/CHUNK)+2)\n    # Outer visual buffer lies beyond the inaccessible mountain perimeter.\n    v437_grid_x.append(minf(-40000.0,float(v437_min_cell.x)*CHUNK-40000.0))\n    v437_grid_z.append(minf(-40000.0,float(v437_min_cell.y)*CHUNK-40000.0))\n    for cell in range(v437_min_cell.x,v437_max_cell.x+1):\n        v437_grid_x.append(float(cell)*CHUNK)\n    for cell in range(v437_min_cell.y,v437_max_cell.y+1):\n        v437_grid_z.append(float(cell)*CHUNK)\n    v437_grid_x.append(maxf(40000.0,float(v437_max_cell.x)*CHUNK+40000.0))\n    v437_grid_z.append(maxf(40000.0,float(v437_max_cell.y)*CHUNK+40000.0))\n    var nx: int = v437_grid_x.size()\n    var nz: int = v437_grid_z.size()\n    for iz in range(nz):\n        for ix in range(nx):\n            var x: float = v437_grid_x[ix]\n            var z: float = v437_grid_z[iz]\n            var sx: float = clampf(x,v437_grid_x[1],v437_grid_x[nx-2])\n            var sz: float = clampf(z,v437_grid_z[1],v437_grid_z[nz-2])\n            var h: float = height_at(sx,sz)\n            v437_grid_vertices.append(Vector3(x,h,z))\n            v437_grid_colors.append(color_at(sx,sz,h))\n    # Smooth normals from neighbouring samples, computed only once.\n    for iz in range(nz):\n        for ix in range(nx):\n            var a: Vector3 = v437_grid_vertices[iz*nx+maxi(0,ix-1)]\n            var b: Vector3 = v437_grid_vertices[iz*nx+mini(nx-1,ix+1)]\n            var c: Vector3 = v437_grid_vertices[maxi(0,iz-1)*nx+ix]\n            var d: Vector3 = v437_grid_vertices[mini(nz-1,iz+1)*nx+ix]\n            v437_grid_normals.append((d-c).cross(b-a).normalized())\n\nfunc _v437_add_sample(p: Vector2, verts: PackedVector3Array, colors: PackedColorArray, normals: PackedVector3Array) -> int:\n    var h: float = height_at(p.x,p.y)\n    var idx: int = verts.size()\n    verts.append(Vector3(p.x,h,p.y))\n    colors.append(color_at(p.x,p.y,h))\n    # The detailed terrain supplies the surface immediately inside the seam.\n    normals.append(Vector3.UP)\n    return idx\n\nfunc _v412_rebuild_horizon() -> void:\n    _v437_prepare_grid()\n    var nx: int = v437_grid_x.size()\n    var nz: int = v437_grid_z.size()\n    var verts: PackedVector3Array = v437_grid_vertices.duplicate()\n    var colors: PackedColorArray = v437_grid_colors.duplicate()\n    var normals: PackedVector3Array = v437_grid_normals.duplicate()\n    var indices := PackedInt32Array()\n    var low: Vector2i = current_cell-Vector2i(RADIUS,RADIUS)\n    var high: Vector2i = current_cell+Vector2i(RADIUS,RADIUS)\n    for iz in range(nz-1):\n        for ix in range(nx-1):\n            var cx: int = v437_min_cell.x+ix-1\n            var cz: int = v437_min_cell.y+iz-1\n            var regular: bool = ix>0 and ix<nx-2 and iz>0 and iz<nz-2\n            var inside: bool = regular and cx>=low.x and cx<=high.x and cz>=low.y and cz<=high.y\n            if inside:\n                continue # The detailed chunk is the sole visible floor here.\n            var a: int = iz*nx+ix\n            var b: int = a+1\n            var c: int = a+nx\n            var d: int = c+1\n            var north: bool = regular and cz==high.y+1 and cx>=low.x and cx<=high.x\n            var south: bool = regular and cz==low.y-1 and cx>=low.x and cx<=high.x\n            var west: bool = regular and cx==high.x+1 and cz>=low.y and cz<=high.y\n            var east: bool = regular and cx==low.x-1 and cz>=low.y and cz<=high.y\n            if not (north or south or west or east):\n                indices.append_array(PackedInt32Array([a,c,b,b,c,d]))\n                continue\n            # Stitch the exact existing near-chunk edge at CHUNK/RESOLUTION.\n            # Every edge between two far cells still uses the same grid corners.\n            var corners := PackedInt32Array([a,c,d,b])\n            var refined: Array[bool] = [west,south,east,north]\n            var boundary := PackedInt32Array()\n            for e in range(4):\n                var i0: int = corners[e]\n                var i1: int = corners[(e+1)%4]\n                boundary.append(i0)\n                if refined[e]:\n                    for k in range(1,RESOLUTION):\n                        var p: Vector3 = verts[i0].lerp(verts[i1],float(k)/float(RESOLUTION))\n                        boundary.append(_v437_add_sample(Vector2(p.x,p.z),verts,colors,normals))\n            var center: Vector3 = (verts[a]+verts[d])*0.5\n            var mid: int = _v437_add_sample(Vector2(center.x,center.z),verts,colors,normals)\n            for e in range(boundary.size()):\n                indices.append_array(PackedInt32Array([mid,boundary[e],boundary[(e+1)%boundary.size()]]))\n    var arrays: Array = []\n    arrays.resize(Mesh.ARRAY_MAX)\n    arrays[Mesh.ARRAY_VERTEX] = verts\n    arrays[Mesh.ARRAY_COLOR] = colors\n    arrays[Mesh.ARRAY_NORMAL] = normals\n    arrays[Mesh.ARRAY_INDEX] = indices\n    var mesh := ArrayMesh.new()\n    mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)\n    if not is_instance_valid(v412_horizon):\n        v412_horizon = MeshInstance3D.new()\n        v412_horizon.name = "V412Fernlandschaft"\n        v412_horizon.material_override = material_ground\n        v412_horizon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF\n        v412_horizon.ignore_occlusion_culling = true\n        add_child(v412_horizon)\n    v412_horizon.position = Vector3.ZERO\n    v412_horizon.mesh = mesh\n    v412_horizon.custom_aabb = mesh.get_aabb().grow(2.0)\n'
+        p.write_text(s,encoding='utf-8')
+        # FIX19 lowered the previous full-world box to -1500; FIX24 searched only -0.52.
+        # Only remove the two verified old box signatures, not any active terrain or building.
+        p=B/'V21World.gd'; s=p.read_text(encoding='utf-8')
+        a=re.search(r'(?ms)^func _build_extended_ground\(\) -> void:\n.*?(?=^func |^var |^const |\Z)',s)
+        assert a,'FIX37: legacy ground function missing'
+        block=a.group()
+        old='    game._box(game, Vector3(0.0,-1500.0,0.0), Vector3(WORLD_SIZE,1.0,WORLD_SIZE), Color("#729c72"), true)'
+        old2=old.replace('-1500.0','-0.52')
+        removed=0
+        for line in (old,old2):
+            if line in block:
+                assert block.count(line)==1
+                block=block.replace(line,'    pass # FIX37: replaced by continuous near and far terrain',1)
+                removed+=1
+        assert removed<=1 and 'Vector3(WORLD_SIZE,1.0,WORLD_SIZE)' not in block,'FIX37: unknown legacy floor signature'
+        s=s[:a.start()]+block+s[a.end():]; p.write_text(s,encoding='utf-8')
+        p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
+        for a,b in [('version/code=4206','version/code=4207'),('version/name="4.1.7.36"','version/name="4.1.7.37"')]:
+            assert s.count(a)==1;s=s.replace(a,b,1)
+        p.write_text(s,encoding='utf-8')
+        print('FIX37_INSTALL_OK: fixed grid, matching near boundary, old floor removed='+str(removed))
+        PYFIX37
+        mkdir -p android/tests
+        cat > android/tests/V437HorizonSmoke.gd <<'GDFIX37'
+        extends SceneTree
+        const T = preload("res://scripts/V417Territories.gd")
+        const Terrain = preload("res://scripts/V27Terrain.gd")
 
+        class TestGame:
+            extends Node3D
+            var hero: CharacterBody3D
+            var state: int = 2
+
+        func _initialize() -> void:
+            call_deferred("_run")
+
+        func _run() -> void:
+            var g := TestGame.new()
+            root.add_child(g)
+            g.hero = CharacterBody3D.new()
+            g.add_child(g.hero)
+            var city: Vector2 = T.city_world("Sandhafen")
+            g.hero.position = Vector3(city.x,0,city.y)
+            var terrain := Terrain.new()
+            g.add_child(terrain)
+            terrain.setup(g,null,null,null)
+            for name in ["Sandhafen","Moordorf","Frostholm"]:
+                var p: Vector2 = T.city_world(name)
+                g.hero.position = Vector3(p.x,0,p.y)
+                terrain._stream(true)
+                if not _check_mesh(terrain):
+                    push_error("FIX37: distant terrain spans the local terrain or has oversized interior triangles at "+String(name))
+                    quit(1)
+                    return
+            var gorge: Vector2 = T.map_to_world(Vector2(80.2,55.0))
+            if T.gorge_depth(T.world_to_map(gorge)) < 400.0 or terrain.height_at(gorge.x,gorge.y) > terrain._v419_base_height_at(gorge.x,gorge.y)-400.0:
+                push_error("FIX37: original gorge depth lost")
+                quit(1)
+                return
+            print("FIX37_HORIZON_OK: three regions, bounded interior triangles, near/far joins, original gorge retained")
+            quit(0)
+
+        func _check_mesh(terrain: Node) -> bool:
+            var view := terrain.get_node_or_null("V412Fernlandschaft") as MeshInstance3D
+            if view==null or view.mesh==null:
+                return false
+            var arr: Array = view.mesh.surface_get_arrays(0)
+            var vertices: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+            var indices: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+            var cell: Vector2i = terrain.get("current_cell")
+            var chunk: float = Terrain.CHUNK
+            var radius: int = Terrain.RADIUS
+            var low := Vector2(float(cell.x-radius)*chunk,float(cell.y-radius)*chunk)
+            var high := Vector2(float(cell.x+radius+1)*chunk,float(cell.y+radius+1)*chunk)
+            var bounds_lo: Vector2 = T.map_to_world(Vector2.ZERO)
+            var bounds_hi: Vector2 = T.map_to_world(Vector2(100,100))
+            var seam_count: int = 0
+            var seam: Dictionary = {}
+            for i in range(0,indices.size(),3):
+                var a: Vector3 = vertices[indices[i]]
+                var b: Vector3 = vertices[indices[i+1]]
+                var c: Vector3 = vertices[indices[i+2]]
+                var pa := Vector2(a.x,a.z)
+                var pb := Vector2(b.x,b.z)
+                var pc := Vector2(c.x,c.z)
+                var mid: Vector2 = (pa+pb+pc)/3.0
+                if mid.x>low.x and mid.x<high.x and mid.y>low.y and mid.y<high.y:
+                    return false
+                if mid.x>=bounds_lo.x and mid.x<=bounds_hi.x and mid.y>=bounds_lo.y and mid.y<=bounds_hi.y:
+                    if maxf(pa.distance_to(pb),maxf(pb.distance_to(pc),pc.distance_to(pa)))>chunk*1.42:
+                        return false
+                for k in range(3):
+                    var idx: int = indices[i+k]
+                    if seam.has(idx): continue
+                    var v: Vector3 = vertices[idx]
+                    var x_edge: bool = (is_equal_approx(v.x,low.x) or is_equal_approx(v.x,high.x)) and v.z>=low.y and v.z<=high.y
+                    var z_edge: bool = (is_equal_approx(v.z,low.y) or is_equal_approx(v.z,high.y)) and v.x>=low.x and v.x<=high.x
+                    if x_edge or z_edge:
+                        seam[idx]=true
+                        seam_count+=1
+                        if absf(v.y-float(terrain.call("height_at",v.x,v.z)))>0.02:
+                            return false
+            return seam_count >= (2*radius+1)*4*Terrain.RESOLUTION
+        GDFIX37
     - name: FIX31 bis FIX33 Godot-Tests
       shell: bash
       run: |
@@ -971,16 +1093,23 @@ jobs:
         timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V436DesertSmoke.gd 2>&1 | tee build/diagnose/FIX36_Wueste.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX36: ' build/diagnose/FIX36_Wueste.log; then exit 1; fi
         grep -Fq 'FIX36_DESERT_OK:' build/diagnose/FIX36_Wueste.log
-
-    - name: FIX36 Android APK exportieren und pruefen
+    - name: FIX37 Fernlandschaft in drei Regionen testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 180s godot --headless --path android --quit-after 300 --script res://tests/V437HorizonSmoke.gd 2>&1 | tee build/diagnose/FIX37_Fernlandschaft.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX37: ' build/diagnose/FIX37_Fernlandschaft.log; then exit 1; fi
+        grep -Fq 'FIX37_HORIZON_OK:' build/diagnose/FIX37_Fernlandschaft.log
+    - name: FIX37 Android APK exportieren und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX36.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX37.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX36_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX36_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX37_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX37_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -988,12 +1117,12 @@ jobs:
         unzip -Z1 "$APK" | grep -Fx 'AndroidManifest.xml' >/dev/null
         ls -lh "$APK"
         sha256sum "$APK"
-    - name: FIX36 APK als Download hochladen
+    - name: FIX37 APK als Download hochladen
       id: apk_upload
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX36_APK
-        path: build/android/LWOD-Android-V41.7-FIX36.apk
+        name: LWOD_ANDROID_V41_7_FIX37_APK
+        path: build/android/LWOD-Android-V41.7-FIX37.apk
         if-no-files-found: error
         compression-level: 0
         retention-days: 14
@@ -1006,12 +1135,12 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX36 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-    - name: FIX36 Testprotokolle hochladen
+        printf '### Android APK Download\n\n[FIX37 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+    - name: FIX37 Testprotokolle hochladen
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_FIX36_TESTPROTOKOLLE
+        name: LWOD_FIX37_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
