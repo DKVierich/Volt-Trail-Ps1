@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX46 Burgruinen-Dach und grosser Dungeon
+name: LWOD Android V41.7 FIX47 Eigenstaendige Dungeon-Kamera
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX46 APK
+    name: LWOD Android V41.7 FIX47 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -61,12 +61,12 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX46 Burgruinen-Dach und grossen Dungeon installieren
+    - name: FIX47 Dungeon-Kamera vom Aussenbild trennen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p android/scripts android/tests
-        cat > 'android/scripts/V441Layout.gd' <<'FIX46_V441LAYOUT'
+        cat > 'android/scripts/V441Layout.gd' <<'FIX47_V441LAYOUT'
         extends RefCounted
         # Shared coordinates for ruin, dungeon, player ground and camera.
         const T = preload("res://scripts/V417Territories.gd")
@@ -167,45 +167,35 @@ jobs:
                 if rest.size()<3: break
             return pieces
 
-        static func dungeon_camera(terrain: Node,hero: CharacterBody3D,cam: Camera3D,yaw: float,pitch: float) -> void:
-            # Tight follow camera for stairs and dungeon hall. It tracks the actor height directly.
+        static func dungeon_camera(terrain: Node,hero: CharacterBody3D,cam: Camera3D,yaw: float,_pitch: float) -> void:
             var actor: Vector3 = hero.global_position
-            var focus: Vector3 = actor + Vector3.UP*1.18
-            var back := Vector3(sin(yaw),0.0,cos(yaw)).normalized()
+            var focus: Vector3 = actor+Vector3.UP*1.26
+            var back := Vector3(sin(yaw),0.0,cos(yaw))
             var q: Vector2 = local(actor)
-            var desired: Vector3 = focus + back*2.15 + Vector3.UP*0.82
+            var desired: Vector3 = focus+back*0.18+Vector3.UP*0.08
             var space: PhysicsDirectSpaceState3D = hero.get_world_3d().direct_space_state
-            var stair_zone: bool = in_stair(q) or q.y >= START_Z-0.4
-            if stair_zone:
-                desired.y = actor.y + 0.92
-                for distance in [2.25,1.95,1.65,1.35,1.05,0.80,0.55,0.35]:
-                    var candidate: Vector3 = focus + back*float(distance) + Vector3.UP*0.74
-                    candidate.y = actor.y + 0.92
-                    var c: Vector2 = local(candidate)
-                    if absf(c.x)>HALF_WIDTH-0.72: continue
-                    var ray := PhysicsRayQueryParameters3D.create(focus,candidate,0xffffffff,[hero.get_rid()])
-                    ray.hit_from_inside = true
-                    if not space.intersect_ray(ray).is_empty(): continue
-                    desired = candidate
-                    break
-            else:
-                desired = focus + back*3.1 + Vector3.UP*1.00
-                desired.y = actor.y + 1.00
-                for distance in [3.1,2.7,2.3,1.9,1.5,1.1,0.7]:
-                    var candidate: Vector3 = focus + back*float(distance) + Vector3.UP*1.00
-                    candidate.y = actor.y + 1.00
-                    var c: Vector2 = local(candidate)
-                    if absf(c.x)>32.6 or c.y<HALL_BACK+1.2 or c.y>END_Z+1.0: continue
-                    var ray := PhysicsRayQueryParameters3D.create(focus,candidate,0xffffffff,[hero.get_rid()])
-                    ray.hit_from_inside = true
-                    if not space.intersect_ray(ray).is_empty(): continue
-                    desired = candidate
-                    break
-            desired.y = clampf(desired.y, actor.y+0.58, actor.y+1.08)
-            cam.global_position = desired
+            # Short orbit, never above the outdoor terrain because the hero is underground.
+            for distance in [3.1,2.8,2.5,2.2,1.9,1.6,1.3,1.0,0.7,0.4,0.2]:
+                var candidate: Vector3 = actor+back*float(distance)+Vector3.UP*2.02
+                var c: Vector2 = local(candidate)
+                if in_stair(c) or (c.y>START_Z and c.y<=START_Z+4.5):
+                    if absf(c.x)>HALF_WIDTH-0.35: continue
+                    var floor_height: float = base(terrain)+level(c) if in_stair(c) else outside_height(terrain,c)
+                    if candidate.y<floor_height+0.28: continue
+                elif in_hall(c):
+                    if absf(c.x)>32.5 or c.y<HALL_BACK+0.55: continue
+                    if candidate.y<base(terrain)-DEPTH+0.28: continue
+                elif in_stair(q) or in_hall(q):
+                    continue
+                var ray := PhysicsRayQueryParameters3D.create(focus,candidate,0xffffffff,[hero.get_rid()])
+                ray.hit_from_inside = true
+                if not space.intersect_ray(ray).is_empty(): continue
+                desired=candidate
+                break
+            cam.global_position=desired
             cam.look_at(focus)
-        FIX46_V441LAYOUT
-        cat > 'android/scripts/V441Castle.gd' <<'FIX46_V441CASTLE'
+        FIX47_V441LAYOUT
+        cat > 'android/scripts/V441Castle.gd' <<'FIX47_V441CASTLE'
         extends Node3D
         const L = preload("res://scripts/V441Layout.gd")
         var game: Node
@@ -246,10 +236,9 @@ jobs:
             _castle()
             _dungeon()
             _commit_stones()
-            process_priority = 1500
-            process_physics_priority = 1500
-            set_physics_process(is_instance_valid(game))
-            set_process(is_instance_valid(game))
+            # Camera is owned by the persistent gameplay camera controller, not by this landmark.
+            set_physics_process(false)
+            set_process(false)
 
         func _ground(q: Vector2) -> float:
             return L.outside_height(terrain,q)-base_y
@@ -487,29 +476,9 @@ jobs:
             stones.clear()
             colors.clear()
 
-        func _physics_process(_delta: float) -> void:
-            _v445_update_camera()
 
-        func _process(_delta: float) -> void:
-            _v445_update_camera()
-
-        func _v445_update_camera() -> void:
-            if not is_instance_valid(game) or int(game.get("state"))!=2: return
-            var hero: CharacterBody3D = game.get("hero") as CharacterBody3D
-            var cam: Camera3D = game.get("camera_node") as Camera3D
-            if not is_instance_valid(hero) or not is_instance_valid(cam): return
-            var controller: Node = game.get_node_or_null("V27CameraWorldMap")
-            if not L.in_dungeon(terrain,hero.global_position):
-                if is_instance_valid(controller) and controller.has_method("_v442_indoor_camera"):
-                    controller.call("_v442_indoor_camera",false)
-                return
-            if is_instance_valid(controller) and controller.has_method("_v442_indoor_camera"):
-                controller.call("_v442_indoor_camera",true)
-            else:
-                # Safe fallback if the old controller is not available.
-                L.dungeon_camera(terrain,hero,cam,hero.global_rotation.y,0.0)
-        FIX46_V441CASTLE
-        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX46_V441RUINESMOKE'
+        FIX47_V441CASTLE
+        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX47_V441RUINESMOKE'
         extends SceneTree
         const L = preload("res://scripts/V441Layout.gd")
         const Landmarks = preload("res://scripts/V417Landmarks.gd")
@@ -528,7 +497,7 @@ jobs:
         func _initialize() -> void:
             call_deferred("_run")
         func fail(msg: String) -> void:
-            push_error("FIX46: "+msg)
+            push_error("FIX47: "+msg)
             quit(1)
         func _run() -> void:
             var g := TestGame.new()
@@ -617,18 +586,31 @@ jobs:
             var outdoor_near: float=g.camera_node.near
             g.camera_node.global_position=g.hero.global_position+Vector3.UP*80.0
             control.call("_physics_process",0.016)
-            if g.camera_node.global_position.distance_to(g.hero.global_position)>4.2:
-                fail("actual camera controller did not reclaim view")
+            var indoor: Camera3D=root.get_camera_3d()
+            if indoor==null or indoor==g.camera_node or indoor.name!="V447DungeonKamera" or indoor.global_position.distance_to(g.hero.global_position)>4.2:
+                fail("viewport did not switch to independent indoor camera")
                 return
-            g.hero.global_position=L.at(t,Vector2(0,middle),true)
-            g.camera_node.global_position+=Vector3.UP*50.0
-            castle.call("_process",0.016)
-            if g.camera_node.global_position.distance_to(g.hero.global_position)>4.2:
-                fail("render-frame camera override not corrected")
-                return
+            # Simulate legacy controller overwriting the outdoor camera and making it current.
+            # Recheck actual rendered camera on each descending and ascending frame.
+            for dir in [1,-1]:
+                for i in range(33):
+                    var progress: float = float(i)/32.0 if dir==1 else 1.0-float(i)/32.0
+                    var z: float = lerpf(L.START_Z-0.1,L.END_Z+0.1,progress)
+                    g.hero.global_position=L.at(t,Vector2(0,z),true)
+                    control.call("_physics_process",0.016)
+                    g.hero.global_position+=Vector3.DOWN*0.025
+                    g.camera_node.global_position=g.hero.global_position+Vector3.UP*80.0
+                    g.camera_node.make_current()
+                    control.call("_process",0.016)
+                    var actual: Camera3D=root.get_camera_3d()
+                    var offset: Vector3=actual.global_position-g.hero.global_position
+                    var target: Vector3=(g.hero.global_position+Vector3.UP*1.26-actual.global_position).normalized()
+                    if actual!=indoor or offset.length()>4.2 or offset.y>2.15 or offset.y<0.5 or (-actual.global_transform.basis.z).dot(target)<0.99:
+                        fail("visible camera lost actor on stair at "+str(z))
+                        return
             g.hero.global_position=L.at(t,Vector2(0,L.START_Z+6.0),false)
-            control.call("_v442_indoor_camera")
-            if absf(g.camera_node.near-outdoor_near)>0.001:
+            control.call("_process",0.016)
+            if root.get_camera_3d()!=g.camera_node or absf(g.camera_node.near-outdoor_near)>0.001:
                 fail("outdoor camera not restored")
                 return
             motion.free()
@@ -677,9 +659,9 @@ jobs:
                 fail("could not verify actual cutout edges")
                 return
             world.free()
-            print("FIX46_RUINE_OK: ruin style roof, larger hall and low follow camera")
+            print("FIX47_RUINE_OK: independent viewport camera, 66 stair frames and outdoor restore")
             quit(0)
-        FIX46_V441RUINESMOKE
+        FIX47_V441RUINESMOKE
         cat > '/tmp/lwod_fix41.py' <<'FIX41_PATCH'
         from pathlib import Path
         import re, os
@@ -727,54 +709,73 @@ jobs:
         a='    if is_instance_valid(terrain) and terrain.has_method("surface_height_at"):\n'
         s=once(s,a,a+'        if V441Layout.in_stair(V441Layout.local(p)):\n            return V441Layout.dungeon_floor(terrain,p)+0.085\n')
         p.write_text(s,encoding='utf-8')
-        # FIX42: the actual camera controller owns the indoor view as well. No second writer.
+        # FIX47: independent current camera, not the outdoor camera shared by legacy controllers.
         p=B/'V27CameraMap.gd'
         s=p.read_text(encoding='utf-8')
         anchor='func _physics_process(delta: float) -> void:\n'
         s=once(s,anchor,anchor+"""    if _v442_indoor_camera(true):
                 return
         """)
+        s=once(s,'func _process(_delta: float) -> void:\n','func _process(_delta: float) -> void:\n    _v447_present()\n')
+        s=once(s,'    name = "V27CameraWorldMap"\n','    name = "V27CameraWorldMap"\n    process_priority = 2000\n')
         s += r'''
         const V441Layout = preload("res://scripts/V441Layout.gd")
         var v442_indoor_active: bool = false
-        var v442_previous_env: Environment
-        var v442_dark_env: Environment
-        var v443_old_near: float = 0.15
+        var v447_camera: Camera3D
+        var v447_dark_env: Environment
+        var v447_offset: Vector3 = Vector3.ZERO
 
         func _v442_indoor_camera(apply_view: bool = false) -> bool:
-            if not is_instance_valid(game):
-                return false
-            var cam: Camera3D = game.get("camera_node") as Camera3D
+            if not is_instance_valid(game): return false
+            var outdoor: Camera3D = game.get("camera_node") as Camera3D
             var actor: CharacterBody3D = game.get("hero") as CharacterBody3D
-            if not is_instance_valid(cam):
-                return false
+            if not is_instance_valid(outdoor): return false
             var indoors: bool = int(game.get("state"))==2 and is_instance_valid(actor) and is_instance_valid(terrain) and V441Layout.in_dungeon(terrain,actor.global_position)
             if not indoors:
                 if v442_indoor_active:
-                    cam.environment = v442_previous_env
-                    cam.near = v443_old_near
-                    v442_previous_env = null
                     v442_indoor_active = false
+                    outdoor.make_current()
+                    v447_offset=Vector3.ZERO
                 return false
+            if not is_instance_valid(v447_camera):
+                v447_camera=Camera3D.new()
+                v447_camera.name="V447DungeonKamera"
+                v447_camera.physics_interpolation_mode=Node.PHYSICS_INTERPOLATION_MODE_OFF
+                v447_camera.near=0.07
+                v447_camera.far=outdoor.far
+                v447_camera.fov=outdoor.fov
+                v447_camera.keep_aspect=outdoor.keep_aspect
+                v447_camera.cull_mask=outdoor.cull_mask
+                v447_dark_env=Environment.new()
+                v447_dark_env.background_mode=Environment.BG_COLOR
+                v447_dark_env.background_color=Color("#211a15")
+                v447_dark_env.ambient_light_source=Environment.AMBIENT_SOURCE_COLOR
+                v447_dark_env.ambient_light_color=Color("#b7a28a")
+                v447_dark_env.ambient_light_energy=0.30
+                v447_camera.environment=v447_dark_env
+                add_child(v447_camera)
             if not v442_indoor_active:
-                v442_previous_env = cam.environment
-                v443_old_near = cam.near
-                cam.near = 0.07
-                if v442_dark_env==null:
-                    v442_dark_env = Environment.new()
-                    v442_dark_env.background_mode = Environment.BG_COLOR
-                    v442_dark_env.background_color = Color("#211a15")
-                    v442_dark_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-                    v442_dark_env.ambient_light_color = Color("#b7a28a")
-                    v442_dark_env.ambient_light_energy = 0.30
-                cam.environment = v442_dark_env
-                v442_indoor_active = true
+                v442_indoor_active=true
+                v447_offset=Vector3(sin(yaw_offset)*0.35,1.80,cos(yaw_offset)*0.35)
             if apply_view:
-                V441Layout.dungeon_camera(terrain,actor,cam,yaw_offset,pitch)
+                V441Layout.dungeon_camera(terrain,actor,v447_camera,yaw_offset,pitch)
+                v447_offset=v447_camera.global_position-actor.global_position
+            _v447_place(actor)
             return true
+
+        func _v447_place(actor: CharacterBody3D) -> void:
+            if not is_instance_valid(v447_camera): return
+            # Follow the latest hero position every rendered frame, even between physics ticks.
+            v447_camera.global_position=actor.global_position+v447_offset
+            v447_camera.look_at(actor.global_position+Vector3.UP*1.26)
+            if get_viewport().get_camera_3d()!=v447_camera:
+                v447_camera.make_current()
+
+        func _v447_present() -> void:
+            _v442_indoor_camera(false)
         '''
         p.write_text(s,encoding='utf-8')
-        print('FIX42 indoor camera branch installed')
+        print('FIX47 independent current indoor camera installed')
         # Old decoration exclusion was 160 m around Ruine, covering entire 128 x 144 m castle.
         # Preserve it, existing map / teleporter / landscape and the old streaming fixes.
         p=B/'V27Terrain.gd';s=p.read_text(encoding='utf-8');assert 'city == "Ruine"' in s
@@ -783,7 +784,7 @@ jobs:
         s += '\nconst V443Shaft = preload("res://scripts/V441Layout.gd")\n\nfunc _v443_triangle(st: SurfaceTool,a: Vector2,b: Vector2,c: Vector2,origin: Vector2) -> void:\n    # Cheap broad-phase: for all other regions emit original vertices exactly as before.\n    var centre: Vector2 = V443Shaft.centre()\n    if a.distance_squared_to(centre)>36000.0 and b.distance_squared_to(centre)>36000.0 and c.distance_squared_to(centre)>36000.0:\n        for p in [a,b,c]: _emit_vertex(st,p.x,p.y,origin)\n        return\n    var qa: Vector2 = V443Shaft.local(Vector3(a.x,0,a.y))\n    var qb: Vector2 = V443Shaft.local(Vector3(b.x,0,b.y))\n    var qc: Vector2 = V443Shaft.local(Vector3(c.x,0,c.y))\n    if minf(qa.x,minf(qb.x,qc.x))>=V443Shaft.HALF_WIDTH or maxf(qa.x,maxf(qb.x,qc.x))<=-V443Shaft.HALF_WIDTH or minf(qa.y,minf(qb.y,qc.y))>=V443Shaft.START_Z or maxf(qa.y,maxf(qb.y,qc.y))<=V443Shaft.END_Z:\n        for p in [a,b,c]: _emit_vertex(st,p.x,p.y,origin)\n        return\n    # Fill the normal chunk vertex cache even when a triangle crosses the shaft.\n    var poly := PackedVector3Array()\n    for p in [a,b,c]:\n        if not v414_vertex_cache.has(p):\n            var h: float = height_at(p.x,p.y)\n            v414_vertex_cache[p]=[h,color_at(p.x,p.y,h)]\n        var q: Vector2 = V443Shaft.local(Vector3(p.x,0,p.y))\n        poly.append(Vector3(q.x,float(v414_vertex_cache[p][0]),q.y))\n    for piece in V443Shaft.cut_triangle(poly):\n        for i in range(1,piece.size()-1):\n            var v0: Vector3 = piece[0]\n            var v1: Vector3 = piece[i]\n            var v2: Vector3 = piece[i+1]\n            if (v1-v0).cross(v2-v0).length_squared()<0.000001: continue\n            for v in [v0,v1,v2]:\n                var p: Vector2 = V443Shaft.world(Vector2(v.x,v.z))\n                st.set_color(color_at(p.x,p.y,v.y))\n                st.add_vertex(Vector3(p.x-origin.x,v.y,p.y-origin.y))\n'
         p.write_text(s,encoding='utf-8')
         p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
-        s=once(s,'version/code=4209','version/code=4215');s=once(s,'version/name="4.1.7.39"','version/name="4.1.7.45"');p.write_text(s,encoding='utf-8')
+        s=once(s,'version/code=4209','version/code=4217');s=once(s,'version/name="4.1.7.39"','version/name="4.1.7.47"');p.write_text(s,encoding='utf-8')
         print('FIX41_INSTALL_OK: old pillars removed; real castle and underground layout linked to player and flight')
         FIX41_PATCH
         python3 -m py_compile /tmp/lwod_fix41.py
@@ -797,22 +798,22 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX46 Burgruinen-Dach und Kamera testen
+    - name: FIX47 Aktive Dungeon-Kamera und Treppenlauf testen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX46_Ruine.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX46: ' build/diagnose/FIX46_Ruine.log; then exit 1; fi
-        grep -Fq 'FIX46_RUINE_OK:' build/diagnose/FIX46_Ruine.log
-    - name: FIX46 Android APK exportieren und pruefen
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX47_Ruine.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX47: ' build/diagnose/FIX47_Ruine.log; then exit 1; fi
+        grep -Fq 'FIX47_RUINE_OK:' build/diagnose/FIX47_Ruine.log
+    - name: FIX47 Android APK exportieren und pruefen
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX46.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX47.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX46_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX46_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX47_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX47_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -822,13 +823,13 @@ jobs:
         sha256sum "$APK"
       shell: bash
     - id: apk_upload
-      name: FIX46 APK als Download hochladen
+      name: FIX47 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX46_APK
-        path: build/android/LWOD-Android-V41.7-FIX46.apk
+        name: LWOD_ANDROID_V41_7_FIX47_APK
+        path: build/android/LWOD-Android-V41.7-FIX47.apk
         retention-days: 14
     - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
@@ -838,13 +839,13 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX46 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        printf '### Android APK Download\n\n[FIX47 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
       shell: bash
     - if: always()
-      name: FIX46 Testprotokolle hochladen
+      name: FIX47 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX46_TESTPROTOKOLLE
+        name: LWOD_FIX47_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
