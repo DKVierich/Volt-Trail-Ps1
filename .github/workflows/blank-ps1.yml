@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX44 Ueberdachter Dungeon-Eingang
+name: LWOD Android V41.7 FIX45 Dungeon Dach und Kameratest repariert
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX44 APK
+    name: LWOD Android V41.7 FIX45 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -61,12 +61,12 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX44 Ueberdachten Eingang und Innenkamera installieren
+    - name: FIX45 Ueberdachten Eingang und Innenkamera installieren
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p android/scripts android/tests
-        cat > 'android/scripts/V441Layout.gd' <<'FIX44_V441LAYOUT'
+        cat > 'android/scripts/V441Layout.gd' <<'FIX45_V441LAYOUT'
         extends RefCounted
         # Shared coordinates for ruin, dungeon, player ground and camera.
         const T = preload("res://scripts/V417Territories.gd")
@@ -117,8 +117,9 @@ jobs:
 
         static func in_dungeon(terrain: Node,p: Vector3) -> bool:
             var q: Vector2 = local(p)
-            if not in_stair(q) and not in_hall(q): return false
             var rel: float = p.y-base(terrain)
+            if absf(q.x)<=HALF_WIDTH and q.y>START_Z and q.y<=START_Z+4.5:
+                return p.y<=outside_height(terrain,q)+2.5
             if in_stair(q):
                 return rel <= level(q)+2.5
             return in_hall(q) and rel < -9.0
@@ -167,35 +168,34 @@ jobs:
             return pieces
 
         static func dungeon_camera(terrain: Node,hero: CharacterBody3D,cam: Camera3D,yaw: float,pitch: float) -> void:
-            # Tight shoulder camera that follows the actor down the stairs instead of floating upward.
-            var focus: Vector3 = hero.global_position + Vector3.UP*1.18
-            var back := Vector3(sin(yaw),0.0,cos(yaw)).normalized()
-            var q: Vector2 = local(hero.global_position)
-            var desired: Vector3 = focus + back*2.9 + Vector3.UP*0.92
-            if in_stair(q):
-                desired.y = hero.global_position.y + 1.05
-                var d: Vector2 = local(desired)-local(focus)
-                var scale: float = 1.0
-                if d.x>0.0001: scale=minf(scale,(HALF_WIDTH-0.82-q.x)/d.x)
-                elif d.x< -0.0001: scale=minf(scale,(-HALF_WIDTH+0.82-q.x)/d.x)
-                scale = clampf(scale,0.18,1.0)
-                desired = focus + (desired-focus)*scale
-            else:
-                desired.y = minf(hero.global_position.y + 1.25, base(terrain)-DEPTH+3.6)
-            desired.y = clampf(desired.y, hero.global_position.y+0.72, hero.global_position.y+1.35)
+            # Never clamp the indoor camera to the OUTDOOR terrain height.
+            var actor: Vector3 = hero.global_position
+            var focus: Vector3 = actor+Vector3.UP*1.26
+            var back := Vector3(sin(yaw),0.0,cos(yaw))
+            var q: Vector2 = local(actor)
+            var desired: Vector3 = focus+back*0.25+Vector3.UP*0.14
             var space: PhysicsDirectSpaceState3D = hero.get_world_3d().direct_space_state
-            var ray := PhysicsRayQueryParameters3D.create(focus,desired,0xffffffff,[hero.get_rid()])
-            var hit: Dictionary = space.intersect_ray(ray)
-            if not hit.is_empty():
-                var impact: Vector3 = hit["position"]
-                desired = focus.lerp(impact,0.72)
-                desired.y = clampf(desired.y, hero.global_position.y+0.60, hero.global_position.y+1.35)
-            if desired.distance_squared_to(focus)<0.05:
-                desired = focus + back*0.18 + Vector3.UP*0.12
-            cam.global_position = desired
+            # Shorten the orbit when the rising staircase or a side wall blocks the view.
+            # The vertical offset always follows the actor, including when descending.
+            for distance in [3.2,2.8,2.4,2.0,1.6,1.2,0.8,0.4,0.2]:
+                var candidate: Vector3 = focus+back*float(distance)+Vector3.UP*(0.62+clampf(pitch,-0.4,0.6)*0.28)
+                var c: Vector2 = local(candidate)
+                var is_shaft: bool = c.y>=END_Z and c.y<=START_Z+4.5
+                if is_shaft and (in_stair(q) or q.y>=START_Z):
+                    if absf(c.x)>HALF_WIDTH-0.55: continue
+                    var ground: float = base(terrain)+level(c) if in_stair(c) else outside_height(terrain,c)
+                    if candidate.y<ground+0.40: continue
+                elif q.y<END_Z and (absf(c.x)>33.35 or c.y<HALL_BACK+0.65):
+                    continue
+                var ray := PhysicsRayQueryParameters3D.create(focus,candidate,0xffffffff,[hero.get_rid()])
+                ray.hit_from_inside = true
+                if not space.intersect_ray(ray).is_empty(): continue
+                desired=candidate
+                break
+            cam.global_position=desired
             cam.look_at(focus)
-        FIX44_V441LAYOUT
-        cat > 'android/scripts/V441Castle.gd' <<'FIX44_V441CASTLE'
+        FIX45_V441LAYOUT
+        cat > 'android/scripts/V441Castle.gd' <<'FIX45_V441CASTLE'
         extends Node3D
         const L = preload("res://scripts/V441Layout.gd")
         var game: Node
@@ -208,8 +208,6 @@ jobs:
         var base_y: float = 0.0
         var stone_mat: StandardMaterial3D
         var torch_mat: StandardMaterial3D
-        var v443_camera_valid: bool = false
-        var v443_camera_transform: Transform3D
 
         func setup(owner_game: Node,land: Node) -> void:
             name = "V441VerfalleneBurg"
@@ -408,31 +406,36 @@ jobs:
                 var z: float = L.START_Z-(float(i)+0.5)*run
                 var y: float = L.level(Vector2(0,z))
                 _floor_box(Vector2(0,z),y,Vector2(L.HALF_WIDTH*2.0,run+0.035))
-            # Covered entrance canopy directly behind the gate.
-            var entry_top: float = maxf(_ground(Vector2(0,L.START_Z-0.8)), _ground(Vector2(0,L.START_Z-6.0))) + 2.6
-            _roof_seal("EingangsVordach", Vector3(0, entry_top, L.START_Z-3.5), Vector3(L.HALF_WIDTH*2.0+3.2, 1.1, 7.2))
-            # Retaining walls reach the true outdoor surface; a raised stone lip prevents falls.
-            # Their colliders run all the way to the stair floor and leave the end portals unobstructed.
-            for i in range(12):
-                var a: float = L.START_Z-float(i)*4.0
-                var b: float = a-4.0
+            # Full-length roof: its two pieces meet at the entrance, not halfway down.
+            var shaft_length: float = L.START_Z-L.END_Z
+            var roof_bottom: float = 4.5
+            for i in range(13):
+                var z: float = lerpf(L.START_Z+4.5,L.END_Z,float(i)/12.0)
+                for x in [-L.HALF_WIDTH,0.0,L.HALF_WIDTH]:
+                    roof_bottom=maxf(roof_bottom,_ground(Vector2(float(x),z))+4.5)
+            var roof_y: float = roof_bottom+0.65
+            _roof_seal("EingangsVordach",Vector3(0,roof_y,L.START_Z+2.25),Vector3(L.HALF_WIDTH*2.0+2.5,1.3,4.5))
+            _roof_seal("TreppenDach",Vector3(0,roof_y,(L.START_Z+L.END_Z)*0.5),Vector3(L.HALF_WIDTH*2.0+2.5,1.3,shaft_length))
+            var sections: int = maxi(1,ceili(shaft_length/2.0))
+            for i in range(sections):
+                var a: float = lerpf(L.START_Z,L.END_Z,float(i)/float(sections))
+                var b: float = lerpf(L.START_Z,L.END_Z,float(i+1)/float(sections))
                 var y: float = L.level(Vector2(0,b))-0.65
                 for x in [-L.HALF_WIDTH-0.58,L.HALF_WIDTH+0.58]:
-                    var q := Vector2(float(x),(a+b)*0.5)
-                    var top: float = maxf(_ground(Vector2(q.x,a)),_ground(Vector2(q.x,b)))+1.45
-                    _wall(Vector2(q.x,a),Vector2(q.x,b),maxf(2.2,top-y),1.28,false,true,y)
-            # Continuous stone roof above the complete stair run.
-            var roof_mid_z: float = (L.START_Z + L.END_Z) * 0.5
-            var roof_y: float = maxf(_ground(Vector2(0,L.START_Z-2.0)), _ground(Vector2(0,L.END_Z+2.0))) + 2.3
-            _roof_seal("TreppenDach", Vector3(0, roof_y, roof_mid_z), Vector3(L.HALF_WIDTH*2.0+2.4, 1.25, absf(L.START_Z-L.END_Z)*0.5 + 1.4))
+                    _wall(Vector2(float(x),a),Vector2(float(x),b),roof_bottom-y+0.40,1.28,false,true,y)
+            # Side walls for the covered approach, open at its front.
+            for x in [-L.HALF_WIDTH-0.58,L.HALF_WIDTH+0.58]:
+                var y: float = minf(_ground(Vector2(float(x),L.START_Z)),_ground(Vector2(float(x),L.START_Z+4.5)))
+                _wall(Vector2(float(x),L.START_Z),Vector2(float(x),L.START_Z+4.5),roof_bottom-y+0.40,1.28,false,true,y)
             # Main hall and four connecting side rooms at the foot of the same staircase.
             var floor_y: float = -L.DEPTH
             var center_z: float = (L.END_Z+L.HALL_BACK)*0.5
-            _floor_box(Vector2(0,center_z),floor_y-0.075,Vector2(68,56))
+            var hall_length: float = L.END_Z-L.HALL_BACK
+            _floor_box(Vector2(0,center_z),floor_y-0.075,Vector2(68,hall_length))
             for ix in range(28):
                 for iz in range(24):
                     var w: float = 68.0/28.0
-                    var d: float = 56.0/24.0
+                    var d: float = hall_length/24.0
                     var q := Vector2(-34.0+(float(ix)+0.5)*w,L.HALL_BACK+(float(iz)+0.5)*d)
                     _stone(Vector3(q.x,floor_y-0.04,q.y),Vector3(w-0.035,0.08,d-0.035),Color("#59534d").lerp(Color("#71685b"),rng.randf()*0.65))
             _wall(Vector2(-34,L.END_Z),Vector2(-L.HALF_WIDTH,L.END_Z),8,2,false,true,floor_y)
@@ -441,15 +444,15 @@ jobs:
             _wall(Vector2(34,L.END_Z),Vector2(34,L.HALL_BACK),8,2,false,true,floor_y)
             _wall(Vector2(-34,L.HALL_BACK),Vector2(34,L.HALL_BACK),8,2,false,true,floor_y)
             for x in [-15.0,15.0]:
-                _wall(Vector2(x,L.END_Z),Vector2(x,-100),7.9,1.6,false,true,floor_y)
-                _wall(Vector2(x,-108),Vector2(x,-123),7.9,1.6,false,true,floor_y)
-                _wall(Vector2(x,-131),Vector2(x,L.HALL_BACK),7.9,1.6,false,true,floor_y)
-            _roof_seal("HallenDecke",Vector3(0,floor_y+8.0,center_z),Vector3(70,1.5,58))
+                _wall(Vector2(x,L.END_Z),Vector2(x,L.END_Z-12.0),7.9,1.6,false,true,floor_y)
+                _wall(Vector2(x,L.END_Z-18.0),Vector2(x,L.HALL_BACK+12.0),7.9,1.6,false,true,floor_y)
+                _wall(Vector2(x,L.HALL_BACK+6.0),Vector2(x,L.HALL_BACK),7.9,1.6,false,true,floor_y)
+            _roof_seal("HallenDecke",Vector3(0,floor_y+8.0,center_z),Vector3(70,1.5,hall_length))
             # Stone face above the lower doorway, preventing daylight through the earth wall.
-            var top: float = maxf(_ground(Vector2(0,L.END_Z)),0.0)+1.3
+            var top: float = roof_bottom+1.3
             var bottom: float = floor_y+7.25
             _roof_seal("SchachtAbschluss",Vector3(0,(top+bottom)*0.5,L.END_Z-0.9),Vector3(L.HALF_WIDTH*2.0+2.0,top-bottom,1.8))
-            for p in [Vector2(-5.10,-46),Vector2(5.10,-62),Vector2(-5.10,-78),Vector2(-14.12,-93),Vector2(14.12,-116),Vector2(-32.92,-112),Vector2(32.92,-112),Vector2(-14.12,-135)]:
+            for p in [Vector2(-5.10,L.START_Z-4.0),Vector2(5.10,L.START_Z-12.0),Vector2(-5.10,L.END_Z+4.0),Vector2(-14.12,L.END_Z-8.0),Vector2(14.12,L.END_Z-22.0),Vector2(-32.92,center_z),Vector2(32.92,center_z),Vector2(-14.12,L.HALL_BACK+3.0)]:
                 _light(p,L.level(p)+2.5)
             set_meta("dungeon_steps",48)
             set_meta("continuous_stair",true)
@@ -475,28 +478,28 @@ jobs:
             colors.clear()
 
         func _physics_process(_delta: float) -> void:
-            v443_camera_valid = false
-            if not is_instance_valid(game) or int(game.get("state"))!=2: return
-            var hero: CharacterBody3D = game.get("hero") as CharacterBody3D
-            if not is_instance_valid(hero) or not L.in_dungeon(terrain,hero.global_position): return
-            # Old outdoor cameras must not overwrite the final indoor view.
-            var controller: Node = game.get_node_or_null("V27CameraWorldMap")
-            if is_instance_valid(controller) and controller.has_method("_v442_indoor_camera"):
-                controller.call("_v442_indoor_camera",true)
-                var cam: Camera3D = game.get("camera_node") as Camera3D
-                if is_instance_valid(cam):
-                    v443_camera_transform=cam.global_transform
-                    v443_camera_valid=true
+            _v445_update_camera()
 
         func _process(_delta: float) -> void:
-            if not v443_camera_valid or not is_instance_valid(game) or int(game.get("state"))!=2: return
+            _v445_update_camera()
+
+        func _v445_update_camera() -> void:
+            if not is_instance_valid(game) or int(game.get("state"))!=2: return
             var hero: CharacterBody3D = game.get("hero") as CharacterBody3D
             var cam: Camera3D = game.get("camera_node") as Camera3D
-            if not is_instance_valid(hero) or not is_instance_valid(cam) or not L.in_dungeon(terrain,hero.global_position): return
-            if cam.global_position.distance_to(v443_camera_transform.origin)>0.35 or cam.global_transform.basis.z.dot(v443_camera_transform.basis.z)<0.98:
-                cam.global_transform=v443_camera_transform
-        FIX44_V441CASTLE
-        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX44_V441RUINESMOKE'
+            if not is_instance_valid(hero) or not is_instance_valid(cam): return
+            var controller: Node = game.get_node_or_null("V27CameraWorldMap")
+            if not L.in_dungeon(terrain,hero.global_position):
+                if is_instance_valid(controller) and controller.has_method("_v442_indoor_camera"):
+                    controller.call("_v442_indoor_camera",false)
+                return
+            if is_instance_valid(controller) and controller.has_method("_v442_indoor_camera"):
+                controller.call("_v442_indoor_camera",true)
+            else:
+                # Safe fallback if the old controller is not available.
+                L.dungeon_camera(terrain,hero,cam,hero.global_rotation.y,0.0)
+        FIX45_V441CASTLE
+        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX45_V441RUINESMOKE'
         extends SceneTree
         const L = preload("res://scripts/V441Layout.gd")
         const Landmarks = preload("res://scripts/V417Landmarks.gd")
@@ -515,7 +518,7 @@ jobs:
         func _initialize() -> void:
             call_deferred("_run")
         func fail(msg: String) -> void:
-            push_error("FIX44: "+msg)
+            push_error("FIX45: "+msg)
             quit(1)
         func _run() -> void:
             var g := TestGame.new()
@@ -537,6 +540,11 @@ jobs:
             if not castle.find_children("*","Label3D",true,false).is_empty() or castle.get_node_or_null("DungeonKollision/HallenDecke")==null or castle.get_node_or_null("DungeonKollision/TreppenDach")==null or castle.get_node_or_null("DungeonKollision/EingangsVordach")==null:
                 fail("unexpected labels or missing hall roof")
                 return
+            var stair_roof: CollisionShape3D=castle.get_node("DungeonKollision/TreppenDach") as CollisionShape3D
+            var roof_shape: BoxShape3D=stair_roof.shape as BoxShape3D
+            if roof_shape==null or stair_roof.position.z-roof_shape.size.z*0.5>L.END_Z+0.01 or stair_roof.position.z+roof_shape.size.z*0.5<L.START_Z-0.01:
+                fail("roof does not cover full staircase")
+                return
             if castle.has_method("_move_to"):
                 fail("portal still moves actor")
                 return
@@ -546,8 +554,9 @@ jobs:
             g.hero.global_position=L.at(t,Vector2(0,L.START_Z+0.25),false)
             g.hero.rotation.y=0.73
             var angle: float=g.hero.rotation.y
+            var samples: int = roundi((L.START_Z-L.END_Z+1.0)/0.25)+1
             for dir in [1,-1]:
-                for i in range(197):
+                for i in range(samples):
                     var z: float = L.START_Z+0.25-float(i)*0.25 if dir==1 else L.END_Z-0.75+float(i)*0.25
                     var q: Vector2=L.world(Vector2(0,z))
                     var before: float=g.hero.global_position.y
@@ -573,13 +582,15 @@ jobs:
             g.camera_node=Camera3D.new()
             g.add_child(g.camera_node)
             await physics_frame
-            for q in [Vector2(0,-40),Vector2(0,-65),Vector2(0,-82),Vector2(0,-112)]:
+            var middle: float = (L.START_Z+L.END_Z)*0.5
+            var hall_mid: float = (L.END_Z+L.HALL_BACK)*0.5
+            for q in [Vector2(0,L.START_Z-0.5),Vector2(0,middle),Vector2(0,L.END_Z+0.5),Vector2(0,hall_mid),Vector2(0,L.HALL_BACK+4.0)]:
                 g.hero.global_position=L.at(t,q,true)
                 for yaw in [0.0,0.9,1.8,2.7,3.6,4.5,5.4]:
                     L.dungeon_camera(t,g.hero,g.camera_node,yaw,1.0)
                     var offset: Vector3=g.camera_node.global_position-g.hero.global_position
                     var target: Vector3=(g.hero.global_position+Vector3.UP*1.26-g.camera_node.global_position).normalized()
-                    if offset.length()>5.8 or offset.y>3.05 or (-g.camera_node.global_transform.basis.z).dot(target)<0.99:
+                    if offset.length()>4.2 or offset.y>2.15 or (-g.camera_node.global_transform.basis.z).dot(target)<0.99:
                         fail("camera outside close third-person viewing range")
                         return
             var control := CameraController.new()
@@ -589,19 +600,23 @@ jobs:
             control.terrain=t
             control.set_physics_process(false)
             control.set_process(false)
-            g.hero.global_position=L.at(t,Vector2(0,-112),true)
+            g.hero.global_position=L.at(t,Vector2(0,hall_mid),true)
+            if not L.in_dungeon(t,g.hero.global_position):
+                fail("invalid test position: not inside current hall")
+                return
             var outdoor_near: float=g.camera_node.near
             g.camera_node.global_position=g.hero.global_position+Vector3.UP*80.0
-            castle.call("_physics_process",0.016)
-            if g.camera_node.global_position.distance_to(g.hero.global_position)>5.8:
+            control.call("_physics_process",0.016)
+            if g.camera_node.global_position.distance_to(g.hero.global_position)>4.2:
                 fail("actual camera controller did not reclaim view")
                 return
+            g.hero.global_position=L.at(t,Vector2(0,middle),true)
             g.camera_node.global_position+=Vector3.UP*50.0
             castle.call("_process",0.016)
-            if g.camera_node.global_position.distance_to(g.hero.global_position)>5.8:
+            if g.camera_node.global_position.distance_to(g.hero.global_position)>4.2:
                 fail("render-frame camera override not corrected")
                 return
-            g.hero.global_position=L.at(t,Vector2(0,L.START_Z+2.0),false)
+            g.hero.global_position=L.at(t,Vector2(0,L.START_Z+6.0),false)
             control.call("_v442_indoor_camera")
             if absf(g.camera_node.near-outdoor_near)>0.001:
                 fail("outdoor camera not restored")
@@ -652,9 +667,9 @@ jobs:
                 fail("could not verify actual cutout edges")
                 return
             world.free()
-            print("FIX44_RUINE_OK: covered cutout, 48 steps, covered entry, 48 steps, close following camera")
+            print("FIX45_RUINE_OK: full roof, 48 steps, live camera controller and render update")
             quit(0)
-        FIX44_V441RUINESMOKE
+        FIX45_V441RUINESMOKE
         cat > '/tmp/lwod_fix41.py' <<'FIX41_PATCH'
         from pathlib import Path
         import re, os
@@ -706,7 +721,7 @@ jobs:
         p=B/'V27CameraMap.gd'
         s=p.read_text(encoding='utf-8')
         anchor='func _physics_process(delta: float) -> void:\n'
-        s=once(s,anchor,anchor+"""    if _v442_indoor_camera():
+        s=once(s,anchor,anchor+"""    if _v442_indoor_camera(true):
                 return
         """)
         s += r'''
@@ -758,7 +773,7 @@ jobs:
         s += '\nconst V443Shaft = preload("res://scripts/V441Layout.gd")\n\nfunc _v443_triangle(st: SurfaceTool,a: Vector2,b: Vector2,c: Vector2,origin: Vector2) -> void:\n    # Cheap broad-phase: for all other regions emit original vertices exactly as before.\n    var centre: Vector2 = V443Shaft.centre()\n    if a.distance_squared_to(centre)>36000.0 and b.distance_squared_to(centre)>36000.0 and c.distance_squared_to(centre)>36000.0:\n        for p in [a,b,c]: _emit_vertex(st,p.x,p.y,origin)\n        return\n    var qa: Vector2 = V443Shaft.local(Vector3(a.x,0,a.y))\n    var qb: Vector2 = V443Shaft.local(Vector3(b.x,0,b.y))\n    var qc: Vector2 = V443Shaft.local(Vector3(c.x,0,c.y))\n    if minf(qa.x,minf(qb.x,qc.x))>=V443Shaft.HALF_WIDTH or maxf(qa.x,maxf(qb.x,qc.x))<=-V443Shaft.HALF_WIDTH or minf(qa.y,minf(qb.y,qc.y))>=V443Shaft.START_Z or maxf(qa.y,maxf(qb.y,qc.y))<=V443Shaft.END_Z:\n        for p in [a,b,c]: _emit_vertex(st,p.x,p.y,origin)\n        return\n    # Fill the normal chunk vertex cache even when a triangle crosses the shaft.\n    var poly := PackedVector3Array()\n    for p in [a,b,c]:\n        if not v414_vertex_cache.has(p):\n            var h: float = height_at(p.x,p.y)\n            v414_vertex_cache[p]=[h,color_at(p.x,p.y,h)]\n        var q: Vector2 = V443Shaft.local(Vector3(p.x,0,p.y))\n        poly.append(Vector3(q.x,float(v414_vertex_cache[p][0]),q.y))\n    for piece in V443Shaft.cut_triangle(poly):\n        for i in range(1,piece.size()-1):\n            var v0: Vector3 = piece[0]\n            var v1: Vector3 = piece[i]\n            var v2: Vector3 = piece[i+1]\n            if (v1-v0).cross(v2-v0).length_squared()<0.000001: continue\n            for v in [v0,v1,v2]:\n                var p: Vector2 = V443Shaft.world(Vector2(v.x,v.z))\n                st.set_color(color_at(p.x,p.y,v.y))\n                st.add_vertex(Vector3(p.x-origin.x,v.y,p.y-origin.y))\n'
         p.write_text(s,encoding='utf-8')
         p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
-        s=once(s,'version/code=4209','version/code=4213');s=once(s,'version/name="4.1.7.39"','version/name="4.1.7.43"');p.write_text(s,encoding='utf-8')
+        s=once(s,'version/code=4209','version/code=4215');s=once(s,'version/name="4.1.7.39"','version/name="4.1.7.45"');p.write_text(s,encoding='utf-8')
         print('FIX41_INSTALL_OK: old pillars removed; real castle and underground layout linked to player and flight')
         FIX41_PATCH
         python3 -m py_compile /tmp/lwod_fix41.py
@@ -772,22 +787,22 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX44 Ueberdachten Eingang und Kamera testen
+    - name: FIX45 Ueberdachten Eingang und Kamera testen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX44_Ruine.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX44: ' build/diagnose/FIX44_Ruine.log; then exit 1; fi
-        grep -Fq 'FIX44_RUINE_OK:' build/diagnose/FIX44_Ruine.log
-    - name: FIX44 Android APK exportieren und pruefen
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX45_Ruine.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX45: ' build/diagnose/FIX45_Ruine.log; then exit 1; fi
+        grep -Fq 'FIX45_RUINE_OK:' build/diagnose/FIX45_Ruine.log
+    - name: FIX45 Android APK exportieren und pruefen
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX44.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX45.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX44_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX44_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX45_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX45_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -797,13 +812,13 @@ jobs:
         sha256sum "$APK"
       shell: bash
     - id: apk_upload
-      name: FIX44 APK als Download hochladen
+      name: FIX45 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX44_APK
-        path: build/android/LWOD-Android-V41.7-FIX44.apk
+        name: LWOD_ANDROID_V41_7_FIX45_APK
+        path: build/android/LWOD-Android-V41.7-FIX45.apk
         retention-days: 14
     - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
@@ -813,13 +828,13 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX44 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        printf '### Android APK Download\n\n[FIX45 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
       shell: bash
     - if: always()
-      name: FIX44 Testprotokolle hochladen
+      name: FIX45 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX44_TESTPROTOKOLLE
+        name: LWOD_FIX45_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
