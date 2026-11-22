@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX31 Wurzelheim Wendelbruecke und Steinmauer
+name: LWOD Android V41.7 FIX32 Wurzelheim Gaerten
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX31 APK
+    name: LWOD Android V41.7 FIX32 APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
     container:
@@ -31,1375 +31,311 @@ jobs:
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-yaml
         fi
-    - name: FIX19 Originalschritte aus gesichertem Workflow extrahieren
+    - name: Bewaehrten FIX31 Workflow laden und pruefen
       shell: bash
       run: |
         set -euo pipefail
-        python3 - <<'PY'
+        wget --quiet --tries=3 --timeout=60 --https-only -O "$RUNNER_TEMP/fix31.yml" 'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/02db69aebd1ad61d1778439da5d8cb22df964599/.github/workflows/blank-ps1.yml'
+        python3 - <<'PYREPLAY'
         import hashlib, os, subprocess, yaml
         from pathlib import Path
-        raw = Path('.github/workflows/blank-ps1.yml').read_bytes()
-        sha = hashlib.sha1(('blob %d\0' % len(raw)).encode() + raw).hexdigest()
-        if sha != 'a3b057011da5de84833a97adc94f161026c5c00a':
-            raise SystemExit('FIX19: Falsche Originaldatei: ' + sha)
-        steps = yaml.safe_load(raw)['jobs']['android']['steps']
-        if len(steps) != 24:
-            raise SystemExit('FIX19: Unerwartete Anzahl Schritte')
-        assert steps[12]['name'].startswith('V41.7 FIX19 Nordbergwand')
-        assert steps[13]['name'] == 'Godot-Gelaende neu importieren'
-        assert steps[22]['name'].startswith('V41.7 FIX19 Landschaft')
-        assert steps[23]['name'].startswith('V41.7 FIX19 Android-APK bauen')
-        dest = Path(os.environ['RUNNER_TEMP']) / 'lwod_fix21_steps'
-        dest.mkdir(parents=True, exist_ok=True)
-        for i in range(2,23):
-            step = steps[i]
-            if not isinstance(step.get('run'), str) or step.get('shell') != 'bash' or 'if' in step:
-                raise SystemExit('Unerwarteter Originalschritt: ' + str(i))
-            script = dest / ('%02d.sh' % i)
-            script.write_text(step['run'] + '\n', encoding='utf-8')
-            subprocess.run(['bash', '-n', str(script)], check=True)
-            print('Gesichert:', i, step['name'], flush=True)
-        PY
-    - name: Alle FIX19 Spielinhalte wiederherstellen
+        p=Path(os.environ['RUNNER_TEMP'])/'fix31.yml'
+        data=p.read_bytes()
+        sha=hashlib.sha1(('blob %d\0'%len(data)).encode()+data).hexdigest()
+        assert sha=='26c4391fba381b6e81f0d3fbb3a090a328210150', 'FIX31 source checksum mismatch: '+sha
+        steps=yaml.safe_load(data)['jobs']['android']['steps']
+        assert len(steps)==17 and steps[8]['name'].startswith('FIX31 Wurzelheim') and steps[12]['name'].startswith('FIX31 Baumplattformen')
+        folder=Path(os.environ['RUNNER_TEMP'])/'fix32_original'; folder.mkdir(exist_ok=True)
+        for i in range(2,13):
+            step=steps[i]; assert step['shell']=='bash' and 'if' not in step
+            f=folder/('%02d.sh'%i); f.write_text(step['run']+'\n',encoding='utf-8'); subprocess.run(['bash','-n',str(f)],check=True)
+        PYREPLAY
+    - name: FIX31 Spielinhalte rekonstruieren
       shell: bash
       run: |
         set -euo pipefail
-        for i in 02 03 04 05 06 07 08 09 10 11 12; do
-          echo "::group::FIX19 Originalschritt $i"
-          bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix21_steps/$i.sh"
-          echo '::endgroup::'
+        for i in 02 03 04 05 06 07 08; do
+          echo "::group::FIX31 Originalschritt $i"
+          bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix32_original/$i.sh"
+          echo "::endgroup::"
         done
-    - name: FIX21 Bergumrandung, Wege und Schlucht korrigieren
+    - name: FIX32 Wurzelheim Wege und Gemuese installieren
       shell: bash
       run: |
         set -euo pipefail
-        cat > "$RUNNER_TEMP/lwod_fix21.py" <<'PYFIX21'
-        from pathlib import Path
-        import re, math
-        B=Path('android/scripts'); tests=Path('android/tests')
-        def once(s,a,b):
-            assert s.count(a)==1, 'FIX21 missing/ambiguous anchor: '+a[:100]
-            return s.replace(a,b,1)
-        def fun(s,name,new):
-            pat=r'(?ms)^(?:static )?func '+re.escape(name)+r'\([^\n]*\n.*?(?=^(?:func |static func |const |var |class |@|extends )|\Z)'
-            s,n=re.subn(pat,lambda _:new.rstrip()+'\n\n',s,count=1)
-            assert n==1,'FIX21 missing function '+name
-            return s
-        def edit(p,f):
-            s=p.read_text(encoding='utf-8'); p.write_text(f(s),encoding='utf-8')
-
-        def point(x,y,angle):
-            return (x+0.62*math.sin(math.radians(angle)),y+0.62*math.cos(math.radians(angle)))
-        def vec(p): return 'Vector2(%.7f,%.7f)'%p
-        # Delete the two gorge crossings and the red-marked Steinland branch.
-        # Steinland remains an accessible landmark, not one of the nine travel destinations.
-        new_links=[('Moordorf','Felswacht',[point(63,50,144),(65.0,46),(65.7,44.5),(65.7,43),(65.7,23),(65.7,21.5),(66.1,19.0),(67.5,18.4),point(71,20,-114)]),('Sandhafen','Frostholm',[point(93,58,-30),(89.5,64.2),(85.0,72.0),(80.5,79.5),point(77,86,150)])]
-        def territory(s):
-            m=re.search(r'(?ms)^const ROUTES = \[\n(.*?)^\]',s); assert m
-            old=m[1].splitlines(); keep=[]; removed=0
-            for line in old:
-                if any('"from":"'+a+'","to":"'+b+'"' in line for a,b in [('Moordorf','Sandhafen'),('Wurzelheim','Frostholm'),('Moordorf','Steinland')]): removed+=1
-                else: keep.append(line.rstrip().rstrip(','))
-            assert removed==3 and len(keep)==7
-            for a,b,via in new_links:
-                keep.append('    {"from":"'+a+'","to":"'+b+'","via":['+','.join(map(vec,via))+']}')
-            s=s[:m.start()]+'const ROUTES = [\n'+',\n'.join(keep)+'\n]'+s[m.end():]
-            for a,b in [('"Wurzelheim": [-84.0,114.0,48.0]','"Wurzelheim": [-84.0,114.0]'),('"Moordorf": [-48.0,114.0,78.0]','"Moordorf": [-48.0,144.0]'),('"Felswacht": [78.0]','"Felswacht": [78.0,-114.0]'),('"Sandhafen": [-84.0,180.0]','"Sandhafen": [180.0,-30.0]'),('"Frostholm": [-84.0]','"Frostholm": [150.0]')]: s=once(s,a,b)
-            s=fun(s,'north_at_map','''static func north_at_map(uv: Vector2) -> bool:
-            return uv.y <= V421_NORTH and uv.y >= 0.0 and uv.x >= 0.0 and uv.x <= 100.0''')
-            s=once(s,'    if north_at_map(uv):\n        return true','    if v421_border_at(uv):\n        return true')
-            s=fun(s,'mountain_crosses','''static func mountain_crosses(a: Vector2, b: Vector2) -> bool:
-            var u: Vector2 = world_to_map(a)
-            var v: Vector2 = world_to_map(b)
-            if v421_border_at(u) or v421_border_at(v):
-                return true
-            if maxf(u.x,v.x)<40.0 or minf(u.x,v.x)>83.0 or minf(u.y,v.y)>79.0:
-                return false
-            var n: int = maxi(1,ceili(u.distance_to(v)/0.035))
-            for i in range(n+1):
-                if mountain_at_map(u.lerp(v,float(i)/float(n))):
-                    return true
-            return false''')
-            s=once(s,'    if north_at_map(uv):\n        return map_to_world(Vector2(maxf(57.0,uv.x),9.1))','''    if v421_border_at(uv):
-                var q := Vector2(clampf(uv.x,V421_SIDE+0.15,100.0-V421_SIDE-0.15),clampf(uv.y,V421_NORTH+0.15,100.0-V421_SIDE-0.15))
-                if not mountain_at_map(q):
-                    return map_to_world(q)
-                var nearest: Vector2 = CITIES["Sonnental"]
-                var best_distance: float = INF
-                for city in CITIES:
-                    var candidate: Vector2 = CITIES[city]
-                    if not mountain_at_map(candidate) and candidate.distance_squared_to(uv)<best_distance:
-                        nearest = candidate
-                        best_distance = candidate.distance_squared_to(uv)
-                return map_to_world(nearest)''')
-            # Do not flatten or alter the accepted gorge floor.
-            s=fun(s,'bridge_at','''static func bridge_at(_p: Vector2) -> bool:
-            return false''')
-            s+='''
-        # FIX21: the 3D perimeter, movement restriction and map share these limits.
-        const V421_SIDE: float = 3.2
-        const V421_NORTH: float = 7.4
-        static func v421_border_at(uv: Vector2) -> bool:
-            return uv.x <= V421_SIDE or uv.x >= 100.0-V421_SIDE or uv.y <= V421_NORTH or uv.y >= 100.0-V421_SIDE
-
-        static func v421_no_decoration(p: Vector2, radius: float = 0.0) -> bool:
-            var uv: Vector2 = world_to_map(p)
-            return mountain_at_map(uv) or gorge_distance(uv) < GORGE_HALF + radius/METRES_PER_PERCENT
-        '''
-            return s
-        edit(B/'V417Territories.gd',territory)
-
-        # Replace the narrow, differently shaped northern ridge with four textured relief ridges.
-        # The inner massif and tunnel remain in the same place.
-        BORDER='''func _v419_north() -> void:
-            var ring := Node3D.new()
-            ring.name = "Kartenumrandung"
-            add_child(ring)
-            for side in range(4):
-                _v421_ridge(ring,side)
-
-        func _v421_uv(side: int, along: float, inward: float) -> Vector2:
-            match side:
-                0: return Vector2(along,inward*T.V421_NORTH)
-                1: return Vector2(100.0-inward*T.V421_SIDE,along)
-                2: return Vector2(along,100.0-inward*T.V421_SIDE)
-                _: return Vector2(inward*T.V421_SIDE,along)
-
-        func _v421_ridge(ring: Node3D, side: int) -> void:
-            # High resolution, smooth shaded, rugged profiles in the FIX8 rock palette.
-            const ALONG: int = 144
-            const ACROSS: int = 12
-            var verts := PackedVector3Array()
-            var colors := PackedColorArray()
-            var normals := PackedVector3Array()
-            var ix := PackedInt32Array()
-            var phase: float = float(side)*17.31
-            for i in range(ALONG+1):
-                var u: float = float(i)*100.0/float(ALONG)
-                for j in range(ACROSS+1):
-                    var t: float = float(j)/float(ACROSS)
-                    var uv: Vector2 = _v421_uv(side,u,t)
-                    var p: Vector2 = T.map_to_world(uv)
-                    var base: float = _ground(p)
-                    var peak: float = 840.0+175.0*sin(u*0.84+phase)+145.0*sin(u*2.17+phase*0.6)+110.0*sin(u*4.9+phase)
-                    var crest: float = 0.42+0.09*sin(u*1.52+phase)
-                    var profile: float = pow(clampf(1.0-absf(t-crest)/(1.0-crest if t>=crest else crest),0.0,1.0),0.50)
-                    var h: float = peak*profile + profile*46.0*sin(u*7.21+t*15.7+phase)
-                    if j==0 or j==ACROSS:
-                        h = -145.0
-                    verts.append(Vector3(p.x,base+h,p.y))
-                    var shade: float = clampf(0.53+0.085*sin(u*2.5+t*13.0+phase)+0.055*sin(u*7.2-t*25.0)+0.035*profile,0.36,0.71)
-                    colors.append(Color(shade,shade*0.98,shade*0.94))
-                    normals.append(Vector3.ZERO)
-            for i in range(ALONG):
-                for j in range(ACROSS):
-                    var a: int = i*(ACROSS+1)+j
-                    var b: int = a+ACROSS+1
-                    var c: int = a+1
-                    var d: int = b+1
-                    var tris: PackedInt32Array = PackedInt32Array([a,b,c,b,d,c])
-                    if side==1 or side==2:
-                        tris = PackedInt32Array([a,c,b,b,c,d])
-                    for k in range(0,6,3):
-                        var aa: int = tris[k]
-                        var bb: int = tris[k+1]
-                        var cc: int = tris[k+2]
-                        var normal: Vector3 = (verts[cc]-verts[aa]).cross(verts[bb]-verts[aa])
-                        if normal.y<0.0:
-                            var tmp: int = bb
-                            bb = cc
-                            cc = tmp
-                            normal = -normal
-                        normals[aa] += normal
-                        normals[bb] += normal
-                        normals[cc] += normal
-                        ix.append_array(PackedInt32Array([aa,bb,cc]))
-            for i in range(normals.size()):
-                normals[i] = normals[i].normalized()
-            var arrays: Array = []
-            arrays.resize(Mesh.ARRAY_MAX)
-            arrays[Mesh.ARRAY_VERTEX] = verts
-            arrays[Mesh.ARRAY_NORMAL] = normals
-            arrays[Mesh.ARRAY_COLOR] = colors
-            arrays[Mesh.ARRAY_INDEX] = ix
-            var mesh := ArrayMesh.new()
-            mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
-            var mountain := MeshInstance3D.new()
-            mountain.name = ["Nordbergwand","Ostbergwand","Suedbergwand","Westbergwand"][side]
-            mountain.mesh = mesh
-            var original := get_node_or_null("MassiveFelswand") as MeshInstance3D
-            if original != null:
-                mountain.material_override = original.material_override
-            mountain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-            mountain.ignore_occlusion_culling = true
-            mountain.custom_aabb = mesh.get_aabb().grow(24.0)
-            ring.add_child(mountain)
-            # An independent solid inner collision face, and _guard blocks even flying above peaks.
-            var body := StaticBody3D.new()
-            body.name = "Randkollision"
-            body.collision_layer = 1
-            body.collision_mask = 0
-            var collider := CollisionShape3D.new()
-            var box := BoxShape3D.new()
-            var a: Vector2 = T.map_to_world(_v421_uv(side,0.0,1.0))
-            var b: Vector2 = T.map_to_world(_v421_uv(side,100.0,1.0))
-            var mid: Vector2 = (a+b)*0.5
-            box.size = Vector3(8.0,6000.0,21000.0) if side==1 or side==3 else Vector3(21000.0,6000.0,8.0)
-            collider.shape = box
-            body.add_child(collider)
-            ring.add_child(body)
-            body.position = Vector3(mid.x,0.0,mid.y)
-        '''
-        def wall(s):
-            s=once(s,'    _v419_bridges()\n','')
-            s=fun(s,'_v419_bridges','func _v419_bridges() -> void:\n    pass # FIX21: no bridge meshes or colliders')
-            s=fun(s,'_v419_north',BORDER)
-            return s
-        edit(B/'V417MountainWall.gd',wall)
-
-        # Reuse a genuine interior part of the old relief texture on all four borders.
-        # Areas overlap only in the corners; no new polygon stripe art.
-        def mapedit(s):
-            a=s.index('    var ridge := PackedVector2Array()\n',s.index('func _draw_v419_features'))
-            b=s.index('    var gorge := PackedVector2Array()',a)
-            s=s[:a]+'''    var tex_size: Vector2 = MOUNTAIN_RELIEF.get_size()
-            var source := Rect2(tex_size*Vector2(0.445,0.32),tex_size*Vector2(0.09,0.28))
-            for side in range(4):
-                var width_pct: float = L.V421_NORTH if side==0 else L.V421_SIDE
-                var rect: Rect2
-                for segment in range(20):
-                    var start: float = float(segment)*5.0
-                    match side:
-                        0: rect = Rect2(_point(Vector2(start,0.0),area),Vector2(area.size.x*0.05,area.size.y*width_pct/100.0))
-                        1: rect = Rect2(_point(Vector2(100.0-width_pct,start),area),Vector2(area.size.x*width_pct/100.0,area.size.y*0.05))
-                        2: rect = Rect2(_point(Vector2(start,100.0-width_pct),area),Vector2(area.size.x*0.05,area.size.y*width_pct/100.0))
-                        _: rect = Rect2(_point(Vector2(0.0,start),area),Vector2(area.size.x*width_pct/100.0,area.size.y*0.05))
-                    draw_rect(rect,Color("#77736c"),true)
-                    draw_texture_rect_region(MOUNTAIN_RELIEF,rect,source)
-        '''+s[b:]
-            # Tunnel symbol is intentionally drawn over its through-road. No bridge strokes.
-            start=s.index('    for link in L.ROUTES:',s.index('func _draw_v419_crossings'))
-            return s[:start].rstrip()+'\n'
-        edit(B/'V417SketchMap.gd',mapedit)
-
-        # Remove old bridge-height special cases; preserve actual gorge depth and color.
-        edit(B/'V27Terrain.gd',lambda s:once(s,'    if V417Territories.bridge_at(Vector2(x,z)):\n        return _v419_base_height_at(x,z)\n',''))
-
-        # Suppress the original fixed-Y green patches, trees and stones within the canyon.
-        # Keep all ordinary biome vegetation outside the exclusion zone.
-        def v21(s):
-            a='        var point := Vector2(px,pz)\n'
-            s=once(s,a,a+'        if V412Bounds.v421_no_decoration(point,4.0):\n            continue\n')
-            a=re.search(r'(?m)^([ \t]+)var patch_z: float = .*$',s)
-            if a:
-                indent=a[1]; s=s[:a.end()]+ '\n'+indent+'if V412Bounds.v421_no_decoration(Vector2(patch_x,patch_z),20.0):\n'+indent+'    continue'+s[a.end():]
-            return s
-        edit(B/'V21World.gd',v21)
-        # Old streaming decor also uses a fixed Y: if still present, skip its instances near the gorge.
-        p=B/'V24Regions.gd'
-        if p.exists():
-            s=p.read_text(encoding='utf-8')
-            a='        var pos := Vector2(x,z)\n'
-            if a in s:
-                s=once(s,a,a+'        if V421DecorationBounds.v421_no_decoration(pos,2.0):\n            continue\n')
-                s=re.sub(r'(?m)^(extends [^\n]+\n)',r'\g<1>const V421DecorationBounds = preload("res://scripts/V417Territories.gd")\n',s,count=1)
-                p.write_text(s,encoding='utf-8')
-        # Exclude independent decorative objects whose footprint overlaps the gorge.
-        # Volcano decorations and all normal towns remain untouched.
-        def landmarks(s):
-            s=re.sub(r'(?m)^(extends [^\n]+\n)',r'\g<1>const V421Land = preload("res://scripts/V417Territories.gd")\n',s,count=1)
-            # The old flat caps perched above isolated Felswacht cones look like floating slabs.
-            s=s.replace('            _block(root,center+Vector2(x,-170.0),Vector3(85,12,85),"#575b64",105.0)\n','')
-            for sig in ['func _stone(parent: Node3D, p: Vector2, radius: float, height: float, color: String, sides: int = 7) -> void:\n','func _block(parent: Node3D, p: Vector2, dims: Vector3, tint: String, y_offset: float = 0.0) -> void:\n']:
-                radius='radius' if '_stone' in sig else 'maxf(dims.x,dims.z)*0.5'
-                # Avoid removing existing actual volcano peaks or coastal landmarks at the exterior border.
-                s=once(s,sig,sig+'    if V421Land.gorge_distance(V421Land.world_to_map(p)) < V421Land.GORGE_HALF+'+radius+'/V421Land.METRES_PER_PERCENT:\n        return\n')
-            return s
-        edit(B/'V417Landmarks.gd',landmarks)
-
-        # Update older expectations only where the intentional change requires it.
-        for name in ('V417WorldSmoke.gd','V417Fix5Smoke.gd','V417Fix7Smoke.gd','V417Fix13Smoke.gd','V416RoadsSmoke.gd'):
-            p=tests/name; s=p.read_text(encoding='utf-8')
-            s=s.replace('routes.size() != 10','routes.size() != 9').replace('ROUTES.size() != 10','ROUTES.size() != 9').replace('ROUTES.size()!=10','ROUTES.size()!=9').replace('get_child_count()!=10','get_child_count()!=9')
-            s=s.replace('reachable.size() != T.CITIES.size()','reachable.size() != T.CITIES.size()-1 or reachable.has("Steinland")').replace('visited.size()!=T.CITIES.size()','visited.size()!=T.CITIES.size()-1 or visited.has("Steinland")')
-            for a,b in [('10 walking paths','9 walking paths'),('10 curved walking paths','9 curved walking paths'),('10 safe routes','9 safe routes'),('10 intercity roads','9 intercity roads'),('10 Wege','9 Wege')]: s=s.replace(a,b)
-            p.write_text(s,encoding='utf-8')
-        # The old FIX19 test required exactly the bridges that the user asked to remove.
-        # Replace only that test with new real-node and geometry assertions.
-        p=tests/'V419LandscapeSmoke.gd'
-        p.write_text('''extends SceneTree
-        const T = preload("res://scripts/V417Territories.gd")
-        const Wall = preload("res://scripts/V417MountainWall.gd")
-        class FakeGame:
-            extends Node3D
-            var state: int = 2
-            var hero: Node3D
-        func _initialize() -> void:
-            call_deferred("_run")
-        func fail(s: String) -> void:
-            push_error("FIX21: "+s)
-            quit(1)
-        func _run() -> void:
-            for uv in [Vector2(0,50),Vector2(100,50),Vector2(20,3),Vector2(20,99),Vector2(-3,20),Vector2(103,50)]:
-                if not T.mountain_at_map(uv):
-                    fail("open perimeter")
-                    return
-            for city in T.CITIES:
-                if T.mountain_at_map(T.CITIES[city]):
-                    fail("city blocked: "+String(city))
-                    return
-            if T.gorge_depth(Vector2(80.2,55))<400.0 or not T.v421_no_decoration(T.map_to_world(Vector2(80.2,55))):
-                fail("gorge lost or decorations allowed")
-                return
-            var tunnel_found: bool = false
-            var frost_found: bool = false
-            for road in T.ROUTES:
-                if road["from"]=="Moordorf" and road["to"]=="Felswacht":
-                    tunnel_found = true
-                if road["from"]=="Sandhafen" and road["to"]=="Frostholm":
-                    frost_found = true
-                var path: PackedVector2Array = T.road_world(road)
-                for i in range(path.size()-1):
-                    if T.mountain_crosses(path[i],path[i+1]):
-                        fail("road intersects rock")
-                        return
-                    var count: int = maxi(1,ceili(path[i].distance_to(path[i+1])/5.0))
-                    for j in range(count+1):
-                        var p: Vector2 = path[i].lerp(path[i+1],float(j)/float(count))
-                        if T.gorge_depth(T.world_to_map(p))>0.01 or T.bridge_at(p):
-                            fail("road crosses gorge")
-                            return
-            if not tunnel_found or not frost_found:
-                fail("new links missing")
-                return
-            var g := FakeGame.new()
-            root.add_child(g)
-            g.hero = Node3D.new()
-            g.add_child(g.hero)
-            var wall := Wall.new()
-            g.add_child(wall)
-            wall.setup(g)
-            if wall.has_node("Schluchtbruecken") or not wall.has_node("Bergtunnel/Tunneltor_Nord") or not wall.has_node("Bergtunnel/Tunneltor_Sued"):
-                fail("bridges remain or tunnel portals absent")
-                return
-            for label in ["Nordbergwand","Ostbergwand","Suedbergwand","Westbergwand"]:
-                var mesh := wall.get_node_or_null("Kartenumrandung/"+label) as MeshInstance3D
-                if mesh==null or mesh.mesh==null or mesh.mesh.get_surface_count()!=1:
-                    fail("missing border relief: "+label)
-                    return
-            # Even when the hero is flying high, the map cannot be exited.
-            for side in [Vector2(3.5,12),Vector2(96.4,12),Vector2(22,7.7),Vector2(22,96.4)]:
-                var p: Vector2 = T.map_to_world(side)
-                var target: Vector2 = side
-                if side.x<4.0: target.x=3.0
-                elif side.x>96.0: target.x=97.0
-                elif side.y<10.0: target.y=7.2
-                else: target.y=97.0
-                var q: Vector2 = T.map_to_world(target)
-                wall.have_safe=false
-                g.hero.global_position=Vector3(p.x,4000.0,p.y)
-                wall.call("_guard")
-                g.hero.global_position=Vector3(q.x,4000.0,q.y)
-                wall.call("_guard")
-                if g.hero.global_position.distance_to(Vector3(p.x,4000.0,p.y))>0.1:
-                    fail("flight bypassed border")
-                    return
-            print("FIX19_LANDSCAPE_OK: FIX21 gorge unchanged, tunnel route, no bridges, four perimeter meshes and flight guard")
-            quit(0)
-        ''',encoding='utf-8')
-        p=Path('android/export_presets.cfg'); s=p.read_text(encoding='utf-8'); s=once(s,'version/code=4189','version/code=4191'); s=once(s,'version/name="4.1.7.19"','version/name="4.1.7.21"'); p.write_text(s,encoding='utf-8')
-        print('FIX21_INSTALL_OK: new paths, no bridge deck, canyon decor exclusion, four rock borders')
-        PYFIX21
-        python3 -m py_compile "$RUNNER_TEMP/lwod_fix21.py"
-        python3 "$RUNNER_TEMP/lwod_fix21.py"
-    - name: FIX23 Abgerundete HD-Weltkarte aus echten Koordinaten erzeugen
+        base64 -d <<'FIX32_PAYLOAD' | gzip -dc > "$RUNNER_TEMP/lwod_fix32.py"
+        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
+        63QBAA==
+        FIX32_PAYLOAD
+        printf '%s  %s\n' 53d660ed5c64227458a14b8cf5e7028d5278b371b414bb63c837625e338c40b4 "$RUNNER_TEMP/lwod_fix32.py" | sha256sum -c -
+        python3 -m py_compile "$RUNNER_TEMP/lwod_fix32.py"
+        python3 "$RUNNER_TEMP/lwod_fix32.py"
+    - name: FIX31 und FIX32 Godot-Tests
       shell: bash
       run: |
         set -euo pipefail
-        if ! python3 -c 'import numpy; from PIL import Image' >/dev/null 2>&1; then
-          apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-numpy python3-pil
-        fi
-        # Import FIX21 first, so its existing resources and scripts are available to the map baker.
-        bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix21_steps/13.sh"
-        cat > android/tests/V422AtlasBake.gd <<'GDBAKE422'
-        extends SceneTree
-        const T = preload("res://scripts/V417Territories.gd")
-        func _initialize() -> void:
-            var out: String = OS.get_environment("RUNNER_TEMP")
-            var pixels := PackedByteArray()
-            pixels.resize(768*312*3)
-            for y in range(312):
-                for x in range(768):
-                    var uv := Vector2((float(x)+0.5)*100.0/768.0,(float(y)+0.5)*100.0/312.0)
-                    var region: int = T.region_index_at_map(uv)
-                    var i: int = (y*768+x)*3
-                    pixels[i] = region+1
-                    pixels[i+1] = 255 if T.mountain_at_map(uv) else 0
-                    pixels[i+2] = roundi(clampf(T.gorge_depth(uv)/455.0,0.0,1.0)*255.0)
-            var img := Image.create_from_data(768,312,false,Image.FORMAT_RGB8,pixels)
-            if img.save_png(out.path_join("lwod422_mask.png")) != OK:
-                push_error("FIX22: mask write failed")
-                quit(1)
-                return
-            var paths: Array = []
-            for road in T.ROUTES:
-                var line: Array = []
-                line.append([T.CITIES[road["from"]].x,T.CITIES[road["from"]].y])
-                for p in road["via"]:
-                    line.append([p.x,p.y])
-                line.append([T.CITIES[road["to"]].x,T.CITIES[road["to"]].y])
-                paths.append(line)
-            var cities: Array = []
-            for city in T.CITIES:
-                var p: Vector2 = T.CITIES[city]
-                cities.append([p.x,p.y])
-            var f := FileAccess.open(out.path_join("lwod422_geo.json"),FileAccess.WRITE)
-            if f == null:
-                push_error("FIX22: geography write failed")
-                quit(1)
-                return
-            f.store_string(JSON.stringify({"roads":paths,"cities":cities}))
-            f.close()
-            print("FIX22_MASK_OK: ",img.get_size()," / ",paths.size()," roads")
-            quit(0)
-        GDBAKE422
-        timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --script res://tests/V422AtlasBake.gd 2>&1 | tee "$RUNNER_TEMP/fix22_bake.log"
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call' "$RUNNER_TEMP/fix22_bake.log"; then exit 1; fi
-        grep -Fq 'FIX22_MASK_OK:' "$RUNNER_TEMP/fix22_bake.log"
-        cat > "$RUNNER_TEMP/lwod422_art.py" <<'PYART422'
-        from pathlib import Path
-        import os, json, math, random
-        import numpy as np
-        from PIL import Image, ImageDraw, ImageFilter
-        work=Path(os.environ['RUNNER_TEMP']); target=Path('android/assets/maps/LWOD_Atlas_HD.webp')
-        W,H=3072,1248
-        rng=np.random.default_rng(422); rnd=random.Random(422)
-        res=Image.Resampling
-        raw=Image.open(work/'lwod422_mask.png').convert('RGB')
-        assert raw.size==(768,312)
-        a=np.asarray(raw); assert a[:,:,0].min()>=1 and a[:,:,0].max()<=12
-        geo=json.loads((work/'lwod422_geo.json').read_text()); assert len(geo['roads'])==9 and len(geo['cities'])==11
-        # FIX23: visual rounding only. The baked region IDs and real world geometry are untouched.
-        # Work at mask resolution first: shared probabilistic edges prevent gaps between regions.
-        h,w=a.shape[:2]
-        y0,x0=np.mgrid[0:h,0:w].astype(np.float32)
-        u=x0/w; v=y0/h
-        # Smooth, modest displacement (at most ~1% of map extent) avoids ruler-straight boundaries.
-        dx=4.0*np.sin(v*math.tau*2.1+u*2.4)+2.0*np.sin(v*math.tau*4.0-u*3.0)
-        dy=3.8*np.sin(u*math.tau*2.8+v*1.7)+1.5*np.sin(u*math.tau*5.1+v*3.1)
-        xi=np.clip(np.rint(x0+dx),0,w-1).astype(np.int32)
-        yi=np.clip(np.rint(y0+dy),0,h-1).astype(np.int32)
-        warped=a[yi,xi,0].astype(np.int16)-1
-        def lowmask(values,radius):
-            return np.asarray(Image.fromarray(values.astype(np.uint8)).filter(ImageFilter.GaussianBlur(radius)),dtype=np.float32)/255.0
-        def upfloat(values):
-            return np.asarray(Image.fromarray(values.astype(np.float32)).resize((W,H),res.BICUBIC),dtype=np.float32)
-        weights=np.stack([lowmask((warped==i)*255,6.5) for i in range(12)],axis=2)
-        # Rounded region outlines with a narrow shaded transition; the legend colors stay recognizable.
-        weights=weights**2.3
-        weights/=np.maximum(weights.sum(axis=2,keepdims=True),1e-6)
-        rounded_ids=weights.argmax(axis=2).astype(np.uint8)
-        idx=np.asarray(Image.fromarray(rounded_ids).resize((W,H),res.NEAREST),dtype=np.int16)
-        # Rock is the same continuous massif and perimeter; only its drawn silhouette is softened.
-        # Use gentler displacement on rock to preserve the narrow perimeter and tunnel mouths.
-        rx=np.clip(np.rint(x0+dx*.55),0,w-1).astype(np.int32)
-        ry=np.clip(np.rint(y0+dy*.55),0,h-1).astype(np.int32)
-        r0=lowmask(a[ry,rx,1],4.0)
-        r1=lowmask(a[:,:,1],1.1)
-        r=np.clip(upfloat(r0*.83+r1*.17),0,1)
-        rock=np.clip((r-.29)/.42,0,1); rock=rock*rock*(3-2*rock)
-        # Gorge keeps its exact original alignment/depth mask.
-        gorge=np.asarray(raw.getchannel('B').resize((W,H),res.BILINEAR),dtype=np.float32)/255
-        # Deterministic, layered relief: the region geometry is supplied by Godot, never by hand.
-        def noise(w,h):
-            seed=rng.integers(0,256,(h,w),dtype=np.uint8)
-            return np.asarray(Image.fromarray(seed).resize((W,H),res.BICUBIC),dtype=np.float32)/255-.5
-        n1=noise(13,7); n2=noise(42,21); n3=noise(130,65); n4=noise(480,240)
-        Y,X=np.ogrid[:H,:W]
-        palette=np.array([[80,125,66],[71,108,62],[134,158,83],[126,121,108],[141,132,112],[150,139,116],[136,126,110],[92,48,40],[48,100,87],[48,102,57],[198,157,80],[196,218,224]],dtype=np.uint8)
-        # Blend all region colors using the same rounded shared boundaries, not rectangular fills.
-        low_rgb=np.uint8(np.clip(weights@palette.astype(np.float32),0,255))
-        base=np.asarray(Image.fromarray(low_rgb).resize((W,H),res.BICUBIC),dtype=np.float32).copy()
-        # A delicate shaded seam at geographic region transitions, replacing old angular line overlays.
-        ordered=np.sort(weights,axis=2)
-        seam=np.clip(1.0-np.abs(ordered[:,:,-1]-ordered[:,:,-2])*6.0,0,1)
-        seam=np.clip(upfloat(seam),0,1)
-        base=base*(1-seam[:,:,None]*.18)+np.array([213,201,160],dtype=np.float32)*seam[:,:,None]*.18
-
-        relief=(n1*37+n2*29+n3*16+n4*7)
-        base+=relief[:,:,None]
-        # Distinct biome relief, not extra paths or waterways.
-        dunes=np.sin(Y*.062+X*.014+n1*8+n2*3); base+=(dunes*12*np.clip(upfloat(weights[:,:,10]),0,1))[:,:,None]
-        snowline=np.sin(X*.021+Y*.039+n2*9); blue=np.stack([snowline*-9,snowline*-3,snowline*4],axis=2); base+=blue*np.clip(upfloat(weights[:,:,11]),0,1)[:,:,None]
-        wet=np.clip((n2+n3*.6+.10)*40,0,28); base+=np.stack([-wet*.4,wet*.35,wet*.6],axis=2)*np.clip(upfloat(weights[:,:,8]),0,1)[:,:,None]
-        veins=np.abs(np.sin(X*.019+Y*.026+n1*12+n2*7)); fire=np.clip((.095-veins)/.095,0,1)*np.clip(n2*2+.27,0,1); base+=np.stack([fire*145,fire*46,fire*4],axis=2)*np.clip(upfloat(weights[:,:,7]),0,1)[:,:,None]
-        # Continuous rugged mountain relief incl. all four perimeter faces.
-        ridge=1-np.abs(np.sin(X*.028+Y*.009+n1*9+n2*5)); ridge2=1-np.abs(np.sin(X*.058-Y*.026+n2*8+n3*2))
-        height=(ridge*.55+ridge2*.22+n1*.65+n2*.25+n3*.11)
-        shade=np.clip((-np.gradient(height,axis=1)*950-np.gradient(height,axis=0)*820),-46,49)
-        rocklight=np.clip(120+shade+n2*53+n3*22+n4*12+ridge*23,55,209)
-        rock_rgb=np.stack([rocklight*1.03,rocklight,rocklight*.91],axis=2)
-        base=base*(1-rock[:,:,None])+rock_rgb*rock[:,:,None]
-        # Gorge stays dry and follows its real depth profile. No bridge art.
-        gdepth=np.clip(gorge*1.22,0,1); cliff=np.stack([124-86*gdepth,110-83*gdepth,91-63*gdepth],axis=2)+n3[:,:,None]*15
-        alpha=np.clip(gorge*6,0,1)
-        base=base*(1-alpha[:,:,None])+cliff*alpha[:,:,None]
-        # A subtle atlas vignette.
-        edge=((X-W/2)/(W/2))**2+((Y-H/2)/(H/2))**2
-        base-=np.clip(edge-.45,0,1.2)[:,:,None]*10
-        img=Image.fromarray(np.uint8(np.clip(base,0,255)),'RGB')
-        d=ImageDraw.Draw(img,'RGBA')
-        # Map symbols are decorative only; keep them away from real paths, towns, mountains and canyon.
-        blocked=Image.new('L',(W,H)); bd=ImageDraw.Draw(blocked)
-        def px(p):return (p[0]*W/100,p[1]*H/100)
-        for route in geo['roads']:bd.line([px(p) for p in route],fill=255,width=35,joint='curve')
-        for p in geo['cities']:
-            x,y=px(p);bd.ellipse((x-43,y-40,x+43,y+40),fill=255)
-        blocked=np.asarray(blocked)
-        def tree(x,y,s,kind):
-            if kind=='snow': dark=(68,103,116,225); lit=(218,235,234,245); mid=(111,150,157,240)
-            elif kind=='moor': dark=(24,61,52,220); lit=(96,139,78,235); mid=(50,102,65,230)
-            else: dark=(23,64,36,235); lit=(115,153,66,235); mid=(54,103,43,235)
-            d.ellipse((x-s*.62,y+s*.24,x+s*.76,y+s*.65),fill=(11,25,16,75))
-            d.line((x,y-s*.1,x,y+s*.45),fill=(84,62,41,215),width=max(1,int(s*.12)))
-            for k in range(3):
-                top=y-s*(1.12-k*.41); width=s*(.35+k*.14); bot=top+s*.75
-                d.polygon([(x,top),(x-width,bot),(x+width,bot)],fill=dark)
-                d.polygon([(x,top),(x-width,bot),(x,bot-s*.13)],fill=mid)
-                d.line((x,top,x-width*.7,bot-s*.12),fill=lit,width=max(1,int(s*.12)))
-        for _ in range(24000):
-            x=rnd.randrange(18,W-18); y=rnd.randrange(23,H-18); i=int(idx[y,x]); s=rnd.uniform(4.5,10.5)
-            if blocked[y,x] or rock[y,x]>.05 or gorge[y,x]>.01:continue
-            density={0:.32,1:.38,2:.13,8:.15,9:.67,11:.22}.get(i,0)
-            density*=max(.08,min(1.5,.86+float(n1[y,x])*2.4+float(n2[y,x])*1.8))
-            density*=.6+.4*float(weights[min(h-1,y*h//H),min(w-1,x*w//W),i])
-            if rnd.random()<density:tree(x,y,s,'snow' if i==11 else 'moor' if i==8 else 'green')
-            elif i==10 and rnd.random()<.09:
-                d.arc((x-14,y-5,x+14,y+9),185,340,fill=(250,213,136,140),width=2)
-            elif i in (4,5,6,7) and rnd.random()<.16:
-                d.polygon([(x-s,y+s*.3),(x-s*.2,y-s*.65),(x+s*.55,y-s*.2),(x+s,y+s*.4)],fill=(52,44,36,100))
-                d.line((x-s,y+s*.3,x-s*.2,y-s*.65,x+s*.55,y-s*.2),fill=(210,185,144,105),width=2)
-        # Drawn separately in-engine: borders, roads, all town labels, live player marker and menu.
-        target.parent.mkdir(parents=True,exist_ok=True)
-        img.save(target,'WEBP',quality=91,method=4)
-        with Image.open(target) as check:
-            assert check.size==(W,H);check.load()
-        assert target.stat().st_size>100000
-        assert np.all(np.isfinite(weights)) and np.max(np.abs(weights.sum(axis=2)-1.0))<1e-4
-        assert np.all(rock[0,:]>.8) and np.all(rock[:,0]>.8) and np.all(rock[:,-1]>.8) and np.all(rock[-1,:]>.8)
-        print('FIX23_ATLAS_OK:',target, W,H,target.stat().st_size)
-        PYART422
-        cat > "$RUNNER_TEMP/lwod422_patch.py" <<'PYPATCH422'
-        from pathlib import Path
-        import re
-        p=Path('android/scripts/V417SketchMap.gd')
-        s=p.read_text(encoding='utf-8')
-        def once(s,a,b):
-            assert s.count(a)==1, 'FIX22 anchor: '+a[:100]
-            return s.replace(a,b,1)
-        def fun(s,name,replacement):
-            pattern=r'(?ms)^func '+re.escape(name)+r'\([^\n]*\n.*?(?=^(?:func |static func |const |var |class |@|extends )|\Z)'
-            s,n=re.subn(pattern,lambda _:replacement.rstrip()+'\n\n',s,count=1)
-            assert n==1,'FIX22 missing function '+name
-            return s
-        s=once(s,'const L = preload("res://scripts/V417Territories.gd")','const L = preload("res://scripts/V417Territories.gd")\nconst ATLAS_HD = preload("res://assets/maps/LWOD_Atlas_HD.webp")')
-        s=once(s,'    set_process(true)\n    queue_redraw()','    texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR\n    set_process(true)\n    call_deferred("_v422_style_frame")\n    queue_redraw()')
-        s=fun(s,'_draw','func _draw() -> void:\n    var area: Rect2 = _layout()\n    if area.size.x < 20.0 or area.size.y < 20.0:\n        return\n    draw_texture_rect(ATLAS_HD,area,false)\n    var scale_ui: float = clampf(area.size.x/1300.0,0.63,2.0)\n    # FIX23: rounded region seams are baked into the HD atlas. No straight polygon overlays.\n    for road in L.ROUTES:\n        _stroke_route(road,area)\n    _draw_v419_crossings(area)\n    var font: Font = get_theme_default_font()\n    var fontsize: int = clampi(roundi(area.size.x/64.0),12,32)\n    for city in L.CITIES.keys():\n        var uv: Vector2 = L.CITIES[city]\n        var pos: Vector2 = _point(uv,area)\n        draw_circle(pos,6.5*scale_ui,Color(0.07,0.10,0.16,0.88),true,-1.0,true)\n        draw_circle(pos,4.9*scale_ui,Color("#c39346"),true,-1.0,true)\n        draw_circle(pos,3.1*scale_ui,Color("#fff0bd"),true,-1.0,true)\n        if font != null:\n            var label: String = String(city)\n            var off: Vector2 = LABEL_OFFSETS.get(city,Vector2(7,-10))\n            var w: float = font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,fontsize).x\n            var origin := pos+Vector2(10.0*scale_ui if off.x>=0.0 else -w-9.0*scale_ui, -9.0*scale_ui if off.y<0.0 else float(fontsize)+6.0*scale_ui)\n            origin.x = clampf(origin.x,area.position.x+8.0,area.end.x-w-8.0)\n            origin.y = clampf(origin.y,area.position.y+float(fontsize)+3.0,area.end.y-8.0)\n            draw_string_outline(font,origin,label,HORIZONTAL_ALIGNMENT_LEFT,-1,fontsize,4,Color("#142023"))\n            draw_string(font,origin,label,HORIZONTAL_ALIGNMENT_LEFT,-1,fontsize,Color("#fff1d5"))\n    if font != null:\n        _v422_feature_label(font,area,Vector2(48,53),"Bergwand",fontsize)\n    _v422_frame(area)\n    # The live marker is always based on the actual player location, not a baked icon.\n    if is_instance_valid(game):\n        var hero: Node3D = game.get("hero") as Node3D\n        if is_instance_valid(hero):\n            var world_pos := Vector2(hero.global_position.x,hero.global_position.z)\n            var uv: Vector2 = L.world_to_map(world_pos)\n            if uv.x >= 0.0 and uv.x <= 100.0 and uv.y >= 0.0 and uv.y <= 100.0:\n                var marker: Vector2 = _point(uv,area)\n                draw_circle(marker,10.5*scale_ui,Color(0.23,0.06,0.37,0.65),true,-1.0,true)\n                draw_circle(marker,6.7*scale_ui,Color("#321b56"),true,-1.0,true)\n                draw_circle(marker,5.1*scale_ui,Color("#fff1fd"),true,-1.0,true)\n                draw_circle(marker,3.4*scale_ui,Color("#b963ff"),true,-1.0,true)\n\nfunc _v422_feature_label(font: Font, area: Rect2, uv: Vector2, label: String, fs: int) -> void:\n    var p: Vector2 = _point(uv,area)\n    var w: float = font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,fs).x\n    p.x = clampf(p.x-w*0.5,area.position.x+10.0,area.end.x-w-10.0)\n    draw_string_outline(font,p,label,HORIZONTAL_ALIGNMENT_LEFT,-1,fs,4,Color("#202223"))\n    draw_string(font,p,label,HORIZONTAL_ALIGNMENT_LEFT,-1,fs,Color("#f0dfb5"))\n\nfunc _v422_frame(area: Rect2) -> void:\n    draw_rect(area.grow(3.0),Color("#0a1325"),false,6.0,true)\n    draw_rect(area.grow(1.8),Color("#784b25"),false,3.4,true)\n    draw_rect(area.grow(0.5),Color("#e0ba67"),false,1.8,true)\n    draw_rect(area.grow(-3.0),Color(0.99,0.85,0.53,0.70),false,1.0,true)\n    for i in range(4):\n        var p := area.position+Vector2(0 if i%2==0 else area.size.x,0 if i<2 else area.size.y)\n        var sx: float = 1.0 if i%2==0 else -1.0\n        var sy: float = 1.0 if i<2 else -1.0\n        var arm := PackedVector2Array([p+Vector2(sx*24,sy*3),p+Vector2(sx*12,sy*3),p+Vector2(sx*3,sy*12),p+Vector2(sx*3,sy*24)])\n        draw_polyline(arm,Color("#462d20"),5.0,true)\n        draw_polyline(arm,Color("#e9c97f"),2.1,true)\n        var gem: Vector2 = p+Vector2(sx*6,sy*6)\n        draw_colored_polygon(PackedVector2Array([gem+Vector2(0,-5),gem+Vector2(5,0),gem+Vector2(0,5),gem+Vector2(-5,0)]),Color("#d8bc71"))\n        draw_colored_polygon(PackedVector2Array([gem+Vector2(0,-3),gem+Vector2(3,0),gem+Vector2(0,3),gem+Vector2(-3,0)]),Color("#427ba6"))\n')
-        s=fun(s,'_stroke_route','func _stroke_route(route: Dictionary, rect: Rect2) -> void:\n    var a: String = String(route["from"])\n    var b: String = String(route["to"])\n    var path := PackedVector2Array()\n    path.append(_point(L.CITIES[a],rect))\n    for p in route["via"]:\n        path.append(_point(p,rect))\n    path.append(_point(L.CITIES[b],rect))\n    var k: float = clampf(rect.size.x/1300.0,0.63,2.0)\n    draw_polyline(path,Color(0.14,0.09,0.06,0.54),7.5*k,true)\n    draw_polyline(path,Color("#5a351e"),5.8*k,true)\n    draw_polyline(path,Color("#c49148"),3.8*k,true)\n    draw_polyline(path,Color("#ffe1a3"),1.8*k,true)\n    for i in range(1,path.size()-1):\n        draw_circle(path[i],1.9*k,Color("#c49148"),true,-1.0,true)\n        draw_circle(path[i],0.93*k,Color("#ffe1a3"),true,-1.0,true)\n')
-        s=fun(s,'_draw_v419_crossings','func _draw_v419_crossings(area: Rect2) -> void:\n    var a: Vector2 = _point(Vector2(L.TUNNEL_X,23.0),area)\n    var b: Vector2 = _point(Vector2(L.TUNNEL_X,43.0),area)\n    var k: float = clampf(area.size.x/1300.0,0.63,2.0)\n    draw_line(a,b,Color("#483324"),13.0*k,true)\n    draw_line(a,b,Color("#151b25"),9.0*k,true)\n    draw_dashed_line(a,b,Color("#f6cd83"),2.6*k,7.0*k,true)\n    for p in [a,b]:\n        var outer := Rect2(p-Vector2(9,5)*k,Vector2(18,10)*k)\n        draw_rect(outer,Color("#36281d"),true)\n        draw_rect(outer.grow(-1.5*k),Color("#c69a55"),true)\n        draw_rect(outer.grow(-3.2*k),Color("#15202a"),true)\n        draw_line(p+Vector2(-6,-3)*k,p+Vector2(6,-3)*k,Color("#ffda94"),1.2*k,true)\n    var font: Font = get_theme_default_font()\n    var fs: int = clampi(roundi(area.size.x/77.0),11,25)\n    if font != null:\n        _v422_feature_label(font,area,Vector2(L.TUNNEL_X+4.3,30.0),"Tunnel",fs)\n        _v422_feature_label(font,area,Vector2(75.1,74.0),"Schlucht",fs)\n')
-        s+="\n"+'func _v422_style_frame() -> void:\n    # The original menu and button signals are retained; only style is changed.\n    var view: Control = get_parent() as Control\n    if view == null:\n        return\n    var panel: Panel = view.get_parent() as Panel\n    if panel == null:\n        return\n    var frame := StyleBoxFlat.new()\n    frame.bg_color = Color("#111e34")\n    frame.border_color = Color("#dcb66e")\n    frame.set_border_width_all(3)\n    frame.set_corner_radius_all(13)\n    frame.shadow_color = Color(0.0,0.0,0.0,0.6)\n    frame.shadow_size = 8\n    frame.shadow_offset = Vector2(0,4)\n    panel.add_theme_stylebox_override("panel",frame)\n    for child in panel.get_children():\n        if child is Label and String(child.text).begins_with("LYDRA"):\n            child.add_theme_color_override("font_color",Color("#f1d59b"))\n            child.add_theme_color_override("font_outline_color",Color("#080e1a"))\n            child.add_theme_constant_override("outline_size",4)\n            child.add_theme_font_size_override("font_size",24)\n        elif child is Button and String(child.text).begins_with("Zur"):\n            child.text = "Zurück zum Spiel"\n            child.offset_left = -235.0\n            child.add_theme_color_override("font_color",Color("#fff0c8"))\n            child.add_theme_font_size_override("font_size",18)\n            for mode in ["normal","hover","pressed","focus"]:\n                var st := StyleBoxFlat.new()\n                st.bg_color = Color("#28466a") if mode=="hover" else Color("#10233e")\n                st.border_color = Color("#d1a75e")\n                st.set_border_width_all(2)\n                st.set_corner_radius_all(7)\n                child.add_theme_stylebox_override(mode,st)\n'
-        p.write_text(s,encoding='utf-8')
-        p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
-        s=once(s,'version/code=4191','version/code=4193')
-        s=once(s,'version/name="4.1.7.21"','version/name="4.1.7.23"')
-        p.write_text(s,encoding='utf-8')
-        print('FIX22_UI_INSTALL_OK: geometry unchanged; HD atlas and live map layers')
-        PYPATCH422
-        cat > android/tests/V422AtlasSmoke.gd <<'GDSMOKE422'
-        extends SceneTree
-        const Map = preload("res://scripts/V417SketchMap.gd")
-        const T = preload("res://scripts/V417Territories.gd")
-        class FakeGame:
-            extends Node
-            var hero: Node3D
-        func _initialize() -> void:
-            call_deferred("_run")
-        func fail(s: String) -> void:
-            push_error("FIX22: "+s)
-            quit(1)
-        func _run() -> void:
-            var texture: Texture2D = load("res://assets/maps/LWOD_Atlas_HD.webp") as Texture2D
-            if texture==null or texture.get_width()!=3072 or texture.get_height()!=1248:
-                fail("HD atlas missing or wrong dimensions")
-                return
-            if T.ROUTES.size()!=9 or T.CITIES.size()!=11:
-                fail("world geography changed")
-                return
-            var game := FakeGame.new()
-            root.add_child(game)
-            game.hero = Node3D.new()
-            game.add_child(game.hero)
-            var start: Vector2 = T.city_world("Sonnental")
-            game.hero.position = Vector3(start.x,0.0,start.y)
-            var panel := Panel.new()
-            root.add_child(panel)
-            panel.size = Vector2(1340,650)
-            var title := Label.new()
-            title.text = "LYDRA - FARBIGE WELTKARTE"
-            panel.add_child(title)
-            var close := Button.new()
-            close.text = "Zurueck zum Spiel"
-            panel.add_child(close)
-            var view := Control.new()
-            panel.add_child(view)
-            view.size = Vector2(1300,530)
-            var atlas: Control = Map.new()
-            view.add_child(atlas)
-            atlas.size = view.size
-            atlas.call("setup",game)
-            await process_frame
-            await process_frame
-            var area: Rect2 = atlas.call("_layout")
-            var pin: Vector2 = atlas.call("_point",T.world_to_map(start),area)
-            var expected: Vector2 = area.position+Vector2(0.12,0.18)*area.size
-            if pin.distance_to(expected)>0.01 or close.text!="Zurück zum Spiel":
-                fail("marker projection or menu theme")
-                return
-            print("FIX22_ATLAS_SMOKE_OK: HD texture, UI frame, live coordinates and nine roads")
-            quit(0)
-        GDSMOKE422
-        python3 -m py_compile "$RUNNER_TEMP/lwod422_art.py" "$RUNNER_TEMP/lwod422_patch.py"
-        python3 "$RUNNER_TEMP/lwod422_art.py"
-        python3 "$RUNNER_TEMP/lwod422_patch.py"
-        mkdir -p build/diagnose
-        cp "$RUNNER_TEMP/fix22_bake.log" build/diagnose/FIX22_Atlas_Bake.log
-    - name: FIX24 Alte Landschaft und doppelte Dekoration bereinigen
-      shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lwod_fix24.py" <<'PYFIX24'
-        from pathlib import Path
-        import re
-        import hashlib
-        B = Path('android/scripts')
-        Q = Path('android/tests')
-        log=[]
-        def note(msg):
-            print('FIX24:',msg,flush=True); log.append(msg)
-        def replace(s,a,b,label,required=False):
-            n=s.count(a)
-            if n==1:
-                note(label); return s.replace(a,b,1)
-            if required: raise RuntimeError(f'{label}: expected one anchor, got {n}')
-            note(f'KEEP {label}: anchor count {n}'); return s
-
-        def edit(name, fn, base=B):
-            p=base/name
-            s=p.read_text(encoding='utf-8')
-            out=fn(s)
-            if out!=s: p.write_text(out,encoding='utf-8')
-
-        def function(s,name):
-            m=re.search(r'(?ms)^(?:static )?func '+re.escape(name)+r'\([^\n]*\n.*?(?=^(?:func |static func |const |var |class |@|extends )|\Z)',s)
-            if not m: return None
-            return m
-
-        def scoped(s,name,fn):
-            m=function(s,name)
-            if not m:
-                note('KEEP missing function '+name); return s
-            return s[:m.start()]+fn(m.group())+s[m.end():]
-
-        # The old systems are reconstructed for compatibility, but their discarded
-        # geometry no longer needs to be instantiated. Keep all their public methods.
-        edit('V25BiomeWorld.gd',lambda s:scoped(s,'setup',lambda q:replace(q,'    _build_regions()\n','    # FIX24: replaced by V27ContinuousTerrain.\n','skip discarded V25 region meshes')))
-        edit('V26SkyWorldMap.gd',lambda s:scoped(s,'setup',lambda q:replace(q,'    _build_height_expansion()\n','    # FIX24: continuous terrain owns region height.\n    region_root = Node3D.new()\n    region_root.name = "V424EmptyLegacyHeightRoot"\n    game.add_child(region_root)\n','skip discarded V26 plateau meshes')))
-
-        # V31 and the current fusion controller own floor placement. Remove only the
-        # exact former giant box; do not touch start-village or house collision.
-        main=(B/'Main.gd').read_text(encoding='utf-8')
-        motion=(B/'V31TerrainMotion.gd').read_text(encoding='utf-8')
-        assert 'terrain_motion.align_to_ground(hero)' in main and 'func align_to_ground(' in motion
-
-        def ground(s):
-            old='    game._box(game, Vector3(0.0,-0.52,0.0), Vector3(WORLD_SIZE,1.0,WORLD_SIZE), Color("#729c72"), true)'
-            return scoped(s,'_build_extended_ground',lambda q:replace(q,old,'    pass # FIX24: no flat legacy world slab above canyon','remove exact V23 world slab'))
-
-        def decor21(s):
-            s=ground(s)
-            def chunk(q):
-                # Only remove the fixed-height, purely cosmetic patch loop.
-                a=re.search(r'(?m)^    for patch in range\(5\):\n',q)
-                if a:
-                    b=re.search(r'(?m)^    trunks\.visible_instance_count\s*=',q[a.end():])
-                    if b and 'patch_x' in q[a.start():a.end()+b.start()] and 'game._box' in q[a.start():a.end()+b.start()]:
-                        q=q[:a.start()]+'    # FIX24: terrain vertex colors replace fixed-Y patches.\n'+q[a.end()+b.start():]
-                        note('remove V23 decorative ground patches')
-                # Use one height sample per tree/stone, without regenerating the layout.
-                old='        var point := Vector2(px,pz)\n'
-                if q.count(old)==1 and all(q.count(v)==1 for v in ('Vector3(px,0.4*scale,pz)','Vector3(px,1.05*scale,pz)','Vector3(px,3.1*scale,pz)')):
-                    q=q.replace(old,old+'        var v424_terrain: Node = game.get_node_or_null("V27ContinuousTerrain")\n        if not is_instance_valid(v424_terrain):\n            continue\n')
-                    anchor='        var scale: float = rng.randf_range(0.8,1.5)\n'
-                    if q.count(anchor)!=1:
-                        raise RuntimeError('V23 vegetation height anchor changed')
-                    q=q.replace(anchor,anchor+'        var v424_y: float = float(v424_terrain.call("surface_height_at",px,pz))\n')
-                    for v in ('0.4','1.05','3.1'):
-                        q=q.replace(f'Vector3(px,{v}*scale,pz)',f'Vector3(px,v424_y+{v}*scale,pz)')
-                    note('V23 trees and rocks follow actual surface')
-                else: note('KEEP V23 tree geometry: source differs')
-                return q
-            s=scoped(s,'_make_chunk',chunk)
-            # Leave the cell unallocated if terrain does not yet exist.
-            if 'var v424_terrain: Node' in s:
-                s=scoped(s,'_stream_chunks',lambda q:replace(q,'    var p: Vector3 = game.hero.global_position\n','    if not is_instance_valid(game.get_node_or_null("V27ContinuousTerrain")):\n        return\n    var p: Vector3 = game.hero.global_position\n','defer V23 decoration until terrain exists',True))
-            return s
-        edit('V21World.gd',decor21)
-
-        # Keep V24 flowers and grass but avoid a second stone population. Preserve
-        # caves/shrines/towers and all their existing game coordinates.
-        def decor24(s):
-            def chunk(q):
-                anchor='        var s: float = rng.randf_range(0.65,1.45)\n'
-                coords=['Vector3(x,0.30*s,z)','Vector3(x,0.61*s,z)','Vector3(x,1.20*s,z)']
-                if q.count(anchor)!=1 or not all(q.count(v)==1 for v in coords):
-                    note('KEEP V24 decor: source differs'); return q
-                q=q.replace(anchor,anchor+'        var v424_terrain: Node = game.get_node_or_null("V27ContinuousTerrain")\n        if not is_instance_valid(v424_terrain):\n            continue\n        var v424_y: float = float(v424_terrain.call("surface_height_at",x,z))\n')
-                for old,v in zip(coords,['0.30','0.61','1.20']): q=q.replace(old,f'Vector3(x,v424_y+{v}*s,z)')
-                # Stones are already rendered by V23, but retain deterministic RNG.
-                a='            var stone_base := Basis().scaled(Vector3(s, s * 0.65, s))\n            stones.set_instance_transform(stone_count, Transform3D(stone_base, Vector3(x,v424_y+0.30*s,z)))\n            stone_count += 1\n'
-                q=replace(q,a,'            continue # FIX24: V23 supplies ordinary rocks.\n','remove redundant V24 rock population')
-                note('V24 grass and flowers follow actual surface')
-                return q
-            s=scoped(s,'_chunk',chunk)
-            if 'var v424_terrain: Node' in s:
-                s=scoped(s,'_load_nearby',lambda q:replace(q,'    var p: Vector3 = game.hero.global_position\n','    if not is_instance_valid(game.get_node_or_null("V27ContinuousTerrain")):\n        return\n    var p: Vector3 = game.hero.global_position\n','defer V24 vegetation until terrain exists',True))
-            return s
-        edit('V24Regions.gd',decor24)
-
-        # Lava strips already follow the continuous terrain. Only delete the second
-        # system of seven fixed rectangular lava slabs, retain all 18 rock formations.
-        lava_old='''        for k in range(7):
-                    var lava: Vector2 = center+Vector2(540.0+float(k)*85.0,-920.0+float(k)*54.0)
-                    _block(root,lava,Vector3(105.0,1.5,30.0),"#b24f31",1.0)
-        '''
-        lava_changed=lava_old in (B/'V417Landmarks.gd').read_text(encoding='utf-8')
-        lava_terrain=(B/'V27Terrain.gd').read_text(encoding='utf-8')
-        assert 'func _create_lava_visuals() -> void:' in lava_terrain and '    _create_lava_visuals()' in lava_terrain
-        if lava_changed:
-            edit('V417Landmarks.gd',lambda s:replace(s,lava_old,'        # FIX24: terrain-following lava replaces #b24f31 slabs.\n','remove seven duplicate lava slabs',True))
-            edit('V417Fix13Smoke.gd',lambda s:replace(s,'if peaks != 18 or lava != 7:','if peaks != 18 or lava != 0:','update obsolete lava-box expectation',True),Q)
-
-        # Preserve exact terrain geometry, color and horizon dimensions. Reuse a bounded
-        # cache of deterministic height/color samples at coincident grid points only.
-        def terrain(s):
-            def horizon(q):
-                old='''            var h: float = height_at(p.x,p.y)
-                    ring.append(Vector3(p.x-origin.x,h,p.y-origin.y))
-                    colors.append(color_at(p.x,p.y,h))'''
-                new='''            var sample: Array = _v424_horizon_sample(p)
-                    ring.append(Vector3(p.x-origin.x,float(sample[0]),p.y-origin.y))
-                    colors.append(sample[1])'''
-                return replace(q,old,new,'cache horizon height and color samples',True)
-            s=scoped(s,'_v412_rebuild_horizon',horizon)
-            assert '_v424_horizon_sample(p)' in s
-            s+='''
-        # FIX24: bounded cache, no altered terrain heights and no worker-thread access.
-        var v424_horizon_samples: Dictionary = {}
-        func _v424_horizon_sample(p: Vector2) -> Array:
-            if v424_horizon_samples.has(p):
-                return v424_horizon_samples[p]
-            if v424_horizon_samples.size() >= 16384:
-                v424_horizon_samples.clear()
-            var h: float = height_at(p.x,p.y)
-            var result: Array = [h,color_at(p.x,p.y,h)]
-            v424_horizon_samples[p] = result
-            return result
-        '''
-            if lava_changed:
-                s=scoped(s,'_create_lava_visuals',lambda q:replace(q,'        var lava := MeshInstance3D.new()\n','        var lava := MeshInstance3D.new()\n        lava.name = "V424Lavafluss_%d" % arm\n','name actual remaining lava meshes',True))
-            return s
-        edit('V27Terrain.gd',terrain)
-
-        # Miter the four perimeter ridges. Adjacent sides share exactly the same
-        # corner vertices and endpoint profile, instead of laying two full meshes over
-        # each other. Keep mountain guard and collision body logic unchanged.
-        def border(s):
-            uv='''func _v421_uv(side: int, along: float, inward: float) -> Vector2:
-            match side:
-                0: return Vector2(along,inward*T.V421_NORTH)
-                1: return Vector2(100.0-inward*T.V421_SIDE,along)
-                2: return Vector2(along,100.0-inward*T.V421_SIDE)
-                _: return Vector2(inward*T.V421_SIDE,along)'''
-            new='''func _v421_uv(side: int, along: float, inward: float) -> Vector2:
-            var f: float = along/100.0
-            var x: float = lerpf(inward*T.V421_SIDE,100.0-inward*T.V421_SIDE,f)
-            var z: float = lerpf(inward*T.V421_NORTH,100.0-inward*T.V421_SIDE,f)
-            match side:
-                0: return Vector2(x,inward*T.V421_NORTH)
-                1: return Vector2(100.0-inward*T.V421_SIDE,z)
-                2: return Vector2(x,100.0-inward*T.V421_SIDE)
-                _: return Vector2(inward*T.V421_SIDE,z)'''
-            if s.count(uv)!=1: note('KEEP perimeter geometry: anchor differs'); return s
-            # At both endpoints, profile/height/color must agree, regardless of side.
-            # Smoothly blend into the shared profile in a narrow corner zone.
-            q=s.replace(uv,new,1)
-            a='''            var profile: float = pow(clampf(1.0-absf(t-crest)/(1.0-crest if t>=crest else crest),0.0,1.0),0.50)'''
-            b='''            var corner: float = smoothstep(0.0,3.0,minf(u,100.0-u))
-                    peak = lerpf(840.0,peak,corner)
-                    crest = lerpf(0.42,crest,corner)
-                    var profile: float = pow(clampf(1.0-absf(t-crest)/(1.0-crest if t>=crest else crest),0.0,1.0),0.50)'''
-            c='profile*46.0*sin(u*7.21+t*15.7+phase)'
-            d='''            colors.append(Color(shade,shade*0.98,shade*0.94))'''
-            if any(q.count(a)!=1 for a in (a,c,d)):
-                note('KEEP perimeter: profile anchors differ'); return s
-            q=q.replace(a,b,1).replace(c,c+'*corner',1).replace(d,'            shade = lerpf(0.53,shade,corner)\n'+d,1)
-            note('miter four border meshes, matching endpoint heights and shades')
-            return q
-        edit('V417MountainWall.gd',border)
-
-        # Do not remove assets just because a static grep cannot see their dynamic
-        # references. Retain the stable map and every existing gameplay script/test.
-        p=Path('android/export_presets.cfg'); s=p.read_text(encoding='utf-8')
-        s=replace(s,'version/code=4193','version/code=4194','APK version code',True)
-        s=replace(s,'version/name="4.1.7.23"','version/name="4.1.7.24"','APK version name',True)
-        p.write_text(s,encoding='utf-8')
-        Path('build/diagnose').mkdir(parents=True,exist_ok=True)
-        Path('build/diagnose/FIX24_Bereinigung.log').write_text('\n'.join(log)+'\n',encoding='utf-8')
-        print('FIX24_CLEANUP_OK')
-        PYFIX24
-        python3 -m py_compile "$RUNNER_TEMP/lwod_fix24.py"
-        python3 "$RUNNER_TEMP/lwod_fix24.py"
-        python3 - <<'PYTEST24'
-        from pathlib import Path
-        p=Path('android/tests/V417Fix12WorldSmoke.gd')
-        s=p.read_text(encoding='utf-8')
-        a='    var cells: Dictionary = terrain.get("chunks")'
-        assert s.count(a)==1
-        b='''    # On the cleaned source, the actual terrain must still create all lava arms.
-            if FileAccess.get_file_as_string("res://scripts/V27Terrain.gd").contains("V424Lavafluss_%d"):
-                for arm in range(3):
-                    var lava_mesh := terrain.get_node_or_null("V424Lavafluss_%d" % arm) as MeshInstance3D
-                    if lava_mesh == null or lava_mesh.mesh == null or lava_mesh.mesh.get_surface_count()<1:
-                        fail("FIX24 terrain lava missing")
-                        return
-            var sample_pos: Vector2 = city+Vector2(100.0,100.0)
-            var sample: Array = terrain.call("_v424_horizon_sample",sample_pos)
-            if absf(float(sample[0])-terrain.height_at(sample_pos.x,sample_pos.y))>0.001:
-                fail("FIX24 cache changed terrain height")
-                return
-            var cached_color: Color = sample[1]
-            if not cached_color.is_equal_approx(terrain.color_at(sample_pos.x,sample_pos.y,float(sample[0]))):
-                fail("FIX24 cache changed terrain color")
-                return
-            var sample_cache: Dictionary = terrain.get("v424_horizon_samples")
-            var count_before: int = sample_cache.size()
-            terrain.call("_v424_horizon_sample",sample_pos)
-            if sample_cache.size()!=count_before:
-                fail("FIX24 cache did not reuse sample")
-                return
-        '''
-        s=s.replace(a,b+a,1)
-        p.write_text(s,encoding='utf-8')
-        PYTEST24
-    - name: FIX27 Waldbaeume in Doerfern und am Mauerrand installieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lwod_fix25.py" <<'PYFIX25'
-        NATURE='# FIX25: One vegetation system on the exact rendered terrain triangles.\n# Shared low-poly resources; each chunk owns at most five MultiMeshes.\nvar v425_meshes: Dictionary = {}\nvar v425_mat: StandardMaterial3D\nvar v425_road_segments: Array[PackedVector2Array] = []\n\nfunc _v425_prepare() -> void:\n    if not v425_meshes.is_empty():\n        return\n    var bark := CylinderMesh.new()\n    bark.top_radius = 0.33\n    bark.bottom_radius = 0.50\n    bark.height = 1.0\n    bark.radial_segments = 7\n    v425_meshes["Holz"] = bark\n    var crown := SphereMesh.new()\n    crown.radius = 0.5\n    crown.height = 1.0\n    crown.radial_segments = 9\n    crown.rings = 5\n    v425_meshes["Laub"] = crown\n    var pine := CylinderMesh.new()\n    pine.top_radius = 0.07\n    pine.bottom_radius = 0.50\n    pine.height = 1.0\n    pine.radial_segments = 8\n    v425_meshes["Nadeln"] = pine\n    var rock := SphereMesh.new()\n    rock.radius = 0.5\n    rock.height = 1.0\n    rock.radial_segments = 6\n    rock.rings = 3\n    v425_meshes["Fels"] = rock\n    var shrub := SphereMesh.new()\n    shrub.radius = 0.5\n    shrub.height = 1.0\n    shrub.radial_segments = 7\n    shrub.rings = 4\n    v425_meshes["Busch"] = shrub\n    v425_mat = StandardMaterial3D.new()\n    v425_mat.vertex_color_use_as_albedo = true\n    v425_mat.roughness = 0.95\n    for route in V417Territories.ROUTES:\n        var path: PackedVector2Array = V417Territories.road_world(route,true)\n        for i in range(path.size()-1):\n            v425_road_segments.append(PackedVector2Array([path[i],path[i+1]]))\n\nfunc _v425_allowed(p: Vector2, clearance: float) -> bool:\n    var uv: Vector2 = V417Territories.world_to_map(p)\n    if V417Territories.v421_border_at(uv) or V417Territories.v421_no_decoration(p,clearance):\n        return false\n    # Check footprints, not just the centre, at the mountain and outer boundary.\n    for off in [Vector2(clearance,0),Vector2(-clearance,0),Vector2(0,clearance),Vector2(0,-clearance)]:\n        var q: Vector2 = p+off\n        if V417Territories.v421_border_at(V417Territories.world_to_map(q)) or V417Territories.mountain_at(q):\n            return false\n    for city in V417Territories.CITIES:\n        var limit: float = 48.0\n        if V427_WOODED_TOWNS.has(city): limit = 61.0\n        elif city == "Ruine" or city == "Tor": limit = 160.0\n        elif city == "Steinland": limit = 55.0\n        if p.distance_squared_to(V417Territories.city_world(String(city))) < pow(limit+clearance,2):\n            return false\n    for segment in v425_road_segments:\n        var a: Vector2 = segment[0]\n        var b: Vector2 = segment[1]\n        var pad: float = clearance+4.5\n        if p.x < minf(a.x,b.x)-pad or p.x > maxf(a.x,b.x)+pad or p.y < minf(a.y,b.y)-pad or p.y > maxf(a.y,b.y)+pad:\n            continue\n        var near: Vector2 = Geometry2D.get_closest_point_to_segment(p,a,b)\n        if near.distance_squared_to(p) < pad*pad:\n            return false\n    return true\n\n# Reuse the vertex heights that _emit_vertex just calculated for this chunk.\nfunc _v425_ground(p: Vector2) -> float:\n    var step: float = CHUNK/float(RESOLUTION)\n    var a := Vector2(floor(p.x/step)*step,floor(p.y/step)*step)\n    var b: Vector2 = a+Vector2(step,0)\n    var c: Vector2 = a+Vector2(0,step)\n    var d: Vector2 = a+Vector2(step,step)\n    if not (v414_vertex_cache.has(a) and v414_vertex_cache.has(b) and v414_vertex_cache.has(c) and v414_vertex_cache.has(d)):\n        return surface_height_at(p.x,p.y)\n    var f: Vector2 = (p-a)/step\n    var h0: float = float(v414_vertex_cache[a][0])\n    var h1: float = float(v414_vertex_cache[b][0])\n    var h2: float = float(v414_vertex_cache[c][0])\n    var h3: float = float(v414_vertex_cache[d][0])\n    if f.x+f.y<=1.0:\n        return h0+(h1-h0)*f.x+(h2-h0)*f.y\n    return h3+(h2-h3)*(1.0-f.x)+(h1-h3)*(1.0-f.y)\n\nfunc _v425_add(data: Dictionary, kind: String, at: Vector3, dimensions: Vector3, tint: Color, turn: Basis = Basis.IDENTITY) -> void:\n    var shape: Basis = turn.scaled_local(dimensions)\n    data[kind].append([Transform3D(shape,at),tint])\n\n# FIX27: coherent forest clusters in world coordinates (no chunk seams).\nfunc _v426_grove(p: Vector2) -> float:\n    var field: float = 0.50 + 0.27*sin(p.x*0.014+p.y*0.009) + 0.16*cos(p.y*0.025-p.x*0.011) + 0.07*sin(p.x*0.039+p.y*0.018)\n    return smoothstep(0.28,0.74,clampf(field,0.0,1.0))\n\nfunc _v425_forest(root: Node3D, cx: int, cz: int) -> void:\n    _v425_prepare()\n    var batches: Dictionary = {"Holz":[],"Laub":[],"Nadeln":[],"Fels":[],"Busch":[]}\n    var rng := RandomNumberGenerator.new()\n    rng.seed = int(425001+cx*73856093+cz*19349663)\n    var origin := Vector2(float(cx)*CHUNK,float(cz)*CHUNK)\n    var step: float = CHUNK/18.0\n    var trees: int = 0\n    var shrubs: int = 0\n    var rocks: int = 0\n    var logs: int = 0\n    for iz in range(18):\n        for ix in range(18):\n            var p: Vector2 = origin+Vector2((float(ix)+rng.randf_range(0.36,0.64))*step,(float(iz)+rng.randf_range(0.36,0.64))*step)\n            var region: int = V417Territories.region_index(p)\n            var dry: bool = region == 7 or region == 10\n            var stone_land: bool = region == 3 or region == 4 or region == 5 or region == 6\n            var frozen: bool = region == 11\n            var forest: bool = region == 9 or region == 0 or region == 1\n            var marsh: bool = region == 8\n            var grove: float = _v426_grove(p)\n            # 324 candidate cells instead of 196: compensate in non-forest biomes.\n            var chance: float = lerpf(0.53,0.98,grove) if forest else ((0.72 if marsh or frozen else (0.43 if dry or stone_land else 0.82))*196.0/324.0)\n            if rng.randf() > chance:\n                continue\n            if region == 7 and p.distance_to(V417Territories.city_world("Aschefurt")+Vector2(550,-900)) < 720.0:\n                continue\n            var pick: float = rng.randf()\n            var tree_cut: float = 0.0 if dry or stone_land else (lerpf(0.49,0.76,grove) if forest else 0.36)\n            var bush_cut: float = tree_cut + (0.06 if region == 7 or frozen else (0.18 if dry or stone_land else (lerpf(0.27,0.12,grove) if forest else 0.27)))\n            # Choose sizes before testing road/town/mountain clearance.\n            var bush_size: float = 0.0\n            var rock_size: float = 0.0\n            var clearance: float = 6.5 if pick < tree_cut else 3.5\n            if pick >= tree_cut and pick < bush_cut and region != 7:\n                bush_size = rng.randf_range(3.0,4.6) if rng.randf()<0.28 else rng.randf_range(1.1,2.7)\n                clearance = maxf(clearance,bush_size*1.2)\n            elif pick >= tree_cut:\n                var rock_pick: float = rng.randf()\n                rock_size = rng.randf_range(5.5,8.0) if rock_pick<0.20 else (rng.randf_range(2.0,5.0) if rock_pick<0.55 else rng.randf_range(0.55,1.8))\n                clearance = maxf(clearance,rock_size*0.80)\n            if not _v425_allowed(p,clearance):\n                continue\n            var y: float = _v425_ground(p)\n            var local := Vector3(p.x-origin.x,y,p.y-origin.y)\n            var yaw: float = rng.randf_range(0.0,TAU)\n            var rot := Basis(Vector3.UP,yaw)\n            var wood := Color("#72503a").lerp(Color("#473629"),rng.randf()*0.65)\n            var green := Color("#285737").lerp(Color("#65934c"),rng.randf())\n            if marsh: green = Color("#315743").lerp(Color("#60846a"),rng.randf())\n            if frozen: green = Color("#567c85").lerp(Color("#dbe8eb"),rng.randf_range(0.3,0.8))\n            if pick < tree_cut:\n                var h: float = rng.randf_range(8.0,16.0) if not forest else rng.randf_range(10.0,20.0)\n                var width: float = h*rng.randf_range(0.32,0.47)\n                _v427_tree(batches,local,h,width,wood,green,rot,frozen or rng.randf()<0.43)\n                trees += 1\n            elif pick < bush_cut and region != 7:\n                var size: float = bush_size\n                var shade: Color = green if not dry else Color("#8e9270")\n                _v425_add(batches,"Busch",local+Vector3(0,size*0.34,0),Vector3(size*1.35,size*0.9,size),shade,rot)\n                _v425_add(batches,"Busch",local+rot*Vector3(size*0.47,size*0.26,0),Vector3(size*0.87,size*0.68,size*0.8),shade.lightened(0.10),rot)\n                if size >= 3.0:\n                    _v425_add(batches,"Busch",local+rot*Vector3(-size*0.39,size*0.43,size*0.12),Vector3(size*0.90,size*1.12,size*0.87),shade.darkened(0.07),rot)\n                shrubs += 1\n            elif not dry and not stone_land and not frozen and pick>0.92:\n                var length: float = rng.randf_range(5.0,10.0)\n                var direction := Vector2(cos(yaw),sin(yaw))\n                var end_a: Vector2 = p-direction*length*0.5\n                var end_b: Vector2 = p+direction*length*0.5\n                if not _v425_allowed(p,length*0.5+1.0):\n                    continue\n                var radius: float = rng.randf_range(0.35,0.65)\n                var a := Vector3(end_a.x-origin.x,_v425_ground(end_a)+radius,end_a.y-origin.y)\n                var b := Vector3(end_b.x-origin.x,_v425_ground(end_b)+radius,end_b.y-origin.y)\n                var axis: Vector3 = (b-a).normalized()\n                var across: Vector3 = axis.cross(Vector3.UP).normalized()\n                if across.length_squared()<0.01: continue\n                var log_basis := Basis(across,axis,across.cross(axis).normalized())\n                _v425_add(batches,"Holz",(a+b)*0.5,Vector3(radius*2.0,a.distance_to(b),radius*2.0),wood,log_basis)\n                logs += 1\n            else:\n                var size: float = rock_size\n                var shade := Color("#797b70").lerp(Color("#a5a294"),rng.randf())\n                if region == 7: shade = Color("#403839").lerp(Color("#79534a"),rng.randf())\n                if frozen: shade = shade.lerp(Color("#c4d2d8"),0.5)\n                _v425_add(batches,"Fels",local+Vector3(0,size*0.29,0),Vector3(size*rng.randf_range(0.9,1.15 if size>=5.5 else 1.5),size*0.72,size),shade,rot)\n                rocks += 1\n    var town_counts: Vector2i = _v427_add_town_trees(batches,origin)\n    trees += town_counts.x+town_counts.y\n    var decor := Node3D.new()\n    decor.name = "V425Natur"\n    decor.set_meta("trees",trees)\n    decor.set_meta("town_trees",town_counts.x)\n    decor.set_meta("edge_trees",town_counts.y)\n    decor.set_meta("shrubs",shrubs)\n    decor.set_meta("rocks",rocks)\n    decor.set_meta("logs",logs)\n    root.add_child(decor)\n    for key in batches:\n        var entries: Array = batches[key]\n        if entries.is_empty(): continue\n        var mm := MultiMesh.new()\n        mm.transform_format = MultiMesh.TRANSFORM_3D\n        mm.use_colors = true\n        mm.mesh = v425_meshes[key] as Mesh\n        mm.instance_count = entries.size()\n        for i in range(entries.size()):\n            mm.set_instance_transform(i,entries[i][0])\n            mm.set_instance_color(i,entries[i][1])\n        var inst := MultiMeshInstance3D.new()\n        inst.name = String(key)\n        inst.multimesh = mm\n        inst.material_override = v425_mat\n        inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF\n        decor.add_child(inst)\n\n\n# FIX27: both town and forest trees use this single model builder.\nfunc _v427_tree(batches: Dictionary, local: Vector3, h: float, width: float, wood: Color, green: Color, rot: Basis, conifer: bool) -> void:\n    var stem: float = h*0.66\n    var diameter: float = h*0.075\n    _v425_add(batches,"Holz",local+Vector3(0,stem*0.5-0.16,0),Vector3(diameter,stem+0.32,diameter),wood,rot)\n    if conifer:\n        for layer in range(3):\n            var factor: float = 1.0-float(layer)*0.24\n            _v425_add(batches,"Nadeln",local+Vector3(0,h*(0.43+float(layer)*0.19),0),Vector3(width*factor,h*0.39,width*factor),green.lightened(float(layer)*0.045),rot)\n    else:\n        _v425_add(batches,"Laub",local+Vector3(0,h*0.73,0),Vector3(width,h*0.52,width*0.91),green,rot)\n        _v425_add(batches,"Laub",local+rot*Vector3(width*0.24,h*0.79,-width*0.12),Vector3(width*0.69,h*0.42,width*0.72),green.lightened(0.08),rot)\n        _v425_add(batches,"Laub",local+rot*Vector3(-width*0.25,h*0.64,width*0.15),Vector3(width*0.63,h*0.36,width*0.67),green.darkened(0.08),rot)\n\nconst V427_HOUSE_ANGLES = [-158.0,-130.0,-99.0,-66.0,-34.0,32.0,63.0,96.0,129.0,158.0]\nconst V427_HOUSE_RADII = [29.0,26.3,30.0,27.2,28.5,29.0,26.4,29.4,27.5,29.1]\nconst V427_WOODED_TOWNS = ["Sonnental","Hügelruh","Wurzelheim","Moordorf","Frostholm"]\n\nfunc _v427_road_clear(p: Vector2, pad: float) -> bool:\n    for segment in v425_road_segments:\n        var a: Vector2 = segment[0]\n        var b: Vector2 = segment[1]\n        if p.x < minf(a.x,b.x)-pad or p.x > maxf(a.x,b.x)+pad or p.y < minf(a.y,b.y)-pad or p.y > maxf(a.y,b.y)+pad:\n            continue\n        if Geometry2D.get_closest_point_to_segment(p,a,b).distance_squared_to(p) < pad*pad:\n            return false\n    return true\n\nfunc _v427_gate_clear(city: String, p: Vector2) -> bool:\n    var center: Vector2 = V417Territories.city_world(city)\n    for gate in V417Territories.gate_names(city):\n        var d: Vector2 = V417Territories.gate_direction(city,gate)\n        if Geometry2D.get_closest_point_to_segment(p,center,center+d*72.0).distance_to(p) < 9.5:\n            return false\n        if p.distance_to(V417Territories.crystal_point(city,gate)) < 8.0:\n            return false\n    return true\n\nfunc _v427_town_clear(city: String, p: Vector2) -> bool:\n    var center: Vector2 = V417Territories.city_world(city)\n    var rad: float = p.distance_to(center)\n    # Ring path ends at radius 25; wall starts around radius 45.\n    # A 10-12 m tree has a maximum crown radius below 3.4 m.\n    if rad < 34.0 or rad > 39.5:\n        return false\n    for i in range(V427_HOUSE_ANGLES.size()):\n        var a: float = deg_to_rad(float(V427_HOUSE_ANGLES[i]))\n        var house: Vector2 = center+Vector2(sin(a),cos(a))*float(V427_HOUSE_RADII[i])\n        if p.distance_to(house)<10.0:\n            return false\n    return _v427_gate_clear(city,p) and _v427_road_clear(p,9.5) and not V417Territories.v421_no_decoration(p,4.0)\n\nfunc _v427_town_sites(city: String) -> PackedVector2Array:\n    _v425_prepare()\n    var result := PackedVector2Array()\n    var center: Vector2 = V417Territories.city_world(city)\n    # A stable, sparse ring of planted trees behind the homes, not on the plaza.\n    for i in range(36):\n        var a: float = TAU*(float(i)+0.5)/36.0\n        var p: Vector2 = center+Vector2(sin(a),cos(a))*38.5\n        if not _v427_town_clear(city,p):\n            continue\n        var spaced: bool = true\n        for previous in result:\n            if previous.distance_to(p)<12.0:\n                spaced = false\n                break\n        if spaced:\n            result.append(p)\n        if result.size()>=7:\n            break\n    return result\n\nfunc _v427_in_chunk(p: Vector2, origin: Vector2) -> bool:\n    return p.x>=origin.x and p.x<origin.x+CHUNK and p.y>=origin.y and p.y<origin.y+CHUNK\n\nfunc _v427_city_tree(batches: Dictionary, p: Vector2, origin: Vector2, city: String, serial: int, outside: bool) -> void:\n    var rng := RandomNumberGenerator.new()\n    rng.seed = int(427000+roundi(p.x)*7919+roundi(p.y)*104729+serial)\n    var h: float = rng.randf_range(10.0,17.0) if outside else rng.randf_range(10.0,12.0)\n    var width: float = h*rng.randf_range(0.32,0.43)\n    var wood: Color = Color("#72503a").lerp(Color("#473629"),rng.randf()*0.65)\n    var green: Color = Color("#285737").lerp(Color("#65934c"),rng.randf())\n    if city == "Moordorf": green = Color("#315743").lerp(Color("#60846a"),rng.randf())\n    if city == "Frostholm": green = Color("#567c85").lerp(Color("#dbe8eb"),rng.randf_range(0.3,0.8))\n    if city == "Sandhafen" or city == "Aschefurt": green = green.lerp(Color("#8b8755"),0.35)\n    var rot := Basis(Vector3.UP,rng.randf_range(0.0,TAU))\n    var local := Vector3(p.x-origin.x,_v425_ground(p),p.y-origin.y)\n    _v427_tree(batches,local,h,width,wood,green,rot,city == "Frostholm" or rng.randf()<0.43)\n\nfunc _v427_add_town_trees(batches: Dictionary, origin: Vector2) -> Vector2i:\n    var count := Vector2i.ZERO\n    for key in V417Territories.V416_GATE_ANGLES:\n        var city: String = String(key)\n        var center: Vector2 = V417Territories.city_world(city)\n        if center.x<origin.x-75.0 or center.x>origin.x+CHUNK+75.0 or center.y<origin.y-75.0 or center.y>origin.y+CHUNK+75.0:\n            continue\n        var sites: PackedVector2Array = _v427_town_sites(city)\n        for i in range(sites.size()):\n            var p: Vector2 = sites[i]\n            if _v427_in_chunk(p,origin):\n                _v427_city_tree(batches,p,origin,city,i,false)\n                count.x+=1\n        if not V427_WOODED_TOWNS.has(city):\n            continue\n        # Irregular woodland edge outside the wall, with free gate approaches.\n        # Ordinary forest objects start farther out so the two sets do not overlap.\n        for i in range(24):\n            var a: float = TAU*(float(i)+0.25)/24.0\n            var r: float = 54.0+2.0*sin(float(i)*2.4)\n            var p: Vector2 = center+Vector2(sin(a),cos(a))*r\n            if not _v427_in_chunk(p,origin) or not _v427_gate_clear(city,p) or not _v427_road_clear(p,11.0):\n                continue\n            if V417Territories.v421_no_decoration(p,6.5) or V417Territories.v421_border_at(V417Territories.world_to_map(p)):\n                continue\n            _v427_city_tree(batches,p,origin,city,i,true)\n            count.y+=1\n    return count\n'
-        from pathlib import Path
-        import re
-        B=Path('android/scripts')
-        Q=Path('android/tests')
-        notes=[]
-        def note(s):
-            print('FIX25:',s,flush=True);notes.append(s)
-        def once(s,a,b):
-            assert s.count(a)==1, 'FIX25 source anchor not unique: '+a[:120]
-            return s.replace(a,b,1)
-        def function(s,name):
-            m=re.search(r'(?ms)^func '+re.escape(name)+r'\([^\n]*\n.*?(?=^(?:func |static func |const |var |class |@|extends )|\Z)',s)
-            assert m, 'FIX25 function missing: '+name
-            return m
-        def disable(s,name):
-            m=function(s,name)
-            header=m.group().splitlines()[0]
-            # These methods are legacy void decoration builders only.
-            assert header.endswith('-> void:')
-            note('Disable obsolete '+name)
-            return s[:m.start()]+header+'\n    pass # FIX25: superseded by current map/terrain.\n\n'+s[m.end():]
-        def edit(name,fn):
-            p=B/name; old=p.read_text(encoding='utf-8');new=fn(old);p.write_text(new,encoding='utf-8')
-        # FIX27: remove only original small trunk/crown generation, not house plants or NPCs.
-        def old_ground(s):
-            m=function(s,'_build_ground');q=m.group()
-            old='        _tree(Vector3(x, 0, z), rng.randf_range(0.8, 1.35))'
-            if old in q:
-                q=once(q,old,'        pass # FIX27: replacement trees are streamed with the terrain')
-                note('Removed V6 ground tree call')
-                return s[:m.start()]+q+s[m.end():]
-            if '_tree(' not in q:
-                note('Original ground tree call already absent')
-                return s
-            raise SystemExit('FIX27: unexpected original ground tree call')
-        edit('Main.gd',old_ground)
-        def old_crowns(s):
-            m=function(s,'_upgrade_nature');q=m.group()
-            a=q.find('    var rng := RandomNumberGenerator.new()')
-            b=q.find('    var plants := RandomNumberGenerator.new()')
-            if a>=0 and b>a and 'for i in range(42):' in q[a:b]:
-                assert 'Color("#267e61")' in q[a:b] and 'Color("#3b966c")' in q[a:b]
-                q=q[:a]+q[b:]
-                note('Removed V17 duplicate small crowns; kept plants and stones')
-                return s[:m.start()]+q+s[m.end():]
-            if 'for i in range(42):' not in q:
-                note('Old V17 crowns already disabled')
-                return s
-            raise SystemExit('FIX27: unexpected old crown implementation')
-        edit('V17Visual.gd',old_crowns)
-        # Exact legacy decoration calls: no deletions based on mesh color/shape alone.
-        edit('V21World.gd',lambda s:disable(s,'_stream_chunks'))
-        edit('V24Regions.gd',lambda s:disable(disable(s,'_make_landmarks'),'_load_nearby'))
-        edit('V17Visual.gd',lambda s:disable(s,'_detail_ground'))
-        # Keep current regional landmarks but remove the bare rectangular swamp pads
-        # and outdated pier planks, NOT the actual village gates, ruins or volcano.
-        def landmarks(s):
-            a='            _block(root,p+Vector2(5.0,-7.0),Vector3(15,1.5,22),"#55756b")\n'
-            b='        for i in range(4):\n            _block(root,center+Vector2(250.0+float(i)*32.0,130.0),Vector3(28,3,95),"#8c6842")\n'
-            for old in (a,b):
-                if old in s:
-                    s=once(s,old,'');note('Removed old isolated rectangular decoration')
-            return s
-        edit('V417Landmarks.gd',landmarks)
-        # Six people from deleted V22 outposts still spawn at obsolete coordinates.
-        # Keep all 14 identities/indices and dialogs; move the six into Sonnental.
-        # V38 builds its daytime/nighttime arrays from these original spawn entries.
-        def people(s):
-            m=function(s,'_build_people');q=m.group()
-            places={'Nela':(-10,-7),'Keno':(9,-7),'Lio':(-8,-19),'Yara':(8,-16),'Dorin':(-7,-36),'Ari':(8,-42)}
-            for label,(x,z) in places.items():
-                pat=r'(_person\("'+label+r'",\s*)Vector2\([^)]*\)'
-                q,n=re.subn(pat,lambda a:a[1]+f'Vector2({x}.0, {z}.0)',q,count=1)
-                assert n==1, 'Missing old outpost NPC: '+label
-            s=s[:m.start()]+q+s[m.end():]
-            note('Six former outpost residents relocated; all original NPC IDs preserved')
-            return s
-        edit('V37VillageQuests.gd',people)
-        # Attach the new multimesh system to the actual detailed terrain chunks.
-        def terrain(s):
-            s=once(s,'    _place_region_details(root,cx,cz)\n','    _place_region_details(root,cx,cz)\n    _v425_forest(root,cx,cz)\n')
-            assert 'func surface_height_at(' in s and 'var v414_vertex_cache' in s and 'const V417Territories' in s
-            return s+'\n'+NATURE+'\n'
-        edit('V27Terrain.gd',terrain)
-        # APK keeps identical application ID/signature.
-        p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
-        s=once(s,'version/code=4194','version/code=4197');s=once(s,'version/name="4.1.7.24"','version/name="4.1.7.27"');p.write_text(s,encoding='utf-8')
-        Path('build/diagnose').mkdir(parents=True,exist_ok=True)
-        Path('build/diagnose/FIX25_Natur_Installation.log').write_text('\n'.join(notes)+'\n',encoding='utf-8')
-        print('FIX25_INSTALL_OK')
-
-        PYFIX25
-        python3 -m py_compile "$RUNNER_TEMP/lwod_fix25.py"
-        python3 "$RUNNER_TEMP/lwod_fix25.py"
-        cat > android/tests/V425NatureSmoke.gd <<'GDFIX25'
-        extends SceneTree
-        const T = preload("res://scripts/V417Territories.gd")
-        const Terrain = preload("res://scripts/V27Terrain.gd")
-        class TestGame:
-            extends Node3D
-            var hero: CharacterBody3D
-            var state: int = 2
-        func _initialize() -> void:
-            call_deferred("_run")
-        func _run() -> void:
-            var g := TestGame.new()
-            root.add_child(g)
-            g.hero = CharacterBody3D.new()
-            g.add_child(g.hero)
-            var p: Vector2 = T.map_to_world(Vector2(18,36))
-            g.hero.position = Vector3(p.x,0,p.y)
-            var terrain := Terrain.new()
-            g.add_child(terrain)
-            terrain.setup(g,null,null,null)
-            var grove_min: float = 1.0
-            var grove_max: float = 0.0
-            for iz in range(12):
-                for ix in range(12):
-                    var sample: float = terrain._v426_grove(Vector2(float(ix)*53.0,float(iz)*53.0))
-                    grove_min = minf(grove_min,sample)
-                    grove_max = maxf(grove_max,sample)
-            if grove_min>0.20 or grove_max<0.80:
-                push_error("FIX25: FIX27 forest density does not vary")
-                quit(1)
-                return
-            var counts := Vector4i.ZERO
-            var cells: Dictionary = terrain.get("chunks")
-            for chunk in cells.values():
-                var nature := (chunk as Node3D).get_node_or_null("V425Natur")
-                if nature == null or nature.get_child_count()>5:
-                    push_error("FIX25: missing batched nature")
-                    quit(1)
-                    return
-                counts += Vector4i(int(nature.get_meta("trees")),int(nature.get_meta("shrubs")),int(nature.get_meta("rocks")),int(nature.get_meta("logs")))
-                for view in nature.get_children():
-                    if not view is MultiMeshInstance3D or (view as MultiMeshInstance3D).multimesh.instance_count<=0:
-                        push_error("FIX25: invalid nature batch")
-                        quit(1)
-                        return
-            if counts.x<20 or counts.y<20 or counts.z<10 or counts.w<1:
-                push_error("FIX25: too little natural detail: "+str(counts))
-                quit(1)
-                return
-            for key in T.V416_GATE_ANGLES:
-                var city: String = String(key)
-                var positions: PackedVector2Array = terrain.call("_v427_town_sites",city)
-                if positions.size()<3 or positions.size()>7:
-                    push_error("FIX27: invalid town tree count "+city+": "+str(positions.size()))
-                    quit(1)
-                    return
-                for i in range(positions.size()):
-                    if not bool(terrain.call("_v427_town_clear",city,positions[i])):
-                        push_error("FIX27: tree in a forbidden town area "+city)
-                        quit(1)
-                        return
-                    for j in range(i):
-                        if positions[i].distance_to(positions[j])<12.0:
-                            push_error("FIX27: overlapping town trees "+city)
-                            quit(1)
-                            return
-            var town: Vector2 = T.city_world("Sonnental")
-            g.hero.position = Vector3(town.x,0,town.y)
-            terrain.call("_stream",true)
-            var village_trees: int = 0
-            var edge_trees: int = 0
-            var town_cells: Dictionary = terrain.get("chunks")
-            for chunk in town_cells.values():
-                var decor := (chunk as Node3D).get_node_or_null("V425Natur")
-                if decor != null:
-                    village_trees += int(decor.get_meta("town_trees",0))
-                    edge_trees += int(decor.get_meta("edge_trees",0))
-            if village_trees<3 or edge_trees<6:
-                push_error("FIX27: missing streamed town/edge trees "+str(Vector2i(village_trees,edge_trees)))
-                quit(1)
-                return
-            print("FIX27_TOWN_TREES_OK: ",village_trees," / ",edge_trees)
-            print("FIX25_NATURE_OK: ",counts)
-            quit(0)
-        GDFIX25
-    - name: FIX31 Wurzelheim Dorfplatz und Absturzsicherung bauen
-      shell: bash
-      run: |
-        set -euo pipefail
-        base64 -d <<'FIX31_PAYLOAD' | gzip -dc > "$RUNNER_TEMP/lwod_fix29.py"
-        H4sIAAAAAAAC/729fZPbNrIv/H8+hXZSKUseUuarKM1mch7H8SaudRxf29ns3cRHxZE4MzqWRIWUxh7XfvinGy8kugGSk+ypm6p4
-        RDb6B6ABNBqNBvjs6aufXv/f0eXoUfHpWOzX9ehNcf2sPO2Pxfq3/Zejt7d5VaxH2/y+PB1H12U1Ot4Wo6q42ZT7fDu6Om2266Ly
-        Rh/z7YfN/maU79ejw21Z7DefgGm/hnfT3/arcl8fR+8gm0NVbMt8PT6rivriyZN6VW0Ox/rJP5Iwe1dU1eZYVpuint6szyaa7eXz
-        fzx/eTG6Br4jIMSzaaBJb55+9+Lnty0tilras+ev3r15/hbe/vqPYgW40diPZh78P/H0C/6MCRgdHt83JXnx6u8m4GYceGGTGp8i
-        4yn0YuMpgqcG6O3rF2+evly+fff8NZR+s8eyzwNG/eHpy78tf3nx3bsfjApOY53ql6cvDalkRs2/f/PTz6++W/7w04+s+mHk+XHS
-        Vo8/iwRhRhOYz5ggIOSAEhkz52WZw+N7VujXz396/fI5KXUMbbRo+fAxNmDhOYwI2Xz00+nMaKMxPvohYQ8JOGQFZfoNipQfN6vR
-        9Wm/GtWHTZVvl4cSWmq8EQ02GfnfjBTXxW/7Efy3uR5tRt/QtpUU/K8qjqdqr3vlr8H781Ywi2kAgpRp73IYYm27ir/jzeSJ/GGC
-        K4YvR79sYNAdNze3x+39KK9g8K7FKD1Wp/0HD3/uAQfG8eiquC8VcV2sPsAzjOhCPF9vcDy3Q1aXpcrXbWm2RXW4HofxNPWiFApd
-        78ryeFsfi8M4mM5SL5jOE+84MaqS72+2RQvw+sX5u6c/P4bO+vgoE3XLZVXWY8E+8erNXv2cPIYCdbTPbYEyGB9Bj+Sb/cXoVbku
-        PKO5RCEuSLayQlW+OywBsDoyjImHYmqfVltIeT3uaxSQASiFaYBCoKXclqt8Oz5cqG4TO7qQKpWWwGH6yTtMP0/8d9PV5ni//FhW
-        W1Cdv5yqz8UWSro7szK5yuuCSsCqOjbLSpcigkbpQzdKJSursKdQl+34rD5V1/mqUGJb5sczbwWFXk3v7fqbouwomsrJrMTkXOh/
-        DtbZZD2VPjys0udkuAd/Sgiy5RxCuKo265tiiTPteLvZf2iKtBFFfp2vPhRr9eopZHJvlD83y68HDIJMP71vU111pro3Uq3NVOMr
-        P59M92W1y7ebz8V6TOtsF2r8a36+fjyW068fQ2/3rnz64r1V9fyqvCuWN0I/sUHaDgpP0pXGsJoRdOy+PI429XKD2HuQ+h2UucGb
-        XOhCS5y2wr+bFVZDcdKA5lf19fj36afJNxnotRGYOerNvXzTCXssD612I8pCa+fvBYe/Le6K7aj4dNiCxq3q0Srfjw55XYMO3pYf
-        G5Vc/1Xr4NF1Ve6k0EZ1sYWy15hqN20KDR3sm0sogA/q1Jhp0EhbgdLTjW+QFOPv0/VGSe9YjleTry+1IaVqucs/XY8BWbXGhIJj
-        Z0J8YQ4xdJQJdu4LR68BCfHuP7G5SS/HhDAn2KmurFShI9WDejnJfFvub9oGHf+OLOvyOF5PLCmKtN9cgr4XVq94/PoyJ7K9mkga
-        dqYWrJn519N7bw29bgJNEE3nTJbGEHQ3yJdgrNflFjrIFUzDI8gWRa6mw5HocfXoVGNnwv61OlVVsUcrHoaQVFaeGE7/cwID7J9P
-        /tV2LdpD2sl5MvoaLPCA9DeUm9TE963kuqdUynhV1Ia1Y44u3ds22NUqmP0LMtGeh5OLgc5DzbbJQCeiqQHeTn9npofeZKcw6qJs
-        hbbV7yZP7qbbYn9zvF3Wv59wXTVuzYW+QapSY1Pk53ePj5NvrCXCY3vRYHcmsLSPm/2psMt9z2081aAe9jldE232nB8HLR9WF6Gp
-        7pme0v9hF4B8RRfH3979xDKb8T2Zk3RPwTXqT3uwe1ewPG3sWuhoW7EaPUJ6XKYKtYP130P7wdK19qBXrbantR4besw09i81NgTc
-        sjwU+3FdVJt8K6xKj5i3YrK6KsutMWWDZV580is8yemHktynSUFkcl4f/eVSYgg1Imfx5t2Fo0ExU9AFRaUzVTwN4uWlxAPVUKhX
-        lHvtsh8E5HtfPwqI96S8QsV9rHLoKEIofg59NxprDef5r194r19MQIGMgmkYp81cA6uUgjStAL+8DFrNacICjIb6WgBZi4H8ulgq
-        d8RSLE2orTEqt+vW3Bjti09Hl0keX/TaDgDycOsB3wAD0amY7+SbuWFa4Js2T2IHNQvBQcMTs/kk/v08aQuIz/dfS8jzqDPPQ1Xc
-        bcpTvYTMyqrN22W5YR50NsJxTgB0huE0bWQiSuLTdJNvIEVHkfbFx+WfFAUCgSzEn8/mmhTfPKiKqieMFZIou8bz2pK19W+Rv6ZV
-        9EOY3XUNAYd0eFnjR1+8ef79i59eoS8OtdrfXvwzWlzAOC3u8iPM6u0SBab0olZ+ONBZjTPuFrIrnuyKanWb749PXr1+pv1zdeOD
-        +0cSLfrccNHiWb4vD/fKA/fbXoyp5R0QlseqKMYVGA9yJMXfecaSyqM91hvdNr9gxb451aaWvCs3a2N8IfDo4lKhTkGy2jZDynSf
-        7woo89mP+W53OsIQ2u3ODPKhrDeo0yGJbjBcfsniiFWYkjaUfJqv18vVLQhljLxGpwBNscMyPLvfogKqfizqW7MkSJ+CmXUsd0tZ
-        IWHl4I/H4TSKjVQwZ1pJguksMpLIbgrkW+MlJgULpC5udmCmIXMYtQW82xQfsYBYsBdq8UOFhSmmOyDjXAOAxlstoyka4bdQmtRk
-        gf6FM9MShkAFMyUKe6lfjp+VsGIZn32ZZWkQL84mZsu00kSgxip9lx8K9BqjxKELHiFtjV0WFfoGbNCb0xZbfSMSXZfbTX5TSEu0
-        3Bejmw30XpiQYcYppu1cadiB2YSZn3k7kNG91PhnMnSKEosPAFa37r4mbBFBn1YlTihKXIaZxyotUxvsy6vyk3rbKA+0iUKv6SlB
-        45yMx03fyAIvmkZtojSdeFrusziJo+tG7kwUMy6KVVV+3Pd1ZGEIYqKu3jxOpoGvRQiFS+YWJ+nhDjDgilPO1PZ5IIcW2dH7Q1q1
-        bZHfQS/qHQP4n0ynR4JAt4gOpYFOxqba0TQUrkZdGe/28RjaKTo3BBNgM6GXsovLUaYHDbUoTudxfjaZoi3evE2u50kanE08s3ub
-        xjbrnTJLQ8Vdlet7lN5bYS19C09Mf6AavIWxa3aft/iCphNppraGmy9MOldxonOW2+2mRrFjDvrBkUWTcCoLdClBJRHr0anRBLEV
-        QgPkVluYmk9zwovTPc21Hh9vZKwFXPPaYZsfYbzu3PpGU5v57dv8tMOX4u3yq/XZ6CuVA2PomPFwrdY53Wlmo63BHP3QpymQToc6
-        2gdT6SsyknA9YqTyYcwYKZs+AZ3FeG0P/WT+Zyc+BOya+KA0yR+e965mizwLGv3bNELH3PdtmVdraLZ8V+PU1vj2oFh/xV8b4TOs
-        R+tSTniQ9TY/iDR6D1VKyT31+SHMJyFX+p/sDaPHEZ/7pOuhTVn/Xh3HYtWNC/dD+XFMGy7xoon/6fGnCcMSk5wWQzOXfcLlv7kh
-        GI+FhsTXUeLJzNtZbb7KgiRvpPrl6PmnfHUcrW5LkF6xXws3TD1abUtYphYgpHsh07+ChQCLfXNRvytPx9saXu3AZB/hEt0tOZjG
-        +q2G1r8BymTyJJmblQbjXkjH4Qrw8knXSvzUYZdQbOVacqQ8D11pDwEOBy1lnIBO0EThdOYFYqdMPTFP2yHkXHeE687JhfXtNpeQ
-        2qivf+Wn/fKrIBJ6a8MSGSprfAjOD+GkVdlNImJ2me41x6BDhkl/Bz8EZMUNeZ6jx4D1ZAQyjDVQWKnnSygs4jn2YrNPRzEYdNit
-        cRe6MY4X6cowjrvAYaEwpyMEhgb8E1njowhW0SIZBIRlRUgBwwxehnMLcDXLw9k1BbxL4nB5lYPuKyobmZd0DsWfBRrYbY7OH2qZ
-        W526Ph0OZXXs7msqgWvyEzvFk8ch6jE/gcYR+8XyhQOhs5tZCT6LqSqJenui4uItpV5rCU7/9fzNT404w9lUiXg6N2z9eQDdaHU2
-        4SaJVHXMKMkNL9aV8XubXxVgk7w9VqCoXGaJUpxOSUuaHtMCihDMcZyfXxmjmNkbMn2j3l+i12z0TzUlSu8FKPwTvKy3oEz/ipLd
-        f8C5cbRR5H2+vUe3np4XlY/HCE6AlvgI021T+Z5dHqEgcG5He61NrhCmsEqo67Fuq59fuyCUCK7yeoM2yrf4d6wAPIWtgNRbiqLT
-        mCViKovvHpmm82l/1E5dmLUxvmhVwGQ0lhhPYJWZTqhD42B69UUiOf4ElnsAS1K3eWFqRjphPsYMraUwSsywEcCsCGemXkEmeBnE
-        qFHjyEthBmqGw3oFStVaB12li2SWtuugr5LJk1m7EsIK1WjMQZ1+9UO5J/H+or9kSjUjHxg7s3lbQFlfnDgi1NQBU/zr+VWWXdt6
-        2sIXmnoQP5yLf/6A2nZkNFCP1BOTPtR3uNTQNHGm4aKUw2GbCYlEbYnBWk4SOhUK86OsjzXpvxHtvwldzGIz/k/bLwW7vefnKrXZ
-        RdVP2VP+R29bCTDcr0pTl6hEM4TTmDXFYj5bJbFDOZ+EPUJ08wrWMVVhrBo3++vyYvTdRuw+5dW90w1qxhIIa9MRUMDGq0imtmWm
-        NeiZ8YSPXhL2Igt2brL9unlPOpfp6fUOnnaK65AWbwGrgdYNAhM5DNpgwiGaVTRA4MK03VF11UBsgHWUvyecQPCaMQUtGNRqYpki
-        lhys+AJrW9hMGFqCMibmpvvkaimeo7D0yyv18gpfnv2QQ78srqoTCKlQK31h7asi4xAPlnJPUoLLYhirJZgmxFqxFJsBOGtUm6sT
-        bhTku1JsaqJT/Sj/Oe0/1N4IJk9k2ezFjOdsjDAwpb9cwULrWCxFJmY5vI2HHZoJ+Fb3f3QKoTVwUxyXe3gzPvulvN3f5qe6WR/I
-        2o7yWrGwPUiQyxLGhlIXgYit/DqRm5bjUD5m8jHiqwC0NJYbzbuhvBs/IdwbP5t0WqyvX4ASiVLV2RXw5LF4nbISt4srFbmoohYt
-        PTg0GlXd35+vH4eJmc3tw/w+Min1YIutWB93BjHkxDASdnn1oTgOFSlW/V73BxmPIDuERDC7A+J+LLbb7t7wXVldQ+ff74v9mdUH
-        kNVp5IuCQRW0QmpeqB8wsJpfzs4dT+yolb5i/ghVw+2m/ZoMUVenFUjU2QStQqW2P6xqx2AeWkEdiqou9wPCLD7CACuqwXJaMQlg
-        PXV2f5zcVd8Xm5ibNvBVTNYwEP7oTCPiBs7d40Qs14yVlqj3w/u8Sl+DYHbFMR+fHfJjVW5Bee2KM+/Ql7KZsJb3Z4g8mBbV6hIr
-        WFRnXndF+3BwUbO8KfMtlK0RSCAcC8QOcjPeFaCNNkcormIVy8tBtgOoYBBGuyyWE40cUMu7zXab3zBF345raXeqtCDcW1dvloAf
-        cU/eNW/9iNGMwoVnbGffwOio4e2xFOs+WI3ikm8r3KW4WQ49PhdOwXoESgNntvJ0c2sGQ+IYQhQcRtZREjH2YD1b0zDfi56wFyfG
-        elPJ4CGC4yFtYs+Z+JpIUsfDfPJQBaPN5PXhiLFYrbrnVHz9GlphLBg7R7trTK4fi86KJ0jaxJhZ12izbEC2zcCGh45ZgMEEJo52
-        nFcYWHf2txf/hA7yy89v/vX85Q/PX/y4/PbnFy/fXYySxrUClkoYjE4H6MIjHLzyWZZAv5CmkTh2hP/ClCFPHmGvpHEL1I7qtNBd
-        9jjGMLq9JEhp/J6/QM8stsqYOzMS9E1i6KpisxVzoCAEWc6LrTvpAnlXllsanDC9Km5AjYotnNdvXvz44t2Lfzxfvnvz4umr718+
-        f0tcDtcCyjSoYxnVbaSqxEZNbzKXHU8iNKPelYhI3xmiqcOR+jnEOnLjowuU8ZphXR28m/0GJ0rPLnjI0WgcMWKLEKauaGLRXuiC
-        MGzCJtb3sZlfG65Jue/ZQtB5wsXbkA3ma+g9MGhgmBpD9xzLAf3tHoesfLg3ayfa2cHnm3w+5WMNL3KWSzc/dPh/W2cbpiSrTbLa
-        whSiOFaSlQ1yHr7vaCIDxkpU3+ZrGPNiRT+6HDVOnNlVNo+4nym/ni/SGfUz0ZUuCuJO+Jly78pbwf9rb/WeuShqqR5XAlUUYGIl
-        wFF/V1TH4tP4zqB+OXoD0yMqNrW9BOuw0S08o68eI7vl0a1Cbp2dqjtY/RUy0LWs1ps9zqtTWlxBxhKjGD0hp/eOOOq7wBQnMpFG
-        aZKFdrJzVyC+2trt9u4LQchExMd8F5zf8b2ipm/BIpi4fu9C/y4YCvH/vOR8+PwgBzAvKPUEI4yn4BUc/mQ+YElngGK6MHYUJL6j
-        8NxffEe3uO541LrciZBw1K0XLkw3bOMdDNDrFc+Fq9PYl7iapUl4NnkYOt/lal2PsXah4pnLZqsrWcFAeyg43/Gi4OhcnuKp0x7/
-        qe1DdeXSUYNEO09njjD3zVfx5aUrxN1ZF8NPia5Ivo83w7gxIatZb0OIfOd2vmJ5v6F7I3THhi4K9xgzzibM9uCH42zNhqRvDrVA
-        njBv4L+fJ76AHRqR4qyBuTktuGDugiymnx4n01DA4fmBuSdp94J2j7SJ8wASwgGTbzZp6gWuQyAVGFT9ikkkIWpJFBmdgh3i/GQp
-        mTEk9gXbH1dQn5Z/WEXJIlMFJWE8oqHkuz+ho0QGE6c3HgjuXU9RfaKwUIIehhjiuDY3QhezOC6afl7jugfaXSzlRElr01gVoT+9
-        EUI7EdqkDPbvTrDUuSlu0W6vfii3n68KWPeeGSmbINrpqtztNkeSWX5UQXT7dV6tf1TxQiy//DiVE7qc+JcwVy/zeplvr4p1id6h
-        5tQDJl2dttvlrhQRSNBWhQH67OeXL5ffvXj79NuXz79rOcQSeF/UIk5Su01k2R1RTfDOWJe0jYgMfLXUrN2btdIDlkrI5B5DSGmX
-        Ss169+2x2Ox3+amozpyrH2Tr2v1czLp2Od89/flPbnEabq/ebU2R54cN5IknfXADGfpiQW2s/8AT8b/tjXAczvGZI0Kfpml9AqOv
-        R9l05pjGsOKk7yp4KRB3CJTTJ6imCun486QbcOJySjzIdnTYjQ90XpjcXTHfogP32Wai/7P1GtZC9Jxz3EDgXudy71iEzIt5li2s
-        ze44zxcLYxGS8kVIpxGWmQbFRy/BizCmYHeJ/E3PTA9KMg0SCiOsw2gaJa2yvsry9SI747u3Vfmxw/fea96ler8F+CePQ9wXx0OF
-        bRF8tVceiAsnAsPYm81ncbqwraPEto4665sQu1hIEbeJMbJbSo7rS4fztEtzekO7wHigV6/qDhUo8H17ugenB1j0fdwcb/EqnqoA
-        TYLbeSDpXXmnzzEegcVwnU1NTZnfYCq3Q4tqX5W2x9Fj3jHj2LelO4cKrvEpfwV27cD+oWL581uInXsRZsnJovZ2WhWHHE9IS7+t
-        0OxkU60J1Ib8HGV5wFbdgC6ydhL9enOzvx67Co6HKml8m3PXT+t5x14UbZbhxpZ383RFGfBtKrsF//BO1VAbygKRRlT7Hv0tqRI1
-        9qCzXIvJQ/eiBhr1P92YIptNA8kbfXTGFfwf2ID6f7f9pPvINcabUMXars5lSzY6FRqhDXZcb3Y1Pb3LYx0HzryI4yK6Izy9qo9g
-        S9Wb1W1RnfZ6SUDOm2BccVk7Dsx8W37qPCuDQ0acTdjV7DAMrEAedBYG0nUehWGnXSCp3nIRkus77uLa0Huo3Y8H7zG4ZAOK4rQV
-        Z1TFuklfEgfcYKOO9sXxY1l94AfuK3E+v72sSmz7G2dTQHuhYMZnfjadB0Hg+XE0zcSPOZhUi5l4MV+AfQIvgmSeyRTJInWmyMIF
-        3nYWT4N5MMcXaTBPRIpFvFg4MawU0QJjwzHFYuEuxxBoU5d0GosfzQuwtMSPZIoHLY0XVgpLHg2L9cIC1SnArkkJRnc5OkEX01Bi
-        ZerFfDpbYG3hxSwIUkwRpPgXXkRCDlYKLdMQfgShxEgWsUgxFz9cGFYKwQovEgHmyGUY1CqHbEp4EcyC0IHhSCH7GKRYiB/z6VwQ
-        4EUmkjowWApHXaxchkFVOWZNX18E2E/hRZrIfqowZlDtcOZIYbVtI7EZ9JwwdmBYKZq6AGgQpc5chkGtPmbVRTX2bApDLnWmsOSh
-        ZJo2w9TCsFKo/pE2Y9/KZQhUjznEICOqqVzzojOFHqbQHaj+6MawUjQvhnPpBNV1WUyTIBPP8yAW7RVHyUw8g8ITYkpCNz3NInyO
-        kgjbZrqI5kLw83Tu5Of0xWIhmjKRBbPwB/EY/yKcS4W9iGMzfRAtIic9ngtJZWEo8LNFIp5niegnFj+nS/ll03Qu8Th+P146nUcB
-        pIun8/lCNFAQhlAfDGQOZkifhWmG78MZ8nE6LOCDGHsr1D+SOAG2B0xcKSyrLX6bnoRhiPQkwSHF8YfweP6O8qWyXeL5LHTVz6o/
-        LP2Rni6S1MnP6HEwE+0Wqw5O8YfwZtMww/LHoBcWov5RgjgRPi+wfIvFTMgN+BOb7sif5GfzczqvP8UfwoP84wwVLfBhf0qwfrHg
-        z5R8FhEqr2kYh5lNt+sfh4GoV5jOFi5+Tk+SuejnQZiENv4Q3myazGT/mmVzkX+SZoI+T2YJ0mMhH+h/80Vs0+38aX42P6fz+lP8
-        ITwod4zlR+/gQsgnS2fiOctk/5glqM/Q1SXbk9JnoA/SyOw/2SwS6Wep7AcWP6fj36DV7wR+CM5mx+QsNctbU1XRjZJj1qzirN4G
-        FcVmSM1E7oeyeVnicB4J7+Y8sah2mSXUIpinLl5KTReLUOzwZnYh+6GU+RMwAzto7FpphATQ+xYzF11ZLdyobWxJzs/p0nIKGoOW
-        4/fjWcXnZGn+BY0RzovDs5fWYdAay4zfootqB40tzfGH8ET+bfaCnXEHjRlOqKzqCpqVlGWsqarcrNhMah1QynTTPVUtUTGSQJZZ
-        rEehP6RB6qCy+orWbRuX8TKq6GptT2PIfVBcmWU4Oc0a2Sly0BinhMoqrKj60c3LqB359kPBsI7TBcp9JicIMIwzUcNM6IBZmCEy
-        zMoziwpQsxSFFc/SGT5mMJtjYMlCzmWEl1Fn+HfmRdMAZhQHch+UmvXaSU9MWmzO0lMWo6oZV0+4akJj8yOb7jRVzZZssmRzdQeU
-        snC0wRNBBdMQoBaxtIuEPanNS0YFMczBSo2wu6HjBrvfAqhZJItBeC2qsGy1ocuQ+6FYvlap0myWYQVhjDiQWX2FQartU4uXUYU1
-        rY1rhtwPpTqFNoyU+LUdo9pKmzmMqhpWG0WqJbXNY/ESqupQrUFHkPuhWJkt6jwQ9U2yJHQUg+U7i6MFPs7jmcXLqDD25zCXo19D
-        LoY5cg9UDCv3GS5Jowxt2US8mUVzLAM2Oq4K2jQzpW2caeZzkV0yTSNs0DYNDPsFKtQ+HDtNAlppPuvI6yHIdr3sNKFghzfQ6dJ+
-        HKM8iiuFvjqPOnDsNIEQC7yJhaD6ytOLzHGy6WImOieM90W8MNM0yHYaeCMnDjvNDFeDYT+OK80sFGt3Z16DyK7+o940acCKEYCQ
-        JhGAjjTNmwx6uJBhwyVcYaETx5VGjiZMw5Dt8nQjJ8Lpa8o5mSl3VqR/QBqYeSVyKn440mj2SAMmOnGk2Z04dho5HJpx4czrIch2
-        eWTjwptUSMOB40oju03TXlieTPQN4IIZqwOHp3HVy85rGNnG0Ykjze6QhiuNrE4zLhJdjGYUOHHsNLz/uPJ6CLLAAQNisZC1ms3m
-        eMFFkOBSG5/BvkR6rOTJ6VksZpV0Ecl+nQUhzoyLOXocHfwWHU1C0FpZELnxB/BEcyzgtW4VrNgC426MFlgAvtlGBl3Uf66GtZYZ
-        DOpGYoyf00V7wgDXrcnx+/FU84WB2kLQXW+BxrcxNPDUKRk9TQIuAdX8QNd92QLgCURPXEwXeqDxEgwAKlUI9tVshlVIwbIL0PCY
-        zWN8jsAuCqP2mdMtGcQwz2FAVfOCI1gJcJ0ZpcYLnscQJKjxBPR4Yy2Byo6iJIaGi7MsFvQsEc8ddBBfulhgBlGKvn14kWTyRScC
-        S7Bo5NCZRz+kWs7zrc5mb0ctyo2NLErXy+N2+0hs2gE9TIPMyc/puK42ttI4/hAez18uyI3NKsJv04VrwNhCE14HYwOR81O6XX6O
-        P4Qn88+oLwa3SU1njLEpSum8/bR8MupFMfdhCV2XP6M+GQN/CI/3H15+2Z4Z9ewZdF5/KT9jd5rxc7ps/3Z7m+P346n9qmbbUW0I
-        8g3CTrr20rBNyU5+TtfPQ/hdeKr94rjpfwnWC57DwBhv+Kz6G6UrfCMERXiwjGARzs/pQv5G6AjPfwiP84v2MgJNeHpOF/3HCH8R
-        /TOO6Xgz+Cndlh/H78fj/Gq8wDOJFTBiSzhdjB+LntDx+QC6HL+O/HvxdPun1K8Kz8SxCs/Es2rQpfwTOn6BTjyiBj+ny/ZPqX/V
-        wO/HU+OXB/M09dN0Fv3TWX9N189d/JzO+YfSK7pyuuKsLHZ6AigOVhfVGfrfYNpGoxX9FHP0QHF6CIbYDOhoAy/kNmISR0gXfy1+
-        my74kI44DvwhPJ5/EmUhPi9S6SOi/DY9ijOZH/7FHRF8j6ZVJLdxef6UzsvP8QfwWPFZ7VliRmVNxyRj8RIqK7aF3A/FeEkNrcSM
-        SsTNpGUJh1GZrBhyHxQfJlp2wgpqH91UzaumQP3o5mXU/nz7oZhq1TNbMp2jBaEngkQGpzEqUytMa1m8jEpUopVvPxTjJdrTSsyo
-        RJXrmS+Rlp7FS6iWrBhyHxTjZTMWm7AsKpk+2ezXwcuoauq28+2HMnmZlcCMBItKTBZmcVi8jErMJQu5D4qNBTZTsYmJUZmZqKnq
-        sYOXURlvf+JGzmR5wax3tjhhVLY00CuvrOl1jJdRzWWRhdwPxfIlKxDGa1HJcoittixeQrXKzJD7ocgymq3C2aKVUVkbsRU642VU
-        tny2kAegKC9ZaVtlZlSy7GerdouXUZmsGHIflF5upmQsaNHpRzeVLRXZypDxMipbpnYgu6FUmRe4YSxqsJgv0BsZz3Gnf45JYdWd
-        pnOblmToBIxmKdoaiyhGecznUWbxmbRIj/VU5U4wu1E4n0oJhY7blEGSRDYNy4lu6WSm80MrJ0wtPkoTcsFIVxF7QDH7UMzNXbrH
-        qsIAVVQgpdGNXchvlohznUEUWnyUJkIhVWQkz68PxeSLpulsEeImeyYiXOJZgCkj9MFTGt3op5vznI/SzE1+itmHQoMSaABDPI3D
-        FAM0EgxVozQaCCE2gGN4CudBwvgoDewjULD6D8fsRlEFVMVtCqjYRShDE9hg0poCquKKUAwVmEH5KE01gGoOjtmNQoN4aBwODcOh
-        NBo4RCN0OB+lmYE/FLMPhcYfYrxhhDflLJIw9mj0IaXR+uFWRYDqKY6jOeOjNBpUZWF2otDoMxr0RuPHKI1G2qmpMdAWCOWjNDNi
-        jefXjcLzo2UxY/M4Jq2fGbbH+RjNiAbkmH0oJHqSBT+y2EdGpXVkcZGMlVFZ0KUF3A/lEK1P28RvGoVRWW1JZKrFy6gkTNZC7oOi
-        vZ1GENKIQUprjtgQRv3o5GRE35lnL5BSBT7VBX6jDGbJXDiHRAw+oyp14Df6QOgYv1VVJi+jKtXlt7qLIvdBsZMKagr2mxmZnBtg
-        VHZKgAXhM15GZRH+FnIflD4Vo6YkNZn4dPLzm9mPUNW85zfztJgbfTrF+nTmbKlirvXpnOvTSb4TSp4kaewRMcn5as7T53bUhMio
-        VplZfQmvRSWyYsj9UDqQVdmIbeSqCB5s41qVXUioOhhVtXMbqioa1uIl1DYIVsXEEuR+KFZmi5qlmQzNnS8yuxgs33S+kKG52KCM
-        l1EjtPfFyaU0DkMbuQ8qgV6fzuW20wJGQQIjdxGK48zZYhYiPYlmYptgEcB7i47fgEsFHdRQhM9JKo9DhwEaTzY/peO3JVFo2TQK
-        QUM78IfwKD86eBdiWy/BaD8rvU1P54mIrs+yhaBnWSi2ccI5LKkc/JxO5Wfj9+PFMFbxOcRQETAe4cUc13n4Ikhj+SIR+gnWnwlU
-        1ZViMQ/10dFQvRBnJXFKi0InhpUCNLRMEcxBhbtz6QeFjh9jOSL00MOCMon1WTX8sg7G/qLXDrtqhPNUGjtSOOSRRHhgCVLAZB07
-        MViKeBqK49LwIp7BOs6VyzCoVQ6rLjMZE40WD66KHCmYPFCLiuBNeJGFiQPDShHiCahMvUjc5RgCFRcqyYaCtflcDCocXPgCP/2M
-        L6JQBFZjtAyCOlIsxP4RynQeCYyZ2E+NMDpokTgxrBRxJmK9QaaxGtw8lyFQq6/Dkj3DyS5E6yIQ8ljMxKFsaOQkC+wUIlpYpIBK
-        ZQtRl3AWi71hmKJcEDyBPepZIYYQ+el3fqScn5/ndH5qvbkqgHoZfeY59Jnr0Gd+R585PHvweP70jDznt+n05D6/HsDmp3S7/Bx/
-        CI/eCsEvluBXL3A6bz9+7QTn53R+G4SNP4jH+OndEXb5OZ3eaMEvo7D5OZ3Lj+P34zU3JszJXozPPLCddH7TAb/XgPNzOr9toRO/
-        A0/Lv93/EnuUvg770fVtd7Eond/0wq+Tsfk5nd5YY+c/hMf56f02dnpOp7fu6PZnG4A+2wFs6Lb8OH4/HufX44XtVvps59Ogh+RS
-        nIZON10fQjf3bM38h/AIf1NfukPss91mg67kn9Dxyza6fbbTbdBV+6d0/Lb4/Xj8liF+hVBDp5ucPttO9dlerM+iGGx+Tuf8Q+lp
-        2JHfBq/MZX1pBIrfxqtQuooF8XUwiAr38Fm4i89CWHwWw+KzABifRd704PH8ZXgPCz/xWSiLQZfhRjoQRgWz+CyKxmdhNA2dl5/j
-        D+H5vAI+l4BvsdhtRNvQ50JyQbAUvB52MR4CamHQyrtYrBS0PXwuUN8hQSuFJVIrlwFQPqwaEdMAoU56e/tYRsMPOxGsBP5QGYYh
-        uXL1m9lRhRD5XJ3ZKazr3JoZtQ3ktDCsFFTJusoxDGphUM3sYrFS0MnC59rehcFSOGRq5TIEamHwWdLn06QrBZ24fT7z9mBYKVjM
-        MinHAKjj2kHrykBqwtgpHNcfUivOhcFSWHVxlGMY1LoCTb2w7v9jp17MFPZ1f9ZVfRzDulTQuhKuqxw9oFY5LAw55jAFGaZ2tq08
-        FAukUEH8FgZLYV3n1l2OTlDHVWzsqjNJn0tf4wOuQrOuLuvgp/T2KjPr6rdePH1Lgt5E0HcqaNd/e0GBuK/AovOryPjVYzY/p/Or
-        0Cj+EB7b3IJypJnES6NYOtznkbzCKk0Tm25fRcWvsuL8nM6vwqL4Q3j2VWTWVWVRuFD7cTOb7rgKjV8lxvk5nV9Fxq4y68ez72Zy
-        3DbVfVOV4x4rv5+Zk/2OrAfQ7MuZ+OVKaqC3kz6hW5crJcq8naVEcTTslM42oB3ZD+Gxy4LkhIKfdgoSx2VJlGznznNj7JRs1Z1n
-        3otmXYMjBgwbL+0GGaGy63fUYGJjkw01TWVX6FjIfVDsOhrr/hkznopTrWtwzHArm5dRzSgujtwPRSPjfBqq1u6V6+FNqOwaHHVv
-        ob7GkPEyqnUdDUPuheq5VsW+eqX3epbOa170fQJ9OHaa5nqNnutZepHt8nReoqIvOnjQdSiuq0VsHDsNv8akJ69uZMe1GOqAunGB
-        Q6RMjr40+taR5voRsX0zhGOlaa8x6cnrIch2eZqaasDmDZ69j4LMmcZ1ncVMcy0oV4tjp1FvElhNYzfqyakfl19qYV2Kgc/JNM5S
-        96UY1qUaslSgOgM3P6eTWnTg9+DxKyH4lRH0kgr7xgfrUoq59PTG5GYaA4DT6a0ajisl+vDYzVVRAGuXOG3gwLadzY1HRrbuUcB9
-        XhEDH3QCULoO7A+6CjAAaJ9jl8/8XgZ2vzxftJn3MPB7FBg/v+eBn+N359+Nx/Pn/PJmxJSeG7fya+sv089Qo6Qufkrn5/C78u/C
-        4+eo23Ps6cJ1bprT7XP09Bx8Nz+l2+f4U+UqG8Lj57D5OWpyBM+i2+fAyalDBz+l2/Lj+ffj8YPEjoPO6H6OM+WP7j+Mi2RxqiyT
-        f13sjE7OmDrOYffiMXaWmiVmVOscMTuDzHkZlZ1fpsh9UNYRRt1ASWCfd2RU63gradxOXkZlx2oTuXPbB8VGGRsU7K4JRrXqy85Z
-        Ml5GZccuWb79UOy4GFFM1kk7RuVHGNkxRHZKjx6OZEcnnfl2QbF8Ga/UnXNyXpln1NRXJlZuPouXUNkRt4583VD8mBo7mJaaR8P6
-        jo2xA1/pAK05/kXz60bhx6Po0SlzCcePXNHjWObqjvNRmrlo5Meq+lDocSV1gkqti+nhJZNGF9bNmSmxgOaHkEwaPeZEMftQqNOD
-        +h6AhgFqGCUbZozGjx2ZB404H6XRY04mZh8KP5ZDD+KY90ZTGj87kshZYpYaI0LzmTR6fzTPrxuFebCYy4l5yxjVeWTJp5X0aS19
-        emqpPavCsu2DYp5m5ihmfmJGZV5u5kRmvIzKPNQWch8Uqoh4LncRYtHfxeXF6i/GTUtpLGZhxKnWcQhy/sHiZVR2pIEg90PpnYTm
-        iGbzTRHkjfATIsI9HOId/4zKjmHo73U0yobwMqp1pIEh90LxcFdxs2omNgJhfrKjWx10HuPPY/RpsKt9hoBEyzrwh/Cs+OV5mi1k
-        IPFiljgDiVkKK44aRs58LsOm02juCnl2pLBioK1chkFZOSwMR/i2VVsmDxhCoj9glPQsdMWmWyms+HZHXQZA7RhQusNpx9RyuhXD
-        zGOQeUwui5HmMdQd+Xfi8fw5v9KxKY25tPJr6q/SqyW2zU/pPIa1M/8OPDuGsNnoTxeOmENOt2NQaaBADz+l2zGwqbyopx+Ph9jw
-        6BgeHMPpdv15zCPn53QeA8nz78fj8VaOGEERMMaWrp3xa2rx6rNVs8+WzQadxlrZ+P14drAW5/AtFp7CEYNnhfHZEFYKKxSQFmMY
-        1BEG0zRmEnRE8LAUjpAvFq7Vh2GlsELPEhV9MwRqhQVZX/C0Qnq6vyTqqAsrRxsW1CUxLdPucnSCWl8ktD5AyLVaz1cN5ywUz46c
-        Yc5RMwUL6ekuRyeoHY7Cw1Xk5qg+fmuHu/BwGLm3qk1Om5/SmdHrCGfpx7PDUaxwFTTPfLVcc4S78HAYsdbzjW/QMH5OF+tGv/2w
-        Dg9n6cdj39ah90/49AIKTrU/1WV+m8vBy6jsE2EGcj+UO5ai/XgSj24gZOsDSPO+0AhGtuMwXNhdYCp0iEUOsW8Q6k8QMir7JlCz
-        hCHfO2SfL2yXMOaVLRy5H8reoG3f2N+Z0Bf9O9Pw71X0fJ3CwOFpXN/P6CxPN7J1V7xihvEv78+f6TMPMd4JZdMdW6NkK5Tzd2yt
-        Nluznfj9eMbOpnPnc4bhiq6dzq6tVVwvLrJuAE43KsAz6MXjV1TzK6mZH7bziuuUXjFtbcWxYFKDTrcGu/Lvwuva2mu3otxbbSwW
-        nn/ZfHArkF8xzLcGOX4Hnr0/RHai7D0fuvXENqYkFrN4+VYUO73Qsa01ANaxv9TsmTi3fej5QC0yJqGOzSi2R8T2phhyL1THJXps
-        z7jjir05ufKVb1bQxXBLJXsmHfm6oWgQHP00Go1q4zRzH4J+6I1fambSaMAexexD4f526os3QwQtHz7x75vRg5yP0sygRO6n70Zx
-        +ttbPzR1nBOidfXRvNNxT2ncVe9CdcKwEGcWYcy+lcyoLLyZfUiZ8TIq+0ozQ+6Hsn1vDu8cu3zDSmH5AKFbCSsahl8WLFwYjhTW
-        XQqWy28AlK/N+LKKn2noPIed0nPQls+LbpcadOqD68y/A6/Th9b4gDp8WvSa62adzZfInT437gPjPjiO34Hn8r8wB43tS+E+Hu5G
-        aj5QZ056tssnY0d9u7xIQ4C2s4Kf5vX5cV47BT+Q7PMTvzaGlYKfPOzJpRPUclbwmwV8fpWAnaK5HCFldenGsFLwCxZ6cukBJTt0
-        Ptsq05tivt4k43TbYUEdFA5+Qnc4TAj+EJ7tcLAcErNMXFk4S1wOCIfDw7y/zsXP6ealfBb+EB5fwlsrfHIhYIcDoP8TyANfZh7I
-        ugtMbY/q3dJme1TuWqpjV/rUFaMyDwC9p5XzMiqNoLCR+6Ccq/60K7y7O40jTNwOCrdwHGmsMPG+8nQj88Vn1/eduuj8+1D6uYuf
-        09mF3534XXh88cgXi+z6/M7F59D3aYa+nzOUfxfewAK04wsc7FMfjJmdhOfMnMy+/fEwMCY3Vm32VZ+OFWj/Bw/6P8PQn29vMdil
-        PvxWdzeV9VPWLRkvo7Ix0oHshqKeVurSpO5PSqN6knpGKR+lUe8sx+xGodMJX74J/d9Bc12H28HouGO3L0MnCtumYbsk+kPuzcXf
-        hMosjvb76ubt4j69NLylkiUhQx6Asq6ksy6tW+BNeLEwCgO0Guw756zlHF+92RjW+s4RWmJdrzcAypd0nVd7ddC55crtVM7P6dx6
-        7sTvwONLMr4Ea0z+Dnrn1UYd/J1XJw3l34E3tJ7rvD7FurKFA9CPRtkAnM4vcHkgns8i9HwWk+ezoDyL7lh3sHUL5+d0vu6h+EN4
-        7EJtn92K7bNrsS26Y91A1gk2P6fzdQvFH8KzTlGry4/lXcjNxzHEpzI4lW3+qcBq44Q/5eVU+YEOfV0AQR6Acn1EnX+M3T6v6fqA
-        vP2ReX4e0oXD07hOeXZ+iL4bmZufHZ9P7PraY4cJyB4ZGPuS3MCXG91Y9P4Fen8Cuz6BEum0T29WYIyUyJasTlQ3Dg9w5QGqEfTI
-        WSQHCg5oTrdm7yhQn1pHrxxoDg5g0ekN3lb+A3B8xui87K7jcr5Ohc2fOZ7lSRu6ba8D0KGxuUYnN9o7ZgQ+Y5DL5R38nE6uqndo
-        /H48x30hGBTis6gQn0WYNHRb4/MZw+ZndGvGMfGH8NjdF9a9GeahDk5lswU988F5GZUeJXEg90D1nKNvT6VrEp46nmVB34l4fv69
-        CW/oxOApeICGfXq/E5Opea1M3d8EZFS/g9n9XcMOKtPiD4JiasvWaqHQqnNozpmt9FxaM0hFdGeA+SwcAJTeWPIYbR859OQAoLVp
-        0Oilrk0EnqAToGvDoDsBV40PRfTZmZTmNit9u5W+zUrfbsXptu6juo7z23Sqezn+EJ5L91HdOAvn8u5OPM7i1K1M96YzQc8yecuV
-        xc/pCg+Kkzl1Zz+eFZ6kjLgZBim7wos4vUN9GPFclL8jvqoJb7Lz78Nzaw8wSdNuhaCpXd7hDm5O9vvzfiCaNVZY+k56l6ehi5/T
-        h/IfwrOGnj00yUdxHEObD31yLszBT+nsSJqFP4RnR+QaX65zBMqaVDb1q72vdiuNh++aVDualyH3QFmjTdw6F7WjJcSvmWA80Fw+
-        czqefgLjuxnuYK2L6jcbrQyA0/E23vk8a25q4RkM4bEh5x6vHVQ23tzjiw0HxtuP3A/lM2ZrZHTRu7f3uxCsBP5QGR4CKR0T7Noz
-        X98/pr7K6avPclp0e7jR4WXzczof7hR/CM/2zdCgbuJfYVQWEK6uamQ3P7KLHDXV8utw5B4oGA0LGOw43KIU6ehvjhIMmIwzXCPj
-        adEAj+bCX/GCJ+DjzRpfDgCewBrxNIchRPfQ6dpSdY8dztyxf9pFTskU9UCwriHT5ZrvHIQWQIcvvpNOi/9gPMeQ40OSHJ12DGk+
-        5JvRYd5P6LM7Bw06ObjtGLL9eNZ5CBLRYJ3DIFQWhRFhFmIDbz4LLV5Gtc5/cOQeKGvAwXIsSWLzJrA0zuaddNddZPwqMQJg33VG
-        rkJz5N8H1zFi3PvCjNo13Nw7wR1UNjYfBOV3jpSuGDKeoBOgK16sOwEfnA9FdIwWOjrY9xctOh+t6pOevv7EJ+e36eQrjA78fjwW
-        f0SvabECjiiV3jajV8fsamt2U3W7lCYj3ULug+rv7g05JkHhfDQw5lifzHczc3JAbcaHgQ11+IYO6cOwb0BwAMXQCcDpyvvU2d07
-        8Hz2vVCffbjT11tbaqfLovPeynunzc/pfLTw/PvxrN4+QysJ7wDLYkfnJ1S1tdrutKrrVXQgKOFlVDZSLOQeKHpFVvMRbPOKrBBm
-        D3ykxK6+Sjsj4+VU2jEUcj8S/wZA0HzTAtrG+ESASB+nnN7ZR9s+6Oa3E7BerTIYBPSNBX4sL9fPItmrUvwAqt9uBcjTvpxu93La
-        S21+3ov5KKP4Q3jWNdnqmiC59U/v5eJU1stZT7V4GZWNLoLcC0UvZms/9W5fxUZpHZ184bpCzknj40qg9qHwT0wExidbpMoiX5Rg
-        5K7ezQeHxU3J1tAS4ANgjn7J+62+Gl5egmX3ez4umqDwUNoenJ/T9T31MtjD7tdDeKxvsp4r1CeLkGGB/Wy3loXnsOgctlXb7tSy
-        ft0H1dU/Ze+lFwo7u70aEiD8JJzjaSQXp001lxMs016k7g4quhjbjurq/M3YiNVpmSCVnyanzIxKtuasvt0H5ehatCuFqCIFPYtj
-        R9e0u7a8XADoaTRz8XN6pj6rATiRK/9+PPaFAevrBGIRq51kjMq+bKBcaMwjxxxsmqrsb+aeY97BDii2ZmXdSj1Cg8TJjFP5PZzq
-        KRTqiXJSonrSYu5AdeE0m3V68w5tw1islGbzJGyPsOgjLZxuNzFtUpuf03kX4/j9eNaHJESMmYo4sz9gQajKomgNCmEWa6uY8TKq
-        9eEMhtwDRV1B1COjootVcDGl0cUhXQxSPkqjZjbH7EZpNlL1xirIK0gWcpsmNjZO9UYqp9t9g/ctzs/pvG9y/H481bfa02PCIGzt
-        S5j3xRWbYeaisr4xD8QgT7LE5mVUSwUw5B6oZi9DfRZHH7HEKqtrXSK1d53EM5tui5w3GeW36bTJbfx+PNVkbSiAGK3t4E9TeWJe
-        3MPEqKy5LBkTXka1RM7y7YGyqwxjNWyqaNeQkC2JM4kNNJjd3hR9EE2UvS16rO4rVeMpiWJxCYH4rAyjsqay5Et4GdUSN8u3B4oZ
-        NDCZZnLTKp2LySpVsRopHl9gVNZUbLwzXkZlysRC7oOi86tqo7aJzAnVIpIGslqEzMWMys1VAtyLxOTE6so7GSNbFqc0MWfYQ13D
-        g5LZcLDF3AfGxGXJUnR+1fcpkbeQGDVMaTaMJjFgUc4maC8Mr2mXINDumsWc3CFkZcd3MdtksqBQ2INgtMZUGt2SoiJWEwFVkoqP
-        02ibUsxuFGYZhti15WV2cUwiSGZiYUmolpJhmoHxMipTFAS5H4rWldfOVJKUxmUr7Bpl1nA+SjN1OMfsQyG+NMw+kyft5vL+U9Nz
-        xqiWbFm7MF5GZW1KkPuheF1p7cz5ntK4bMV6Qi0nOB+lmeYIx+xGsa741qde1CEYshPFqFa7EEc942VUtgtgIfdBNVfGCz+BWqY3
-        YdpiUa7W5JTGZWRKhfNRGm0Tml83iiVbVgt2bTsTF5EPi6lhvIxqXRfPkPuglH9RuReVd08595rb94Urj9K4bE0ZcT5Ko21pYvah
-        sAgL60p8uSZsloiEyuTDIoMZL6OysGMLuQ+Ky4jKz1x2cbnTNlGfUxAbB5zPpNFVIZdtN4p1HJncd8KuO2FU6xMJ7PMKnJdS+acZ
-        TOQhKPq1FdOFofbL1XY5pVHPiNp7VFuPlI/TzDbhmN0otnzMOrK7cxnVahd2xJzxMio7ns5k2wdFHYzUg9h4bVSHN2n8izvmjXWc
-        j9LozXomZj8K+fB26+M0nUf6IACjWsfoybl5xmtRSbsw5H4oWle6D0G3ISiN7oXQ7QzOR2nm/gvF7EOxbrwjd8upyCxfhWZZl9ix
-        W+tYu3BeRmVtSq/W64diMiJfUjLrSmnUBUl39rmMTBqXrYnZh8JuBLRuEySfK2dU1i7sW+aMl1HZh9Jt5B4oyy1M7g8xnbaURiP8
-        aESf5UA2aNSdzDG7UaxPBemgEq2i6SeKCJXJp3WmC+OU8TKq9WkkjtwDxe9KMSOT+d0sJo0GPNMAZ8pHafwuGIbZicIO/FuffyLX
-        jjEqkw+7dJ3xMiq7YM1G7oHisjXP+nNJmzR63JTeAmBJzKDRNuGYfSjkeBq7O4Fd2caoVrswYXJeRqWyJcj9UPzmV3rXqzK+hDFE
-        afymWVNGnI/SaFuamH0o7NgyO6XMDikzqtUu5NSeg5dR6VUBJnI/FD3zRA8X0YNIlEbPLNEzSpSP0vjX9hhmJ4qjjkal2KFGRmWy
-        ZSceGS+jsuOUFnIfFL37QRFpEWn52yJImnajSc+9zsLgozTaJhZmJ4otWyZMdr0FE5cpn3ZLRjgxGS+jWpdqMOAeJEu09D4OKmiD
-        RrNsfKw6Cyowg0abxMLsQjmbTOvDdnNcXm/L/FiPz7yzyW/7Efx3l1ej+ji6uBy9PVXX+ap4V5bb6b74OFYJ6uP0qrjZ7Mc/FvXt
-        9PWbFz++ePfiH8+X7968ePrq+5fP36p012U12ow2+1GV72+KceCt82M+rTefi/HEiyYXMpXO8nAx+kexOpZVNLocrYr9sSrO1Ysx
-        Mv66ee/Jv+fh+wnlPW72x4vRs3ILOV7Kv+OzL69WeZStziajzfWoG2m6LfY3x9vx5JtsGoyKbV20ALM8ml+dGZlB1eviuFyJBJgr
-        peXr9fKuqI7Fp7HMMB4fpp+85U1VnvZr8fswvZ+cY4OIX61Eb4p9UeXHYrkvq12+rcdGaxzy4y22B8r7xb4+5vtVEX9nNgmmmO7z
-        XQHVP/vlVH0utrfFZvdtuS72H4ub4sxItgMUSAZ5rsrdbnMkGDsoQrXJt8sS6lFt1gi41C/HQjDTX3548e65d6xOheKsylLWfXW7
-        2UI1AQgoj774209vnr99BwiPftt/OfppX4yu8uPqtliPdvludzqO6vv6WOy8UVUctvlqs78ZHW+LUbldjzZ1uYVc16P6cFtUxZPV
-        /XazXxfQ1FVR1NPf9ten/Wq0vEuixVKC1WMJXl+Mvtusjptyn1f33qisNtBVm77ljVafLqBPHuHHZ/FjMvK/wb8XrbwrKAiI+02+
-        X5e7V6fdVVF9L5sHam9IHdJBd4BCXiLAGMoSBOH56tNjWAyls2ARn68+Pw5hLbyYzWKjPVfQG44ic+AMjMHyuR0tiTk+BPFTB7FB
-        Lbbbi5EYzjgIfvj51d+fwMrATkhGmpRPM9LGgn+8+TQ5x9pBduvrpRq/oKBRsUSTyWPMy9NpPw+nndBS4IBMwuwddjHIdgMtWoFG
-        KfdLbORP48PkL5cLKNpoXx5FI6fLfLstPxbQufDYTjC5ACHuYQCeCrt+v5v1O/g8p9XmeL/8WFbQU42hcmYX8fdGNXy9AEF2ZQkp
-        m+qDFsHPO/aV7rZtIy612WyKMZdYP5uvytebU93NHE/Fh2EcnNtylW+xQxs6yZftjspJiFdrqAmqJU28d4B9LMs1YmkdiVfixTib
-        bIvqMNZv0zCeR/DWMyTzGCclhqjadr3Wg9c7+6Hcfj7zRJnPdYED7/YxhqJ6wcTT76Q8HoPF79167cPEwxKybNhMNOPDp6ncZn00
-        20eijrNp4qu+jrVYJBM3e32bg8I0hBPF6TzOuXCS63mSBiAcjfnEbvEO4byCDLZ7Lp4a5uKmfGD/Tx6rkqNRAKKD4ZhF50YNgjSd
-        eKuy7uZq5SxkIuQfpp54mHiioqzEQqmNzi9HoVKOxfFU7eVrnAze/vjT35/jXFB8Ohb7dT16C5N88Q7U+W97GC1gceBMcagKKBKM
-        zAoU+ZMn9araHI71Ez6Gb9Y4XiXbsz62aPEs35eHe8LxRuiauo8vmKtEmnGb1/XoXVEfv4dZVnUfXZNXMM3G37X6HWasEsyR27zK
-        VzBzwix8b5JhAj8WWv1HSv2L6Qwm0muYPqsCpweJ6i0/qg7pLdfNL2GAKItHTGB35WZtdGqJYczJLtNhYmYt51meeTNVxN6yenDu
-        WMl9v8GC/+2nh7Le4EyNLdFT+D1pAOwHOUzp3W0galRL43UJyv3m9riEbr781NTgs/olSi9+GcVXPTfDuVMKZ7OHYuZbYbmy+sI4
-        3C7XxTUUCmans2V12mN/Ue152lsMKBxhXujORCwKakndqNc3U+xSOKvTPmWy3ph8Ir1hcRx1hkp4JuOxMRz/EWXP5LxVnmqV8sxG
-        PxrAlTCU1FDpKE2lKze9kRnd6OejzANeHQ3ryJy+3w1M17KmZkfSemsFcxs0obdqprFqio0FbXQ6rNHSxpFfrJfH8uO+Nhc/d5vt
-        Nr8p9CDAiWBqpgVb/UjLMsppBwSTQIGMLi9H+9N2q40Z9Xp6m9fLXXHMx2fChC22xR2au2fmzHQ41bdLkBBOGn978c8YLBCdroFH
-        TKHUqtNK8Lfsv5/Atg8nvF8712ahF4Z8QXZrCEAXG2oOC5R1sSyrJVYLxFDe7m/zU738KojWZ6OvRhtLGkoit6Ys8qv6enzbtBvY
-        HAkYMGg9BWFDfzbNr2Adoo2To9cyYNNODB42oTtEdwt9WsoLusm6WH0YnZ2D2GDyYxOZJbdB2aWm6Nq2d0jr2/y0g6XO8QgYu+VX
-        SmCXl1os3Zw/5GCLFlew6Fp9KBjncOV3m7rG5dUVLOmg10BOWAosxNkfrb29Vj9/Nn32/NU7WOv9GrxvVhJh4mmjBkTibk9zkQzW
-        Ha6IecN2dwaTOTN4M0efcIgEtD5A1zCiVsfRdb7Z/oHR09vGv8B8VGxVSz357lStbm+KW3xZoW17VQDf2YPavFUxb4/FZr/LT0V1
-        Zre5o3L1YVPlAr0+lrDu/giKT3eCP6sjnk3fvn7x5unL5dt3z1+/Pbf0xQ6mONYtZDGWhxKXxxvmtLk3Fqs6pZysoXF5Ypj0Trm5
-        vO3qDVAK6A/3Hv5VPYKMTdGXJJp/P/kmhHXd4OhR0lQWheosIyiH1iDnZ+qnBMbnu1q9uv/P9YtDN5e74kHqWXiAHqifAbPtlVJB
-        wytTR2cPV7eyYZTWdfS8B+uaj8Kt8YCqfldW1zDq9vti75yREYjVD18N1c9RN2QbbWoxmUAvUFWFqbnY/qHBdQNTObbzu+mN8PyB
-        dVRTw4I1ew665CGywBSv8+PtGHEnXQ2OaK1AtN7Gt61MPnn0+fNkut5Igx6MofHqXJV9vakK4XQj5fdE/o+fTX95+vIlSvYBHWcD
-        i7QKwaTSQoSzPzOCtpv9BxTus+nLF6/+/pZJEtcMF6PXOajotar5U7BF74VqkbPkEtOMEYbpoh1Vc2NMhzOf+Bu+xwV2auucbo0F
-        Qk5ib+eY/IalpSZ0ENUHnN+pivrDcmss5B2WVLrkQCvvD6vGQLaU08Jy5BdVXe4fPmSLj2BCFlVj03T0Vglr2ZDytduQHBYfLPs3
-        oCDBAMAhfSzVWD77D1X2wguz/6diYXrNFsof19yNaP6s8u43khx7FMOWTdhasmKHCCZlsTeyL46wQvzwh5RvLbY0Os140WTKRu5p
-        NLdJL7GdTcZ6SjJ3ufLz1tB59/Tnx42b7hw0y+RJMnd59WEhbc6TuuwO2f8rP+0HzAHVfs+miAriXpaHYj+W1fJyl/sUveCQ9i+u
-        BUlPc1YFtIFSYlfbEtXx2cTN7exwrtbV/xVbVah2dOCTQyJPr2pg/1xvVrcFWBA3Z+6F1UCX1CIfKaFhhqtyu4VhVLkq1VkhbgIV
-        a/RGuFdccbviisJp2qy5kK88HU02hGkTTwOadrs2twgwrZiXprgNL57u29Uc2Ov5dbFUs86yPhYHmNAAopnUIOuWHR/ADP7LJaTo
-        H916HiuvYdaUq/SPuTS0HL2jd4wfKlx0SODls6evfnr9f5c//f1iFAatFyUHPQfPpq1ae0KlwB9sRfgjjX9PWCOeNP0E26zRkM3c
-        KMoTiK3P66rcCaDt5mq02R3K6jhCi+wL9bsqvvj2UphojwCtKjdr7Xx+NPni/zDKsajF+3VxPSrB8hrXXu5dTS6+wEzzGoblcVRP
-        had9nEPXDb3RI6h3tICSrm7LSvfQJ/nuanODzr2L0aPz/NeLMAref2G4PHEbDndiizHge6HMsVhDrdA29a73Ks/D5bdP8M1f68sD
-        sOTr5bH4dARDaFWuIZ/LR6fjtT9/NPnr/vIa1Mbkr6qQ+79c1p5gPEw/VhuwGwXf3rM4Rc6qMEt0po4lo7cvPupC5MfL6tH4v3b1
-        5L+Fu/XReVVMi3qVHwpR3sl59ei38a///dv+/ePf9tPH/zX+r8v/Hv/XhUj8b/TCb1bSV/xvuS/wbxwI/5ae5n//f//WruXJv3/7
-        1+SRyBMKcQmZ1KerPW5ze1uQ6DofLS+gWNMKlnubw3hy/ug36IOPvNoTTXIZtvXHthH11wL/QlUULS0QlGrSy0eNMxjDDbSjMJgr
-        m+zMewtZ7W/Gm/11+esZIp69n4iOJ0p52fSS/PyRGrOEQ01jwIQGlWmyG+NT7q5fnYQPF8riyagMDyGsQSdKCwWYmDWwlCe1Swxv
-        7R6EvYT3RrSE8ar5CSay8duqrTNTbFTh7FkaHgc5o6ry3Bgyhhqj2lnenw0UZNIxEz2ojqo8pDK9khOVAJ2yxDYoKlOt35T51kfH
-        tKI9TCqN6chd0RhgoZDOJh0Tudg2aHNEc8MpSYIFneM8l5XciUFU4NJyTIawY+FhjWA5YnFIevXEVIE775EwYZsJ+dXrZyME3EEJ
-        pFSuyvW9FMwOVmytZJhVBkbZo04iaH7DtO105MtQIkSasKzxl9c3Ptoxj/PhEhsYltLw7+TRH2nMOFjq5UxPOyIuNCC6ehrjALeG
-        j7cAM/Fwb1n+nDzewchX++4Ywts/AHoqMVE9tP71YjcFPVwdx5P35yiW8/rX3RSU7nhyQScm1KmPzt88//7FT6++EDPSI7pJ+8iT
-        vWYiNeoW5s5dXn2oG6VqTheNdbhZO/Sf6mdNon//N1NzHZPBo37YdnsTppcvR2KCvhjBnFGA+m5CokR8k7AwpC9xtBL7182GD4y6
-        0fF2U6s5Y9o90bRzjJZXmL3UYhESa4SkhAYdHSyNRmL1JZuAHy3lo4rVWUPrgokEfVKOXRdxjHvaxma2jr5amtFXxu4oFc6+hKUU
-        zM1r+HMEo1BYqUpQGMZW1K3WbALCjFghM+xrC+oG3Vbmzu9VWaKN75o1Hz1qtgNxXB/+XEzRF3ohLDDaeKIMlnDnbZG+YHPpdQ66
-        4wsow4SWrCmTVL7Y6HVTsA2G6kFGGYaMiJ1KoX+buDhPRvVoHSI72vmlO4hOJfZWn7zVZ3Mj+T/JmMxwqFU/FPeoV7k04Xm2/P7p
-        u+dLGU/KluUo7Atlz0DWyrABrB4DSLUDslpDswnWgo5nbbDWp8NhC4UabY61HHxYtcbQofpJBjzq8RZlercdB5scXGqkoUq0zD3V
-        9sIyUTvjyh9nxTKcwSoFzAj45/NEaSPFTmd9EWwg5gBu+vyRDEhAjxFTQx2aEtA7ePIFNDcKRVrWLdMfCNZ5pAUZh0qQP5bCnYXi
-        RAlOvsCFiJP+BVlg9C5Szs9UuAbMmOHy5pRX67EzgseDgt9txOpJmXRce0EPw6Xqpl5uVNTL8i6H9b8WzuTCWtvjQrrBQ2OxlYJj
-        ja1lrAriieCHm215JXbZpMXZLtMRYPSXy5ErlTGmXGQMEAZulugOGk4OIV3i6b+ev/npN1iQ2Cu4L74ErY+xzO2qfr+9RwnsCgyp
-        FbG+UBMfTbRRs7GPr2GaLf4HtwDy1UossXH3DQRQC8cAiKCGEYpmej0Vw2kHQlEt1wwqDDUjhRemJcx4yxo9MmO6LagkC/anqP1f
-        pJeZmU000RRa9gZUXalHgIi5UXammbucRKBvWf1n5G4bJvX/9YLLMd929zPRjzxSxsmfrTrXQ1cTNYx/1JqwbS3oJNLw2N5zbfjH
-        NaKMrgd1NTofBeh36tGL/6FubLKyVsEP1o7nsoj/azoyCZO/nWqtHUGgky/GqBtNhkcTUylKn5hj4I7/j8n3dld+KCxmEc3p4D0w
-        11XxCd1d2KvAggM76frm0WTQa9TaO3ewloA6PYEUxWUSLrJH/F0UhE4O9IlcniXTcJpNo+zskZsSh2fATeaK2lUr4UuUPrXli1dv
-        3z19+VI4E5WNrhesI+Es8TAQuAINdb3FHiOMeVSBI9mDPGHF3mzyvbb2QSNCVwEJf/H/AyQ2nfxLXgEA
-        FIX31_PAYLOAD
-        printf '%s  %s\n' 'f3dbb7a24470378ecece4733c815bee12c47a02c3b970ffed12a001a714be9ef' "$RUNNER_TEMP/lwod_fix29.py" | sha256sum -c -
-        python3 -m py_compile "$RUNNER_TEMP/lwod_fix29.py"
-        python3 "$RUNNER_TEMP/lwod_fix29.py"
-    - name: Alle Godot-Tests einschliesslich FIX21 ausfuehren
-      shell: bash
-      run: |
-        set -euo pipefail
-        for i in 13 14 15 16 17 18 19 20 21 22; do
-          echo "::group::FIX19 Originaltest $i"
-          bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix21_steps/$i.sh"
-          echo '::endgroup::'
+        for i in 09 10 11 12; do
+          echo "::group::FIX31 Originalschritt $i"
+          bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix32_original/$i.sh"
+          echo "::endgroup::"
         done
-    - name: FIX22 HD-Karte und Spielerposition testen
-      shell: bash
-      run: |
-        set -euo pipefail
-        timeout --signal=TERM --kill-after=5s 90s godot --headless --path android --script res://tests/V422AtlasSmoke.gd 2>&1 | tee build/diagnose/FIX22_Atlas_Test.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX22: ' build/diagnose/FIX22_Atlas_Test.log; then exit 1; fi
-        grep -Fq 'FIX22_ATLAS_SMOKE_OK:' build/diagnose/FIX22_Atlas_Test.log
-    - name: FIX25 Vegetation und Gelande testen
-      shell: bash
-      run: |
-        set -euo pipefail
-        timeout --signal=TERM --kill-after=5s 180s godot --headless --path android --script res://tests/V425NatureSmoke.gd 2>&1 | tee build/diagnose/FIX25_Natur_Test.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX25: ' build/diagnose/FIX25_Natur_Test.log; then
-          exit 1
-        fi
-        grep -Fq 'FIX25_NATURE_OK:' build/diagnose/FIX25_Natur_Test.log
-        grep -Fq 'FIX27_TOWN_TREES_OK:' build/diagnose/FIX25_Natur_Test.log
-    - name: FIX31 Baumplattformen Bewohner Wege und Zaeune testen
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 180s godot --headless --path android --script res://tests/V429CanopySmoke.gd 2>&1 | tee build/diagnose/FIX31_Wurzelheim_Test.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX31: ' build/diagnose/FIX31_Wurzelheim_Test.log; then exit 1; fi
-        grep -Fq 'FIX31_CANOPY_OK:' build/diagnose/FIX31_Wurzelheim_Test.log
-    - name: FIX31 Android APK exportieren und pruefen
+        grep -Fq "FIX32_GARDEN_OK:" build/diagnose/FIX31_Wurzelheim_Test.log
+    - name: FIX32 Android APK exportieren und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX31.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX32.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX31_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX31_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX32_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX32_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -1407,12 +343,12 @@ jobs:
         unzip -Z1 "$APK" | grep -Fx 'AndroidManifest.xml' >/dev/null
         ls -lh "$APK"
         sha256sum "$APK"
-    - name: FIX31 APK als Download hochladen
+    - name: FIX32 APK als Download hochladen
       id: apk_upload
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX31_APK
-        path: build/android/LWOD-Android-V41.7-FIX31.apk
+        name: LWOD_ANDROID_V41_7_FIX32_APK
+        path: build/android/LWOD-Android-V41.7-FIX32.apk
         if-no-files-found: error
         compression-level: 0
         retention-days: 14
@@ -1425,12 +361,12 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX31 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-    - name: FIX31 Testprotokolle hochladen
+        printf '### Android APK Download\n\n[FIX32 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+    - name: FIX32 Testprotokolle hochladen
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_FIX31_TESTPROTOKOLLE
+        name: LWOD_FIX32_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
