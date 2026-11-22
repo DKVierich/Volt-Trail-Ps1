@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX43 Echte Dungeon-Treppe
+name: LWOD Android V41.7 FIX44 Ueberdachter Dungeon-Eingang
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX43 APK
+    name: LWOD Android V41.7 FIX44 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -61,23 +61,23 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX43 Echte Dungeon-Treppe und Innenkamera installieren
+    - name: FIX44 Ueberdachten Eingang und Innenkamera installieren
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p android/scripts android/tests
-        cat > 'android/scripts/V441Layout.gd' <<'FIX41_V441LAYOUT'
+        cat > 'android/scripts/V441Layout.gd' <<'FIX44_V441LAYOUT'
         extends RefCounted
         # Shared coordinates for ruin, dungeon, player ground and camera.
         const T = preload("res://scripts/V417Territories.gd")
         const OUTER_X: float = 64.0
         const OUTER_Z: float = 72.0
         # Open-air stairwell, physically cut out of the terrain. No portal movement.
-        const START_Z: float = -36.0
-        const END_Z: float = -84.0
-        const DEPTH: float = 24.0
+        const START_Z: float = -24.0
+        const END_Z: float = -48.0
+        const DEPTH: float = 14.0
         const HALF_WIDTH: float = 5.2
-        const HALL_BACK: float = -140.0
+        const HALL_BACK: float = -94.0
         const ENTRY: Vector2 = Vector2(0,START_Z)
 
         static func centre() -> Vector2:
@@ -167,40 +167,35 @@ jobs:
             return pieces
 
         static func dungeon_camera(terrain: Node,hero: CharacterBody3D,cam: Camera3D,yaw: float,pitch: float) -> void:
-            # Actual world yaw, independent of hero rotation, matches the movement stick.
-            var focus: Vector3 = hero.global_position+Vector3.UP*1.26
-            var back := Vector3(sin(yaw),0.0,cos(yaw))
-            var tilt: float = clampf(pitch,-0.08,0.25)
-            var desired: Vector3 = focus+back*3.7+Vector3.UP*(0.55+3.7*sin(tilt))
+            # Tight shoulder camera that follows the actor down the stairs instead of floating upward.
+            var focus: Vector3 = hero.global_position + Vector3.UP*1.18
+            var back := Vector3(sin(yaw),0.0,cos(yaw)).normalized()
             var q: Vector2 = local(hero.global_position)
+            var desired: Vector3 = focus + back*2.9 + Vector3.UP*0.92
             if in_stair(q):
-                # Shrink orbit along its original heading rather than move the camera through side walls.
+                desired.y = hero.global_position.y + 1.05
                 var d: Vector2 = local(desired)-local(focus)
                 var scale: float = 1.0
-                if d.x>0.0001: scale=minf(scale,(HALF_WIDTH-0.55-q.x)/d.x)
-                elif d.x< -0.0001: scale=minf(scale,(-HALF_WIDTH+0.55-q.x)/d.x)
-                if d.y>0.0001: scale=minf(scale,(START_Z+0.4-q.y)/d.y)
-                scale=clampf(scale,0.08,1.0)
-                desired=focus+(desired-focus)*scale
-                var camera_q: Vector2 = local(desired)
-                var ground: float = base(terrain)+level(camera_q)
-                desired.y=maxf(desired.y,ground+0.7)
-                desired.y=minf(desired.y,hero.global_position.y+3.0)
+                if d.x>0.0001: scale=minf(scale,(HALF_WIDTH-0.82-q.x)/d.x)
+                elif d.x< -0.0001: scale=minf(scale,(-HALF_WIDTH+0.82-q.x)/d.x)
+                scale = clampf(scale,0.18,1.0)
+                desired = focus + (desired-focus)*scale
             else:
-                desired.y=minf(desired.y,base(terrain)-DEPTH+6.6)
+                desired.y = minf(hero.global_position.y + 1.25, base(terrain)-DEPTH+3.6)
+            desired.y = clampf(desired.y, hero.global_position.y+0.72, hero.global_position.y+1.35)
             var space: PhysicsDirectSpaceState3D = hero.get_world_3d().direct_space_state
             var ray := PhysicsRayQueryParameters3D.create(focus,desired,0xffffffff,[hero.get_rid()])
             var hit: Dictionary = space.intersect_ray(ray)
             if not hit.is_empty():
                 var impact: Vector3 = hit["position"]
-                desired=focus.lerp(impact,0.78)
-            # Never use the old overhead emergency position; keep a small shoulder view.
-            if desired.distance_squared_to(focus)<0.04:
-                desired=focus+back*0.12+Vector3.UP*0.16
-            cam.global_position=desired
+                desired = focus.lerp(impact,0.72)
+                desired.y = clampf(desired.y, hero.global_position.y+0.60, hero.global_position.y+1.35)
+            if desired.distance_squared_to(focus)<0.05:
+                desired = focus + back*0.18 + Vector3.UP*0.12
+            cam.global_position = desired
             cam.look_at(focus)
-        FIX41_V441LAYOUT
-        cat > 'android/scripts/V441Castle.gd' <<'FIX41_V441CASTLE'
+        FIX44_V441LAYOUT
+        cat > 'android/scripts/V441Castle.gd' <<'FIX44_V441CASTLE'
         extends Node3D
         const L = preload("res://scripts/V441Layout.gd")
         var game: Node
@@ -406,12 +401,16 @@ jobs:
             dungeon_body.get_child(dungeon_body.get_child_count()-1).name = label
 
         func _dungeon() -> void:
-            # First step at ground level. Ninety-six contiguous steps descend physically.
-            var run: float = (L.START_Z-L.END_Z)/96.0
-            for i in range(96):
+            # Shorter, fully roofed descent. Forty-eight contiguous steps descend physically.
+            var step_count: int = 48
+            var run: float = (L.START_Z-L.END_Z)/float(step_count)
+            for i in range(step_count):
                 var z: float = L.START_Z-(float(i)+0.5)*run
                 var y: float = L.level(Vector2(0,z))
                 _floor_box(Vector2(0,z),y,Vector2(L.HALF_WIDTH*2.0,run+0.035))
+            # Covered entrance canopy directly behind the gate.
+            var entry_top: float = maxf(_ground(Vector2(0,L.START_Z-0.8)), _ground(Vector2(0,L.START_Z-6.0))) + 2.6
+            _roof_seal("EingangsVordach", Vector3(0, entry_top, L.START_Z-3.5), Vector3(L.HALF_WIDTH*2.0+3.2, 1.1, 7.2))
             # Retaining walls reach the true outdoor surface; a raised stone lip prevents falls.
             # Their colliders run all the way to the stair floor and leave the end portals unobstructed.
             for i in range(12):
@@ -422,6 +421,10 @@ jobs:
                     var q := Vector2(float(x),(a+b)*0.5)
                     var top: float = maxf(_ground(Vector2(q.x,a)),_ground(Vector2(q.x,b)))+1.45
                     _wall(Vector2(q.x,a),Vector2(q.x,b),maxf(2.2,top-y),1.28,false,true,y)
+            # Continuous stone roof above the complete stair run.
+            var roof_mid_z: float = (L.START_Z + L.END_Z) * 0.5
+            var roof_y: float = maxf(_ground(Vector2(0,L.START_Z-2.0)), _ground(Vector2(0,L.END_Z+2.0))) + 2.3
+            _roof_seal("TreppenDach", Vector3(0, roof_y, roof_mid_z), Vector3(L.HALF_WIDTH*2.0+2.4, 1.25, absf(L.START_Z-L.END_Z)*0.5 + 1.4))
             # Main hall and four connecting side rooms at the foot of the same staircase.
             var floor_y: float = -L.DEPTH
             var center_z: float = (L.END_Z+L.HALL_BACK)*0.5
@@ -448,7 +451,7 @@ jobs:
             _roof_seal("SchachtAbschluss",Vector3(0,(top+bottom)*0.5,L.END_Z-0.9),Vector3(L.HALF_WIDTH*2.0+2.0,top-bottom,1.8))
             for p in [Vector2(-5.10,-46),Vector2(5.10,-62),Vector2(-5.10,-78),Vector2(-14.12,-93),Vector2(14.12,-116),Vector2(-32.92,-112),Vector2(32.92,-112),Vector2(-14.12,-135)]:
                 _light(p,L.level(p)+2.5)
-            set_meta("dungeon_steps",96)
+            set_meta("dungeon_steps",48)
             set_meta("continuous_stair",true)
 
         func _commit_stones() -> void:
@@ -492,8 +495,8 @@ jobs:
             if not is_instance_valid(hero) or not is_instance_valid(cam) or not L.in_dungeon(terrain,hero.global_position): return
             if cam.global_position.distance_to(v443_camera_transform.origin)>0.35 or cam.global_transform.basis.z.dot(v443_camera_transform.basis.z)<0.98:
                 cam.global_transform=v443_camera_transform
-        FIX41_V441CASTLE
-        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX41_V441RUINESMOKE'
+        FIX44_V441CASTLE
+        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX44_V441RUINESMOKE'
         extends SceneTree
         const L = preload("res://scripts/V441Layout.gd")
         const Landmarks = preload("res://scripts/V417Landmarks.gd")
@@ -512,7 +515,7 @@ jobs:
         func _initialize() -> void:
             call_deferred("_run")
         func fail(msg: String) -> void:
-            push_error("FIX43: "+msg)
+            push_error("FIX44: "+msg)
             quit(1)
         func _run() -> void:
             var g := TestGame.new()
@@ -528,10 +531,10 @@ jobs:
             l.terrain=t
             var ruin: Node3D=l._create("Ruine",L.centre())
             var castle: Node3D=ruin.get_node_or_null("V441VerfalleneBurg") as Node3D
-            if castle==null or ruin.get_child_count()!=1 or not bool(castle.get_meta("continuous_stair",false)) or castle.get_meta("dungeon_steps",0)!=96:
+            if castle==null or ruin.get_child_count()!=1 or not bool(castle.get_meta("continuous_stair",false)) or castle.get_meta("dungeon_steps",0)!=48:
                 fail("missing continuous staircase or old blocks")
                 return
-            if not castle.find_children("*","Label3D",true,false).is_empty() or castle.get_node_or_null("DungeonKollision/HallenDecke")==null:
+            if not castle.find_children("*","Label3D",true,false).is_empty() or castle.get_node_or_null("DungeonKollision/HallenDecke")==null or castle.get_node_or_null("DungeonKollision/TreppenDach")==null or castle.get_node_or_null("DungeonKollision/EingangsVordach")==null:
                 fail("unexpected labels or missing hall roof")
                 return
             if castle.has_method("_move_to"):
@@ -649,9 +652,9 @@ jobs:
                 fail("could not verify actual cutout edges")
                 return
             world.free()
-            print("FIX43_RUINE_OK: open cutout, 96 steps, continuous ascent/descent, facing and close camera")
+            print("FIX44_RUINE_OK: covered cutout, 48 steps, covered entry, 48 steps, close following camera")
             quit(0)
-        FIX41_V441RUINESMOKE
+        FIX44_V441RUINESMOKE
         cat > '/tmp/lwod_fix41.py' <<'FIX41_PATCH'
         from pathlib import Path
         import re, os
@@ -769,22 +772,22 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX43 Durchgehende Treppe und Kamera testen
+    - name: FIX44 Ueberdachten Eingang und Kamera testen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX43_Ruine.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX43: ' build/diagnose/FIX43_Ruine.log; then exit 1; fi
-        grep -Fq 'FIX43_RUINE_OK:' build/diagnose/FIX43_Ruine.log
-    - name: FIX43 Android APK exportieren und pruefen
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX44_Ruine.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX44: ' build/diagnose/FIX44_Ruine.log; then exit 1; fi
+        grep -Fq 'FIX44_RUINE_OK:' build/diagnose/FIX44_Ruine.log
+    - name: FIX44 Android APK exportieren und pruefen
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX43.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX44.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX43_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX43_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX44_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX44_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -794,13 +797,13 @@ jobs:
         sha256sum "$APK"
       shell: bash
     - id: apk_upload
-      name: FIX43 APK als Download hochladen
+      name: FIX44 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX43_APK
-        path: build/android/LWOD-Android-V41.7-FIX43.apk
+        name: LWOD_ANDROID_V41_7_FIX44_APK
+        path: build/android/LWOD-Android-V41.7-FIX44.apk
         retention-days: 14
     - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
@@ -810,13 +813,13 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX43 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        printf '### Android APK Download\n\n[FIX44 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
       shell: bash
     - if: always()
-      name: FIX43 Testprotokolle hochladen
+      name: FIX44 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX43_TESTPROTOKOLLE
+        name: LWOD_FIX44_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
