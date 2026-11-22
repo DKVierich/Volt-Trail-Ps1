@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX41 Echte Burgruine und Dungeon
+name: LWOD Android V41.7 FIX42 Ruine Dungeon Korrektur
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX41 APK
+    name: LWOD Android V41.7 FIX42 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -61,7 +61,7 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX41 Burgruine und Untergrund-Dungeon installieren
+    - name: FIX42 Burgruine und Dungeon korrigieren
       shell: bash
       run: |
         set -euo pipefail
@@ -76,47 +76,64 @@ jobs:
         const SPAWN: Vector2 = Vector2(0,-44)
         const EXIT: Vector2 = Vector2(0,-49)
         const BACK: Vector2 = Vector2(0,-34)
-
+        
         static func centre() -> Vector2:
             return T.city_world("Ruine")
-
+        
         static func forward() -> Vector2:
             return T.gate_direction("Ruine","Ruine").normalized()
-
+        
         static func right() -> Vector2:
             var d: Vector2 = forward()
             return Vector2(d.y,-d.x)
-
+        
         static func local(p: Vector3) -> Vector2:
             var q: Vector2 = Vector2(p.x,p.z)-centre()
             return Vector2(q.dot(right()),q.dot(forward()))
-
+        
         static func world(q: Vector2) -> Vector2:
             return centre()+right()*q.x+forward()*q.y
-
+        
         static func base(terrain: Node) -> float:
             var c: Vector2 = centre()
             return float(terrain.call("surface_height_at",c.x,c.y)) if is_instance_valid(terrain) else 0.0
-
+        
         static func outside_height(terrain: Node,q: Vector2) -> float:
             var p: Vector2 = world(q)
             return float(terrain.call("surface_height_at",p.x,p.y)) if is_instance_valid(terrain) else 0.0
-
+        
         static func in_dungeon(terrain: Node,p: Vector3) -> bool:
             var q: Vector2 = local(p)
             return absf(q.x)<37.0 and q.y>-54.0 and q.y<42.0 and p.y<base(terrain)-12.0
-
+        
         static func level(q: Vector2) -> float:
             # 12 m descent along a 28 m stair passage, followed by level halls.
             return -24.0-12.0*clampf((q.y+44.0)/28.0,0.0,1.0)
-
+        
         static func dungeon_floor(terrain: Node,p: Vector3) -> float:
             return base(terrain)+level(local(p))
-
+        
         static func at(terrain: Node,q: Vector2,underground: bool) -> Vector3:
             var w: Vector2 = world(q)
             var y: float = base(terrain)+level(q) if underground else outside_height(terrain,q)
             return Vector3(w.x,y+0.085,w.y)
+        
+        # FIX42 indoor camera: short collision-aware orbit, independent of outdoor ground.
+        static func dungeon_camera(hero: CharacterBody3D,cam: Camera3D,yaw: float,pitch: float) -> void:
+            var focus: Vector3 = hero.global_position+Vector3.UP*1.45
+            var tilt: float = clampf(pitch,-0.16,0.36)
+            var back := Vector3(sin(yaw),0.0,cos(yaw))
+            var desired: Vector3 = focus+back*(4.3*cos(tilt))+Vector3.UP*(0.55+4.3*sin(tilt))
+            var space: PhysicsDirectSpaceState3D = hero.get_world_3d().direct_space_state
+            var ray := PhysicsRayQueryParameters3D.create(focus,desired,hero.collision_mask,[hero.get_rid()])
+            var hit: Dictionary = space.intersect_ray(ray)
+            if not hit.is_empty():
+                var impact: Vector3 = hit["position"]
+                desired = focus.lerp(impact,0.80)
+            if desired.distance_squared_to(focus)<0.0225:
+                desired = focus+Vector3.UP*0.18+back*0.07
+            cam.global_position = desired
+            cam.look_at(focus)
         FIX41_V441LAYOUT
         cat > 'android/scripts/V441Castle.gd' <<'FIX41_V441CASTLE'
         extends Node3D
@@ -132,7 +149,7 @@ jobs:
         var base_y: float = 0.0
         var stone_mat: StandardMaterial3D
         var torch_mat: StandardMaterial3D
-
+        
         func setup(owner_game: Node,land: Node) -> void:
             name = "V441VerfalleneBurg"
             game = owner_game
@@ -162,15 +179,15 @@ jobs:
             _commit_stones()
             process_priority = 900
             set_process(is_instance_valid(game))
-
+        
         func _ground(q: Vector2) -> float:
             return L.outside_height(terrain,q)-base_y
-
+        
         func _stone(p: Vector3,size: Vector3,col: Color,yaw: float = 0.0,roll: float = 0.0) -> void:
             var b := Basis(Vector3.UP,yaw)*Basis(Vector3.FORWARD,roll)
             stones.append(Transform3D(b.scaled_local(size),p))
             colors.append(col)
-
+        
         func _solid(body: StaticBody3D,p: Vector3,size: Vector3,yaw: float = 0.0) -> void:
             var shape := BoxShape3D.new()
             shape.size = size
@@ -179,12 +196,12 @@ jobs:
             slot.position = p
             slot.rotation.y = yaw
             body.add_child(slot)
-
+        
         func _stone_color(dark: bool = false) -> Color:
             var a := Color("#57534f") if dark else Color("#77776b")
             var b := Color("#827b70") if dark else Color("#aaa597")
             return a.lerp(b,rng.randf())
-
+        
         func _wall(a: Vector2,b: Vector2,height: float,thick: float,ruined: bool = true,underground: bool = false,floor_y: float = -36.0) -> void:
             var span: float = a.distance_to(b)
             var yaw: float = -atan2((b-a).y,(b-a).x)
@@ -196,16 +213,23 @@ jobs:
                 var h: float = height
                 if ruined:
                     h = height*(0.67+0.23*sin(float(i)*1.07+span)+rng.randf_range(0.0,0.19))
-                var rows: int = maxi(2,ceili(h/1.75))
+                var rows: int = maxi(2,ceili(h/0.86))
                 var row_h: float = h/float(rows)
-                # Individual stone courses: small varying joints, no giant grey lintel slab.
+                # A recessed continuous core closes every mortar joint underground.
+                if underground:
+                    _stone(Vector3(q.x,g+h*0.5-0.35,q.y),Vector3(unit+0.08,h,thick-0.20),Color("#38342f"),yaw)
+                var along: Vector2 = (b-a).normalized()
                 for row in range(rows):
-                    var col: Color = _stone_color(underground)
                     var y: float = g-0.35+(float(row)+0.5)*row_h
-                    var offset: float = rng.randf_range(-0.04,0.04)
-                    _stone(Vector3(q.x,y,q.y),Vector3(unit-0.06,row_h-0.045,thick+offset),col,yaw)
+                    var split: float = 0.34 if (row+i)%2==0 else 0.66
+                    for part in range(2):
+                        var portion: float = split if part==0 else 1.0-split
+                        var midpoint: float = split*0.5 if part==0 else (1.0+split)*0.5
+                        var v: Vector2 = q+along*((midpoint-0.5)*unit)
+                        var offset: float = rng.randf_range(-0.035,0.035)
+                        _stone(Vector3(v.x,y,v.y),Vector3(maxf(0.08,unit*portion-0.035),row_h-0.026,thick+offset),_stone_color(underground),yaw)
                 _solid(dungeon_body if underground else wall_body,Vector3(q.x,g+h*0.5-0.4,q.y),Vector3(unit+0.04,h+0.8,thick),yaw)
-
+        
         func _tower(q: Vector2,r: float,h: float,opening: float) -> void:
             var sides: int = 16
             for i in range(sides):
@@ -216,7 +240,7 @@ jobs:
                 var start: Vector2 = q+Vector2(cos(a),sin(a))*r
                 var finish: Vector2 = q+Vector2(cos(b),sin(b))*r
                 _wall(start,finish,h+2.8*sin(float(i)*0.55),2.3,true)
-
+        
         func _arch(q: Vector2,width: float,height: float,depth: float) -> void:
             var ground: float = _ground(q)
             var r: float = width*0.5
@@ -230,18 +254,14 @@ jobs:
                 var angle: float = PI*(float(i)+0.5)/13.0
                 var p := Vector3(q.x+cos(angle)*(r+0.65),ground+spring+sin(angle)*(r+0.65),q.y)
                 _stone(p,Vector3(1.5,1.35,depth),_stone_color(),0.0,angle-PI*0.5)
-
-        func _sign(parent: Node3D,message: String,p: Vector3) -> void:
-            var label := Label3D.new()
-            label.text = message
-            label.font_size = 54
-            label.outline_size = 12
-            label.pixel_size = 0.035
-            label.modulate = Color("#f7ddb0")
-            label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-            label.position = p
-            parent.add_child(label)
-
+                var slot := CollisionShape3D.new()
+                var shape := BoxShape3D.new()
+                shape.size = Vector3(1.5,1.35,depth)
+                slot.shape = shape
+                slot.position = p
+                slot.rotation.z = angle-PI*0.5
+                wall_body.add_child(slot)
+        
         func _castle() -> void:
             # Road and existing travel crystal enter through this 16 m gap.
             _wall(Vector2(-64,72),Vector2(-8,72),13.5,3.2)
@@ -275,7 +295,6 @@ jobs:
             _wall(Vector2(-17,-40),Vector2(-3.8,-40),10,2.6)
             _wall(Vector2(3.8,-40),Vector2(17,-40),10,2.6)
             _arch(L.ENTRY,7.6,7.5,2.6)
-            _sign(self,"Untergrund-Dungeon",Vector3(0,_ground(L.ENTRY)+8.3,-39.8))
             # Grounded rubble in the wall breaks and wings, never on the road/teleporter.
             for i in range(95):
                 var side: float = -1.0 if i%2==0 else 1.0
@@ -283,27 +302,40 @@ jobs:
                 var w: float = rng.randf_range(0.7,2.4)
                 _stone(Vector3(q.x,_ground(q)+w*0.30,q.y),Vector3(w,w*0.62,w*rng.randf_range(0.7,1.35)),_stone_color(),rng.randf_range(0,TAU),rng.randf_range(-0.26,0.26))
             set_meta("castle_size",Vector2(128,144))
-
+        
         func _floor_box(q: Vector2,y: float,size: Vector2) -> void:
             _stone(Vector3(q.x,y-0.5,q.y),Vector3(size.x,1.0,size.y),Color("#59534d"))
-
+        
         func _light(q: Vector2,y: float) -> void:
+            var side: float = -1.0 if q.x<0.0 else 1.0
+            var wall := Vector3(q.x,y,q.y)
+            _stone(wall,Vector3(0.22,0.73,0.48),Color("#302923"))
+            _stone(wall-Vector3(side*0.30,0.18,0),Vector3(0.70,0.16,0.18),Color("#44362a"))
+            _stone(wall-Vector3(side*0.52,0.10,0),Vector3(0.36,0.28,0.31),Color("#3c3029"))
             var fixture := MeshInstance3D.new()
+            fixture.name = "Wandfackel"
             var m := SphereMesh.new()
-            m.radius = 0.24
-            m.height = 0.48
+            m.radius = 0.17
+            m.height = 0.64
+            m.radial_segments = 8
+            m.rings = 4
             fixture.mesh = m
             fixture.material_override = torch_mat
-            fixture.position = Vector3(q.x,y,q.y)
+            fixture.position = wall-Vector3(side*0.52,-0.39,0)
             add_child(fixture)
             var light := OmniLight3D.new()
-            light.light_color = Color("#ffbd75")
-            light.light_energy = 1.6
-            light.omni_range = 19.0
+            light.light_color = Color("#ffb36a")
+            light.light_energy = 2.4
+            light.omni_range = 15.0
             light.shadow_enabled = false
-            light.position = fixture.position
+            light.position = wall-Vector3(side*0.9,-0.45,0)
             add_child(light)
-
+        
+        func _roof_seal(label: String,p: Vector3,size: Vector3) -> void:
+            _stone(p,size,Color("#3d3933"))
+            _solid(dungeon_body,p,size)
+            dungeon_body.get_child(dungeon_body.get_child_count()-1).name = label
+        
         func _dungeon() -> void:
             # Discrete visible stair treads; movement uses a continuous matching slope.
             _floor_box(Vector2(0,-47),-24,8*Vector2(1,0.75))
@@ -321,7 +353,13 @@ jobs:
                     _wall(Vector2(x,a),Vector2(x,b),h,1.5,false,true,y)
             _wall(Vector2(-4.8,-51),Vector2(4.8,-51),9,1.5,false,true,-24)
             # Large main chamber plus side rooms, all connected.
-            _floor_box(Vector2(0,12),-36,Vector2(68,56))
+            _floor_box(Vector2(0,12),-36.075,Vector2(68,56))
+            for ix in range(28):
+                for iz in range(24):
+                    var w: float = 68.0/28.0
+                    var d: float = 56.0/24.0
+                    var q := Vector2(-34.0+(float(ix)+0.5)*w,-16.0+(float(iz)+0.5)*d)
+                    _stone(Vector3(q.x,-36.04,q.y),Vector3(w-0.035,0.08,d-0.035),Color("#59534d").lerp(Color("#71685b"),rng.randf()*0.65))
             _wall(Vector2(-34,-16),Vector2(-4.8,-16),12,2,false,true)
             _wall(Vector2(4.8,-16),Vector2(34,-16),12,2,false,true)
             _wall(Vector2(-34,-16),Vector2(-34,40),12,2,false,true)
@@ -332,16 +370,13 @@ jobs:
                 _wall(Vector2(x,8),Vector2(x,23),9,1.6,false,true)
                 _wall(Vector2(x,31),Vector2(x,40),9,1.6,false,true)
             # Ceiling over chamber and stairs (camera remains below it).
-            _stone(Vector3(0,-23,12),Vector3(70,1.5,58),Color("#3b3936"))
-            _stone(Vector3(0,-15.5,-33),Vector3(12,1.3,36),Color("#403d38"))
-            _solid(dungeon_body,Vector3(0,-23,12),Vector3(70,1.5,58))
-            _solid(dungeon_body,Vector3(0,-15.5,-33),Vector3(12,1.3,36))
-            for p in [Vector2(-3.2,-41),Vector2(3.2,-26),Vector2(0,0),Vector2(0,26),Vector2(-25,12),Vector2(25,12)]:
-                _light(p,L.level(p)+4.0)
-            _sign(self,"Ausgang zur Burgruine",Vector3(0,-20,-49))
-            _sign(self,"Alte Gewölbe",Vector3(0,-30,-13))
+            _roof_seal("HallenDecke",Vector3(0,-24.0,12),Vector3(70,1.5,58))
+            _roof_seal("TreppenDecke",Vector3(0,-16.0,-33),Vector3(12.8,1.5,36.8))
+            _roof_seal("DeckenUebergang",Vector3(0,-20.5,-16),Vector3(12.8,9.0,1.5))
+            for p in [Vector2(-3.96,-41),Vector2(3.96,-26),Vector2(-14.12,-9),Vector2(14.12,16),Vector2(-32.92,12),Vector2(32.92,12),Vector2(-14.12,35),Vector2(14.12,35)]:
+                _light(p,L.level(p)+3.1)
             set_meta("dungeon_steps",48)
-
+        
         func _commit_stones() -> void:
             var mesh := BoxMesh.new()
             mesh.size = Vector3.ONE
@@ -361,37 +396,17 @@ jobs:
             add_child(batch)
             stones.clear()
             colors.clear()
-
+        
         func _move_to(hero: CharacterBody3D,q: Vector2,under: bool) -> void:
             hero.global_position = L.at(terrain,q,under)
             hero.velocity = Vector3.ZERO
             var cam: Camera3D = game.get("camera_node") as Camera3D
             if is_instance_valid(cam):
-                cam.global_position = hero.global_position+Vector3(0,3.0,5.0)
+                var f: Vector2 = L.forward()
+                cam.global_position = hero.global_position+Vector3(-f.x*3.0,2.6,-f.y*3.0)
                 cam.look_at(hero.global_position+Vector3.UP*1.5)
             cooldown = 1.2
-
-        func _dungeon_camera(hero: CharacterBody3D) -> void:
-            # The old outdoor camera may try to move above terrain. Keep its horizontal
-            # orbit but constrain the actual view to the underground room and its walls.
-            var cam: Camera3D = game.get("camera_node") as Camera3D
-            if not is_instance_valid(cam): return
-            var focus: Vector3 = hero.global_position+Vector3.UP*1.45
-            var offset: Vector3 = cam.global_position-focus
-            offset.y = 0.0
-            if offset.length_squared()<0.01: offset = hero.global_transform.basis.z
-            offset.y = 0.0
-            var target: Vector3 = focus+offset.normalized()*4.2+Vector3.UP*1.25
-            var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
-            var ray := PhysicsRayQueryParameters3D.create(focus,target,hero.collision_mask,[hero.get_rid()])
-            var hit: Dictionary = space.intersect_ray(ray)
-            if not hit.is_empty():
-                var impact: Vector3 = hit["position"]
-                target = focus.lerp(impact,0.82)
-            if target.distance_squared_to(focus)<0.04: target = focus+Vector3.UP*0.25
-            cam.global_position = target
-            cam.look_at(focus)
-
+        
         func _process(delta: float) -> void:
             cooldown = maxf(0.0,cooldown-delta)
             if not is_instance_valid(game) or int(game.get("state"))!=2:
@@ -402,7 +417,6 @@ jobs:
             var p: Vector3 = hero.global_position
             var q: Vector2 = L.local(p)
             if L.in_dungeon(terrain,p):
-                _dungeon_camera(hero)
                 if cooldown<=0.0 and q.distance_to(L.EXIT)<1.8:
                     _move_to(hero,L.BACK,false)
             elif cooldown<=0.0 and q.distance_to(L.ENTRY)<1.8 and absf(p.y-L.outside_height(terrain,q))<2.0:
@@ -447,6 +461,21 @@ jobs:
                 _fail("old blocks still generated or castle missing")
                 return
             castle.set_process(false)
+            if not castle.find_children("*","Label3D",true,false).is_empty():
+                _fail("FIX42: unwanted floating dungeon text")
+                return
+            var hall: CollisionShape3D = castle.get_node_or_null("DungeonKollision/HallenDecke") as CollisionShape3D
+            var stairs: CollisionShape3D = castle.get_node_or_null("DungeonKollision/TreppenDecke") as CollisionShape3D
+            var seam: CollisionShape3D = castle.get_node_or_null("DungeonKollision/DeckenUebergang") as CollisionShape3D
+            if hall==null or stairs==null or seam==null:
+                _fail("FIX42: roof seal missing")
+                return
+            if hall.position.y-(hall.shape as BoxShape3D).size.y*0.5 > -24.35 or stairs.position.y-(stairs.shape as BoxShape3D).size.y*0.5 > -16.35:
+                _fail("FIX42: daylight gap above wall")
+                return
+            if castle.find_children("*","OmniLight3D",true,false).size()!=8:
+                _fail("FIX42: wall torch count")
+                return
             var mesh: MultiMeshInstance3D = castle.get_node("BurgUndDungeonSteinmauerwerk") as MultiMeshInstance3D
             if mesh.multimesh.instance_count<1000 or castle.get_node("BurgKollision").get_child_count()<100 or castle.get_node("DungeonKollision").get_child_count()<30:
                 _fail("missing real masonry or collisions")
@@ -466,13 +495,24 @@ jobs:
             if absf(start-end-12.0)>0.01 or absf(end-(12.0-36.0))>0.01:
                 _fail("walking height does not follow underground staircase")
                 return
+            var camera := Camera3D.new()
+            g.add_child(camera)
+            g.camera_node = camera
+            # Run camera on clear centre line after a physics frame to check stable indoor distance.
+            g.hero.global_position = L.at(t,Vector2(0,12),true)
+            await physics_frame
+            L.dungeon_camera(g.hero,camera,0.6,0.2)
+            var camera_offset: Vector3 = camera.global_position-g.hero.global_position
+            if camera_offset.length()>6.2 or camera_offset.y>4.0 or camera_offset.y<0.0:
+                _fail("FIX42: indoor camera too far or high")
+                return
             g.hero.global_position = L.at(t,L.EXIT,true)
             castle.call("_process",1.3)
             if L.in_dungeon(t,g.hero.global_position) or L.local(g.hero.global_position).distance_to(L.BACK)>0.1:
                 _fail("return to surface failed")
                 return
             g.free()
-            print("FIX41_RUINE_OK: real castle replacement, wall collisions, 48 stairs, underground floor and exit")
+            print("FIX42_RUINE_OK: masonry, 48 stairs, roof seals, no labels, torches, camera and return")
             quit(0)
         FIX41_V441RUINESMOKE
         cat > '/tmp/lwod_fix41.py' <<'FIX41_PATCH'
@@ -480,15 +520,15 @@ jobs:
         import re, os
         B=Path('android/scripts')
         Q=Path('android/tests')
-
+        
         def once(s,a,b):
             assert s.count(a)==1, f'FIX41 source anchor {s.count(a)}: {a[:110]}'
             return s.replace(a,b,1)
-
+        
         def edit(name,fn):
             p=B/name
             p.write_text(fn(p.read_text(encoding='utf-8')),encoding='utf-8')
-
+        
         def landmarks(s):
             # Remove the exact former 4 pillars and oversized floating lintel at the source.
             pat=r'(?ms)^    elif id == "Ruine":\n.*?(?=^    elif |^    return root)'
@@ -502,14 +542,14 @@ jobs:
             assert n==1
             return s
         edit('V417Landmarks.gd',landmarks)
-
+        
         def motion(s):
             anchor='func _floor_at(p: Vector3) -> float:\n'
             return once(s,anchor,anchor+'''    if is_instance_valid(terrain) and V441Layout.in_dungeon(terrain,p):
                 return V441Layout.dungeon_floor(terrain,p)
         ''')+'\nconst V441Layout = preload("res://scripts/V441Layout.gd")\n'
         edit('V31TerrainMotion.gd',motion)
-
+        
         def fusion(s):
             anchor='func toggle_fusion() -> void:\n    if not _playing():\n        return\n'
             return once(s,anchor,anchor+'''    var v441_actor: CharacterBody3D = game.get("hero") as CharacterBody3D
@@ -518,23 +558,54 @@ jobs:
                 return # Flight is not available in the underground rooms.
         ''')+'\nconst V441Layout = preload("res://scripts/V441Layout.gd")\n'
         edit('V414Fusion.gd',fusion)
-        # Suppress the old outdoor camera floor clamp only while underground. There is also
-        # a collision-aware dungeon camera fallback in V441Castle itself.
+        # FIX42: the actual camera controller owns the indoor view as well. No second writer.
         p=B/'V27CameraMap.gd'
         s=p.read_text(encoding='utf-8')
-        anchor='        desired.y = maxf(desired.y,ground+1.25)'
-        if s.count(anchor)==1:
-            s=s.replace(anchor,'        if not V441Layout.in_dungeon(terrain,hero.global_position):\n    '+anchor,1)
-            s+='\nconst V441Layout = preload("res://scripts/V441Layout.gd")\n'
-            p.write_text(s,encoding='utf-8')
-            print('FIX41 outdoor camera clamp patched')
-        else:
-            print('FIX41 dungeon camera fallback active')
+        anchor='func _physics_process(delta: float) -> void:\n'
+        s=once(s,anchor,anchor+"""    if _v442_indoor_camera():
+                return
+        """)
+        s += r'''
+        const V441Layout = preload("res://scripts/V441Layout.gd")
+        var v442_indoor_active: bool = false
+        var v442_previous_env: Environment
+        var v442_dark_env: Environment
+        
+        func _v442_indoor_camera() -> bool:
+            if not is_instance_valid(game):
+                return false
+            var cam: Camera3D = game.get("camera_node") as Camera3D
+            var actor: CharacterBody3D = game.get("hero") as CharacterBody3D
+            if not is_instance_valid(cam):
+                return false
+            var indoors: bool = int(game.get("state"))==2 and is_instance_valid(actor) and is_instance_valid(terrain) and V441Layout.in_dungeon(terrain,actor.global_position)
+            if not indoors:
+                if v442_indoor_active:
+                    cam.environment = v442_previous_env
+                    v442_previous_env = null
+                    v442_indoor_active = false
+                return false
+            if not v442_indoor_active:
+                v442_previous_env = cam.environment
+                if v442_dark_env==null:
+                    v442_dark_env = Environment.new()
+                    v442_dark_env.background_mode = Environment.BG_COLOR
+                    v442_dark_env.background_color = Color("#211a15")
+                    v442_dark_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+                    v442_dark_env.ambient_light_color = Color("#b7a28a")
+                    v442_dark_env.ambient_light_energy = 0.30
+                cam.environment = v442_dark_env
+                v442_indoor_active = true
+            V441Layout.dungeon_camera(actor,cam,yaw_offset,pitch)
+            return true
+        '''
+        p.write_text(s,encoding='utf-8')
+        print('FIX42 indoor camera branch installed')
         # Old decoration exclusion was 160 m around Ruine, covering entire 128 x 144 m castle.
         # Preserve it, existing map / teleporter / landscape and the old streaming fixes.
         p=B/'V27Terrain.gd';s=p.read_text(encoding='utf-8');assert 'city == "Ruine"' in s
         p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
-        s=once(s,'version/code=4209','version/code=4211');s=once(s,'version/name="4.1.7.39"','version/name="4.1.7.41"');p.write_text(s,encoding='utf-8')
+        s=once(s,'version/code=4209','version/code=4212');s=once(s,'version/name="4.1.7.39"','version/name="4.1.7.42"');p.write_text(s,encoding='utf-8')
         print('FIX41_INSTALL_OK: old pillars removed; real castle and underground layout linked to player and flight')
         FIX41_PATCH
         python3 -m py_compile /tmp/lwod_fix41.py
@@ -548,22 +619,22 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX41 Burgruine Treppe und Dungeon-Rueckweg testen
+    - name: FIX42 Burgruine Decken Kamera und Rueckweg testen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/diagnose
         timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX41_Ruine.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX41: ' build/diagnose/FIX41_Ruine.log; then exit 1; fi
-        grep -Fq 'FIX41_RUINE_OK:' build/diagnose/FIX41_Ruine.log
-    - name: FIX41 Android APK exportieren und pruefen
+        grep -Fq 'FIX42_RUINE_OK:' build/diagnose/FIX41_Ruine.log
+    - name: FIX42 Android APK exportieren und pruefen
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX41.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX42.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX41_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX41_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX42_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX42_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -573,13 +644,13 @@ jobs:
         sha256sum "$APK"
       shell: bash
     - id: apk_upload
-      name: FIX41 APK als Download hochladen
+      name: FIX42 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX41_APK
-        path: build/android/LWOD-Android-V41.7-FIX41.apk
+        name: LWOD_ANDROID_V41_7_FIX42_APK
+        path: build/android/LWOD-Android-V41.7-FIX42.apk
         retention-days: 14
     - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
@@ -589,13 +660,13 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX41 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        printf '### Android APK Download\n\n[FIX42 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
       shell: bash
     - if: always()
-      name: FIX41 Testprotokolle hochladen
+      name: FIX42 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX41_TESTPROTOKOLLE
+        name: LWOD_FIX42_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
