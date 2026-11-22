@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX37 Fernlandschaft und Altlasten
+name: LWOD Android V41.7 FIX38 Alte Gebirgskette entfernen
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX37 APK
+    name: LWOD Android V41.7 FIX38 APK
     runs-on: ubuntu-latest
     timeout-minutes: 50
     container:
@@ -1066,6 +1066,91 @@ jobs:
                             return false
             return seam_count >= (2*radius+1)*4*Terrain.RESOLUTION
         GDFIX37
+    - name: FIX38 Alte Gebirgskette und unsichtbare Grenze entfernen
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PYFIX38'
+        from pathlib import Path
+        import re
+        p=Path('android/scripts/V21World.gd')
+        s=p.read_text(encoding='utf-8')
+        # The V23 ring was built at fixed +/-15985..16200 coordinates. The current
+        # playable map extends beyond its eastern and southern sides, so both the
+        # former visual ridge and the former invisible wall must be retired together.
+        # The current V417MountainWall / V421 perimeter owns world-boundary protection.
+        for name,node,signature in [('_build_outer_mountains','V22AussenGebirge','15985.0'),('_build_new_perimeter','V22AussenGrenze','15964')]:
+            pat=r'(?ms)^func '+re.escape(name)+r'\(\) -> void:\n.*?(?=^(?:func |static func |var |const |class |@|extends )|\Z)'
+            matches=list(re.finditer(pat,s))
+            assert len(matches)==1,'FIX38: missing or ambiguous old builder '+name
+            m=matches[0];old=m.group()
+            assert node in old and signature in old,'FIX38: unexpected historical geometry '+name
+            replacement=(f'func {name}() -> void:\n'
+              f'    # FIX38: retired internal V23 boundary, replaced by the actual map perimeter.\n'
+              f'    if not is_instance_valid(game):\n        return\n'
+              f'    var obsolete: Node = game.get_node_or_null("{node}")\n'
+              f'    if is_instance_valid(obsolete):\n'
+              f'        game.remove_child(obsolete)\n        obsolete.queue_free()\n\n')
+            s=s[:m.start()]+replacement+s[m.end():]
+        p.write_text(s,encoding='utf-8')
+        wall=Path('android/scripts/V417MountainWall.gd').read_text(encoding='utf-8')
+        territory=Path('android/scripts/V417Territories.gd').read_text(encoding='utf-8')
+        assert 'Kartenumrandung' in wall and 'func _guard()' in wall and 'v421_border_at' in territory,'FIX38: current boundary missing'
+        p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
+        for old,new in [('version/code=4207','version/code=4208'),('version/name="4.1.7.37"','version/name="4.1.7.38"')]:
+            assert s.count(old)==1, 'FIX38: unexpected version';s=s.replace(old,new,1)
+        p.write_text(s,encoding='utf-8')
+        print('FIX38_INSTALL_OK: V22AussenGebirge and V22AussenGrenze retired; actual V421 map perimeter kept')
+        PYFIX38
+        mkdir -p android/tests
+        cat > android/tests/V438OldBoundarySmoke.gd <<'GDFIX38'
+        extends SceneTree
+        const OldWorld = preload("res://scripts/V21World.gd")
+        const T = preload("res://scripts/V417Territories.gd")
+
+        func _initialize() -> void:
+            call_deferred("_run")
+
+        func fail(message: String) -> void:
+            push_error("FIX38: " + message)
+            quit(1)
+
+        func _run() -> void:
+            var g := Node3D.new()
+            root.add_child(g)
+            var old := OldWorld.new()
+            g.add_child(old)
+            old.game = g
+            # Call the two actual construction methods, not a text-only check.
+            old.call("_build_outer_mountains")
+            old.call("_build_new_perimeter")
+            if g.has_node("V22AussenGebirge") or g.has_node("V22AussenGrenze") or g.get_child_count()!=1:
+                fail("retired visual ridge or collider still generated")
+                return
+            # Also remove a stale instance if a prior setup created one.
+            var obsolete_mesh := MeshInstance3D.new()
+            obsolete_mesh.name = "V22AussenGebirge"
+            g.add_child(obsolete_mesh)
+            var obsolete_wall := StaticBody3D.new()
+            obsolete_wall.name = "V22AussenGrenze"
+            g.add_child(obsolete_wall)
+            old.call("_build_outer_mountains")
+            old.call("_build_new_perimeter")
+            if g.has_node("V22AussenGebirge") or g.has_node("V22AussenGrenze"):
+                fail("stale boundary remains in scene tree")
+                return
+            # At the old eastern edge the desert is inside today's playable rectangle.
+            var p := Vector2(16035.0,T.city_world("Sandhafen").y)
+            if T.mountain_at(p) or T.v421_border_at(T.world_to_map(p)):
+                fail("old eastern coordinate is incorrectly blocked")
+                return
+            for uv in [Vector2(1,50),Vector2(99,50),Vector2(50,1),Vector2(50,99)]:
+                if not T.v421_border_at(uv) or not T.mountain_at(T.map_to_world(uv)):
+                    fail("actual perimeter no longer blocked")
+                    return
+            print("FIX38_OLD_BOUNDARY_OK: old visual and collision constructors inactive; current map perimeter retained")
+            quit(0)
+        GDFIX38
     - name: FIX31 bis FIX33 Godot-Tests
       shell: bash
       run: |
@@ -1101,15 +1186,23 @@ jobs:
         timeout --signal=TERM --kill-after=5s 180s godot --headless --path android --quit-after 300 --script res://tests/V437HorizonSmoke.gd 2>&1 | tee build/diagnose/FIX37_Fernlandschaft.log
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX37: ' build/diagnose/FIX37_Fernlandschaft.log; then exit 1; fi
         grep -Fq 'FIX37_HORIZON_OK:' build/diagnose/FIX37_Fernlandschaft.log
-    - name: FIX37 Android APK exportieren und pruefen
+    - name: FIX38 Alte und aktuelle Weltgrenzen testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V438OldBoundarySmoke.gd 2>&1 | tee build/diagnose/FIX38_Weltgrenzen.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX38: ' build/diagnose/FIX38_Weltgrenzen.log; then exit 1; fi
+        grep -Fq 'FIX38_OLD_BOUNDARY_OK:' build/diagnose/FIX38_Weltgrenzen.log
+    - name: FIX38 Android APK exportieren und pruefen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX37.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX38.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX37_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX37_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX38_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX38_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -1117,12 +1210,12 @@ jobs:
         unzip -Z1 "$APK" | grep -Fx 'AndroidManifest.xml' >/dev/null
         ls -lh "$APK"
         sha256sum "$APK"
-    - name: FIX37 APK als Download hochladen
+    - name: FIX38 APK als Download hochladen
       id: apk_upload
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX37_APK
-        path: build/android/LWOD-Android-V41.7-FIX37.apk
+        name: LWOD_ANDROID_V41_7_FIX38_APK
+        path: build/android/LWOD-Android-V41.7-FIX38.apk
         if-no-files-found: error
         compression-level: 0
         retention-days: 14
@@ -1135,12 +1228,12 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX37 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-    - name: FIX37 Testprotokolle hochladen
+        printf '### Android APK Download\n\n[FIX38 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+    - name: FIX38 Testprotokolle hochladen
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_FIX37_TESTPROTOKOLLE
+        name: LWOD_FIX38_TESTPROTOKOLLE
         path: build/diagnose
         if-no-files-found: warn
         retention-days: 14
