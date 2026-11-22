@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX40 Ruinengebiet und Untergrund-Dungeon
+name: LWOD Android V41.7 FIX41 Echte Burgruine und Dungeon
 'on':
   workflow_dispatch: {}
   push:
@@ -10,19 +10,19 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX40 APK
+    name: LWOD Android V41.7 FIX41 APK
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 55
     container:
       image: barichello/godot-ci:4.7.2
     env:
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       ANDROID_HOME: /usr/lib/android-sdk
     steps:
-    - name: Erfolgreichen FIX19 Stand laden
+    - name: FIX39 Sicherung laden
       uses: actions/checkout@v4
       with:
-        ref: a50b23c0dbeebc464305c0451b98245a0632aebc
+        ref: 9b01d317fffd8d5abf0b2d0afbffb8846c44f1c6
     - name: Python und YAML bereitstellen
       shell: bash
       run: |
@@ -31,1381 +31,539 @@ jobs:
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-yaml
         fi
-    - name: Bewaehrten FIX31 Workflow laden und pruefen
+    - name: FIX39 Schritte sichern
       shell: bash
       run: |
         set -euo pipefail
-        wget --quiet --tries=3 --timeout=60 --https-only -O "$RUNNER_TEMP/fix31.yml" 'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/02db69aebd1ad61d1778439da5d8cb22df964599/.github/workflows/blank-ps1.yml'
         python3 - <<'PYREPLAY'
-        import hashlib, os, subprocess, yaml
+        import hashlib,os,subprocess,yaml
         from pathlib import Path
-        p=Path(os.environ['RUNNER_TEMP'])/'fix31.yml'
-        data=p.read_bytes()
-        sha=hashlib.sha1(('blob %d\0'%len(data)).encode()+data).hexdigest()
-        assert sha=='26c4391fba381b6e81f0d3fbb3a090a328210150', 'FIX31 source checksum mismatch: '+sha
-        steps=yaml.safe_load(data)['jobs']['android']['steps']
-        assert len(steps)==17 and steps[8]['name'].startswith('FIX31 Wurzelheim') and steps[12]['name'].startswith('FIX31 Baumplattformen')
-        folder=Path(os.environ['RUNNER_TEMP'])/'fix32_original'; folder.mkdir(exist_ok=True)
-        for i in range(2,13):
-            step=steps[i]; assert step['shell']=='bash' and 'if' not in step
-            f=folder/('%02d.sh'%i); f.write_text(step['run']+'\n',encoding='utf-8'); subprocess.run(['bash','-n',str(f)],check=True)
+        raw=Path('.github/workflows/blank-ps1.yml').read_bytes()
+        assert hashlib.sha1(('blob %d\0'%len(raw)).encode()+raw).hexdigest()=='148a908318b1d91002357f1acfa18fbf60e347c3','FIX39 source checksum mismatch'
+        steps=yaml.safe_load(raw)['jobs']['android']['steps']
+        assert len(steps)==21 and steps[10]['name'].startswith('FIX39 Sichtweite und Terrain') and steps[16]['name'].startswith('FIX39 Sichtweite und Chunk')
+        folder=Path(os.environ['RUNNER_TEMP'])/'fix41_base';folder.mkdir(exist_ok=True)
+        for i in range(2,17):
+            s=steps[i];assert s.get('shell')=='bash' and 'if' not in s
+            f=folder/('%02d.sh'%i);f.write_text(s['run']+'\n',encoding='utf-8');subprocess.run(['bash','-n',str(f)],check=True)
+            print('FIX39 gesichert',i,s['name'],flush=True)
         PYREPLAY
-    - name: FIX31 Spielinhalte rekonstruieren
+    - name: Erfolgreichen FIX19 Stand laden
+      uses: actions/checkout@v4
+      with:
+        ref: a50b23c0dbeebc464305c0451b98245a0632aebc
+    - name: FIX39 vollstaendig rekonstruieren
       shell: bash
       run: |
         set -euo pipefail
-        for i in 02 03 04 05 06 07 08; do
-          echo "::group::FIX31 Originalschritt $i"
-          bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix32_original/$i.sh"
-          echo "::endgroup::"
+        for i in 02 03 04 05 06 07 08 09 10; do
+          echo "::group::FIX39 Installationsschritt $i"
+          bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
+          echo '::endgroup::'
         done
-    - name: FIX32 Wurzelheim Wege und Gemuese installieren
+    - name: FIX41 Burgruine und Untergrund-Dungeon installieren
       shell: bash
       run: |
         set -euo pipefail
-        base64 -d <<'FIX32_PAYLOAD' | gzip -dc > "$RUNNER_TEMP/lwod_fix32.py"
-        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
-        63QBAA==
-        FIX32_PAYLOAD
-        printf '%s  %s\n' 53d660ed5c64227458a14b8cf5e7028d5278b371b414bb63c837625e338c40b4 "$RUNNER_TEMP/lwod_fix32.py" | sha256sum -c -
-        python3 -m py_compile "$RUNNER_TEMP/lwod_fix32.py"
-        python3 "$RUNNER_TEMP/lwod_fix32.py"
-    - name: FIX33 Wurzelheim Kurven und Touch-Ernte korrigieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        base64 -d <<'FIX33_PAYLOAD' | gzip -dc > "$RUNNER_TEMP/lwod_fix33.py"
-        H4sIAAAAAAAC/7W97XIdyXE2+H+u4hgKBwkPGurq6k/adMRYkl9PWNbImpFfx44mECBxSCIEAnwBcEbjX3sPezv7b+9kr2TzyaoGOp9M8FC73omQ
-        wDr5UdXV1VmZWZlZb25v3u8+nN+/u7p8tbt8/+Hm9n73e2l+Uf99u//in17ih+fPzq8vbm8uL3559/r28sP93bPjv9/9O4Hu93cAfHGxf7O7uX69
-        f353cn7y6vjFFzv57/zubi8c705f33y8vn9+fvzyZTrZPfvnr/8z59359et3N7e795d3d5fXb3fyz/P3ry7ffrz5ePdi9+zL8+9fpK79Qfnc7u8/
-        3l4Ln9v9h6tz6US6OEml0/3F5f3zDydvrmufdy8/CNr5xdn9/i/3z/fXr28uhP3LZx/v3zQznuDD6U+3l/f7An9z/fzu+MRhffH7r777l7Nff/Xd
-        Vy+fNVN3OvdjdzKe5qnrTtBu26k/GU7nuU3aHuZpEXjq+yWE55xmaS9LPwX4+bRb5ulkws+9ttshDwIf+zEX+DTOAu/6vo3hbQK/ZRA0jy/jn5fp
-        ZD4dc8ra7qY5A567pPhpGReBp3aaAng6HcepxfPkbgnwfbudZWDzae6XPuyf22PfAn8e54Lfp2k8WU7blIXfuJyOyzDIeKY2CXyUjqYp43lH8Bd4
-        GnMr7TYPXQCXiRqWJO0uT0OAT21+Xte//KPrk4xvGJdF22lJo8CXNhwv98/jY3r/fNy/wR9k/Es3YL7bXsY/CCCN/Ql+nmU9DOPpsHR4P3mRYUdw
-        mf/+JLWn7ZL7gEDa/aALThewMJjHpZUB9MvShx1YOA+Q8Qk+tqdDGhYMsJ0XhXdZZhoDlFfkEcYkr2rBEy0pjwGBf0SeA0fhEewzMEHfn/adjEFe
-        Xupkknp87mnSr2JI2p7nThmOfQrg8vkPGZPSLlglAb5t96edPD0G0OV2DAbQyzPP7YPY6UXetO0ib6XtxxTg+wHYATI9w5kf4zN/+b7bUV9iL4sF
-        8JwHfUddGvAK2tN+KFPctfLyml4kxCKCQX8QAepZOATmebBTeSr59pL+IPMavgdCcC/i0JvjieAxZNkg2hkbztQNWdsyoxCQo85sTqcTdo4Z39f4
-        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
-        ti34OYDz+Ag/3Nw2m5/DD+Gb8fF4uP9ofNv1Em7mpAxs6Rkeba4bfPc+eT1oey6b7fzUeuH1xPiPbbe5heuJ1z+t361yFSprpOzx97KFR8rip/qL
-        lFV+3g08VHY/MT/h+t/27wxmMpD7doEqOtbLkK3tTYY54Zpmh+o06pWbhtK2HbvkI85NMsazT3RiY5oSnyzY2+K2twlFIlXo51FPsYdOz7d6rUFL
-        8QY+doECHwwxQV3QxBbZxSn3OFZD9nGpArOdfZ5f/zY2tAT1L3KD6y6c4etotiVF/c02VGHUXnRjoL466RbZH4fas9J6RKMHNnzkuvQDUJdOHWD2
-        AHYLIzbURzDDdkopbJxeln2ThGuaPtTbdOxuHKX7SM3r8peX0nVB9npSA/VXDW2R5RWPHVbu3M96syF8d/Lu8sjTamFuku3b2bbse7Qd2rM5ZAqX
-        KLR56NxpCkJQSyLJgtJqQC7JbymNI9MS1B3MGGR6GJ4FJakceL5yV8ady531GzoLs1wsJt9IbW+yXlAjSF/iQndQ4wowvZJuXjq+5ZphWy4Wk0c2
-        tEsJ8s56aS6Ol+ppE4rUjKoE1ZvexqQJmW3bEZ2FWS6MWSPBNTAcpxE9Fo5eDsY3fG+fwT6fpbMwnrMtJo/MPtGit9aLjC1lxjcwngmLaVvb57P9
-        8RPZZ99yYdiW56d6t+M0/T374ouL/Zvd7f7t5c3187vjF1/s5L/357d/fnl3enl9sf/L82dvPl6/3p392Od09vb25uP1xdmH8/t3d8+fHSvy/fnl
-        1cn1y9v96d3HV9fPb5/9eH67uzi/P9+9eLn70/Oj71vZik+aH748+tPxs5Or8/evLs53Zy92Bu/50bMvf//Vd/9y9uuvvvvqy2dHgnn3PYbx4oeT
-        19Ln/ctUeju/u9vf3u+uX75M2r7d33+8vd7dff8C2D98idF8sb+4vH/+T7989h99O/9BH+3u9O3Fs5PymMflme/3t7eX9ze3Pz889i92/7rff5Cn
-        /7B7fXNze3F5fX6/v9tJ7zcfX7/bX5zu/ufH2//aX73bX75/drf76fzqand5t5u63fvdm9ub97v7d/vd6/31/e3+pDK8vrnXX2+uLnb9KHi35xeX
-        H+9Od9/e33xQyNXN9dvd7c35xd3uHLjyf2B8qgzu7s9v7x/fhDTvL1/v9IWA5Oynm9uri/VF7K8vBPWN4D5/9qfrLa5MJhh9Wefw8g1w/6F9oSRX
-        e7x4Bby6ufj55d33ivxCYD88/npz/Xr/HP86efYcr//79EOjf9sfjk+vb27fn19d/tf+4vnx3/XjafvsINbzST5FjOR89/Ll7uhxYo92+6u7/Q5c
-        jp8df2IA+L/TO2H3/Ljpajfb39InB/ZXUz8M+NXhAT8uSp3KH77EuL+8+16m9MUPm9WZpu/qIrzclxX6sCiPv/jF7rf7t+evf5Y3/fF+L8v17n4n
-        q/D1n+903ehq0iV482Z3I7/c7n68vLo6fyucdt8JgnR9fXEuy2svrLD+FPn9/u5d4XW7f39+eY3l/frd+fXb/cXf726ur35W5o9PV3uXkX+4ubzG
-        CIB7d1rEBmBn4PbwDdVH17d1d/Lsu9PXl/c/13X67f3t5fXb5/jl+PjLi/WFfBLnYdq3gJcvn55/nd1/19kd/4DP6tv3N3/el8//YbhVBEBk7B/H
-        LpP08ln9QC7vzi7xDclznP0oi+DiuQjA7kxe59v9/fGLP13v6n+Ce/bh6vxnDO54J1O+u/mwvz778XL/kwzzSH+BFDg7v/757O35+/3Z+/31xzMg
-        Vfwz5Xy9P789e3178+G5PN6mr01XtbsK/PO+oD8xrvW/DyKYPtyfvru8kGVtwRvK3cvd9cerq0d4eY9/un6mM3MtD3NUJBqW1v/449ci/z7c7kUY
-        X+zuLt9en6skPL+6u9l9xG+vft79ef/zq5vz24tfvr+Rn053X4ns+2mnovTu9e1+f106+0Xhs7v9KGtRRpTP3p3f/ijv6Oz65qfdxeXt/vW9rEpM
-        1PuPsmwxl+c/CV+RHHf71zfyO6bhtHAr05PPtJszFZv/+LLd3dyWn0WsX13c/HT9j+1p+8I/bOXw+uPtrUjxsx9l1d/c/sMWkwe4ndKVy1ER3S/r
-        NyA9nsj8Hdtfn33qBcgYPl6eyaKSj/plAbx4drL7JI15PoG8P//Lm+fymCcG0Jxd7K/uz48/0Q8PtGz/l9cfPt4/38uU3L/YfY3Gb/Dv413zj7sf
-        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
-        FIX33_PAYLOAD
-        printf '%s  %s\n' dfc5c83e32c38c8b04794795ca055aaf558aa7ffa6e30dafbf71bfae82b152e4 "$RUNNER_TEMP/lwod_fix33.py" | sha256sum -c -
-        python3 -m py_compile "$RUNNER_TEMP/lwod_fix33.py"
-        python3 "$RUNNER_TEMP/lwod_fix33.py"
-    - name: FIX35 Moordorf Suempfe, Totholz und Nebel installieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        cat > "$RUNNER_TEMP/lwod_fix35.py" <<'PYFIX35'
-        from pathlib import Path
-        import re
-        B = Path('android/scripts')
-        Q = Path('android/tests')
-
-        def once(s, old, new):
-            n=s.count(old)
-            if n != 1:
-                raise RuntimeError(f'FIX35: expected one anchor, got {n}: {old[:140]}')
-            return s.replace(old,new,1)
-
-        def terrain(s):
-            # Preserve original colour generation: the swamp layer is on the existing terrain mesh.
-            s=once(s,'func color_at(x: float, z: float, height: float) -> Color:', 'func _v435_base_color_at(x: float, z: float, height: float) -> Color:')
-            s=once(s,'func _process(delta: float) -> void:\n','func _process(delta: float) -> void:\n    _v435_update_fog(delta)\n')
-            s=once(s,'            if rng.randf() > chance:\n', '            if marsh: chance = lerpf(0.76,0.95,grove)\n            if rng.randf() > chance:\n')
-            s=once(s,'            # Choose sizes before testing road/town/mountain clearance.', '''            if marsh:
-                        # About 43% tree sites, 43% shrub sites, other sites remain varied.
-                        tree_cut = 0.43
-                        bush_cut = 0.86
-                    # Choose sizes before testing road/town/mountain clearance.''')
-            s=once(s,'                _v427_tree(batches,local,h,width,wood,green,rot,frozen or rng.randf()<0.43)', '''                if marsh and rng.randf()<0.82:
-                            _v435_dead_tree(batches,local,h,rot,rng)
-                        else:
-                            _v427_tree(batches,local,h,width,wood,green,rot,frozen or rng.randf()<0.43)''')
-            # The village itself retains planted living trees; wild trees immediately outside use swamp models.
-            s=once(s,'    _v427_tree(batches,local,h,width,wood,green,rot,city == "Frostholm" or rng.randf()<0.43)', '''    if city == "Moordorf" and outside and serial%5!=0:
-                _v435_dead_tree(batches,local,h,rot,rng)
-            else:
-                _v427_tree(batches,local,h,width,wood,green,rot,city == "Frostholm" or rng.randf()<0.43)''')
-            # Existing vegetation generator owns its meshes, no extra per-tree nodes.
-            return s+'\n'+TERRAIN
-
-        TERRAIN = r'''
-        # FIX35: deterministic marshes, sharing the existing terrain and forest batches.
-        # There are no additional flat slabs or overlapping water colliders.
-        var v435_fog_env: Environment
-        var v435_old_fog_enabled: bool = false
-        var v435_old_fog_density: float = 0.0
-        var v435_old_fog_color: Color = Color.WHITE
-        var v435_fog_amount: float = 0.0
-
-        func v435_swamp_strength(p: Vector2) -> float:
-            if V417Territories.region_index(p) != 8:
-                return 0.0
-            # Large, irregular bog pools and dry islands. Coordinates are continuous across chunks.
-            var a: float = sin(p.x*0.023 + 1.25*sin(p.y*0.016))
-            var b: float = cos(p.y*0.028 + 0.95*sin(p.x*0.019))
-            var c: float = sin((p.x+p.y)*0.046)*0.18
-            var field: float = (a*0.55+b*0.45+c)
-            var wet: float = smoothstep(-0.05,0.54,field)
-            if wet<=0.001:
-                return 0.0
-            # Keep all settlements, entrances, mountain walls, gorge edges and footpaths dry.
-            wet *= smoothstep(62.0,92.0,p.distance_to(V417Territories.city_world("Moordorf")))
-            wet *= smoothstep(55.0,82.0,p.distance_to(V417Territories.city_world("Steinland")))
-            if wet<=0.001 or V417Territories.v421_no_decoration(p,5.0):
-                return 0.0
-            _v425_prepare()
-            for segment in v425_road_segments:
-                var start: Vector2 = segment[0]
-                var finish: Vector2 = segment[1]
-                if p.x<minf(start.x,finish.x)-24.0 or p.x>maxf(start.x,finish.x)+24.0 or p.y<minf(start.y,finish.y)-24.0 or p.y>maxf(start.y,finish.y)+24.0:
-                    continue
-                var d: float = p.distance_to(Geometry2D.get_closest_point_to_segment(p,start,finish))
-                wet *= smoothstep(10.0,24.0,d)
-                if wet<=0.001:
-                    return 0.0
-            return clampf(wet,0.0,1.0)
-
-        func color_at(x: float, z: float, height: float) -> Color:
-            var original: Color = _v435_base_color_at(x,z,height)
-            var wet: float = v435_swamp_strength(Vector2(x,z))
-            if wet<=0.0: return original
-            # Wet earth at the edge, olive/brown water and mud in the centre.
-            var mud: Color = Color("#35413a").lerp(Color("#263d36"),smoothstep(0.35,0.9,wet))
-            var shimmer: float = 0.5+0.5*sin(x*0.16+sin(z*0.08)*2.0)
-            mud = mud.lerp(Color("#546857"),shimmer*0.16)
-            return original.lerp(mud,wet*0.91)
-
-        func _v435_wood_segment(batches: Dictionary, a: Vector3, b: Vector3, diameter: float, color: Color) -> void:
-            var axis: Vector3 = (b-a).normalized()
-            var across: Vector3 = axis.cross(Vector3.FORWARD).normalized()
-            if across.length_squared()<0.1: across = axis.cross(Vector3.RIGHT).normalized()
-            var frame := Basis(across,axis,across.cross(axis).normalized())
-            _v425_add(batches,"Holz",(a+b)*0.5,Vector3(diameter,a.distance_to(b),diameter),color,frame)
-
-        func _v435_dead_tree(batches: Dictionary, local: Vector3, h: float, turn: Basis, rng: RandomNumberGenerator) -> void:
-            var height: float = h*rng.randf_range(0.70,0.98)
-            var color: Color = Color("#50483a").lerp(Color("#827b65"),rng.randf()*0.62)
-            var lean: Vector3 = turn*Vector3(height*0.13,0,height*0.06)
-            var base: Vector3 = local-Vector3.UP*0.15
-            var mid: Vector3 = base+Vector3.UP*height*0.54+lean*0.40
-            var top: Vector3 = base+Vector3.UP*height+lean
-            _v435_wood_segment(batches,base,mid,height*0.11,color.darkened(0.12))
-            _v435_wood_segment(batches,mid,top,height*0.065,color)
-            for i in range(3):
-                var angle: float = float(i)*2.39996+rng.randf_range(-0.4,0.4)
-                var side: Vector3 = turn*Vector3(cos(angle),0,sin(angle))
-                var start: Vector3 = mid.lerp(top,0.12+float(i)*0.21)
-                var elbow: Vector3 = start+side*height*0.17+Vector3.UP*height*0.13
-                var tip: Vector3 = elbow+side*height*0.11+Vector3.UP*height*rng.randf_range(0.08,0.17)
-                _v435_wood_segment(batches,start,elbow,height*0.036,color)
-                _v435_wood_segment(batches,elbow,tip,height*0.015,color.lightened(0.12))
-            # No green crowns: jagged broken trunks and bare branches are visibly rotten.
-
-        func _v435_restore_fog() -> void:
-            if is_instance_valid(v435_fog_env):
-                v435_fog_env.fog_density = v435_old_fog_density
-                v435_fog_env.fog_light_color = v435_old_fog_color
-                v435_fog_env.fog_enabled = v435_old_fog_enabled
-            v435_fog_env = null
-            v435_fog_amount = 0.0
-
-        func _v435_update_fog(delta: float) -> void:
-            if not is_instance_valid(game) or not is_instance_valid(game.hero) or not is_inside_tree():
-                _v435_restore_fog()
-                return
-            var p: Vector3 = game.hero.global_position
-            var in_marsh: bool = game.state == 2 and V417Territories.region_index(Vector2(p.x,p.z))==8
-            if not in_marsh and not is_instance_valid(v435_fog_env): return
-            var world: World3D = get_world_3d()
-            var env: Environment = world.environment if world!=null else null
-            var camera: Camera3D = get_viewport().get_camera_3d()
-            if is_instance_valid(camera) and camera.environment!=null: env = camera.environment
-            if env==null:
-                _v435_restore_fog()
-                return
-            if v435_fog_env!=env:
-                _v435_restore_fog()
-                if not in_marsh: return
-                v435_fog_env = env
-                v435_old_fog_enabled = env.fog_enabled
-                v435_old_fog_density = env.fog_density
-                v435_old_fog_color = env.fog_light_color
-            v435_fog_amount = move_toward(v435_fog_amount,1.0 if in_marsh else 0.0,delta*0.75)
-            if not in_marsh and v435_fog_amount<=0.0:
-                _v435_restore_fog()
-                return
-            var original_density: float = v435_old_fog_density if v435_old_fog_enabled else 0.0
-            env.fog_enabled = true
-            env.fog_density = lerpf(original_density,maxf(original_density,0.0023),v435_fog_amount)
-            env.fog_light_color = v435_old_fog_color.lerp(Color("#9cae9b"),v435_fog_amount*0.85)
-        '''
-
-        MOTION = r'''
-        # FIX35: only normal walking is impaired; flight uses its original movement branch.
-        func v435_swamp(p: Vector3) -> float:
-            if not is_instance_valid(terrain): return 0.0
-            return float(terrain.call("v435_swamp_strength",Vector2(p.x,p.z)))
-
-        func v435_before_move(hero: CharacterBody3D) -> void:
-            if not is_instance_valid(hero): return
-            var factor: float = lerpf(1.0,0.48,v435_swamp(hero.global_position))
-            hero.velocity.x *= factor
-            hero.velocity.z *= factor
-        '''
-
-        def motion(s):
-            # A maximum 34 cm of visual immersion; not a new collider or altered floor plane.
-            s=once(s,'    p.y = _floor_at(p) + 0.085','    p.y = _floor_at(p) + 0.085 - 0.34*v435_swamp(p)')
-            return s+'\n'+MOTION
-
-        def main(s):
-            a='        var v431_previous: Vector3 = hero.global_position\n        hero.move_and_slide()'
-            return once(s,a,'        var v431_previous: Vector3 = hero.global_position\n        if terrain_motion != null:\n            terrain_motion.call("v435_before_move",hero)\n        hero.move_and_slide()')
-
-        def landmarks(s):
-            # Old swamp trees are replaced by the same chunk vegetation used everywhere.
-            pat=r'(?ms)^    elif id == "Moordorf":\n.*?(?=^    elif |^    return root)'
-            s,n=re.subn(pat,'    elif id == "Moordorf":\n        pass # FIX35: terrain batches own all swamp trees and ground details.\n',s,count=1)
-            if n!=1: raise RuntimeError('FIX35: old Moordorf landmark branch missing')
-            return s
-
-        SMOKE = r'''
-        extends SceneTree
+        mkdir -p android/scripts android/tests
+        cat > 'android/scripts/V441Layout.gd' <<'FIX41_V441LAYOUT'
+        extends RefCounted
+        # Shared coordinates for ruin, dungeon, player ground and camera.
         const T = preload("res://scripts/V417Territories.gd")
-        const Terrain = preload("res://scripts/V27Terrain.gd")
-        const Motion = preload("res://scripts/V31TerrainMotion.gd")
+        const OUTER_X: float = 64.0
+        const OUTER_Z: float = 72.0
+        const ENTRY: Vector2 = Vector2(0,-40)
+        const SPAWN: Vector2 = Vector2(0,-44)
+        const EXIT: Vector2 = Vector2(0,-49)
+        const BACK: Vector2 = Vector2(0,-34)
 
+        static func centre() -> Vector2:
+            return T.city_world("Ruine")
+
+        static func forward() -> Vector2:
+            return T.gate_direction("Ruine","Ruine").normalized()
+
+        static func right() -> Vector2:
+            var d: Vector2 = forward()
+            return Vector2(d.y,-d.x)
+
+        static func local(p: Vector3) -> Vector2:
+            var q: Vector2 = Vector2(p.x,p.z)-centre()
+            return Vector2(q.dot(right()),q.dot(forward()))
+
+        static func world(q: Vector2) -> Vector2:
+            return centre()+right()*q.x+forward()*q.y
+
+        static func base(terrain: Node) -> float:
+            var c: Vector2 = centre()
+            return float(terrain.call("surface_height_at",c.x,c.y)) if is_instance_valid(terrain) else 0.0
+
+        static func outside_height(terrain: Node,q: Vector2) -> float:
+            var p: Vector2 = world(q)
+            return float(terrain.call("surface_height_at",p.x,p.y)) if is_instance_valid(terrain) else 0.0
+
+        static func in_dungeon(terrain: Node,p: Vector3) -> bool:
+            var q: Vector2 = local(p)
+            return absf(q.x)<37.0 and q.y>-54.0 and q.y<42.0 and p.y<base(terrain)-12.0
+
+        static func level(q: Vector2) -> float:
+            # 12 m descent along a 28 m stair passage, followed by level halls.
+            return -24.0-12.0*clampf((q.y+44.0)/28.0,0.0,1.0)
+
+        static func dungeon_floor(terrain: Node,p: Vector3) -> float:
+            return base(terrain)+level(local(p))
+
+        static func at(terrain: Node,q: Vector2,underground: bool) -> Vector3:
+            var w: Vector2 = world(q)
+            var y: float = base(terrain)+level(q) if underground else outside_height(terrain,q)
+            return Vector3(w.x,y+0.085,w.y)
+        FIX41_V441LAYOUT
+        cat > 'android/scripts/V441Castle.gd' <<'FIX41_V441CASTLE'
+        extends Node3D
+        const L = preload("res://scripts/V441Layout.gd")
+        var game: Node
+        var terrain: Node
+        var stones: Array[Transform3D] = []
+        var colors: PackedColorArray = PackedColorArray()
+        var rng := RandomNumberGenerator.new()
+        var wall_body: StaticBody3D
+        var dungeon_body: StaticBody3D
+        var cooldown: float = 0.0
+        var base_y: float = 0.0
+        var stone_mat: StandardMaterial3D
+        var torch_mat: StandardMaterial3D
+
+        func setup(owner_game: Node,land: Node) -> void:
+            name = "V441VerfalleneBurg"
+            game = owner_game
+            terrain = land
+            rng.seed = 441731
+            base_y = L.base(terrain)
+            var c: Vector2 = L.centre()
+            var d: Vector2 = L.forward()
+            position = Vector3(c.x,base_y,c.y)
+            rotation.y = atan2(d.x,d.y)
+            wall_body = StaticBody3D.new()
+            wall_body.name = "BurgKollision"
+            add_child(wall_body)
+            dungeon_body = StaticBody3D.new()
+            dungeon_body.name = "DungeonKollision"
+            add_child(dungeon_body)
+            stone_mat = StandardMaterial3D.new()
+            stone_mat.vertex_color_use_as_albedo = true
+            stone_mat.roughness = 1.0
+            torch_mat = StandardMaterial3D.new()
+            torch_mat.albedo_color = Color("#ffbd58")
+            torch_mat.emission_enabled = true
+            torch_mat.emission = Color("#ff8d32")
+            torch_mat.emission_energy_multiplier = 1.6
+            _castle()
+            _dungeon()
+            _commit_stones()
+            process_priority = 900
+            set_process(is_instance_valid(game))
+
+        func _ground(q: Vector2) -> float:
+            return L.outside_height(terrain,q)-base_y
+
+        func _stone(p: Vector3,size: Vector3,col: Color,yaw: float = 0.0,roll: float = 0.0) -> void:
+            var b := Basis(Vector3.UP,yaw)*Basis(Vector3.FORWARD,roll)
+            stones.append(Transform3D(b.scaled_local(size),p))
+            colors.append(col)
+
+        func _solid(body: StaticBody3D,p: Vector3,size: Vector3,yaw: float = 0.0) -> void:
+            var shape := BoxShape3D.new()
+            shape.size = size
+            var slot := CollisionShape3D.new()
+            slot.shape = shape
+            slot.position = p
+            slot.rotation.y = yaw
+            body.add_child(slot)
+
+        func _stone_color(dark: bool = false) -> Color:
+            var a := Color("#57534f") if dark else Color("#77776b")
+            var b := Color("#827b70") if dark else Color("#aaa597")
+            return a.lerp(b,rng.randf())
+
+        func _wall(a: Vector2,b: Vector2,height: float,thick: float,ruined: bool = true,underground: bool = false,floor_y: float = -36.0) -> void:
+            var span: float = a.distance_to(b)
+            var yaw: float = -atan2((b-a).y,(b-a).x)
+            var count: int = maxi(1,ceili(span/3.6))
+            var unit: float = span/float(count)
+            for i in range(count):
+                var q: Vector2 = a.lerp(b,(float(i)+0.5)/float(count))
+                var g: float = floor_y if underground else _ground(q)
+                var h: float = height
+                if ruined:
+                    h = height*(0.67+0.23*sin(float(i)*1.07+span)+rng.randf_range(0.0,0.19))
+                var rows: int = maxi(2,ceili(h/1.75))
+                var row_h: float = h/float(rows)
+                # Individual stone courses: small varying joints, no giant grey lintel slab.
+                for row in range(rows):
+                    var col: Color = _stone_color(underground)
+                    var y: float = g-0.35+(float(row)+0.5)*row_h
+                    var offset: float = rng.randf_range(-0.04,0.04)
+                    _stone(Vector3(q.x,y,q.y),Vector3(unit-0.06,row_h-0.045,thick+offset),col,yaw)
+                _solid(dungeon_body if underground else wall_body,Vector3(q.x,g+h*0.5-0.4,q.y),Vector3(unit+0.04,h+0.8,thick),yaw)
+
+        func _tower(q: Vector2,r: float,h: float,opening: float) -> void:
+            var sides: int = 16
+            for i in range(sides):
+                var a: float = TAU*float(i)/float(sides)
+                var b: float = TAU*float(i+1)/float(sides)
+                if absf(wrapf((a+b)*0.5-opening,-PI,PI))<0.39:
+                    continue
+                var start: Vector2 = q+Vector2(cos(a),sin(a))*r
+                var finish: Vector2 = q+Vector2(cos(b),sin(b))*r
+                _wall(start,finish,h+2.8*sin(float(i)*0.55),2.3,true)
+
+        func _arch(q: Vector2,width: float,height: float,depth: float) -> void:
+            var ground: float = _ground(q)
+            var r: float = width*0.5
+            var spring: float = height-r
+            for side in [-1.0,1.0]:
+                for j in range(5):
+                    var p := Vector3(q.x+float(side)*(r+0.85),ground+(float(j)+0.5)*spring/5.0,q.y)
+                    _stone(p,Vector3(1.65,spring/5.0-0.045,depth),_stone_color())
+                _solid(wall_body,Vector3(q.x+float(side)*(r+0.85),ground+spring*0.5,q.y),Vector3(1.65,spring,depth))
+            for i in range(13):
+                var angle: float = PI*(float(i)+0.5)/13.0
+                var p := Vector3(q.x+cos(angle)*(r+0.65),ground+spring+sin(angle)*(r+0.65),q.y)
+                _stone(p,Vector3(1.5,1.35,depth),_stone_color(),0.0,angle-PI*0.5)
+
+        func _sign(parent: Node3D,message: String,p: Vector3) -> void:
+            var label := Label3D.new()
+            label.text = message
+            label.font_size = 54
+            label.outline_size = 12
+            label.pixel_size = 0.035
+            label.modulate = Color("#f7ddb0")
+            label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+            label.position = p
+            parent.add_child(label)
+
+        func _castle() -> void:
+            # Road and existing travel crystal enter through this 16 m gap.
+            _wall(Vector2(-64,72),Vector2(-8,72),13.5,3.2)
+            _wall(Vector2(8,72),Vector2(64,72),13.5,3.2)
+            _arch(Vector2(0,72),16,14,3.2)
+            # Broken side walls give the castle a naturally collapsed silhouette.
+            _wall(Vector2(-64,72),Vector2(-64,31),14,3.2)
+            _wall(Vector2(-64,23),Vector2(-64,-72),16,3.2)
+            _wall(Vector2(64,72),Vector2(64,-12),15,3.2)
+            _wall(Vector2(64,-23),Vector2(64,-72),14,3.2)
+            _wall(Vector2(-64,-72),Vector2(-15,-72),15,3.2)
+            _wall(Vector2(-8,-72),Vector2(64,-72),13.0,3.2)
+            _tower(Vector2(-54,63),9.5,24,PI*1.5)
+            _tower(Vector2(54,63),9.5,29,PI*1.5)
+            _tower(Vector2(-54,-63),9.5,22,PI*0.5)
+            _tower(Vector2(54,-63),9.5,27,PI*0.5)
+            # Two roofless wings: accessible openings and ruined partitions.
+            for side in [-1.0,1.0]:
+                var x: float = float(side)*37.0
+                _wall(Vector2(x-11,-28),Vector2(x+11,-28),10,2)
+                _wall(Vector2(x-11,-28),Vector2(x-11,14),9,2)
+                _wall(Vector2(x+11,-28),Vector2(x+11,14),7.5,2)
+                _wall(Vector2(x-11,14),Vector2(x-4,14),7,2)
+                _wall(Vector2(x+4,14),Vector2(x+11,14),6,2)
+                _wall(Vector2(x-11,-7),Vector2(x-4,-7),5,1.8)
+                _wall(Vector2(x+4,-7),Vector2(x+11,-7),5,1.8)
+            # Open keep at the far end of the courtyard; its arch is the dungeon entrance.
+            _wall(Vector2(-17,-54),Vector2(17,-54),15,2.6)
+            _wall(Vector2(-17,-54),Vector2(-17,-40),13,2.6)
+            _wall(Vector2(17,-54),Vector2(17,-40),11,2.6)
+            _wall(Vector2(-17,-40),Vector2(-3.8,-40),10,2.6)
+            _wall(Vector2(3.8,-40),Vector2(17,-40),10,2.6)
+            _arch(L.ENTRY,7.6,7.5,2.6)
+            _sign(self,"Untergrund-Dungeon",Vector3(0,_ground(L.ENTRY)+8.3,-39.8))
+            # Grounded rubble in the wall breaks and wings, never on the road/teleporter.
+            for i in range(95):
+                var side: float = -1.0 if i%2==0 else 1.0
+                var q := Vector2(side*rng.randf_range(48,61),rng.randf_range(-49,47))
+                var w: float = rng.randf_range(0.7,2.4)
+                _stone(Vector3(q.x,_ground(q)+w*0.30,q.y),Vector3(w,w*0.62,w*rng.randf_range(0.7,1.35)),_stone_color(),rng.randf_range(0,TAU),rng.randf_range(-0.26,0.26))
+            set_meta("castle_size",Vector2(128,144))
+
+        func _floor_box(q: Vector2,y: float,size: Vector2) -> void:
+            _stone(Vector3(q.x,y-0.5,q.y),Vector3(size.x,1.0,size.y),Color("#59534d"))
+
+        func _light(q: Vector2,y: float) -> void:
+            var fixture := MeshInstance3D.new()
+            var m := SphereMesh.new()
+            m.radius = 0.24
+            m.height = 0.48
+            fixture.mesh = m
+            fixture.material_override = torch_mat
+            fixture.position = Vector3(q.x,y,q.y)
+            add_child(fixture)
+            var light := OmniLight3D.new()
+            light.light_color = Color("#ffbd75")
+            light.light_energy = 1.6
+            light.omni_range = 19.0
+            light.shadow_enabled = false
+            light.position = fixture.position
+            add_child(light)
+
+        func _dungeon() -> void:
+            # Discrete visible stair treads; movement uses a continuous matching slope.
+            _floor_box(Vector2(0,-47),-24,8*Vector2(1,0.75))
+            for i in range(48):
+                var z: float = -44.0+(float(i)+0.5)*28.0/48.0
+                var y: float = L.level(Vector2(0,z))
+                _floor_box(Vector2(0,z),y,Vector2(8,28.0/48.0+0.03))
+            # Sloped wall foundations follow the stair down; no ground snapping to surface.
+            for i in range(8):
+                var a: float = -50.0+float(i)*4.25
+                var b: float = a+4.25
+                var y: float = L.level(Vector2(0,b))
+                var h: float = -16.0-y
+                for x in [-4.8,4.8]:
+                    _wall(Vector2(x,a),Vector2(x,b),h,1.5,false,true,y)
+            _wall(Vector2(-4.8,-51),Vector2(4.8,-51),9,1.5,false,true,-24)
+            # Large main chamber plus side rooms, all connected.
+            _floor_box(Vector2(0,12),-36,Vector2(68,56))
+            _wall(Vector2(-34,-16),Vector2(-4.8,-16),12,2,false,true)
+            _wall(Vector2(4.8,-16),Vector2(34,-16),12,2,false,true)
+            _wall(Vector2(-34,-16),Vector2(-34,40),12,2,false,true)
+            _wall(Vector2(34,-16),Vector2(34,40),12,2,false,true)
+            _wall(Vector2(-34,40),Vector2(34,40),12,2,false,true)
+            for x in [-15.0,15.0]:
+                _wall(Vector2(x,-16),Vector2(x,0),9,1.6,false,true)
+                _wall(Vector2(x,8),Vector2(x,23),9,1.6,false,true)
+                _wall(Vector2(x,31),Vector2(x,40),9,1.6,false,true)
+            # Ceiling over chamber and stairs (camera remains below it).
+            _stone(Vector3(0,-23,12),Vector3(70,1.5,58),Color("#3b3936"))
+            _stone(Vector3(0,-15.5,-33),Vector3(12,1.3,36),Color("#403d38"))
+            _solid(dungeon_body,Vector3(0,-23,12),Vector3(70,1.5,58))
+            _solid(dungeon_body,Vector3(0,-15.5,-33),Vector3(12,1.3,36))
+            for p in [Vector2(-3.2,-41),Vector2(3.2,-26),Vector2(0,0),Vector2(0,26),Vector2(-25,12),Vector2(25,12)]:
+                _light(p,L.level(p)+4.0)
+            _sign(self,"Ausgang zur Burgruine",Vector3(0,-20,-49))
+            _sign(self,"Alte Gewölbe",Vector3(0,-30,-13))
+            set_meta("dungeon_steps",48)
+
+        func _commit_stones() -> void:
+            var mesh := BoxMesh.new()
+            mesh.size = Vector3.ONE
+            var mm := MultiMesh.new()
+            mm.transform_format = MultiMesh.TRANSFORM_3D
+            mm.use_colors = true
+            mm.mesh = mesh
+            mm.instance_count = stones.size()
+            for i in range(stones.size()):
+                mm.set_instance_transform(i,stones[i])
+                mm.set_instance_color(i,colors[i])
+            var batch := MultiMeshInstance3D.new()
+            batch.name = "BurgUndDungeonSteinmauerwerk"
+            batch.multimesh = mm
+            batch.material_override = stone_mat
+            batch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            add_child(batch)
+            stones.clear()
+            colors.clear()
+
+        func _move_to(hero: CharacterBody3D,q: Vector2,under: bool) -> void:
+            hero.global_position = L.at(terrain,q,under)
+            hero.velocity = Vector3.ZERO
+            var cam: Camera3D = game.get("camera_node") as Camera3D
+            if is_instance_valid(cam):
+                cam.global_position = hero.global_position+Vector3(0,3.0,5.0)
+                cam.look_at(hero.global_position+Vector3.UP*1.5)
+            cooldown = 1.2
+
+        func _dungeon_camera(hero: CharacterBody3D) -> void:
+            # The old outdoor camera may try to move above terrain. Keep its horizontal
+            # orbit but constrain the actual view to the underground room and its walls.
+            var cam: Camera3D = game.get("camera_node") as Camera3D
+            if not is_instance_valid(cam): return
+            var focus: Vector3 = hero.global_position+Vector3.UP*1.45
+            var offset: Vector3 = cam.global_position-focus
+            offset.y = 0.0
+            if offset.length_squared()<0.01: offset = hero.global_transform.basis.z
+            offset.y = 0.0
+            var target: Vector3 = focus+offset.normalized()*4.2+Vector3.UP*1.25
+            var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+            var ray := PhysicsRayQueryParameters3D.create(focus,target,hero.collision_mask,[hero.get_rid()])
+            var hit: Dictionary = space.intersect_ray(ray)
+            if not hit.is_empty():
+                var impact: Vector3 = hit["position"]
+                target = focus.lerp(impact,0.82)
+            if target.distance_squared_to(focus)<0.04: target = focus+Vector3.UP*0.25
+            cam.global_position = target
+            cam.look_at(focus)
+
+        func _process(delta: float) -> void:
+            cooldown = maxf(0.0,cooldown-delta)
+            if not is_instance_valid(game) or int(game.get("state"))!=2:
+                return
+            var hero: CharacterBody3D = game.get("hero") as CharacterBody3D
+            if not is_instance_valid(hero) or bool(hero.get_meta("v414_fused",false)):
+                return
+            var p: Vector3 = hero.global_position
+            var q: Vector2 = L.local(p)
+            if L.in_dungeon(terrain,p):
+                _dungeon_camera(hero)
+                if cooldown<=0.0 and q.distance_to(L.EXIT)<1.8:
+                    _move_to(hero,L.BACK,false)
+            elif cooldown<=0.0 and q.distance_to(L.ENTRY)<1.8 and absf(p.y-L.outside_height(terrain,q))<2.0:
+                _move_to(hero,L.SPAWN,true)
+        FIX41_V441CASTLE
+        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX41_V441RUINESMOKE'
+        extends SceneTree
+        const L = preload("res://scripts/V441Layout.gd")
+        const Castle = preload("res://scripts/V441Castle.gd")
+        const Landmarks = preload("res://scripts/V417Landmarks.gd")
+        const Motion = preload("res://scripts/V31TerrainMotion.gd")
+        class TestTerrain:
+            extends Node3D
+            func surface_height_at(_x: float,_z: float) -> float:
+                return 12.0
+        class TestGame:
+            extends Node3D
+            var state: int = 2
+            var hero: CharacterBody3D
+            var camera_node: Camera3D
         func _initialize() -> void:
             call_deferred("_run")
-
-        func fail(message: String) -> void:
-            push_error("FIX35: "+message)
+        func _fail(msg: String) -> void:
+            push_error("FIX41: "+msg)
             quit(1)
-
         func _run() -> void:
-            var terrain := Terrain.new()
-            var center: Vector2 = T.city_world("Moordorf")
-            var target: Vector2 = center
-            var maximum: float = 0.0
-            var wet_count: int = 0
-            var dry_count: int = 0
-            for iz in range(-14,15):
-                for ix in range(-14,15):
-                    var p: Vector2 = center+Vector2(ix*32.0,iz*32.0)
-                    var wet: float = terrain.v435_swamp_strength(p)
-                    if wet>0.65: wet_count+=1
-                    if wet<0.05: dry_count+=1
-                    if wet>maximum:
-                        maximum = wet
-                        target = p
-            if wet_count<20 or dry_count<20 or maximum<0.92:
-                terrain.free()
-                fail("marsh pools and dry islands missing")
+            var g := TestGame.new()
+            root.add_child(g)
+            var t := TestTerrain.new()
+            t.name = "V27ContinuousTerrain"
+            g.add_child(t)
+            g.hero = CharacterBody3D.new()
+            g.add_child(g.hero)
+            g.hero.global_position = L.at(t,Vector2.ZERO,false)
+            var landmarks := Landmarks.new()
+            g.add_child(landmarks)
+            landmarks.game = g
+            landmarks.terrain = t
+            var ruin: Node3D = landmarks._create("Ruine",L.centre())
+            var castle: Node3D = ruin.get_node_or_null("V441VerfalleneBurg") as Node3D
+            if castle==null or ruin.get_child_count()!=1:
+                _fail("old blocks still generated or castle missing")
                 return
-            if terrain.v435_swamp_strength(center)>0.001 or terrain.v435_swamp_strength(T.city_world("Sonnental"))>0.001:
-                terrain.free()
-                fail("mud affects villages or another region")
+            castle.set_process(false)
+            var mesh: MultiMeshInstance3D = castle.get_node("BurgUndDungeonSteinmauerwerk") as MultiMeshInstance3D
+            if mesh.multimesh.instance_count<1000 or castle.get_node("BurgKollision").get_child_count()<100 or castle.get_node("DungeonKollision").get_child_count()<30:
+                _fail("missing real masonry or collisions")
                 return
-            for route in T.ROUTES:
-                var points: PackedVector2Array = T.road_world(route,true)
-                for i in range(points.size()-1):
-                    var a: Vector2 = points[i]
-                    var b: Vector2 = points[i+1]
-                    if terrain.v435_swamp_strength(a.lerp(b,0.5))>0.001:
-                        terrain.free()
-                        fail("mud on road")
-                        return
-            var batches: Dictionary = {"Holz":[],"Laub":[],"Nadeln":[],"Fels":[],"Busch":[]}
-            var rng := RandomNumberGenerator.new()
-            rng.seed = 435
-            terrain._v435_dead_tree(batches,Vector3.ZERO,12.0,Basis.IDENTITY,rng)
-            if batches["Holz"].size()!=8 or not batches["Laub"].is_empty() or not batches["Nadeln"].is_empty():
-                terrain.free()
-                fail("bare branches not generated")
+            if castle.get_meta("dungeon_steps",0)!=48:
+                _fail("descent missing")
+                return
+            g.hero.global_position = L.at(t,L.ENTRY,false)
+            castle.call("_process",1.3)
+            if not L.in_dungeon(t,g.hero.global_position) or L.local(g.hero.global_position).distance_to(L.SPAWN)>0.1:
+                _fail("walking through arch does not enter dungeon")
                 return
             var motion := Motion.new()
-            motion.terrain = terrain
-            var hero := CharacterBody3D.new()
-            root.add_child(hero)
-            hero.global_position = Vector3(target.x,0,target.y)
-            hero.velocity = Vector3(10,0,0)
-            motion.v435_before_move(hero)
-            var reduced: float = hero.velocity.x
-            if reduced<4.7 or reduced>5.3 or motion.v435_swamp(hero.global_position)<0.92:
-                hero.free(); motion.free(); terrain.free()
-                fail("walking slowdown is not applied")
+            motion.terrain=t
+            var start: float = float(motion.call("_floor_at",g.hero.global_position))
+            var end: float = float(motion.call("_floor_at",L.at(t,Vector2(0,-16),true)))
+            if absf(start-end-12.0)>0.01 or absf(end-(12.0-36.0))>0.01:
+                _fail("walking height does not follow underground staircase")
                 return
-            hero.global_position = Vector3(center.x,0,center.y)
-            hero.velocity = Vector3(10,0,0)
-            motion.v435_before_move(hero)
-            if not is_equal_approx(hero.velocity.x,10.0):
-                hero.free(); motion.free(); terrain.free()
-                fail("dry walking changed")
+            g.hero.global_position = L.at(t,L.EXIT,true)
+            castle.call("_process",1.3)
+            if L.in_dungeon(t,g.hero.global_position) or L.local(g.hero.global_position).distance_to(L.BACK)>0.1:
+                _fail("return to surface failed")
                 return
-            hero.free(); motion.free(); terrain.free()
-            print("FIX35_MARSH_OK: wet=",wet_count," dry=",dry_count," walking=",reduced," bare branches and dry roads")
+            g.free()
+            print("FIX41_RUINE_OK: real castle replacement, wall collisions, 48 stairs, underground floor and exit")
             quit(0)
-        '''
-
-        def install():
-            for name,fn in [('V27Terrain.gd',terrain),('V31TerrainMotion.gd',motion),('Main.gd',main),('V417Landmarks.gd',landmarks)]:
-                p=B/name
-                src=p.read_text(encoding='utf-8')
-                p.write_text(fn(src),encoding='utf-8')
-            (Q/'V435MarshSmoke.gd').write_text(SMOKE,encoding='utf-8')
-            p=Path('android/export_presets.cfg')
-            s=p.read_text(encoding='utf-8')
-            s=once(s,'version/code=4203','version/code=4205')
-            s=once(s,'version/name="4.1.7.33"','version/name="4.1.7.35"')
-            p.write_text(s,encoding='utf-8')
-            print('FIX35_INSTALL_OK: real swamp terrain, walking, fog and bare trees')
-
-        if __name__=='__main__': install()
-        PYFIX35
-        python3 -m py_compile "$RUNNER_TEMP/lwod_fix35.py"
-        python3 "$RUNNER_TEMP/lwod_fix35.py"
-    - name: FIX36 Alte Wasserplatte in der Wueste entfernen
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 - <<'PYFIX36'
+        FIX41_V441RUINESMOKE
+        cat > '/tmp/lwod_fix41.py' <<'FIX41_PATCH'
         from pathlib import Path
-        import re
-
-        # Remove only the obsolete artificial water plate beside Sandhafen.
-        p = Path('android/scripts/V417Landmarks.gd')
-        s = p.read_text(encoding='utf-8')
-        pattern = r'(?ms)^    elif id == "Sandhafen":\n.*?(?=^    elif |^    return root)'
-        matches = list(re.finditer(pattern, s))
-        assert len(matches) == 1, 'FIX36: Sandhafen landmark branch not unique'
-        m = matches[0]
-        old = '        _water(root,center+Vector2(610.0,0.0),Vector2(410.0,1540.0),"#45a5a9")\n'
-        assert m.group().count(old) == 1, 'FIX36: legacy desert plate not found'
-        branch = m.group().replace(old, '        # FIX36: obsolete flat water plate removed; continuous desert terrain remains.\n', 1)
-        assert '_water(' not in branch and '_stone(' in branch, 'FIX36: unexpected desert landmarks'
-        s = s[:m.start()] + branch + s[m.end():]
-        p.write_text(s, encoding='utf-8')
-
-        cfg = Path('android/export_presets.cfg')
-        s = cfg.read_text(encoding='utf-8')
-        for old, new in [('version/code=4205','version/code=4206'), ('version/name="4.1.7.35"','version/name="4.1.7.36"')]:
-            assert s.count(old) == 1, 'FIX36: unexpected export version'
-            s = s.replace(old, new, 1)
-        cfg.write_text(s, encoding='utf-8')
-        print('FIX36_INSTALL_OK: obsolete 410 x 1540 water plate removed only at Sandhafen')
-        PYFIX36
-        mkdir -p android/tests
-        cat > android/tests/V436DesertSmoke.gd <<'GDFIX36'
-        extends SceneTree
-        const Landmarks = preload("res://scripts/V417Landmarks.gd")
-        const T = preload("res://scripts/V417Territories.gd")
-
-        func _initialize() -> void:
-            call_deferred("_run")
-
-        func _run() -> void:
-            var landmarks := Landmarks.new()
-            root.add_child(landmarks)
-            var center: Vector2 = T.city_world("Sandhafen")
-            var desert: Node3D = landmarks._create("Sandhafen",center)
-            var rocks: int = 0
-            for child in desert.get_children():
-                if child is MeshInstance3D:
-                    var view := child as MeshInstance3D
-                    if view.mesh is BoxMesh:
-                        var size: Vector3 = (view.mesh as BoxMesh).size
-                        if size.x >= 400.0 and size.z >= 1500.0:
-                            push_error("FIX36: obsolete desert water plate still present")
-                            landmarks.free()
-                            quit(1)
-                            return
-                    if view.mesh is CylinderMesh:
-                        rocks += 1
-            if rocks != 4:
-                push_error("FIX36: desert rock landmarks changed")
-                landmarks.free()
-                quit(1)
-                return
-            landmarks.free()
-            print("FIX36_DESERT_OK: obsolete water plate absent; four desert rock landmarks retained")
-            quit(0)
-        GDFIX36
-    - name: FIX37 Fernlandschaft und alte Weltbodenplatte korrigieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 - <<'PYFIX37'
-        from pathlib import Path
-        import re
+        import re, os
         B=Path('android/scripts')
-        p=B/'V27Terrain.gd'
-        s=p.read_text(encoding='utf-8')
-        pattern=r'(?ms)^func _v412_rebuild_horizon\(\) -> void:\n.*?(?=^(?:func |static func |var |const |class |@|extends )|\Z)'
-        matches=list(re.finditer(pattern,s))
-        assert len(matches)==1,'FIX37: horizon function not unique'
-        m=matches[0]
-        assert 'for pad in' in m.group() and 'v412_horizon.mesh = mesh' in m.group(),'FIX37: unexpected old horizon'
-        s=s[:m.start()]+s[m.end():]
-        assert '_v412_rebuild_horizon()' in s and 'var v412_horizon: MeshInstance3D' in s
-        s+='\n'+'# FIX37: world-aligned, indexed distant terrain. Long triangles that used to\n# drag gorge colours/heights across the entire map are confined outside it.\nvar v437_grid_x: PackedFloat32Array = PackedFloat32Array()\nvar v437_grid_z: PackedFloat32Array = PackedFloat32Array()\nvar v437_grid_vertices: PackedVector3Array = PackedVector3Array()\nvar v437_grid_colors: PackedColorArray = PackedColorArray()\nvar v437_grid_normals: PackedVector3Array = PackedVector3Array()\nvar v437_min_cell: Vector2i\nvar v437_max_cell: Vector2i\n\nfunc _v437_prepare_grid() -> void:\n    if not v437_grid_vertices.is_empty():\n        return\n    var lo: Vector2 = V417Territories.map_to_world(Vector2.ZERO)\n    var hi: Vector2 = V417Territories.map_to_world(Vector2(100,100))\n    v437_min_cell = Vector2i(floori(lo.x/CHUNK)-2,floori(lo.y/CHUNK)-2)\n    v437_max_cell = Vector2i(ceili(hi.x/CHUNK)+2,ceili(hi.y/CHUNK)+2)\n    # Outer visual buffer lies beyond the inaccessible mountain perimeter.\n    v437_grid_x.append(minf(-40000.0,float(v437_min_cell.x)*CHUNK-40000.0))\n    v437_grid_z.append(minf(-40000.0,float(v437_min_cell.y)*CHUNK-40000.0))\n    for cell in range(v437_min_cell.x,v437_max_cell.x+1):\n        v437_grid_x.append(float(cell)*CHUNK)\n    for cell in range(v437_min_cell.y,v437_max_cell.y+1):\n        v437_grid_z.append(float(cell)*CHUNK)\n    v437_grid_x.append(maxf(40000.0,float(v437_max_cell.x)*CHUNK+40000.0))\n    v437_grid_z.append(maxf(40000.0,float(v437_max_cell.y)*CHUNK+40000.0))\n    var nx: int = v437_grid_x.size()\n    var nz: int = v437_grid_z.size()\n    for iz in range(nz):\n        for ix in range(nx):\n            var x: float = v437_grid_x[ix]\n            var z: float = v437_grid_z[iz]\n            var sx: float = clampf(x,v437_grid_x[1],v437_grid_x[nx-2])\n            var sz: float = clampf(z,v437_grid_z[1],v437_grid_z[nz-2])\n            var h: float = height_at(sx,sz)\n            v437_grid_vertices.append(Vector3(x,h,z))\n            v437_grid_colors.append(color_at(sx,sz,h))\n    # Smooth normals from neighbouring samples, computed only once.\n    for iz in range(nz):\n        for ix in range(nx):\n            var a: Vector3 = v437_grid_vertices[iz*nx+maxi(0,ix-1)]\n            var b: Vector3 = v437_grid_vertices[iz*nx+mini(nx-1,ix+1)]\n            var c: Vector3 = v437_grid_vertices[maxi(0,iz-1)*nx+ix]\n            var d: Vector3 = v437_grid_vertices[mini(nz-1,iz+1)*nx+ix]\n            v437_grid_normals.append((d-c).cross(b-a).normalized())\n\nfunc _v437_add_sample(p: Vector2, verts: PackedVector3Array, colors: PackedColorArray, normals: PackedVector3Array) -> int:\n    var h: float = height_at(p.x,p.y)\n    var idx: int = verts.size()\n    verts.append(Vector3(p.x,h,p.y))\n    colors.append(color_at(p.x,p.y,h))\n    # The detailed terrain supplies the surface immediately inside the seam.\n    normals.append(Vector3.UP)\n    return idx\n\nfunc _v412_rebuild_horizon() -> void:\n    _v437_prepare_grid()\n    var nx: int = v437_grid_x.size()\n    var nz: int = v437_grid_z.size()\n    var verts: PackedVector3Array = v437_grid_vertices.duplicate()\n    var colors: PackedColorArray = v437_grid_colors.duplicate()\n    var normals: PackedVector3Array = v437_grid_normals.duplicate()\n    var indices := PackedInt32Array()\n    var low: Vector2i = current_cell-Vector2i(RADIUS,RADIUS)\n    var high: Vector2i = current_cell+Vector2i(RADIUS,RADIUS)\n    for iz in range(nz-1):\n        for ix in range(nx-1):\n            var cx: int = v437_min_cell.x+ix-1\n            var cz: int = v437_min_cell.y+iz-1\n            var regular: bool = ix>0 and ix<nx-2 and iz>0 and iz<nz-2\n            var inside: bool = regular and cx>=low.x and cx<=high.x and cz>=low.y and cz<=high.y\n            if inside:\n                continue # The detailed chunk is the sole visible floor here.\n            var a: int = iz*nx+ix\n            var b: int = a+1\n            var c: int = a+nx\n            var d: int = c+1\n            var north: bool = regular and cz==high.y+1 and cx>=low.x and cx<=high.x\n            var south: bool = regular and cz==low.y-1 and cx>=low.x and cx<=high.x\n            var west: bool = regular and cx==high.x+1 and cz>=low.y and cz<=high.y\n            var east: bool = regular and cx==low.x-1 and cz>=low.y and cz<=high.y\n            if not (north or south or west or east):\n                indices.append_array(PackedInt32Array([a,c,b,b,c,d]))\n                continue\n            # Stitch the exact existing near-chunk edge at CHUNK/RESOLUTION.\n            # Every edge between two far cells still uses the same grid corners.\n            var corners := PackedInt32Array([a,c,d,b])\n            var refined: Array[bool] = [west,south,east,north]\n            var boundary := PackedInt32Array()\n            for e in range(4):\n                var i0: int = corners[e]\n                var i1: int = corners[(e+1)%4]\n                boundary.append(i0)\n                if refined[e]:\n                    for k in range(1,RESOLUTION):\n                        var p: Vector3 = verts[i0].lerp(verts[i1],float(k)/float(RESOLUTION))\n                        boundary.append(_v437_add_sample(Vector2(p.x,p.z),verts,colors,normals))\n            var center: Vector3 = (verts[a]+verts[d])*0.5\n            var mid: int = _v437_add_sample(Vector2(center.x,center.z),verts,colors,normals)\n            for e in range(boundary.size()):\n                indices.append_array(PackedInt32Array([mid,boundary[e],boundary[(e+1)%boundary.size()]]))\n    var arrays: Array = []\n    arrays.resize(Mesh.ARRAY_MAX)\n    arrays[Mesh.ARRAY_VERTEX] = verts\n    arrays[Mesh.ARRAY_COLOR] = colors\n    arrays[Mesh.ARRAY_NORMAL] = normals\n    arrays[Mesh.ARRAY_INDEX] = indices\n    var mesh := ArrayMesh.new()\n    mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)\n    if not is_instance_valid(v412_horizon):\n        v412_horizon = MeshInstance3D.new()\n        v412_horizon.name = "V412Fernlandschaft"\n        v412_horizon.material_override = material_ground\n        v412_horizon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF\n        v412_horizon.ignore_occlusion_culling = true\n        add_child(v412_horizon)\n    v412_horizon.position = Vector3.ZERO\n    v412_horizon.mesh = mesh\n    v412_horizon.custom_aabb = mesh.get_aabb().grow(2.0)\n'
-        p.write_text(s,encoding='utf-8')
-        # FIX19 lowered the previous full-world box to -1500; FIX24 searched only -0.52.
-        # Only remove the two verified old box signatures, not any active terrain or building.
-        p=B/'V21World.gd'; s=p.read_text(encoding='utf-8')
-        a=re.search(r'(?ms)^func _build_extended_ground\(\) -> void:\n.*?(?=^func |^var |^const |\Z)',s)
-        assert a,'FIX37: legacy ground function missing'
-        block=a.group()
-        old='    game._box(game, Vector3(0.0,-1500.0,0.0), Vector3(WORLD_SIZE,1.0,WORLD_SIZE), Color("#729c72"), true)'
-        old2=old.replace('-1500.0','-0.52')
-        removed=0
-        for line in (old,old2):
-            if line in block:
-                assert block.count(line)==1
-                block=block.replace(line,'    pass # FIX37: replaced by continuous near and far terrain',1)
-                removed+=1
-        assert removed<=1 and 'Vector3(WORLD_SIZE,1.0,WORLD_SIZE)' not in block,'FIX37: unknown legacy floor signature'
-        s=s[:a.start()]+block+s[a.end():]; p.write_text(s,encoding='utf-8')
-        p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
-        for a,b in [('version/code=4206','version/code=4207'),('version/name="4.1.7.36"','version/name="4.1.7.37"')]:
-            assert s.count(a)==1;s=s.replace(a,b,1)
-        p.write_text(s,encoding='utf-8')
-        print('FIX37_INSTALL_OK: fixed grid, matching near boundary, old floor removed='+str(removed))
-        PYFIX37
-        mkdir -p android/tests
-        cat > android/tests/V437HorizonSmoke.gd <<'GDFIX37'
-        extends SceneTree
-        const T = preload("res://scripts/V417Territories.gd")
-        const Terrain = preload("res://scripts/V27Terrain.gd")
+        Q=Path('android/tests')
 
-        class TestGame:
-            extends Node3D
-            var hero: CharacterBody3D
-            var state: int = 2
-
-        func _initialize() -> void:
-            call_deferred("_run")
-
-        func _run() -> void:
-            var g := TestGame.new()
-            root.add_child(g)
-            g.hero = CharacterBody3D.new()
-            g.add_child(g.hero)
-            var city: Vector2 = T.city_world("Sandhafen")
-            g.hero.position = Vector3(city.x,0,city.y)
-            var terrain := Terrain.new()
-            g.add_child(terrain)
-            terrain.setup(g,null,null,null)
-            for name in ["Sandhafen","Moordorf","Frostholm"]:
-                var p: Vector2 = T.city_world(name)
-                g.hero.position = Vector3(p.x,0,p.y)
-                terrain._stream(true)
-                if not _check_mesh(terrain):
-                    push_error("FIX37: distant terrain spans the local terrain or has oversized interior triangles at "+String(name))
-                    quit(1)
-                    return
-            var gorge: Vector2 = T.map_to_world(Vector2(80.2,55.0))
-            if T.gorge_depth(T.world_to_map(gorge)) < 400.0 or terrain.height_at(gorge.x,gorge.y) > terrain._v419_base_height_at(gorge.x,gorge.y)-400.0:
-                push_error("FIX37: original gorge depth lost")
-                quit(1)
-                return
-            print("FIX37_HORIZON_OK: three regions, bounded interior triangles, near/far joins, original gorge retained")
-            quit(0)
-
-        func _check_mesh(terrain: Node) -> bool:
-            var view := terrain.get_node_or_null("V412Fernlandschaft") as MeshInstance3D
-            if view==null or view.mesh==null:
-                return false
-            var arr: Array = view.mesh.surface_get_arrays(0)
-            var vertices: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-            var indices: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
-            var cell: Vector2i = terrain.get("current_cell")
-            var chunk: float = Terrain.CHUNK
-            var radius: int = Terrain.RADIUS
-            var low := Vector2(float(cell.x-radius)*chunk,float(cell.y-radius)*chunk)
-            var high := Vector2(float(cell.x+radius+1)*chunk,float(cell.y+radius+1)*chunk)
-            var bounds_lo: Vector2 = T.map_to_world(Vector2.ZERO)
-            var bounds_hi: Vector2 = T.map_to_world(Vector2(100,100))
-            var seam_count: int = 0
-            var seam: Dictionary = {}
-            for i in range(0,indices.size(),3):
-                var a: Vector3 = vertices[indices[i]]
-                var b: Vector3 = vertices[indices[i+1]]
-                var c: Vector3 = vertices[indices[i+2]]
-                var pa := Vector2(a.x,a.z)
-                var pb := Vector2(b.x,b.z)
-                var pc := Vector2(c.x,c.z)
-                var mid: Vector2 = (pa+pb+pc)/3.0
-                if mid.x>low.x and mid.x<high.x and mid.y>low.y and mid.y<high.y:
-                    return false
-                if mid.x>=bounds_lo.x and mid.x<=bounds_hi.x and mid.y>=bounds_lo.y and mid.y<=bounds_hi.y:
-                    if maxf(pa.distance_to(pb),maxf(pb.distance_to(pc),pc.distance_to(pa)))>chunk*1.42:
-                        return false
-                for k in range(3):
-                    var idx: int = indices[i+k]
-                    if seam.has(idx): continue
-                    var v: Vector3 = vertices[idx]
-                    var x_edge: bool = (is_equal_approx(v.x,low.x) or is_equal_approx(v.x,high.x)) and v.z>=low.y and v.z<=high.y
-                    var z_edge: bool = (is_equal_approx(v.z,low.y) or is_equal_approx(v.z,high.y)) and v.x>=low.x and v.x<=high.x
-                    if x_edge or z_edge:
-                        seam[idx]=true
-                        seam_count+=1
-                        if absf(v.y-float(terrain.call("height_at",v.x,v.z)))>0.02:
-                            return false
-            return seam_count >= (2*radius+1)*4*Terrain.RESOLUTION
-        GDFIX37
-    - name: FIX38 Alte Gebirgskette und unsichtbare Grenze entfernen
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 - <<'PYFIX38'
-        from pathlib import Path
-        import re
-        p=Path('android/scripts/V21World.gd')
-        s=p.read_text(encoding='utf-8')
-        # The V23 ring was built at fixed +/-15985..16200 coordinates. The current
-        # playable map extends beyond its eastern and southern sides, so both the
-        # former visual ridge and the former invisible wall must be retired together.
-        # The current V417MountainWall / V421 perimeter owns world-boundary protection.
-        for name,node,signature in [('_build_outer_mountains','V22AussenGebirge','15985.0'),('_build_new_perimeter','V22AussenGrenze','15964')]:
-            pat=r'(?ms)^func '+re.escape(name)+r'\(\) -> void:\n.*?(?=^(?:func |static func |var |const |class |@|extends )|\Z)'
-            matches=list(re.finditer(pat,s))
-            assert len(matches)==1,'FIX38: missing or ambiguous old builder '+name
-            m=matches[0];old=m.group()
-            assert node in old and signature in old,'FIX38: unexpected historical geometry '+name
-            replacement=(f'func {name}() -> void:\n'
-              f'    # FIX38: retired internal V23 boundary, replaced by the actual map perimeter.\n'
-              f'    if not is_instance_valid(game):\n        return\n'
-              f'    var obsolete: Node = game.get_node_or_null("{node}")\n'
-              f'    if is_instance_valid(obsolete):\n'
-              f'        game.remove_child(obsolete)\n        obsolete.queue_free()\n\n')
-            s=s[:m.start()]+replacement+s[m.end():]
-        p.write_text(s,encoding='utf-8')
-        wall=Path('android/scripts/V417MountainWall.gd').read_text(encoding='utf-8')
-        territory=Path('android/scripts/V417Territories.gd').read_text(encoding='utf-8')
-        assert 'Kartenumrandung' in wall and 'func _guard()' in wall and 'v421_border_at' in territory,'FIX38: current boundary missing'
-        p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
-        for old,new in [('version/code=4207','version/code=4208'),('version/name="4.1.7.37"','version/name="4.1.7.38"')]:
-            assert s.count(old)==1, 'FIX38: unexpected version';s=s.replace(old,new,1)
-        p.write_text(s,encoding='utf-8')
-        print('FIX38_INSTALL_OK: V22AussenGebirge and V22AussenGrenze retired; actual V421 map perimeter kept')
-        PYFIX38
-        mkdir -p android/tests
-        cat > android/tests/V438OldBoundarySmoke.gd <<'GDFIX38'
-        extends SceneTree
-        const OldWorld = preload("res://scripts/V21World.gd")
-        const T = preload("res://scripts/V417Territories.gd")
-
-        func _initialize() -> void:
-            call_deferred("_run")
-
-        func fail(message: String) -> void:
-            push_error("FIX38: " + message)
-            quit(1)
-
-        func _run() -> void:
-            var g := Node3D.new()
-            root.add_child(g)
-            var old := OldWorld.new()
-            g.add_child(old)
-            old.game = g
-            # Call the two actual construction methods, not a text-only check.
-            old.call("_build_outer_mountains")
-            old.call("_build_new_perimeter")
-            if g.has_node("V22AussenGebirge") or g.has_node("V22AussenGrenze") or g.get_child_count()!=1:
-                fail("retired visual ridge or collider still generated")
-                return
-            # Also remove a stale instance if a prior setup created one.
-            var obsolete_mesh := MeshInstance3D.new()
-            obsolete_mesh.name = "V22AussenGebirge"
-            g.add_child(obsolete_mesh)
-            var obsolete_wall := StaticBody3D.new()
-            obsolete_wall.name = "V22AussenGrenze"
-            g.add_child(obsolete_wall)
-            old.call("_build_outer_mountains")
-            old.call("_build_new_perimeter")
-            if g.has_node("V22AussenGebirge") or g.has_node("V22AussenGrenze"):
-                fail("stale boundary remains in scene tree")
-                return
-            # At the old eastern edge the desert is inside today's playable rectangle.
-            var p := Vector2(16035.0,T.city_world("Sandhafen").y)
-            if T.mountain_at(p) or T.v421_border_at(T.world_to_map(p)):
-                fail("old eastern coordinate is incorrectly blocked")
-                return
-            for uv in [Vector2(1,50),Vector2(99,50),Vector2(50,1),Vector2(50,99)]:
-                if not T.v421_border_at(uv) or not T.mountain_at(T.map_to_world(uv)):
-                    fail("actual perimeter no longer blocked")
-                    return
-            print("FIX38_OLD_BOUNDARY_OK: old visual and collision constructors inactive; current map perimeter retained")
-            quit(0)
-        GDFIX38
-    - name: FIX40 Sichtweite und Terrain-Vorladen installieren
-      shell: bash
-      run: |
-        set -euo pipefail
-        cat > /tmp/lwod_fix39_stream.gd <<'GDFIX40STREAM'
-        # FIX40: prepare one real terrain chunk per interval, ahead of the actor.
-        # Cached chunks live under an invisible, disabled parent until promoted.
-        const V439_CACHE_LIMIT: int = 16
-        const V439_PREFETCH_INTERVAL: float = 0.12
-        var v439_cache: Dictionary = {}
-        var v439_cache_root: Node3D
-        var v439_clock: float = 0.0
-        var v439_hits: int = 0
-
-        func _v439_valid_cell(id: Vector2i) -> bool:
-            return absf(float(id.x)*CHUNK) <= EDGE and absf(float(id.y)*CHUNK) <= EDGE
-
-        func _v439_take(id: Vector2i) -> Node3D:
-            if v439_cache.has(id):
-                var prepared: Node3D = v439_cache[id] as Node3D
-                v439_cache.erase(id)
-                if is_instance_valid(prepared):
-                    prepared.reparent(self,true)
-                    v439_hits += 1
-                    return prepared
-            return _make_chunk(id.x,id.y)
-
-        func _v439_trim(cell: Vector2i) -> void:
-            for key in v439_cache.keys():
-                var id: Vector2i = key
-                if maxi(absi(id.x-cell.x),absi(id.y-cell.y)) > RADIUS+1 or chunks.has(id):
-                    var old: Node3D = v439_cache[id] as Node3D
-                    v439_cache.erase(id)
-                    if is_instance_valid(old):
-                        old.queue_free()
-
-        func _v439_score(id: Vector2i, target: Vector2) -> float:
-            var p := Vector2((float(id.x)+0.5)*CHUNK,(float(id.y)+0.5)*CHUNK)
-            return p.distance_squared_to(target)
-
-        func _v439_prefetch_one(p: Vector2, direction: Vector2) -> void:
-            if direction.length_squared() < 0.01:
-                return
-            var cell := Vector2i(floori(p.x/CHUNK),floori(p.y/CHUNK))
-            if cell != current_cell:
-                return # regular streamer owns the active area during a teleport or crossing
-            _v439_trim(cell)
-            var target: Vector2 = p+direction.normalized()*CHUNK*float(RADIUS+1)
-            var chosen := cell
-            var best: float = INF
-            for ix in range(cell.x-RADIUS-1,cell.x+RADIUS+2):
-                for iz in range(cell.y-RADIUS-1,cell.y+RADIUS+2):
-                    var id := Vector2i(ix,iz)
-                    if maxi(absi(ix-cell.x),absi(iz-cell.y)) != RADIUS+1:
-                        continue
-                    if not _v439_valid_cell(id) or chunks.has(id) or v439_cache.has(id):
-                        continue
-                    var score: float = _v439_score(id,target)
-                    if score < best:
-                        chosen = id
-                        best = score
-            if chosen == cell:
-                return
-            if v439_cache.size() >= V439_CACHE_LIMIT:
-                var worst_id := cell
-                var worst: float = -1.0
-                for key in v439_cache.keys():
-                    var id: Vector2i = key
-                    var score: float = _v439_score(id,target)
-                    if score > worst:
-                        worst = score
-                        worst_id = id
-                if best >= worst:
-                    return
-                var old: Node3D = v439_cache[worst_id] as Node3D
-                v439_cache.erase(worst_id)
-                if is_instance_valid(old):
-                    old.queue_free()
-            if not is_instance_valid(v439_cache_root):
-                v439_cache_root = Node3D.new()
-                v439_cache_root.name = "V439TerrainVorladen"
-                v439_cache_root.visible = false
-                v439_cache_root.process_mode = Node.PROCESS_MODE_DISABLED
-                add_child(v439_cache_root)
-            var prepared: Node3D = _make_chunk(chosen.x,chosen.y)
-            prepared.reparent(v439_cache_root,true)
-            v439_cache[chosen] = prepared
-
-        func _v439_tick(delta: float) -> void:
-            v439_clock += delta
-            if v439_clock < V439_PREFETCH_INTERVAL:
-                return
-            v439_clock = 0.0
-            var actor: CharacterBody3D = game.hero as CharacterBody3D
-            if not is_instance_valid(actor):
-                return
-            var direction := Vector2(actor.velocity.x,actor.velocity.z)
-            if direction.length_squared() < 0.36:
-                return
-            var p := Vector2(actor.global_position.x,actor.global_position.z)
-            _v439_prefetch_one(p,direction)
-        GDFIX40STREAM
-        python3 - <<'PYFIX40'
-        from pathlib import Path
-        import re
-        B=Path('android/scripts')
-        def one(s,a,b):
-            assert s.count(a)==1,'FIX40 source anchor: '+a[:100]
+        def once(s,a,b):
+            assert s.count(a)==1, f'FIX41 source anchor {s.count(a)}: {a[:110]}'
             return s.replace(a,b,1)
-        p=B/'V27Terrain.gd';s=p.read_text(encoding='utf-8')
-        assert 'func _v437_prepare_grid()' in s and 'func _v412_stream_near(' in s and 'func _v425_forest(' in s
-        s=one(s,'const RADIUS: int = 2','const RADIUS: int = 3')
-        s=one(s,'chunks[id] = _make_chunk(ix,iz)','chunks[id] = _v439_take(id)')
-        s=one(s,'    if stream_clock >= 0.5:\n        stream_clock=0.0\n        _stream()','    if stream_clock >= 0.15:\n        stream_clock=0.0\n        _stream()\n    _v439_tick(delta)')
-        s=one(s,'    _v412_stream_near(force)\n','    _v412_stream_near(force)\n    if force or prev != current_cell:\n        _v439_trim(current_cell)\n')
-        # The existing horizon uses RADIUS for its exact hole and seam. Keep this geometry.
-        s+='\n'+Path('/tmp/lwod_fix39_stream.gd').read_text(encoding='utf-8')+'\n'
-        p.write_text(s,encoding='utf-8')
-        p=B/'V417MountainWall.gd';s=p.read_text(encoding='utf-8')
-        s=one(s,'const MOUNTAIN_VIEW_FAR: float = 35000.0','const MOUNTAIN_VIEW_FAR: float = 45000.0')
-        p.write_text(s,encoding='utf-8')
-        p=B/'V408Regions.gd';s=p.read_text(encoding='utf-8')
-        for name,old,new in [('LOAD_DISTANCE','650','1100.0'),('UNLOAD_DISTANCE','950','1550.0')]:
-            s,n=re.subn(r'(?m)^(const '+name+r'\s*(?::\s*float\s*)?[:=]+\s*)'+old+r'(?:\.0)?\s*$',lambda m:m[1]+new,s);assert n==1,'FIX40 missing '+name
-        p.write_text(s,encoding='utf-8')
+
+        def edit(name,fn):
+            p=B/name
+            p.write_text(fn(p.read_text(encoding='utf-8')),encoding='utf-8')
+
+        def landmarks(s):
+            # Remove the exact former 4 pillars and oversized floating lintel at the source.
+            pat=r'(?ms)^    elif id == "Ruine":\n.*?(?=^    elif |^    return root)'
+            m=re.search(pat,s)
+            assert m and '_block(' in m[0], 'FIX41: original ruin branch not found'
+            s,n=re.subn(pat,'''    elif id == "Ruine":
+                var castle := preload("res://scripts/V441Castle.gd").new()
+                root.add_child(castle)
+                castle.setup(game,terrain)
+        ''',s,count=1)
+            assert n==1
+            return s
+        edit('V417Landmarks.gd',landmarks)
+
+        def motion(s):
+            anchor='func _floor_at(p: Vector3) -> float:\n'
+            return once(s,anchor,anchor+'''    if is_instance_valid(terrain) and V441Layout.in_dungeon(terrain,p):
+                return V441Layout.dungeon_floor(terrain,p)
+        ''')+'\nconst V441Layout = preload("res://scripts/V441Layout.gd")\n'
+        edit('V31TerrainMotion.gd',motion)
+
+        def fusion(s):
+            anchor='func toggle_fusion() -> void:\n    if not _playing():\n        return\n'
+            return once(s,anchor,anchor+'''    var v441_actor: CharacterBody3D = game.get("hero") as CharacterBody3D
+            var v441_terrain: Node = game.get_node_or_null("V27ContinuousTerrain")
+            if is_instance_valid(v441_actor) and is_instance_valid(v441_terrain) and V441Layout.in_dungeon(v441_terrain,v441_actor.global_position):
+                return # Flight is not available in the underground rooms.
+        ''')+'\nconst V441Layout = preload("res://scripts/V441Layout.gd")\n'
+        edit('V414Fusion.gd',fusion)
+        # Suppress the old outdoor camera floor clamp only while underground. There is also
+        # a collision-aware dungeon camera fallback in V441Castle itself.
+        p=B/'V27CameraMap.gd'
+        s=p.read_text(encoding='utf-8')
+        anchor='        desired.y = maxf(desired.y,ground+1.25)'
+        if s.count(anchor)==1:
+            s=s.replace(anchor,'        if not V441Layout.in_dungeon(terrain,hero.global_position):\n    '+anchor,1)
+            s+='\nconst V441Layout = preload("res://scripts/V441Layout.gd")\n'
+            p.write_text(s,encoding='utf-8')
+            print('FIX41 outdoor camera clamp patched')
+        else:
+            print('FIX41 dungeon camera fallback active')
+        # Old decoration exclusion was 160 m around Ruine, covering entire 128 x 144 m castle.
+        # Preserve it, existing map / teleporter / landscape and the old streaming fixes.
+        p=B/'V27Terrain.gd';s=p.read_text(encoding='utf-8');assert 'city == "Ruine"' in s
         p=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')
-        s=one(s,'version/code=4208','version/code=4209');s=one(s,'version/name="4.1.7.38"','version/name="4.1.7.39"');p.write_text(s,encoding='utf-8')
-        print('FIX40_INSTALL_OK: 7x7 active cells, 16 bounded prefetched cells, 45000 camera far, early town streaming')
-        PYFIX40
-        mkdir -p android/tests
-        cat > android/tests/V439StreamSmoke.gd <<'GDFIX40TEST'
-        extends SceneTree
-        const T = preload("res://scripts/V417Territories.gd")
-        const Terrain = preload("res://scripts/V27Terrain.gd")
-        const Wall = preload("res://scripts/V417MountainWall.gd")
-        const Regions = preload("res://scripts/V408Regions.gd")
-        class TestGame:
-            extends Node3D
-            var hero: CharacterBody3D
-            var state: int = 2
-
-        func _initialize() -> void:
-            call_deferred("_run")
-
-        func _fail(message: String) -> void:
-            push_error("FIX40: "+message)
-            quit(1)
-
-        func _run() -> void:
-            var g := TestGame.new()
-            root.add_child(g)
-            g.hero = CharacterBody3D.new()
-            g.add_child(g.hero)
-            var city: Vector2 = T.city_world("Sandhafen")
-            var cell := Vector2i(floori(city.x/Terrain.CHUNK),floori(city.y/Terrain.CHUNK))
-            var start := Vector2((float(cell.x)+0.5)*Terrain.CHUNK,(float(cell.y)+0.5)*Terrain.CHUNK)
-            g.hero.position = Vector3(start.x,100.0,start.y)
-            var terrain := Terrain.new()
-            g.add_child(terrain)
-            terrain.setup(g,null,null,null)
-            if Terrain.RADIUS != 3 or Wall.MOUNTAIN_VIEW_FAR < 45000.0 or Regions.LOAD_DISTANCE < 1100.0:
-                _fail("view distance settings missing")
-                return
-            if terrain.chunks.size()!=49:
-                _fail("expected 49 active terrain cells")
-                return
-            # Prepare leading cells one by one; they cannot render over the existing horizon.
-            for i in range(20):
-                terrain._v439_prefetch_one(start,Vector2.RIGHT)
-            if terrain.v439_cache.size() != Terrain.V439_CACHE_LIMIT or terrain.v439_cache_root.visible:
-                _fail("cache budget or hidden parent incorrect")
-                return
-            var expected := cell+Vector2i(Terrain.RADIUS+1,0)
-            if not terrain.v439_cache.has(expected):
-                _fail("leading cell not prefetched")
-                return
-            var original: Node3D = terrain.v439_cache[expected]
-            g.hero.position.x += Terrain.CHUNK
-            terrain._stream()
-            if terrain.v439_hits < 1 or terrain.chunks.get(expected) != original or original.get_parent()!=terrain or not original.is_visible_in_tree():
-                _fail("prefetched mesh not reused on crossing")
-                return
-            if terrain.chunks.size()!=49 or terrain.v439_cache.has(expected):
-                _fail("duplicate or missing active cells")
-                return
-            # Teleport must discard stale cached nodes and load the destination normally.
-            var next: Vector2 = T.city_world("Moordorf")
-            g.hero.position = Vector3(next.x,100.0,next.y)
-            terrain._stream(true)
-            if not terrain.v439_cache.is_empty() or not terrain.chunks.has(terrain.current_cell):
-                _fail("cache leaked across teleport")
-                return
-            print("FIX40_STREAM_OK: 49 active cells, capped hidden prefetch, actual reuse, teleport and camera range")
-            quit(0)
-        GDFIX40TEST
-    - name: FIX31 bis FIX33 Godot-Tests
+        s=once(s,'version/code=4209','version/code=4211');s=once(s,'version/name="4.1.7.39"','version/name="4.1.7.41"');p.write_text(s,encoding='utf-8')
+        print('FIX41_INSTALL_OK: old pillars removed; real castle and underground layout linked to player and flight')
+        FIX41_PATCH
+        python3 -m py_compile /tmp/lwod_fix41.py
+        python3 /tmp/lwod_fix41.py
+    - name: Sicherungen und alle FIX39 Godot-Tests
       shell: bash
       run: |
         set -euo pipefail
-        for i in 09 10 11 12; do
-          echo "::group::FIX31 Originalschritt $i"
-          bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix32_original/$i.sh"
-          echo "::endgroup::"
+        for i in 11 12 13 14 15 16; do
+          echo "::group::FIX39 Originaltest $i"
+          bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
+          echo '::endgroup::'
         done
-        grep -Fq "FIX32_GARDEN_OK:" build/diagnose/FIX31_Wurzelheim_Test.log
-        grep -Fq "FIX33_TOUCH_ROADS_OK:" build/diagnose/FIX31_Wurzelheim_Test.log
-    - name: FIX35 Suempfe und Laufgeschwindigkeit testen
+    - name: FIX41 Burgruine Treppe und Dungeon-Rueckweg testen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V435MarshSmoke.gd 2>&1 | tee build/diagnose/FIX35_Moordorf.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX35: ' build/diagnose/FIX35_Moordorf.log; then exit 1; fi
-        grep -Fq 'FIX35_MARSH_OK:' build/diagnose/FIX35_Moordorf.log
-    - name: FIX36 Wuestenobjekt und Felsen testen
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V436DesertSmoke.gd 2>&1 | tee build/diagnose/FIX36_Wueste.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX36: ' build/diagnose/FIX36_Wueste.log; then exit 1; fi
-        grep -Fq 'FIX36_DESERT_OK:' build/diagnose/FIX36_Wueste.log
-    - name: FIX37 Fernlandschaft in drei Regionen testen
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 180s godot --headless --path android --quit-after 300 --script res://tests/V437HorizonSmoke.gd 2>&1 | tee build/diagnose/FIX37_Fernlandschaft.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX37: ' build/diagnose/FIX37_Fernlandschaft.log; then exit 1; fi
-        grep -Fq 'FIX37_HORIZON_OK:' build/diagnose/FIX37_Fernlandschaft.log
-    - name: FIX38 Alte und aktuelle Weltgrenzen testen
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V438OldBoundarySmoke.gd 2>&1 | tee build/diagnose/FIX38_Weltgrenzen.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX38: ' build/diagnose/FIX38_Weltgrenzen.log; then exit 1; fi
-        grep -Fq 'FIX38_OLD_BOUNDARY_OK:' build/diagnose/FIX38_Weltgrenzen.log
-    - name: FIX40 Sichtweite und Chunk-Vorladen testen
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 180s godot --headless --path android --quit-after 300 --script res://tests/V439StreamSmoke.gd 2>&1 | tee build/diagnose/FIX40_Sichtweite.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX40: ' build/diagnose/FIX40_Sichtweite.log; then exit 1; fi
-        grep -Fq 'FIX40_STREAM_OK:' build/diagnose/FIX40_Sichtweite.log
-    - name: FIX40 Android APK exportieren und pruefen
-      shell: bash
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX41_Ruine.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX41: ' build/diagnose/FIX41_Ruine.log; then exit 1; fi
+        grep -Fq 'FIX41_RUINE_OK:' build/diagnose/FIX41_Ruine.log
+    - name: FIX41 Android APK exportieren und pruefen
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX40.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX41.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX40_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX40_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX41_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX41_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -1413,30 +571,31 @@ jobs:
         unzip -Z1 "$APK" | grep -Fx 'AndroidManifest.xml' >/dev/null
         ls -lh "$APK"
         sha256sum "$APK"
-    - name: FIX40 APK als Download hochladen
-      id: apk_upload
+      shell: bash
+    - id: apk_upload
+      name: FIX41 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_ANDROID_V41_7_FIX40_APK
-        path: build/android/LWOD-Android-V41.7-FIX40.apk
-        if-no-files-found: error
         compression-level: 0
+        if-no-files-found: error
+        name: LWOD_ANDROID_V41_7_FIX41_APK
+        path: build/android/LWOD-Android-V41.7-FIX41.apk
         retention-days: 14
-    - name: Erfolgreichen APK Upload bestaetigen
-      shell: bash
-      env:
+    - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
         APK_ARTIFACT_URL: ${{ steps.apk_upload.outputs.artifact-url }}
+      name: Erfolgreichen APK Upload bestaetigen
       run: |
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX40 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-    - name: FIX40 Testprotokolle hochladen
-      if: always()
+        printf '### Android APK Download\n\n[FIX41 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+      shell: bash
+    - if: always()
+      name: FIX41 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
-        name: LWOD_FIX40_TESTPROTOKOLLE
-        path: build/diagnose
         if-no-files-found: warn
+        name: LWOD_FIX41_TESTPROTOKOLLE
+        path: build/diagnose
         retention-days: 14
