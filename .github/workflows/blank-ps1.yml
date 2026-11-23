@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX63 Lebendige Doerfer
+name: LWOD Android V41.7 FIX64 Lebendige Doerfer
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX63 APK
+    name: LWOD Android V41.7 FIX64 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -25,960 +25,658 @@ jobs:
         ref: 9b01d317fffd8d5abf0b2d0afbffb8846c44f1c6
     - name: Python und YAML bereitstellen
       shell: bash
-      run: "set -euo pipefail\nif ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1; then\n  apt-get\
-        \ update -qq\n  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-yaml\nfi\n"
+      run: |
+        set -euo pipefail
+        if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1; then
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-yaml
+        fi
     - name: FIX39 Schritte sichern
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'PYREPLAY'\nimport hashlib,os,subprocess,yaml\nfrom pathlib import Path\nraw=Path('.github/workflows/blank-ps1.yml').read_bytes()\n\
-        assert hashlib.sha1(('blob %d\\0'%len(raw)).encode()+raw).hexdigest()=='148a908318b1d91002357f1acfa18fbf60e347c3','FIX39\
-        \ source checksum mismatch'\nsteps=yaml.safe_load(raw)['jobs']['android']['steps']\nassert len(steps)==21 and steps[10]['name'].startswith('FIX39\
-        \ Sichtweite und Terrain') and steps[16]['name'].startswith('FIX39 Sichtweite und Chunk')\nfolder=Path(os.environ['RUNNER_TEMP'])/'fix41_base';folder.mkdir(exist_ok=True)\n\
-        for i in range(2,17):\n    s=steps[i];assert s.get('shell')=='bash' and 'if' not in s\n    f=folder/('%02d.sh'%i);f.write_text(s['run']+'\\\
-        n',encoding='utf-8');subprocess.run(['bash','-n',str(f)],check=True)\n    print('FIX39 gesichert',i,s['name'],flush=True)\n\
-        PYREPLAY\n"
+      run: |
+        set -euo pipefail
+        python3 - <<'PYREPLAY'
+        import hashlib,os,subprocess,yaml
+        from pathlib import Path
+        raw=Path('.github/workflows/blank-ps1.yml').read_bytes()
+        assert hashlib.sha1(('blob %d\0'%len(raw)).encode()+raw).hexdigest()=='148a908318b1d91002357f1acfa18fbf60e347c3','FIX39 source checksum mismatch'
+        steps=yaml.safe_load(raw)['jobs']['android']['steps']
+        assert len(steps)==21 and steps[10]['name'].startswith('FIX39 Sichtweite und Terrain') and steps[16]['name'].startswith('FIX39 Sichtweite und Chunk')
+        folder=Path(os.environ['RUNNER_TEMP'])/'fix41_base';folder.mkdir(exist_ok=True)
+        for i in range(2,17):
+            s=steps[i];assert s.get('shell')=='bash' and 'if' not in s
+            f=folder/('%02d.sh'%i);f.write_text(s['run']+'\n',encoding='utf-8');subprocess.run(['bash','-n',str(f)],check=True)
+            print('FIX39 gesichert',i,s['name'],flush=True)
+        PYREPLAY
     - name: Erfolgreichen FIX19 Stand laden
       uses: actions/checkout@v4
       with:
         ref: a50b23c0dbeebc464305c0451b98245a0632aebc
     - name: FIX39 vollstaendig rekonstruieren
       shell: bash
-      run: "set -euo pipefail\nfor i in 02 03 04 05 06 07 08 09 10; do\n  echo \"::group::FIX39 Installationsschritt $i\"\n  bash\
-        \ --noprofile --norc -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\"\n  echo '::endgroup::'\ndone\n"
+      run: |
+        set -euo pipefail
+        for i in 02 03 04 05 06 07 08 09 10; do
+          echo "::group::FIX39 Installationsschritt $i"
+          bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
+          echo '::endgroup::'
+        done
     - name: FIX54 Dungeon-Dekoration und Statuen installieren
       shell: bash
-      run: "set -euo pipefail\nmkdir -p android/scripts android/tests\ncat > 'android/scripts/V441Layout.gd' <<'FIX54_V441LAYOUT'\n\
-        extends RefCounted\n# Shared coordinates for ruin, dungeon, player ground and camera.\nconst T = preload(\"res://scripts/V417Territories.gd\"\
-        )\nconst OUTER_X: float = 64.0\nconst OUTER_Z: float = 72.0\n# Open-air stairwell, physically cut out of the terrain. No\
-        \ portal movement.\nconst START_Z: float = -24.0\nconst END_Z: float = -56.0\nconst DEPTH: float = 18.0\nconst HALF_WIDTH:\
-        \ float = 5.2\nconst HALL_BACK: float = -128.0\nconst ENTRY: Vector2 = Vector2(0,START_Z)\n\nstatic func centre() -> Vector2:\n\
-        \    return T.city_world(\"Ruine\")\n\nstatic func forward() -> Vector2:\n    return T.gate_direction(\"Ruine\",\"Ruine\"\
-        ).normalized()\n\nstatic func right() -> Vector2:\n    var d: Vector2 = forward()\n    return Vector2(d.y,-d.x)\n\nstatic\
-        \ func local(p: Vector3) -> Vector2:\n    var q: Vector2 = Vector2(p.x,p.z)-centre()\n    return Vector2(q.dot(right()),q.dot(forward()))\n\
-        \nstatic func world(q: Vector2) -> Vector2:\n    return centre()+right()*q.x+forward()*q.y\n\nstatic func base(terrain:\
-        \ Node) -> float:\n    # Top tread is exactly at the rendered ground at the entrance.\n    var c: Vector2 = world(ENTRY)\n\
-        \    return float(terrain.call(\"surface_height_at\",c.x,c.y)) if is_instance_valid(terrain) else 0.0\n\nstatic func outside_height(terrain:\
-        \ Node,q: Vector2) -> float:\n    var p: Vector2 = world(q)\n    return float(terrain.call(\"surface_height_at\",p.x,p.y))\
-        \ if is_instance_valid(terrain) else 0.0\n\nstatic func in_stair(q: Vector2) -> bool:\n    return absf(q.x) <= HALF_WIDTH\
-        \ and q.y <= START_Z and q.y >= END_Z\n\nstatic func in_hall(q: Vector2) -> bool:\n    return absf(q.x)<34.0 and q.y<=END_Z\
-        \ and q.y>HALL_BACK\n\nstatic func level(q: Vector2) -> float:\n    return -DEPTH*clampf((START_Z-q.y)/(START_Z-END_Z),0.0,1.0)\n\
-        \nstatic func in_dungeon(terrain: Node,p: Vector3) -> bool:\n    var q: Vector2 = local(p)\n    var rel: float = p.y-base(terrain)\n\
-        \    if absf(q.x)<=HALF_WIDTH and q.y>START_Z and q.y<=START_Z+4.5:\n        return p.y<=outside_height(terrain,q)+2.5\n\
-        \    if in_stair(q):\n        return rel <= level(q)+2.5\n    return in_hall(q) and rel < -9.0\n\nstatic func walk_on_dungeon(terrain:\
-        \ Node,p: Vector3) -> bool:\n    var q: Vector2 = local(p)\n    return in_stair(q) or (in_hall(q) and p.y<base(terrain)-9.0)\n\
-        \nstatic func dungeon_floor(terrain: Node,p: Vector3) -> float:\n    return base(terrain)+level(local(p))\n\nstatic func\
-        \ at(terrain: Node,q: Vector2,underground: bool) -> Vector3:\n    var w: Vector2 = world(q)\n    var y: float = base(terrain)+level(q)\
-        \ if underground else outside_height(terrain,q)\n    return Vector3(w.x,y+0.085,w.y)\n\n# Exact rectangle subtraction.\
-        \ Each piece lies outside a different half-plane;\n# vertices interpolate original terrain triangle heights, avoiding cracks.\n\
-        # Vector3 here uses castle-local x,z and original world y as height.\nstatic func _split(poly: PackedVector3Array,axis:\
-        \ int,edge: float,sign_value: float) -> Array[PackedVector3Array]:\n    var inner := PackedVector3Array()\n    var outer\
-        \ := PackedVector3Array()\n    if poly.is_empty(): return [inner,outer]\n    var prev: Vector3 = poly[poly.size()-1]\n\
-        \    var dp: float = (prev[axis]-edge)*sign_value\n    for cur in poly:\n        var dc: float = (cur[axis]-edge)*sign_value\n\
-        \        if (dp>=0.0)!=(dc>=0.0):\n            var cross: Vector3 = prev.lerp(cur,dp/(dp-dc))\n            inner.append(cross)\n\
-        \            outer.append(cross)\n        if dc>=0.0: inner.append(cur)\n        else: outer.append(cur)\n        prev=cur\n\
-        \        dp=dc\n    return [inner,outer]\n\nstatic func cut_triangle(poly: PackedVector3Array) -> Array[PackedVector3Array]:\n\
-        \    var pieces: Array[PackedVector3Array] = []\n    var rest: PackedVector3Array = poly\n    for bound in [[0,-HALF_WIDTH,1.0],[0,HALF_WIDTH,-1.0],[2,END_Z,1.0],[2,START_Z,-1.0]]:\n\
-        \        var split: Array[PackedVector3Array] = _split(rest,int(bound[0]),float(bound[1]),float(bound[2]))\n        if\
-        \ split[1].size()>=3: pieces.append(split[1])\n        rest=split[0]\n        if rest.size()<3: break\n    return pieces\n\
-        \n# Dedicated collision bit: only actual castle walls and ceilings affect the camera.\nconst CAMERA_WALL_MASK: int = 1\
-        \ << 19\nconst CAMERA_MIN_DISTANCE: float = 2.15\nconst CAMERA_MAX_HEIGHT: float = 5.80\nconst CAMERA_DISTANCE: float =\
-        \ 4.5\nconst CAMERA_MAX_DISTANCE: float = 7.5\n\nstatic func camera_focus(actor: Vector3,pitch: float) -> Vector3:\n  \
-        \  # Keep the actor in the frame even if the roof limits the actual orbit height.\n    return actor+Vector3.UP*clampf(1.26-(pitch-0.32)*1.45,0.10,2.65)\n\
-        \nstatic func camera_floor(terrain: Node,q: Vector2) -> float:\n    if in_stair(q): return base(terrain)+level(q)\n   \
-        \ if in_hall(q): return base(terrain)-DEPTH\n    return outside_height(terrain,q)\n\nstatic func camera_zone(q: Vector2)\
-        \ -> bool:\n    if in_hall(q): return absf(q.x)<32.4 and q.y>HALL_BACK+0.9\n    if q.y>=END_Z and q.y<=START_Z+4.5: return\
-        \ absf(q.x)<HALF_WIDTH-0.55\n    # Open courtyard on the entrance side, not through its side walls.\n    return q.y>START_Z+4.5\
-        \ and q.y<START_Z+10.0 and absf(q.x)<HALF_WIDTH-0.55\n\nstatic func dungeon_camera(terrain: Node,hero: CharacterBody3D,cam:\
-        \ Camera3D,yaw: float,pitch: float) -> void:\n    var actor: Vector3 = hero.global_position\n    var focus: Vector3 = camera_focus(actor,pitch)\n\
-        \    var space: PhysicsDirectSpaceState3D = hero.get_world_3d().direct_space_state\n    # Do not shorten the camera into\
-        \ the character. Prefer an alternate shoulder\n    # or side on the staircase instead, keeping a proper third-person distance.\n\
-        \    # Use the same pitch input as the exterior camera, with a safe indoor range.\n    var eye_height: float = clampf(3.55+(pitch-0.32)*2.65,1.60,5.60)\n\
-        \    var best: Vector3 = actor+Vector3(sin(yaw)*3.0,eye_height,cos(yaw)*3.0)\n    if not in_hall(local(best)) and local(best).y<=START_Z+4.5:\n\
-        \        best.y=minf(best.y,base(terrain)+3.90)\n    var fallback: Vector3 = best\n    var have_fallback: bool = false\n\
-        \    var solved: bool = false\n    for angle in [0.0,0.52,-0.52,1.05,-1.05,1.57,-1.57,2.1,-2.1,3.14159265]:\n        var\
-        \ turn: float = yaw+float(angle)\n        var back := Vector3(sin(turn),0.0,cos(turn))\n        for distance in [CAMERA_DISTANCE,4.0,3.5,3.0,2.6,2.2]:\n\
-        \            var candidate: Vector3 = actor+back*float(distance)+Vector3.UP*eye_height\n            var c: Vector2 = local(candidate)\n\
-        \            if not camera_zone(c): continue\n            # Keep the raised view below the covered entrance at the top\
-        \ of the stairs.\n            if not in_hall(c) and c.y<=START_Z+4.5:\n                candidate.y=minf(candidate.y,base(terrain)+3.90)\n\
-        \            if candidate.y<camera_floor(terrain,c)+0.85:\n                candidate.y=camera_floor(terrain,c)+0.85\n \
-        \               if not in_hall(c) and c.y<=START_Z+4.5 and candidate.y>base(terrain)+3.90: continue\n            if candidate.y>actor.y+CAMERA_MAX_HEIGHT:\
-        \ continue\n            if in_hall(c) and candidate.y>base(terrain)-DEPTH+10.4: continue\n            # Sample the line\
-        \ against the analytical stair/floor, not unrelated\n            # terrain, player, companion or NPC collision shapes.\n\
-        \            var above_floor: bool = true\n            for fraction in [0.25,0.5,0.75]:\n                var sample: Vector3\
-        \ = focus.lerp(candidate,float(fraction))\n                if sample.y<camera_floor(terrain,local(sample))+0.20:\n    \
-        \                above_floor=false\n                    break\n            if not above_floor: continue\n            if\
-        \ not have_fallback:\n                fallback=candidate\n                have_fallback=true\n            var ray := PhysicsRayQueryParameters3D.create(focus,candidate,CAMERA_WALL_MASK,[hero.get_rid()])\n\
-        \            var hit: Dictionary = space.intersect_ray(ray)\n            if not hit.is_empty(): continue\n            #\
-        \ A second ray gives clearance around the near plane at the camera.\n            var padding_ray := PhysicsRayQueryParameters3D.create(candidate,candidate+back*0.30,CAMERA_WALL_MASK,[hero.get_rid()])\n\
-        \            if not space.intersect_ray(padding_ray).is_empty(): continue\n            best=candidate\n            solved=true\n\
-        \            break\n        if solved: break\n    # Even a transient collision at a seam must never place the lens inside\
-        \ the hero.\n    if not solved and have_fallback: best=fallback\n    cam.global_position=best\n    cam.look_at(focus)\n\
-        FIX54_V441LAYOUT\ncat > 'android/scripts/V441Castle.gd' <<'FIX54_V441CASTLE'\nextends Node3D\nconst L = preload(\"res://scripts/V441Layout.gd\"\
-        )\nvar game: Node\nvar terrain: Node\nvar stones: Array[Transform3D] = []\nvar colors: PackedColorArray = PackedColorArray()\n\
-        var rng := RandomNumberGenerator.new()\nvar wall_body: StaticBody3D\nvar dungeon_body: StaticBody3D\nvar base_y: float\
-        \ = 0.0\nvar stone_mat: StandardMaterial3D\nvar torch_mat: StandardMaterial3D\n\nfunc setup(owner_game: Node,land: Node)\
-        \ -> void:\n    name = \"V441VerfalleneBurg\"\n    game = owner_game\n    terrain = land\n    rng.seed = 441731\n    base_y\
-        \ = L.base(terrain)\n    var c: Vector2 = L.centre()\n    var d: Vector2 = L.forward()\n    position = Vector3(c.x,base_y,c.y)\n\
-        \    rotation.y = atan2(d.x,d.y)\n    wall_body = StaticBody3D.new()\n    wall_body.name = \"BurgKollision\"\n    wall_body.set_collision_layer_value(20,true)\n\
-        \    add_child(wall_body)\n    dungeon_body = StaticBody3D.new()\n    dungeon_body.name = \"DungeonKollision\"\n    dungeon_body.set_collision_layer_value(20,true)\n\
-        \    add_child(dungeon_body)\n    stone_mat = StandardMaterial3D.new()\n    stone_mat.vertex_color_use_as_albedo = true\n\
-        \    stone_mat.roughness = 1.0\n    torch_mat = StandardMaterial3D.new()\n    torch_mat.albedo_color = Color(\"#ffbd58\"\
-        )\n    torch_mat.emission_enabled = true\n    torch_mat.emission = Color(\"#ff8d32\")\n    torch_mat.emission_energy_multiplier\
-        \ = 1.6\n    _castle()\n    _dungeon()\n    _commit_stones()\n    # Camera is owned by the persistent gameplay camera controller,\
-        \ not by this landmark.\n    set_physics_process(false)\n    set_process(false)\n\nfunc _ground(q: Vector2) -> float:\n\
-        \    return L.outside_height(terrain,q)-base_y\n\nfunc _stone(p: Vector3,size: Vector3,col: Color,yaw: float = 0.0,roll:\
-        \ float = 0.0) -> void:\n    var b := Basis(Vector3.UP,yaw)*Basis(Vector3.FORWARD,roll)\n    stones.append(Transform3D(b.scaled_local(size),p))\n\
-        \    colors.append(col)\n\nfunc _solid(body: StaticBody3D,p: Vector3,size: Vector3,yaw: float = 0.0) -> void:\n    var\
-        \ shape := BoxShape3D.new()\n    shape.size = size\n    var slot := CollisionShape3D.new()\n    slot.shape = shape\n  \
-        \  slot.position = p\n    slot.rotation.y = yaw\n    body.add_child(slot)\n\nfunc _stone_color(dark: bool = false) -> Color:\n\
-        \    var a := Color(\"#57534f\") if dark else Color(\"#77776b\")\n    var b := Color(\"#827b70\") if dark else Color(\"\
-        #aaa597\")\n    return a.lerp(b,rng.randf())\n\nfunc _wall(a: Vector2,b: Vector2,height: float,thick: float,ruined: bool\
-        \ = true,underground: bool = false,floor_y: float = -36.0) -> void:\n    var span: float = a.distance_to(b)\n    var yaw:\
-        \ float = -atan2((b-a).y,(b-a).x)\n    var count: int = maxi(1,ceili(span/3.6))\n    var unit: float = span/float(count)\n\
-        \    for i in range(count):\n        var q: Vector2 = a.lerp(b,(float(i)+0.5)/float(count))\n        var g: float = floor_y\
-        \ if underground else _ground(q)\n        var h: float = height\n        if ruined:\n            h = height*(0.67+0.23*sin(float(i)*1.07+span)+rng.randf_range(0.0,0.19))\n\
-        \        var rows: int = maxi(2,ceili(h/0.86))\n        var row_h: float = h/float(rows)\n        # A recessed continuous\
-        \ core closes every mortar joint underground.\n        if underground:\n            _stone(Vector3(q.x,g+h*0.5-0.35,q.y),Vector3(unit+0.08,h,thick-0.20),Color(\"\
-        #38342f\"),yaw)\n        var along: Vector2 = (b-a).normalized()\n        for row in range(rows):\n            var y: float\
-        \ = g-0.35+(float(row)+0.5)*row_h\n            var split: float = 0.34 if (row+i)%2==0 else 0.66\n            for part\
-        \ in range(2):\n                var portion: float = split if part==0 else 1.0-split\n                var midpoint: float\
-        \ = split*0.5 if part==0 else (1.0+split)*0.5\n                var v: Vector2 = q+along*((midpoint-0.5)*unit)\n       \
-        \         var offset: float = rng.randf_range(-0.035,0.035)\n                _stone(Vector3(v.x,y,v.y),Vector3(maxf(0.08,unit*portion-0.035),row_h-0.026,thick+offset),_stone_color(underground),yaw)\n\
-        \        _solid(dungeon_body if underground else wall_body,Vector3(q.x,g+h*0.5-0.4,q.y),Vector3(unit+0.04,h+0.8,thick),yaw)\n\
-        \nfunc _tower(q: Vector2,r: float,h: float,opening: float) -> void:\n    var sides: int = 16\n    for i in range(sides):\n\
-        \        var a: float = TAU*float(i)/float(sides)\n        var b: float = TAU*float(i+1)/float(sides)\n        if absf(wrapf((a+b)*0.5-opening,-PI,PI))<0.39:\n\
-        \            continue\n        var start: Vector2 = q+Vector2(cos(a),sin(a))*r\n        var finish: Vector2 = q+Vector2(cos(b),sin(b))*r\n\
-        \        _wall(start,finish,h+2.8*sin(float(i)*0.55),2.3,true)\n\nfunc _arch(q: Vector2,width: float,height: float,depth:\
-        \ float) -> void:\n    var ground: float = _ground(q)\n    var r: float = width*0.5\n    var spring: float = height-r\n\
-        \    for side in [-1.0,1.0]:\n        for j in range(5):\n            var p := Vector3(q.x+float(side)*(r+0.85),ground+(float(j)+0.5)*spring/5.0,q.y)\n\
-        \            _stone(p,Vector3(1.65,spring/5.0-0.045,depth),_stone_color())\n        _solid(wall_body,Vector3(q.x+float(side)*(r+0.85),ground+spring*0.5,q.y),Vector3(1.65,spring,depth))\n\
-        \    for i in range(13):\n        var angle: float = PI*(float(i)+0.5)/13.0\n        var p := Vector3(q.x+cos(angle)*(r+0.65),ground+spring+sin(angle)*(r+0.65),q.y)\n\
-        \        _stone(p,Vector3(1.5,1.35,depth),_stone_color(),0.0,angle-PI*0.5)\n        var slot := CollisionShape3D.new()\n\
-        \        var shape := BoxShape3D.new()\n        shape.size = Vector3(1.5,1.35,depth)\n        slot.shape = shape\n    \
-        \    slot.position = p\n        slot.rotation.z = angle-PI*0.5\n        wall_body.add_child(slot)\n\nfunc _castle() ->\
-        \ void:\n    # Road and existing travel crystal enter through this 16 m gap.\n    _wall(Vector2(-64,72),Vector2(-8,72),13.5,3.2)\n\
-        \    _wall(Vector2(8,72),Vector2(64,72),13.5,3.2)\n    _arch(Vector2(0,72),16,14,3.2)\n    # Broken side walls give the\
-        \ castle a naturally collapsed silhouette.\n    _wall(Vector2(-64,72),Vector2(-64,31),14,3.2)\n    _wall(Vector2(-64,23),Vector2(-64,-72),16,3.2)\n\
-        \    _wall(Vector2(64,72),Vector2(64,-12),15,3.2)\n    _wall(Vector2(64,-23),Vector2(64,-72),14,3.2)\n    _wall(Vector2(-64,-72),Vector2(-7,-72),15,3.2)\n\
-        \    _wall(Vector2(7,-72),Vector2(64,-72),13.0,3.2)\n    _tower(Vector2(-54,63),9.5,24,PI*1.5)\n    _tower(Vector2(54,63),9.5,29,PI*1.5)\n\
-        \    _tower(Vector2(-54,-63),9.5,22,PI*0.5)\n    _tower(Vector2(54,-63),9.5,27,PI*0.5)\n    # Two roofless wings: accessible\
-        \ openings and ruined partitions.\n    for side in [-1.0,1.0]:\n        var x: float = float(side)*37.0\n        _wall(Vector2(x-11,-28),Vector2(x+11,-28),10,2)\n\
-        \        _wall(Vector2(x-11,-28),Vector2(x-11,14),9,2)\n        _wall(Vector2(x+11,-28),Vector2(x+11,14),7.5,2)\n     \
-        \   _wall(Vector2(x-11,14),Vector2(x-4,14),7,2)\n        _wall(Vector2(x+4,14),Vector2(x+11,14),6,2)\n        _wall(Vector2(x-11,-7),Vector2(x-4,-7),5,1.8)\n\
-        \        _wall(Vector2(x+4,-7),Vector2(x+11,-7),5,1.8)\n    # Open keep at the far end of the courtyard; its arch is the\
-        \ dungeon entrance.\n    _wall(Vector2(-17,-54),Vector2(-7,-54),15,2.6)\n    _wall(Vector2(7,-54),Vector2(17,-54),15,2.6)\n\
-        \    _wall(Vector2(-17,-54),Vector2(-17,L.START_Z),13,2.6)\n    _wall(Vector2(17,-54),Vector2(17,L.START_Z),11,2.6)\n \
-        \   _wall(Vector2(-17,L.START_Z),Vector2(-L.HALF_WIDTH,L.START_Z),10,2.6)\n    _wall(Vector2(L.HALF_WIDTH,L.START_Z),Vector2(17,L.START_Z),10,2.6)\n\
-        \    _arch(L.ENTRY,L.HALF_WIDTH*2.0,10.5,2.6)\n    # Grounded rubble in the wall breaks and wings, never on the road/teleporter.\n\
-        \    for i in range(95):\n        var side: float = -1.0 if i%2==0 else 1.0\n        var q := Vector2(side*rng.randf_range(48,61),rng.randf_range(-49,47))\n\
-        \        var w: float = rng.randf_range(0.7,2.4)\n        _stone(Vector3(q.x,_ground(q)+w*0.30,q.y),Vector3(w,w*0.62,w*rng.randf_range(0.7,1.35)),_stone_color(),rng.randf_range(0,TAU),rng.randf_range(-0.26,0.26))\n\
-        \    set_meta(\"castle_size\",Vector2(128,144))\n\nfunc _floor_box(q: Vector2,y: float,size: Vector2) -> void:\n    _stone(Vector3(q.x,y-0.5,q.y),Vector3(size.x,1.0,size.y),Color(\"\
-        #59534d\"))\n\nfunc _light(q: Vector2,y: float) -> void:\n    var side: float = -1.0 if q.x<0.0 else 1.0\n    var wall\
-        \ := Vector3(q.x,y,q.y)\n    _stone(wall,Vector3(0.22,0.73,0.48),Color(\"#302923\"))\n    _stone(wall-Vector3(side*0.30,0.18,0),Vector3(0.70,0.16,0.18),Color(\"\
-        #44362a\"))\n    _stone(wall-Vector3(side*0.52,0.10,0),Vector3(0.36,0.28,0.31),Color(\"#3c3029\"))\n    var fixture :=\
-        \ MeshInstance3D.new()\n    fixture.name = \"Wandfackel\"\n    var m := SphereMesh.new()\n    m.radius = 0.17\n    m.height\
-        \ = 0.64\n    m.radial_segments = 8\n    m.rings = 4\n    fixture.mesh = m\n    fixture.material_override = torch_mat\n\
-        \    fixture.position = wall-Vector3(side*0.52,-0.39,0)\n    add_child(fixture)\n    var light := OmniLight3D.new()\n \
-        \   light.light_color = Color(\"#ffb36a\")\n    light.light_energy = 2.4\n    light.omni_range = 15.0\n    light.shadow_enabled\
-        \ = false\n    light.position = wall-Vector3(side*0.9,-0.45,0)\n    add_child(light)\n\nfunc _roof_seal(label: String,p:\
-        \ Vector3,size: Vector3) -> void:\n    _stone(p,size,Color(\"#3d3933\"))\n    _solid(dungeon_body,p,size)\n    dungeon_body.get_child(dungeon_body.get_child_count()-1).name\
-        \ = label\n\nfunc _standing_torch(q: Vector2, floor_y: float) -> void:\n    _stone(Vector3(q.x,floor_y+0.95,q.y),Vector3(0.26,1.9,0.26),Color(\"\
-        #4f4032\"))\n    _stone(Vector3(q.x,floor_y+0.18,q.y),Vector3(0.74,0.14,0.74),Color(\"#5a5046\"))\n    _stone(Vector3(q.x,floor_y+1.86,q.y),Vector3(0.34,0.14,0.34),Color(\"\
-        #645748\"))\n    var flame := OmniLight3D.new()\n    flame.light_color = Color(\"#ffb670\")\n    flame.light_energy = 2.7\n\
-        \    flame.omni_range = 13.0\n    flame.shadow_enabled = false\n    flame.position = Vector3(q.x,floor_y+2.15,q.y)\n  \
-        \  add_child(flame)\n    var ember := MeshInstance3D.new()\n    var sm := SphereMesh.new()\n    sm.radius = 0.12\n    sm.height\
-        \ = 0.26\n    ember.mesh = sm\n    ember.material_override = torch_mat\n    ember.position = Vector3(q.x,floor_y+2.0,q.y)\n\
-        \    add_child(ember)\n\nfunc _pillar(q: Vector2, floor_y: float, broken: bool=false, fallen: bool=false, rot: float=0.0)\
-        \ -> void:\n    if fallen:\n        _stone(Vector3(q.x,floor_y+0.46,q.y),Vector3(0.82,0.92,4.2),Color(\"#666057\"),rot,PI*0.5)\n\
-        \        _stone(Vector3(q.x+sin(rot)*2.1,floor_y+0.32,q.y+cos(rot)*2.1),Vector3(0.96,0.34,1.1),Color(\"#736b61\"),rot,0.2)\n\
-        \        return\n    var h: float = 6.8 if not broken else 4.4\n    _stone(Vector3(q.x,floor_y+h*0.5,q.y),Vector3(0.94,h,0.94),Color(\"\
-        #666057\"))\n    _stone(Vector3(q.x,floor_y+0.24,q.y),Vector3(1.35,0.18,1.35),Color(\"#7b7369\"))\n    _stone(Vector3(q.x,floor_y+h+0.18,q.y),Vector3(1.28,0.22,1.28),Color(\"\
-        #7b7369\"))\n    if broken:\n        _stone(Vector3(q.x+0.42,floor_y+4.8,q.y-0.18),Vector3(0.58,0.42,0.46),Color(\"#6c645b\"\
-        ),0.5,-0.3)\n        _stone(Vector3(q.x-0.58,floor_y+0.25,q.y+0.24),Vector3(0.52,0.28,0.68),Color(\"#6a6259\"),0.3,0.2)\n\
-        \nfunc _vine_patch(q: Vector2, floor_y: float, height: float=2.8, wide: float=1.4) -> void:\n    for i in range(5):\n \
-        \       var ox: float = rng.randf_range(-wide,wide)\n        var oy: float = rng.randf_range(0.25,height)\n        var\
-        \ oz: float = rng.randf_range(-0.35,0.35)\n        _stone(Vector3(q.x+ox*0.24,floor_y+oy,q.y+oz),Vector3(rng.randf_range(0.20,0.42),rng.randf_range(0.14,0.28),rng.randf_range(0.08,0.18)),Color(\"\
-        #456145\"))\n    _stone(Vector3(q.x,floor_y+0.10,q.y),Vector3(wide*0.9,0.08,0.72),Color(\"#3f5b3b\"))\n\nfunc _phoenix_statue(q:\
-        \ Vector2, floor_y: float, broken: bool=false) -> void:\n    _stone(Vector3(q.x,floor_y+0.45,q.y),Vector3(2.6,0.90,2.6),Color(\"\
-        #6c655e\"))\n    _stone(Vector3(q.x,floor_y+1.35,q.y),Vector3(1.55,0.90,1.55),Color(\"#746d66\"))\n    _stone(Vector3(q.x,floor_y+2.55,q.y),Vector3(0.95,1.55,0.95),Color(\"\
-        #817971\"))\n    _stone(Vector3(q.x,floor_y+4.12,q.y-0.18),Vector3(0.62,1.60,0.82),Color(\"#93897e\"))\n    _stone(Vector3(q.x,floor_y+5.02,q.y+0.28),Vector3(0.56,0.62,1.26),Color(\"\
-        #8f867b\"))\n    _stone(Vector3(q.x-1.08,floor_y+4.68,q.y),Vector3(1.56,0.34,0.92),Color(\"#8d8478\"),0.0,-0.34)\n    if\
-        \ not broken:\n        _stone(Vector3(q.x+1.08,floor_y+4.68,q.y),Vector3(1.56,0.34,0.92),Color(\"#8d8478\"),0.0,0.34)\n\
-        \        _stone(Vector3(q.x,floor_y+5.92,q.y+0.55),Vector3(0.42,0.42,0.58),Color(\"#94897e\"))\n        _stone(Vector3(q.x,floor_y+6.25,q.y+0.82),Vector3(0.18,0.44,0.18),Color(\"\
-        #8c8377\"))\n    else:\n        _stone(Vector3(q.x+0.88,floor_y+0.26,q.y+0.42),Vector3(0.62,0.36,0.54),Color(\"#7c7368\"\
-        ),0.3,0.25)\n        _stone(Vector3(q.x+1.48,floor_y+0.24,q.y+0.10),Vector3(0.44,0.28,0.72),Color(\"#766d63\"),0.6,-0.2)\n\
-        \        _stone(Vector3(q.x+0.22,floor_y+5.38,q.y+0.52),Vector3(0.28,0.22,0.40),Color(\"#84796d\"),0.2,-0.2)\n    _vine_patch(q+Vector2(-0.7,0.2),floor_y+0.05,1.5,0.8)\n\
-        \    _vine_patch(q+Vector2(0.8,-0.15),floor_y+0.05,1.8,0.9)\n\nfunc _dungeon() -> void:\n    # Shorter, fully roofed descent.\
-        \ Forty-eight contiguous steps descend physically.\n    var step_count: int = 48\n    var run: float = (L.START_Z-L.END_Z)/float(step_count)\n\
-        \    for i in range(step_count):\n        var z: float = L.START_Z-(float(i)+0.5)*run\n        var y: float = L.level(Vector2(0,z))\n\
-        \        _floor_box(Vector2(0,z),y,Vector2(L.HALF_WIDTH*2.0,run+0.035))\n    # Full-length roof: its two pieces meet at\
-        \ the entrance, not halfway down.\n    var shaft_length: float = L.START_Z-L.END_Z\n    var roof_bottom: float = 4.5\n\
-        \    for i in range(13):\n        var z: float = lerpf(L.START_Z+4.5,L.END_Z,float(i)/12.0)\n        for x in [-L.HALF_WIDTH,0.0,L.HALF_WIDTH]:\n\
-        \            roof_bottom=maxf(roof_bottom,_ground(Vector2(float(x),z))+4.5)\n    var roof_y: float = roof_bottom+0.65\n\
-        \    _roof_seal(\"EingangsVordach\",Vector3(0,roof_y,L.START_Z+2.25),Vector3(L.HALF_WIDTH*2.0+4.2,1.8,5.8))\n    _roof_seal(\"\
-        TreppenDach\",Vector3(0,roof_y,(L.START_Z+L.END_Z)*0.5),Vector3(L.HALF_WIDTH*2.0+4.0,1.8,shaft_length+1.1))\n    var sections:\
-        \ int = maxi(1,ceili(shaft_length/2.0))\n    for i in range(sections):\n        var a: float = lerpf(L.START_Z,L.END_Z,float(i)/float(sections))\n\
-        \        var b: float = lerpf(L.START_Z,L.END_Z,float(i+1)/float(sections))\n        var y: float = L.level(Vector2(0,b))-0.65\n\
-        \        for x in [-L.HALF_WIDTH-0.58,L.HALF_WIDTH+0.58]:\n            _wall(Vector2(float(x),a),Vector2(float(x),b),roof_bottom-y+0.40,1.28,false,true,y)\n\
-        \    # Side walls for the covered approach, open at its front.\n    for x in [-L.HALF_WIDTH-0.58,L.HALF_WIDTH+0.58]:\n\
-        \        var y: float = minf(_ground(Vector2(float(x),L.START_Z)),_ground(Vector2(float(x),L.START_Z+4.5)))\n        _wall(Vector2(float(x),L.START_Z),Vector2(float(x),L.START_Z+4.5),roof_bottom-y+0.40,1.28,false,true,y)\n\
-        \    # Main hall and four connecting side rooms at the foot of the same staircase.\n    var floor_y: float = -L.DEPTH\n\
-        \    var center_z: float = (L.END_Z+L.HALL_BACK)*0.5\n    var hall_length: float = L.END_Z-L.HALL_BACK\n    _floor_box(Vector2(0,center_z),floor_y-0.075,Vector2(68,hall_length))\n\
-        \    for ix in range(28):\n        for iz in range(24):\n            var w: float = 68.0/28.0\n            var d: float\
-        \ = hall_length/24.0\n            var q := Vector2(-34.0+(float(ix)+0.5)*w,L.HALL_BACK+(float(iz)+0.5)*d)\n           \
-        \ _stone(Vector3(q.x,floor_y-0.04,q.y),Vector3(w-0.035,0.08,d-0.035),Color(\"#59534d\").lerp(Color(\"#71685b\"),rng.randf()*0.65))\n\
-        \    _wall(Vector2(-34,L.END_Z),Vector2(-L.HALF_WIDTH,L.END_Z),11.5,2.4,false,true,floor_y)\n    _wall(Vector2(L.HALF_WIDTH,L.END_Z),Vector2(34,L.END_Z),11.5,2.4,false,true,floor_y)\n\
-        \    _wall(Vector2(-34,L.END_Z),Vector2(-34,L.HALL_BACK),11.5,2.4,false,true,floor_y)\n    _wall(Vector2(34,L.END_Z),Vector2(34,L.HALL_BACK),11.5,2.4,false,true,floor_y)\n\
-        \    _wall(Vector2(-34,L.HALL_BACK),Vector2(34,L.HALL_BACK),11.5,2.4,false,true,floor_y)\n    for x in [-15.0,15.0]:\n\
-        \        _wall(Vector2(x,L.END_Z),Vector2(x,L.END_Z-12.0),11.4,1.9,false,true,floor_y)\n        _wall(Vector2(x,L.END_Z-18.0),Vector2(x,L.HALL_BACK+12.0),11.4,1.9,false,true,floor_y)\n\
-        \        _wall(Vector2(x,L.HALL_BACK+6.0),Vector2(x,L.HALL_BACK),11.4,1.9,false,true,floor_y)\n    _roof_seal(\"HallenDecke\"\
-        ,Vector3(0,floor_y+11.5,center_z),Vector3(70,1.5,hall_length))\n    # Stone face above the lower doorway, preventing daylight\
-        \ through the earth wall.\n    var top: float = roof_bottom+1.3\n    var bottom: float = floor_y+10.75\n    _roof_seal(\"\
-        SchachtAbschluss\",Vector3(0,(top+bottom)*0.5,L.END_Z-0.9),Vector3(L.HALF_WIDTH*2.0+2.0,top-bottom,1.8))\n    for p in\
-        \ [Vector2(-5.10,L.START_Z-4.0),Vector2(5.10,L.START_Z-12.0),Vector2(-5.10,L.END_Z+4.0),Vector2(-14.12,L.END_Z-8.0),Vector2(14.12,L.END_Z-22.0),Vector2(-32.92,center_z),Vector2(32.92,center_z),Vector2(-14.12,L.HALL_BACK+3.0)]:\n\
-        \        _light(p,L.level(p)+2.5)\n    # Decorative dungeon set: 4 phoenix statues, rubble, torch stands, broken pillars\
-        \ and vegetation.\n    _phoenix_statue(Vector2(-23.0,L.END_Z-7.0),floor_y,false)\n    _phoenix_statue(Vector2(23.0,L.END_Z-7.0),floor_y,true)\n\
-        \    _phoenix_statue(Vector2(-23.0,L.HALL_BACK+11.0),floor_y,false)\n    _phoenix_statue(Vector2(23.0,L.HALL_BACK+11.0),floor_y,false)\n\
-        \    for q in [Vector2(-25.0,center_z-5.0),Vector2(25.0,center_z-5.0),Vector2(-7.5,L.END_Z-20.0),Vector2(7.5,L.HALL_BACK+9.0)]:\n\
-        \        _standing_torch(q,floor_y)\n    _pillar(Vector2(-9.5,center_z+8.0),floor_y,false,false)\n    _pillar(Vector2(9.5,center_z+8.0),floor_y,true,false)\n\
-        \    _pillar(Vector2(-18.0,center_z-10.0),floor_y,false,true,0.45)\n    _pillar(Vector2(18.0,center_z-14.0),floor_y,false,true,-0.55)\n\
-        \    _pillar(Vector2(-27.0,L.HALL_BACK+15.0),floor_y,true,false)\n    _pillar(Vector2(27.0,L.HALL_BACK+15.0),floor_y,false,false)\n\
-        \    for q in [Vector2(-12.5,L.END_Z-14.0),Vector2(10.0,L.END_Z-28.0),Vector2(-26.0,center_z+4.0),Vector2(22.0,center_z-11.0),Vector2(-4.0,L.HALL_BACK+6.0),Vector2(6.5,L.HALL_BACK+12.0)]:\n\
-        \        var n: int = 4 + int(absf(q.x)) % 3\n        for i in range(n):\n            var off := Vector2(rng.randf_range(-1.2,1.2),rng.randf_range(-1.0,1.0))\n\
-        \            var w: float = rng.randf_range(0.45,1.45)\n            _stone(Vector3(q.x+off.x,floor_y+w*0.22,q.y+off.y),Vector3(w,w*0.44,w*rng.randf_range(0.75,1.3)),_stone_color(),rng.randf_range(0,TAU),rng.randf_range(-0.35,0.35))\n\
-        \    for q in [Vector2(-30.0,L.END_Z-5.0),Vector2(30.0,L.END_Z-5.0),Vector2(-28.0,center_z-6.0),Vector2(28.0,center_z-6.0),Vector2(-12.0,L.HALL_BACK+4.0),Vector2(14.0,L.HALL_BACK+8.0),Vector2(0.0,L.HALL_BACK+5.0)]:\n\
-        \        _vine_patch(q,floor_y+0.02,3.2,1.6)\n    for q in [Vector2(-20.0,L.HALL_BACK+4.0),Vector2(20.0,L.HALL_BACK+4.0),Vector2(-6.0,L.END_Z-9.0),Vector2(6.0,L.END_Z-16.0)]:\n\
-        \        _stone(Vector3(q.x,floor_y+0.10,q.y),Vector3(1.65,0.12,1.0),Color(\"#456145\"))\n        _stone(Vector3(q.x-0.35,floor_y+0.22,q.y+0.15),Vector3(0.28,0.22,0.22),Color(\"\
-        #4a6a46\"))\n        _stone(Vector3(q.x+0.30,floor_y+0.24,q.y-0.18),Vector3(0.24,0.18,0.24),Color(\"#54764d\"))\n    set_meta(\"\
-        dungeon_steps\",48)\n    set_meta(\"continuous_stair\",true)\n    set_meta(\"phoenix_statues\",4)\n\nfunc _commit_stones()\
-        \ -> void:\n    var mesh := BoxMesh.new()\n    mesh.size = Vector3.ONE\n    var mm := MultiMesh.new()\n    mm.transform_format\
-        \ = MultiMesh.TRANSFORM_3D\n    mm.use_colors = true\n    mm.mesh = mesh\n    mm.instance_count = stones.size()\n    for\
-        \ i in range(stones.size()):\n        mm.set_instance_transform(i,stones[i])\n        mm.set_instance_color(i,colors[i])\n\
-        \    var batch := MultiMeshInstance3D.new()\n    batch.name = \"BurgUndDungeonSteinmauerwerk\"\n    batch.multimesh = mm\n\
-        \    batch.material_override = stone_mat\n    batch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF\n    add_child(batch)\n\
-        \    stones.clear()\n    colors.clear()\n\n\nFIX54_V441CASTLE\ncat > 'android/tests/V441RuineSmoke.gd' <<'FIX54_V441RUINESMOKE'\n\
-        extends SceneTree\nconst L = preload(\"res://scripts/V441Layout.gd\")\nconst Landmarks = preload(\"res://scripts/V417Landmarks.gd\"\
-        )\nconst Motion = preload(\"res://scripts/V31TerrainMotion.gd\")\nconst CameraController = preload(\"res://scripts/V27CameraMap.gd\"\
-        )\nconst Terrain = preload(\"res://scripts/V27Terrain.gd\")\nclass TestTerrain:\n    extends Node3D\n    func surface_height_at(_x:\
-        \ float,_z: float) -> float: return 12.0\n    func v435_swamp_strength(_p: Vector2) -> float: return 0.0\nconst RealTouch\
-        \ = preload(\"res://scripts/V33TouchCamera.gd\")\nclass TestGame:\n    extends Node3D\n    var state: int = 2\n    var\
-        \ hero: CharacterBody3D\n    var camera_node: Camera3D\n    var phoenix: Node3D\n    var joystick_axis: Vector2 = Vector2.ZERO\n\
-        func _initialize() -> void:\n    call_deferred(\"_run\")\nfunc fail(msg: String) -> void:\n    push_error(\"FIX54: \"+msg)\n\
-        \    quit(1)\nfunc _run() -> void:\n    var g := TestGame.new()\n    root.add_child(g)\n    var t := TestTerrain.new()\n\
-        \    t.name=\"V27ContinuousTerrain\"\n    g.add_child(t)\n    g.hero=CharacterBody3D.new()\n    g.add_child(g.hero)\n \
-        \   g.phoenix=Node3D.new()\n    g.add_child(g.phoenix)\n    var companion_mesh := MeshInstance3D.new()\n    companion_mesh.mesh=BoxMesh.new()\n\
-        \    g.phoenix.add_child(companion_mesh)\n    var original_layers: int = companion_mesh.layers\n    # Simulate the companion/player\
-        \ accessory's broad collision shape. This is\n    # not a castle wall and must never cause the camera to collapse into\
-        \ the actor.\n    var obstruction := StaticBody3D.new()\n    var obstruction_shape := CollisionShape3D.new()\n    var obstruction_box\
-        \ := BoxShape3D.new()\n    obstruction_box.size=Vector3(500,500,500)\n    obstruction_shape.shape=obstruction_box\n   \
-        \ obstruction.add_child(obstruction_shape)\n    g.add_child(obstruction)\n    var cp: Vector2=L.centre()\n    obstruction.position=Vector3(cp.x,0,cp.y)\n\
-        \    var l := Landmarks.new()\n    g.add_child(l)\n    l.game=g\n    l.terrain=t\n    var ruin: Node3D=l._create(\"Ruine\"\
-        ,L.centre())\n    var castle: Node3D=ruin.get_node_or_null(\"V441VerfalleneBurg\") as Node3D\n    if castle==null or ruin.get_child_count()!=1\
-        \ or not bool(castle.get_meta(\"continuous_stair\",false)) or castle.get_meta(\"dungeon_steps\",0)!=48 or castle.get_meta(\"\
-        phoenix_statues\",0)!=4:\n        fail(\"missing continuous staircase or old blocks\")\n        return\n    if not castle.find_children(\"\
-        *\",\"Label3D\",true,false).is_empty() or castle.get_node_or_null(\"DungeonKollision/HallenDecke\")==null or castle.get_node_or_null(\"\
-        DungeonKollision/TreppenDach\")==null or castle.get_node_or_null(\"DungeonKollision/EingangsVordach\")==null:\n       \
-        \ fail(\"unexpected labels or missing hall roof\")\n        return\n    var stair_roof: CollisionShape3D=castle.get_node(\"\
-        DungeonKollision/TreppenDach\") as CollisionShape3D\n    var roof_shape: BoxShape3D=stair_roof.shape as BoxShape3D\n  \
-        \  if roof_shape==null or stair_roof.position.z-roof_shape.size.z*0.5>L.END_Z+0.01 or stair_roof.position.z+roof_shape.size.z*0.5<L.START_Z-0.01:\n\
-        \        fail(\"roof does not cover full staircase\")\n        return\n    var hall_roof: CollisionShape3D=castle.get_node(\"\
-        DungeonKollision/HallenDecke\") as CollisionShape3D\n    var hall_shape: BoxShape3D=hall_roof.shape as BoxShape3D\n   \
-        \ if hall_roof.position.y-hall_shape.size.y*0.5+L.DEPTH<10.5:\n        fail(\"hall ceiling too low\")\n        return\n\
-        \    if castle.has_method(\"_move_to\"):\n        fail(\"portal still moves actor\")\n        return\n    var motion :=\
-        \ Motion.new()\n    motion.terrain=t\n    # Use same align_to_ground as Main.gd; move horizontally in 25cm increments both\
-        \ directions.\n    g.hero.global_position=L.at(t,Vector2(0,L.START_Z+0.25),false)\n    g.hero.rotation.y=0.73\n    var\
-        \ angle: float=g.hero.rotation.y\n    var samples: int = roundi((L.START_Z-L.END_Z+1.0)/0.25)+1\n    for dir in [1,-1]:\n\
-        \        for i in range(samples):\n            var z: float = L.START_Z+0.25-float(i)*0.25 if dir==1 else L.END_Z-0.75+float(i)*0.25\n\
-        \            var q: Vector2=L.world(Vector2(0,z))\n            var before: float=g.hero.global_position.y\n           \
-        \ g.hero.global_position=Vector3(q.x,before,q.y)\n            motion.align_to_ground(g.hero)\n            if absf(g.hero.global_position.y-before)>0.35\
-        \ or absf(g.hero.rotation.y-angle)>0.001:\n                fail(\"height discontinuity or changed facing at \"+str(z))\n\
-        \                return\n            if absf(g.hero.global_position.y-(12.085+L.level(Vector2(0,z))))>0.11:\n         \
-        \       fail(\"walk floor does not match steps\")\n                return\n    # Rectangle clip test: a large triangle\
-        \ crosses the entire cutout.\n    var pieces: Array[PackedVector3Array]=L.cut_triangle(PackedVector3Array([Vector3(-50,12,-100),Vector3(50,12,-100),Vector3(0,12,10)]))\n\
-        \    if pieces.is_empty():\n        fail(\"terrain clipping removed all terrain\")\n        return\n    for poly in pieces:\n\
-        \        for i in range(1,poly.size()-1):\n            var c: Vector3=(poly[0]+poly[i]+poly[i+1])/3.0\n            if absf(c.x)<L.HALF_WIDTH-0.01\
-        \ and c.z>L.END_Z+0.01 and c.z<L.START_Z-0.01:\n                fail(\"terrain still covers staircase\")\n            \
-        \    return\n    g.camera_node=Camera3D.new()\n    g.add_child(g.camera_node)\n    await physics_frame\n    var middle:\
-        \ float = (L.START_Z+L.END_Z)*0.5\n    var hall_mid: float = (L.END_Z+L.HALL_BACK)*0.5\n    for q in [Vector2(0,L.START_Z-0.5),Vector2(0,middle),Vector2(0,L.END_Z+0.5),Vector2(0,hall_mid),Vector2(0,L.HALL_BACK+4.0)]:\n\
-        \        g.hero.global_position=L.at(t,q,true)\n        for yaw in [0.0,0.9,1.8,2.7,3.6,4.5,5.4]:\n            L.dungeon_camera(t,g.hero,g.camera_node,yaw,1.0)\n\
-        \            var offset: Vector3=g.camera_node.global_position-g.hero.global_position\n            var target: Vector3=(L.camera_focus(g.hero.global_position,1.0)-g.camera_node.global_position).normalized()\n\
-        \            if Vector2(offset.x,offset.z).length()<L.CAMERA_MIN_DISTANCE or offset.length()>L.CAMERA_MAX_DISTANCE or offset.y>L.CAMERA_MAX_HEIGHT+0.01\
-        \ or (-g.camera_node.global_transform.basis.z).dot(target)<0.99:\n                fail(\"camera outside close third-person\
-        \ viewing range\")\n                return\n    var control := CameraController.new()\n    control.name=\"V27CameraWorldMap\"\
-        \n    g.add_child(control)\n    control.game=g\n    control.terrain=t\n    control.set_physics_process(false)\n    control.set_process(false)\n\
-        \    g.hero.global_position=L.at(t,Vector2(0,hall_mid),true)\n    if not L.in_dungeon(t,g.hero.global_position):\n    \
-        \    fail(\"invalid test position: not inside current hall\")\n        return\n    var outdoor_near: float=g.camera_node.near\n\
-        \    g.camera_node.global_position=g.hero.global_position+Vector3.UP*80.0\n    control.call(\"_physics_process\",0.016)\n\
-        \    var indoor: Camera3D=root.get_camera_3d()\n    if indoor==null or indoor==g.camera_node or indoor.name!=\"V447DungeonKamera\"\
-        \ or indoor.global_position.distance_to(g.hero.global_position)>L.CAMERA_MAX_DISTANCE:\n        fail(\"viewport did not\
-        \ switch to independent indoor camera\")\n        return\n    if companion_mesh.layers!=original_layers or (indoor.cull_mask\
-        \ & original_layers)==0 or not g.phoenix.visible:\n        fail(\"companion not visible in the active dungeon camera\"\
-        )\n        return\n    if g.phoenix.global_position.distance_to(g.hero.global_position)>4.5 or g.phoenix.global_position.distance_to(indoor.global_position)<2.3:\n\
-        \        fail(\"companion did not follow safely beside the actor\")\n        return\n    # Same properties written by the\
-        \ existing touch stick. Exercise render-only\n    # updates, because older versions could disable the camera physics callback.\n\
-        \    control.set(\"yaw_offset\",0.0)\n    control.set(\"pitch\",0.32)\n    control.call(\"_process\",0.016)\n    var before_yaw:\
-        \ Vector3=indoor.global_position-g.hero.global_position\n    if Vector2(before_yaw.x,before_yaw.z).length()<4.40:\n   \
-        \     fail(\"clear hall did not use wider camera distance\")\n        return\n    if absf(before_yaw.y-3.55)>0.08:\n  \
-        \      fail(\"raised neutral camera height not applied in clear hall\")\n        return\n    var bird_offset: Vector3=g.phoenix.global_position-g.hero.global_position\n\
-        \    if Vector2(bird_offset.x,bird_offset.z).length()<2.55:\n        fail(\"companion spacing not increased in clear hall\"\
-        )\n        return\n    control.set(\"yaw_offset\",1.2)\n    control.call(\"_process\",0.016)\n    var after_yaw: Vector3=indoor.global_position-g.hero.global_position\n\
-        \    if Vector2(before_yaw.x,before_yaw.z).distance_to(Vector2(after_yaw.x,after_yaw.z))<0.8:\n        fail(\"touch yaw\
-        \ did not rotate the active dungeon view\")\n        return\n    control.set(\"pitch\",-0.35)\n    control.call(\"_process\"\
-        ,0.016)\n    var low: float=indoor.global_position.y\n    control.set(\"pitch\",0.8)\n    control.call(\"_process\",0.016)\n\
-        \    if indoor.global_position.y-low<2.0:\n        fail(\"touch pitch did not change the active dungeon view\")\n     \
-        \   return\n    # Drive the real V33 input owner, through actual screen-drag events.\n    var stick := RealTouch.new()\n\
-        \    g.add_child(stick)\n    stick.set(\"game\",g)\n    stick.set(\"old_look\",control)\n    stick.set(\"terrain\",t)\n\
-        \    stick.set(\"camera_yaw\",0.0)\n    stick.set(\"view_pitch\",-0.31)\n    stick.set_process(false)\n    stick.set_physics_process(false)\n\
-        \    stick.set(\"camera_id\",3)\n    stick.set(\"camera_center\",Vector2(400,220))\n    var drag := InputEventScreenDrag.new()\n\
-        \    drag.index=3\n    drag.position=Vector2(400,120)\n    stick.call(\"_input\",drag)\n    for i in range(10):\n     \
-        \   control.set(\"pitch\",0.32)\n        stick.call(\"_physics_process\",0.12)\n        stick.call(\"_process\",0.016)\n\
-        \    var up_height: float=indoor.global_position.y\n    var up_angle: float=(-indoor.global_transform.basis.z).y\n    if\
-        \ not bool(control.get(\"v453_touch_active\")) or root.get_camera_3d()!=indoor:\n        fail(\"real V33 input never reached\
-        \ active dungeon camera\")\n        return\n    drag.position=Vector2(400,320)\n    stick.call(\"_input\",drag)\n    for\
-        \ i in range(16):\n        control.set(\"pitch\",0.32)\n        stick.call(\"_physics_process\",0.12)\n        stick.call(\"\
-        _process\",0.016)\n    var down_height: float=indoor.global_position.y\n    var down_angle: float=(-indoor.global_transform.basis.z).y\n\
-        \    if down_height-up_height<2.0 or up_angle-down_angle<0.20:\n        fail(\"real V33 screen drags did not tilt the live\
-        \ camera\")\n        return\n    var release := InputEventScreenTouch.new()\n    release.index=3\n    release.pressed=false\n\
-        \    stick.call(\"_input\",release)\n    control.set(\"pitch\",0.32)\n    stick.call(\"_physics_process\",0.12)\n    stick.call(\"\
-        _process\",0.016)\n    if absf(indoor.global_position.y-down_height)>0.08 or absf((-indoor.global_transform.basis.z).y-down_angle)>0.02:\n\
-        \        fail(\"released real camera stick did not hold its angle\")\n        return\n    # Stair test: even if the overhead\
-        \ roof limits position, view direction must respond.\n    g.hero.global_position=L.at(t,Vector2(0,middle),true)\n    stick.set(\"\
-        view_pitch\",-1.05)\n    stick.call(\"_process\",0.016)\n    var stair_down: float=(-indoor.global_transform.basis.z).y\n\
-        \    stick.set(\"view_pitch\",1.43)\n    stick.call(\"_process\",0.016)\n    var stair_up: float=(-indoor.global_transform.basis.z).y\n\
-        \    if root.get_camera_3d()!=indoor or stair_up-stair_down<0.08:\n        fail(\"covered staircase still ignores vertical\
-        \ view angle\")\n        return\n    stick.free()\n    control.set(\"v453_touch_active\",false)\n    control.set(\"yaw_offset\"\
-        ,0.0)\n    control.set(\"pitch\",0.32)\n    # Simulate legacy controller overwriting the outdoor camera and making it current.\n\
-        \    # Recheck actual rendered camera on each descending and ascending frame.\n    for dir in [1,-1]:\n        for i in\
-        \ range(33):\n            var progress: float = float(i)/32.0 if dir==1 else 1.0-float(i)/32.0\n            var z: float\
-        \ = lerpf(L.START_Z-0.1,L.END_Z+0.1,progress)\n            g.hero.global_position=L.at(t,Vector2(0,z),true)\n         \
-        \   control.call(\"_physics_process\",0.016)\n            g.hero.global_position+=Vector3.DOWN*0.025\n            g.camera_node.global_position=g.hero.global_position+Vector3.UP*80.0\n\
-        \            g.camera_node.make_current()\n            control.call(\"_process\",0.016)\n            var actual: Camera3D=root.get_camera_3d()\n\
-        \            var offset: Vector3=actual.global_position-g.hero.global_position\n            var target: Vector3=(L.camera_focus(g.hero.global_position,0.32)-actual.global_position).normalized()\n\
-        \            if actual!=indoor or Vector2(offset.x,offset.z).length()<L.CAMERA_MIN_DISTANCE or offset.length()>L.CAMERA_MAX_DISTANCE\
-        \ or offset.y>L.CAMERA_MAX_HEIGHT+0.01 or offset.y<0.5 or (-actual.global_transform.basis.z).dot(target)<0.99:\n      \
-        \          fail(\"visible camera lost actor on stair at \"+str(z))\n                return\n    g.hero.global_position=L.at(t,Vector2(0,L.START_Z+6.0),false)\n\
-        \    control.call(\"_process\",0.016)\n    if root.get_camera_3d()!=g.camera_node or absf(g.camera_node.near-outdoor_near)>0.001:\n\
-        \        fail(\"outdoor camera not restored\")\n        return\n    if companion_mesh.layers!=original_layers:\n      \
-        \  fail(\"companion render layers not restored\")\n        return\n    motion.free()\n    g.free()\n    # Check the actual\
-        \ live terrain mesh, rather than only clipping math.\n    var world := TestGame.new()\n    root.add_child(world)\n    world.hero=CharacterBody3D.new()\n\
-        \    world.add_child(world.hero)\n    var entry: Vector2=L.world(L.ENTRY)\n    world.hero.position=Vector3(entry.x,0,entry.y)\n\
-        \    var land := Terrain.new()\n    world.add_child(land)\n    land.setup(world,null,null,null)\n    var examined: int=0\n\
-        \    var border: int=0\n    for chunk in land.chunks.values():\n        var node: Node3D=chunk as Node3D\n        if Vector2(node.position.x,node.position.z).distance_to(L.centre())>Terrain.CHUNK*1.5+180.0:\
-        \ continue\n        var model: MeshInstance3D=node.get_node_or_null(\"Gelande\") as MeshInstance3D\n        if model==null\
-        \ or model.mesh==null: continue\n        var a: Array=model.mesh.surface_get_arrays(0)\n        var verts: PackedVector3Array=a[Mesh.ARRAY_VERTEX]\n\
-        \        var inds: PackedInt32Array=PackedInt32Array() if a[Mesh.ARRAY_INDEX]==null else a[Mesh.ARRAY_INDEX]\n        var\
-        \ total: int=verts.size() if inds.is_empty() else inds.size()\n        for j in range(0,total,3):\n            var poly:=PackedVector3Array()\n\
-        \            for k in range(3):\n                var v: Vector3=model.to_global(verts[j+k if inds.is_empty() else inds[j+k]])\n\
-        \                var q: Vector2=L.local(v)\n                poly.append(Vector3(q.x,v.y,q.y))\n                if absf(absf(q.x)-L.HALF_WIDTH)<0.03\
-        \ and q.y>=L.END_Z-0.03 and q.y<=L.START_Z+0.03:\n                    border+=1\n            var mid: Vector3=(poly[0]+poly[1]+poly[2])/3.0\n\
-        \            if absf(mid.x)>35.0 or mid.z<L.END_Z-35.0 or mid.z>L.START_Z+35.0: continue\n            examined+=1\n   \
-        \         var area: float=absf((poly[1]-poly[0]).cross(poly[2]-poly[0]).y)*0.5\n            var kept: float=0.0\n     \
-        \       for piece in L.cut_triangle(poly):\n                for k in range(1,piece.size()-1):\n                    kept+=absf((piece[k]-piece[0]).cross(piece[k+1]-piece[0]).y)*0.5\n\
-        \            if area-kept>0.10:\n                fail(\"terrain mesh still covers part of open stairs\")\n            \
-        \    return\n    if examined<5 or border<4:\n        fail(\"could not verify actual cutout edges\")\n        return\n \
-        \   world.free()\n    print(\"FIX54_RUINE_OK: wide camera, real V33 touch drag, staircase tilt, companion spacing, 66 stair\
-        \ frames\")\n    quit(0)\nFIX54_V441RUINESMOKE\ncat > '/tmp/lwod_fix41.py' <<'FIX41_PATCH'\nfrom pathlib import Path\n\
-        import re, os\nB=Path('android/scripts')\nQ=Path('android/tests')\n\ndef once(s,a,b):\n    assert s.count(a)==1, f'FIX41\
-        \ source anchor {s.count(a)}: {a[:110]}'\n    return s.replace(a,b,1)\n\ndef edit(name,fn):\n    p=B/name\n    p.write_text(fn(p.read_text(encoding='utf-8')),encoding='utf-8')\n\
-        \ndef landmarks(s):\n    # Remove the exact former 4 pillars and oversized floating lintel at the source.\n    pat=r'(?ms)^\
-        \    elif id == \"Ruine\":\\n.*?(?=^    elif |^    return root)'\n    m=re.search(pat,s)\n    assert m and '_block(' in\
-        \ m[0], 'FIX41: original ruin branch not found'\n    s,n=re.subn(pat,'''    elif id == \"Ruine\":\n        var castle :=\
-        \ preload(\"res://scripts/V441Castle.gd\").new()\n        root.add_child(castle)\n        castle.setup(game,terrain)\n\
-        ''',s,count=1)\n    assert n==1\n    return s\nedit('V417Landmarks.gd',landmarks)\n\ndef motion(s):\n    anchor='func _floor_at(p:\
-        \ Vector3) -> float:\\n'\n    return once(s,anchor,anchor+'''    if is_instance_valid(terrain) and V441Layout.walk_on_dungeon(terrain,p):\n\
-        \        return V441Layout.dungeon_floor(terrain,p)\n''')+'\\nconst V441Layout = preload(\"res://scripts/V441Layout.gd\"\
-        )\\n'\nedit('V31TerrainMotion.gd',motion)\n\ndef fusion(s):\n    anchor='func toggle_fusion() -> void:\\n    if not _playing():\\\
-        n        return\\n'\n    return once(s,anchor,anchor+'''    var v441_actor: CharacterBody3D = game.get(\"hero\") as CharacterBody3D\n\
-        \    var v441_terrain: Node = game.get_node_or_null(\"V27ContinuousTerrain\")\n    if is_instance_valid(v441_actor) and\
-        \ is_instance_valid(v441_terrain) and V441Layout.in_dungeon(v441_terrain,v441_actor.global_position):\n        return #\
-        \ Flight is not available in the underground rooms.\n''')+'\\nconst V441Layout = preload(\"res://scripts/V441Layout.gd\"\
-        )\\n'\nedit('V414Fusion.gd',fusion)\np=B/'V414Fusion.gd'; s=p.read_text(encoding='utf-8')\na='    if is_instance_valid(terrain)\
-        \ and terrain.has_method(\"surface_height_at\"):\\n'\ns=once(s,a,a+'        if V441Layout.in_stair(V441Layout.local(p)):\\\
-        n            return V441Layout.dungeon_floor(terrain,p)+0.085\\n')\np.write_text(s,encoding='utf-8')\n# FIX54: independent\
-        \ current camera, not the outdoor camera shared by legacy controllers.\np=B/'V27CameraMap.gd'\ns=p.read_text(encoding='utf-8')\n\
-        anchor='func _physics_process(delta: float) -> void:\\n'\ns=once(s,anchor,anchor+\"\"\"    if _v442_indoor_camera(true):\n\
-        \        return\n\"\"\")\ns=once(s,'func _process(_delta: float) -> void:\\n','func _process(_delta: float) -> void:\\\
-        n    _v447_present()\\n')\ns=once(s,'    name = \"V27CameraWorldMap\"\\n','    name = \"V27CameraWorldMap\"\\n    process_priority\
-        \ = 2000\\n')\ns += r'''\nconst V441Layout = preload(\"res://scripts/V441Layout.gd\")\nvar v442_indoor_active: bool = false\n\
-        var v447_camera: Camera3D\nvar v447_dark_env: Environment\nvar v447_offset: Vector3 = Vector3.ZERO\nvar v449_last_yaw:\
-        \ float = INF\nvar v449_last_pitch: float = INF\nvar v449_last_actor: Vector3 = Vector3(INF,INF,INF)\nvar v452_view_pitch:\
-        \ float = 0.32\nvar v453_touch_active: bool = false\nvar v453_touch_pitch: float = 0.32\n\n# V33 supplies ABSOLUTE view\
-        \ direction after handling the real touch event.\n# Looking up in V33 is positive, whereas a higher orbit looks down.\n\
-        func v453_touch_camera(yaw: float, vertical: float) -> bool:\n    if not is_instance_valid(game) or not is_instance_valid(terrain):\
-        \ return false\n    var actor: CharacterBody3D = game.get(\"hero\") as CharacterBody3D\n    if int(game.get(\"state\"))!=2\
-        \ or not is_instance_valid(actor) or not V441Layout.in_dungeon(terrain,actor.global_position):\n        _v442_indoor_camera(false)\n\
-        \        return false\n    if map_open: return true\n    yaw_offset=yaw\n    v453_touch_active=true\n    v453_touch_pitch=clampf(0.32-(vertical+0.31)*1.25,-0.55,1.08)\n\
-        \    return _v442_indoor_camera(false)\n\nfunc _v452_effective_pitch() -> float:\n    return v453_touch_pitch if v453_touch_active\
-        \ else clampf(pitch,-0.55,1.08)\n\nfunc _v449_companion(actor: CharacterBody3D) -> void:\n    if not (\"phoenix\" in game):\
-        \ return\n    var bird: Node3D = game.get(\"phoenix\") as Node3D\n    if not is_instance_valid(bird) or not bird.visible:\
-        \ return\n    # Place the existing animated bird on the far side of the hero relative to\n    # the actual lens. Keep its\
-        \ full render layers and avoid the stair walls.\n    var ahead: Vector3 = actor.global_position-v447_camera.global_position\n\
-        \    ahead.y=0.0\n    if ahead.length_squared()<0.01: return\n    ahead=ahead.normalized()\n    var side: Vector3 = ahead.cross(Vector3.UP).normalized()\n\
-        \    var origin: Vector3 = actor.global_position+Vector3.UP*1.35\n    var space: PhysicsDirectSpaceState3D = actor.get_world_3d().direct_space_state\n\
-        \    var destination: Vector3 = origin+ahead*2.3\n    var found: bool = false\n    for sign_value in [-1.0,1.0]:\n    \
-        \    for offset in [Vector2(2.35,1.30),Vector2(2.05,1.65),Vector2(1.60,2.15),Vector2(1.85,1.15),Vector2(1.55,1.5),Vector2(1.10,2.0)]:\n\
-        \            var candidate: Vector3 = origin+side*float(sign_value)*offset.x+ahead*offset.y\n            var q: Vector2\
-        \ = V441Layout.local(candidate)\n            if not V441Layout.camera_zone(q): continue\n            candidate.y=maxf(origin.y,V441Layout.camera_floor(terrain,q)+1.1)\n\
-        \            if candidate.y>actor.global_position.y+3.5: continue\n            # A broad sideways check gives the wings\
-        \ room and prevents wall clipping.\n            var clear: bool = true\n            for wing in [-1.1,0.0,1.1]:\n     \
-        \           var tip: Vector3 = candidate+side*float(wing)\n                if not V441Layout.camera_zone(V441Layout.local(tip)):\n\
-        \                    clear=false\n                    break\n                var ray := PhysicsRayQueryParameters3D.create(origin,tip,V441Layout.CAMERA_WALL_MASK,[actor.get_rid()])\n\
-        \                if not space.intersect_ray(ray).is_empty():\n                    clear=false\n                    break\n\
-        \            if not clear: continue\n            destination=candidate\n            found=true\n            break\n   \
-        \     if found: break\n    if not found:\n        # At a narrow corner, remain ahead of the hero rather than behind the\
-        \ lens.\n        for step in [2.3,2.0,1.8,1.4,1.0]:\n            var candidate: Vector3 = origin+ahead*float(step)\n  \
-        \          var q: Vector2 = V441Layout.local(candidate)\n            if not V441Layout.camera_zone(q): continue\n     \
-        \       candidate.y=maxf(origin.y,V441Layout.camera_floor(terrain,q)+1.1)\n            var ray := PhysicsRayQueryParameters3D.create(origin,candidate,V441Layout.CAMERA_WALL_MASK,[actor.get_rid()])\n\
-        \            if candidate.y<=actor.global_position.y+3.5 and space.intersect_ray(ray).is_empty():\n                destination=candidate\n\
-        \                found=true\n                break\n    if found:\n        bird.global_position=destination\n\nfunc _v442_indoor_camera(apply_view:\
-        \ bool = false) -> bool:\n    if not is_instance_valid(game): return false\n    var outdoor: Camera3D = game.get(\"camera_node\"\
-        ) as Camera3D\n    var actor: CharacterBody3D = game.get(\"hero\") as CharacterBody3D\n    if not is_instance_valid(outdoor):\
-        \ return false\n    var indoors: bool = int(game.get(\"state\"))==2 and is_instance_valid(actor) and is_instance_valid(terrain)\
-        \ and V441Layout.in_dungeon(terrain,actor.global_position)\n    if not indoors:\n        if v442_indoor_active:\n     \
-        \       v442_indoor_active = false\n            outdoor.make_current()\n            v447_offset=Vector3.ZERO\n        \
-        \    v449_last_yaw=INF\n            v449_last_pitch=INF\n            v449_last_actor=Vector3(INF,INF,INF)\n           \
-        \ v453_touch_active=false\n        return false\n    if not is_instance_valid(v447_camera):\n        v447_camera=Camera3D.new()\n\
-        \        v447_camera.name=\"V447DungeonKamera\"\n        v447_camera.physics_interpolation_mode=Node.PHYSICS_INTERPOLATION_MODE_OFF\n\
-        \        v447_camera.near=0.12\n        v447_camera.far=outdoor.far\n        v447_camera.fov=75.0\n        v447_camera.keep_aspect=outdoor.keep_aspect\n\
-        \        v447_camera.cull_mask=outdoor.cull_mask\n        v447_dark_env=Environment.new()\n        v447_dark_env.background_mode=Environment.BG_COLOR\n\
-        \        v447_dark_env.background_color=Color(\"#211a15\")\n        v447_dark_env.ambient_light_source=Environment.AMBIENT_SOURCE_COLOR\n\
-        \        v447_dark_env.ambient_light_color=Color(\"#b7a28a\")\n        v447_dark_env.ambient_light_energy=0.30\n      \
-        \  v447_camera.environment=v447_dark_env\n        add_child(v447_camera)\n        v447_camera.top_level=true\n    if not\
-        \ v442_indoor_active:\n        v442_indoor_active=true\n        v447_offset=Vector3(sin(yaw_offset)*4.5,3.55,cos(yaw_offset)*4.5)\n\
-        \        apply_view=true\n    # Use the raw right-stick vertical axis independently of the legacy pitch.\n    # The external\
-        \ camera still owns its unchanged yaw/movement input.\n    var indoor_pitch: float = _v452_effective_pitch()\n    if apply_view\
-        \ or not is_equal_approx(yaw_offset,v449_last_yaw) or not is_equal_approx(indoor_pitch,v449_last_pitch) or actor.global_position.distance_squared_to(v449_last_actor)>0.04:\n\
-        \        V441Layout.dungeon_camera(terrain,actor,v447_camera,yaw_offset,indoor_pitch)\n        v447_offset=v447_camera.global_position-actor.global_position\n\
-        \        v449_last_yaw=yaw_offset\n        v449_last_pitch=indoor_pitch\n        v452_view_pitch=indoor_pitch\n       \
-        \ v449_last_actor=actor.global_position\n    _v447_place(actor)\n    _v449_companion(actor)\n    return true\n\nfunc _v447_place(actor:\
-        \ CharacterBody3D) -> void:\n    if not is_instance_valid(v447_camera): return\n    # Follow the latest hero position every\
-        \ rendered frame, even between physics ticks.\n    v447_camera.global_position=actor.global_position+v447_offset\n    v447_camera.look_at(V441Layout.camera_focus(actor.global_position,v452_view_pitch))\n\
-        \    if get_viewport().get_camera_3d()!=v447_camera:\n        v447_camera.make_current()\n\nfunc _v447_present() -> void:\n\
-        \    _v442_indoor_camera(false)\n'''\np.write_text(s,encoding='utf-8')\nprint('FIX54 independent current indoor camera\
-        \ installed')\n# Actual touch owner: V33 disables V29 and keeps its own view_pitch.\n# Forward the real final yaw/pitch\
-        \ from BOTH render and physics paths.\np=B/'V33TouchCamera.gd'; s=p.read_text(encoding='utf-8')\nassert 'var view_pitch:'\
-        \ in s and 'var camera_yaw:' in s and 'var old_look:' in s, 'FIX54: unexpected V33 touch source'\ns=once(s,'func _update_camera(delta:\
-        \ float) -> void:\\n','func _update_camera(delta: float) -> void:\\n    if is_instance_valid(old_look) and old_look.has_method(\"\
-        v453_touch_camera\"):\\n        if bool(old_look.call(\"v453_touch_camera\",camera_yaw,view_pitch)):\\n            return\\\
-        n')\np.write_text(s,encoding='utf-8')\nprint('FIX54: V33 real touch controller connected to dungeon camera')\n# Old decoration\
-        \ exclusion was 160 m around Ruine, covering entire 128 x 144 m castle.\n# Preserve it, existing map / teleporter / landscape\
-        \ and the old streaming fixes.\np=B/'V27Terrain.gd';s=p.read_text(encoding='utf-8');assert 'city == \"Ruine\"' in s\ns=once(s,'\
-        \            _emit_vertex(st,x0,z0,origin)\\n            _emit_vertex(st,x0,z1,origin)\\n            _emit_vertex(st,x1,z0,origin)\\\
-        n            _emit_vertex(st,x1,z0,origin)\\n            _emit_vertex(st,x0,z1,origin)\\n            _emit_vertex(st,x1,z1,origin)','\
-        \            if v443_ruin_chunk:\\n                _v443_triangle(st,Vector2(x0,z0),Vector2(x0,z1),Vector2(x1,z0),origin)\\\
-        n                _v443_triangle(st,Vector2(x1,z0),Vector2(x0,z1),Vector2(x1,z1),origin)\\n            else:\\n        \
-        \        _emit_vertex(st,x0,z0,origin)\\n                _emit_vertex(st,x0,z1,origin)\\n                _emit_vertex(st,x1,z0,origin)\\\
-        n                _emit_vertex(st,x1,z0,origin)\\n                _emit_vertex(st,x0,z1,origin)\\n                _emit_vertex(st,x1,z1,origin)')\n\
-        s=once(s,'    var step_size: float = CHUNK / float(RESOLUTION)\\n','    var step_size: float = CHUNK / float(RESOLUTION)\\\
-        n    var v443_ruin_chunk: bool = origin.distance_to(V443Shaft.centre())<CHUNK*1.5+180.0\\n')\ns += '\\nconst V443Shaft\
-        \ = preload(\"res://scripts/V441Layout.gd\")\\n\\nfunc _v443_triangle(st: SurfaceTool,a: Vector2,b: Vector2,c: Vector2,origin:\
-        \ Vector2) -> void:\\n    # Cheap broad-phase: for all other regions emit original vertices exactly as before.\\n    var\
-        \ centre: Vector2 = V443Shaft.centre()\\n    if a.distance_squared_to(centre)>36000.0 and b.distance_squared_to(centre)>36000.0\
-        \ and c.distance_squared_to(centre)>36000.0:\\n        for p in [a,b,c]: _emit_vertex(st,p.x,p.y,origin)\\n        return\\\
-        n    var qa: Vector2 = V443Shaft.local(Vector3(a.x,0,a.y))\\n    var qb: Vector2 = V443Shaft.local(Vector3(b.x,0,b.y))\\\
-        n    var qc: Vector2 = V443Shaft.local(Vector3(c.x,0,c.y))\\n    if minf(qa.x,minf(qb.x,qc.x))>=V443Shaft.HALF_WIDTH or\
-        \ maxf(qa.x,maxf(qb.x,qc.x))<=-V443Shaft.HALF_WIDTH or minf(qa.y,minf(qb.y,qc.y))>=V443Shaft.START_Z or maxf(qa.y,maxf(qb.y,qc.y))<=V443Shaft.END_Z:\\\
-        n        for p in [a,b,c]: _emit_vertex(st,p.x,p.y,origin)\\n        return\\n    # Fill the normal chunk vertex cache\
-        \ even when a triangle crosses the shaft.\\n    var poly := PackedVector3Array()\\n    for p in [a,b,c]:\\n        if not\
-        \ v414_vertex_cache.has(p):\\n            var h: float = height_at(p.x,p.y)\\n            v414_vertex_cache[p]=[h,color_at(p.x,p.y,h)]\\\
-        n        var q: Vector2 = V443Shaft.local(Vector3(p.x,0,p.y))\\n        poly.append(Vector3(q.x,float(v414_vertex_cache[p][0]),q.y))\\\
-        n    for piece in V443Shaft.cut_triangle(poly):\\n        for i in range(1,piece.size()-1):\\n            var v0: Vector3\
-        \ = piece[0]\\n            var v1: Vector3 = piece[i]\\n            var v2: Vector3 = piece[i+1]\\n            if (v1-v0).cross(v2-v0).length_squared()<0.000001:\
-        \ continue\\n            for v in [v0,v1,v2]:\\n                var p: Vector2 = V443Shaft.world(Vector2(v.x,v.z))\\n \
-        \               st.set_color(color_at(p.x,p.y,v.y))\\n                st.add_vertex(Vector3(p.x-origin.x,v.y,p.y-origin.y))\\\
-        n'\np.write_text(s,encoding='utf-8')\np=Path('android/export_presets.cfg');s=p.read_text(encoding='utf-8')\ns=once(s,'version/code=4209','version/code=4223');s=once(s,'version/name=\"\
-        4.1.7.39\"','version/name=\"4.1.7.53\"');p.write_text(s,encoding='utf-8')\nprint('FIX41_INSTALL_OK: old pillars removed;\
-        \ real castle and underground layout linked to player and flight')\nFIX41_PATCH\npython3 -m py_compile /tmp/lwod_fix41.py\n\
-        python3 /tmp/lwod_fix41.py\n"
+      run: |
+        set -euo pipefail
+        python3 - <<'LWOD64_05'
+        import base64, gzip, hashlib
+        from pathlib import Path
+        encoded = (
+            'H4sIAAAAAAAC/919a3PbuJLod/8KHqX2WrQpRqQeln2ibGXizExq8trYM3PO5mRZlERZPJFEhaRsK7v732934w2SspyZu/fWnapJIgJoAI1Go19o'
+            'FEnpdJJt5mzSTTKP0+XR6ssszZ3OxonXszxLZ0+LaZ5uykL+LpOiLI6mcek8d46tSk9/6/eDN/Eu25b+zezYefbs+MfXfxv0I/r+4u/vf70+Pkru'
+            'y2Q9K5yPyfxltl2XyezoiXO1iPNk5kyzLJ+l6xg6ceZZ7uTbdO05s+36JsngH5tlvEty5yaHdjMckTONV0ke+0fTbF2UzrUzdjZ5ssziWbuVJ8XF'
+            'U21kwdl1kudpmeVpUsDwWi5vBaN69TH624Uzh4YlgBj2/a5R9u+q7CyEsifO+02y7sSAqaKEP++S5RJGt9gV6TReLnfOdFs6Gf4/d8pF4pTQcZyu'
+            'fecdYDrLy3jprLLbZJWsSzH0q+sXH6/1jjqhGsWrd5dG0WAoiy5ffbj+WRUFI1ny84s3P0a/v77Uiwd+qErfRD+8ePmLBjYIR1qX1x//fuH8lkwB'
+            'YSGU8n+1ux4fqnt0BJMv06kz366nzhQmkydt1+k8F3Uvjhz4L0/Kbb52rv1pWu6iuyxfwuJ8hIVNWhYIWPG7OJ/tg3EDpBEBhUJhmq0FHE/A89dZ'
+            'voqX6bcEoJjA8/RmUdaAvo1zZ6ZPVI5C71nMfubvvM7Mv7eALzNY9/ZGgOnVd/O1Dp8b/97b+N/cjkBgXbdf/VlWtvkUXI/9lAN1rdEwHKveGvEp'
+            'ujzlkE+++venEiz82pmAJ3GRtDkxXwAxzxICTQTEAD9xrrONA0DjmZMWTnIfT0vYD0BfuA9y2PgJ7nOxg9lnHEW8nia+xNRUxxSbDhGkgRzqVgzH'
+            'x43XbhXbfB5Pk2iR4IyiuGx5U0Dw1N+5rpPOYUxRCuSNvUW3QCgz0d51kmWROF3YAMaUYRcX6UwANCfvWSjW8ICT2FQn8fV7JsAo5HsnkK4j4lE2'
+            'PUyybGkQQzwp5kBo967zbKwxD2KzQAn4le98+en5mLGmSo8LnMvBHT7rAasTQJ+NCaT4+VwyKmvHJbdJpQttAXgfHeKPJ9NlvNrM220+gQ4Adp/K'
+            'X9Sh6wHqvMDvupXZ8PPHWnxrt6vpVbY65w6uLIUjSrFdWNqOvrFYNVhqhZ9xdTmeW2vxbMw/nPb9ARuHhoYNVqgnZe+rexr6A9GpIhe3AgWGjVTA'
+            'Ua+a8WK57i4Nimo7nXObIO/i5Zco+5OxqoYgRu+A+NC2hoRoMFCNo7PWmw8rguXJ8v2Dq5KbAfyUIUqM0+onbmYm3hbZJOORF4QCjYP3FDruGhkM'
+            'lu4UidUN6yuxE60nxj8aiaR6LPXad8CZdqewb0YD7w621BFIRq+Q5Tt4QMfrm2XiFNsJcHc6rn3nVTxdgKyZTBNnCVKY6M2JnVk6n8PRsC4dWLB5'
+            'ByS9dfJXAHeb5IAyqJqCpJhvsiUIALC06Q1IiUshWMGBk7Le2LALz4lvQS5N1zfOFDr/UvgAio8a6uSJsy0A5jQuymXSoRVy7r1vRCQSOGHUgcOr'
+            '4GB9YwGjYrNMyzYMCTD9ATpJZryHFzConRffp8UFDttLZjcJXwyvSG/WyLi34gstLbX4VAXyWS12ul6D6HsxrumqrRYdEPpALVh0HLIPB0my2pTw'
+            '+UIs6yfqwyMYn9Uxlie3ku6RX0HrTwSiADmr7XYCVXe2UUTXxoafEAufO4gB90TNnRqggD/d4swIpmI3BGmqQYJa+wDxabVnm+djIEb3L+P2bMr+'
+            'qYBK0SLPisKYDwzTXwJtYTfebPMU4HRmU9c1mhJq/HgDcv+sTTDMckJaQzmMjY/nwoKzzVUt3H4XFhy9HMc5hi/yw2wznk31bWmunymdb8tIbJJG'
+            'kj2UFGkDAw4bqwJWP33WTruirOuO05KkhQlxIaCGT5+6XkcdeXgof/bgm/apw76FHp3dnvjFz0BW/NmkKNqu+wfNtzQO2ION26YRfep+dj0mqrHf'
+            'gfU7/Owaa01AoBbfH8/HvQuOMrGuooarnbBFOWafu591YFjAAT0DOBOQrL/oa84AI+O9TGagfZakRS+XaQEM15ngjLM1SuDTcgs8jXE8PIOXBVOg'
+            'k3QJbBJ+AP+dMnncVKpfvnj76uOL6HeUw96+uPqFeBqqmqDeO8G5Wevt63fR5WtYhncvX6kNHPrBwKr34m/Rz69e//Tzta6cjrpmrSokEG6qgKrV'
+            'zqCaSf80pWieTbdFO8ZVlyzA26TldKFzY+OgfeL8kiQbwgu1QwLFH/McQDpwlK5xmUi7yUDdX6artCxEdUR5lsMqyBNEl38R3CnvzP/1g5BSAz8c'
+            'dto0qk7X74XuSeD3ByCeBl0v9IcDt35qNfJKs3hsSXr75JevrtaCS1P1DZiwrU+xWZqom8K3bJ00aw31A9CUiNDvV7UGkE7ORXMsMLULU2quwlQc'
+            'B1ZiMOAEgcYf2GTbvNyBogz7y9BiHZyx56wz3EwgWd0sHKQIknNo3xlEoInyOAY5MPEt6HLVqHlQteIrQ6lFDyD5ZBfOy0WMAlmS/5DNdr1LD6rC'
+            'R6oPv3bxnZBVKhsDZSp1DJjbCHYdgvdvltkkXkabrEhR5pO1aevptatbknWohJliA5ownBxkVysuyepzhd+uYMJJ71J2mZTMrhT1Zm3XZ+ahiFoj'
+            'iZcJX7fLjFalWGR5maw1VoccLWO/BW5850OegEQKuHfiJXxAoyQ23S5BYuYAgRvQsnIKoO0EHDZxUEVP4pnnfAHegVJoDMd3tgFw5SLNZx34VwGN'
+            'ZinT5H0O71doSoCQtRAyANJmW6IISiR2DwNJUWyiYXvOXVouAHYRz7HPWYYmUzjjNUtKshO7T3FHzmd6QDynBp9B7gJn6bDrDeAPtRATOsHV0hmc'
+            'q12k6zZQjXvSAwVa9edNs0J+lzwEF0BsY6YZIXCX6Wfah0aNFkv93XiVrudt9m/P5Fo9/1wb+hw6msBhrw8fm8kKi/g2iVQt5DdoBIxBGlOEmC1v'
+            'k1lNIYotTPFAsQUNCLAjQ69Df4IMMiBJBHE6OMN/wp9wFnod/KPnB/1gcB4OB5aggnxBLRZg8JRJG9SRa1TFMaO0ry8FNmfGDFwA+qUa4YAF1dGY'
+            'rZPW60M7IAwP1xLIAf4PP9cI0bBa6Qx2RJUqcEgnbMCiI1c/5BSBVKFW1XvZkSWNM0LSz40pnAkgGZTpWtMKrAMcCKQA+eg2Te6ACJbZHdvz2S0Z'
+            'JSUD52bJMtsIAz7tbM64rTEIYp4yEp42Eq74T05JULH2oZGUtU616s/qzn5v6sKhN3qg530tKw0Pmyp3yMg+nlcn07BE5qyeEyH5u9MaWbGpuT20'
+            'plEwEQVP1X4juVwBd1wyRgyiMZDDTYz8nMl063i5K9HLw2jiKSGQnfbbdZ6geWJmwRPY5e4rD/pdbeI1yuewG999eKkJ7MUi3iQWodFZO8mQTWFn'
+            'kg2VuTV03NxzbmvhDClEuRH/Pxt8rhIE8Taarb6P6UTmGrHAI1d4BHRLORaKD4FqIku2oVkdFwkt7FZHhP9pcx0rVmv/pzQhi0oNVDXRC1Y0OX+l'
+            'E1EylkioVDEgjCvrQcov6LlojmEyzMd492/bJN99iFF7AMwUvUt/CjMpkzah3VMYt/Uu75MUdvIU5JzPbqWzBap7lyktUZyjgk1CkE+2swKFIrQD'
+            'oaZfi4+0NKxCDdvjhQOQMjTwwtRu0lu0oy2TmLNOZkrErbJO0FSAdjzBUIVeaQ97E8/QVBcdjiuFJfkvdvCAHNN9LOb49OtQpY3MfRg3KFc0UAuT'
+            'IKokYlIx7iEhasiCJ84rVDJjB0+nIkUTqeIXgFkQ/5J45ay2wKLWoLER0qecfyVrtJySkIq/CQ+6KMa6I55pC0I4GfHziB0fK1u6H0tRCgthy32J'
+            'kEsgJbtHtut/X9DAS7JLVIMGXr64un7zSgUNoBrTu+QmgDf73P1aIELLPUIyuwEyYooQ/TRUI/pSlCBISLvWNaIbWOqqd8kNWiSjZMssL4Q56yX+'
+            'EsYs+1ObdZuD+A9U/RGmna3ebVeTJP8pWcNGwENundzxaqgaRhPQyC6cK9LnmHZGZUKpayjGEy7SzP3oA5TziVag82Ob9QyU1bcxahDxkreEIUwX'
+            'jTWOSKMsQFHdtLM7GHKkUOjBxp5pPmClGq5ReRk7LVyC35IcSQim+8M2v2lR+Q0rVwDpq7Dkg+AHgJmGvL7xiwSoc+wAqLNeQF/ZZOHbG7/qNatI'
+            'kW98w61ecfa/8U13vyBsR8nU6D9mnZIbmQ0twzXI1j4OJAbMYWTAvTcT5XIxoVhfLr7eRhVfIAxR9IvY2S2rEqxCJLd9RIIEs4C3w66HbIVBBX4V'
+            'TRfpctaWTVmBTkLNg9JryXFdso/W0Iyqjx6d3pqVSWJlo7NoURujrOijbyi5j2hLRltYobiI4uUkmWW6dKTqkzEGdniB1kvYI0R3Ygc81K2s6LMu'
+            'WLfQijZ8u/VkPp/MBqOWXTtZpQVhJVnHkyVRsxxatZYBbzTrhfvgJfnNLlptl2W6WaZJTrMaUvWI2Xn50KWrlf8E+XOVlhFjd/zjE24BwqgN3Joz'
+            'Z7KjIwNNFaDH4bGDmxVlWGE1wUMwh1VPuABMLaA97uBVnH9hJw3SBguNKqJNnk0B/20S61xVbH5mfCdibsmHffxv/EYzY4dtXAGRZqyF6XhoWFe/'
+            'YEUvGPo1Kxjjpx7O0/hSYxCbIJ//IQZ0tZXC65EJxPz64/uPv7/4eElANaKW/gHt6GlP/ALk5mQWcfkZRux6Gy6As9NIuouypUQeHOwg6lQPDK9x'
+            '9vaUayZI2glNMru/wn+bGxO/kK8CBU/4S7VbAnVcEGkzFlHTGKr4DP6YQVKfNaa8UV8NHgyDZ6cDciPFZrCia6w+27Zt2OaWsYemS4uvWTj5oGk/'
+            'Ds4Gvf68RW5zbM785aL0DP4bTlquSQyidBSeTc66TW3jOB6cn7UMF3vMFLCJh6cgkMNs3nblTJC3t2MVLzBR/zRsfR5sR5Tl2A8MptSsWMiFqpEG'
+            'Ah0eKVC6VNHpDeuJAnRZVSv2hdUnKrP2RAtH0Mmrw87M9qQTu/7OY3/fa2c4BoYKR9Mqvk/bgUeeqjb29rTnD11VebtONeMmVWDaKkFxpaEuRZ2Y'
+            'zKO8xDS7GcElEv1tBipFhXXgGoBNU9yNGgJHXW18heRqZuuFam0Zx9AHyBbOUBwWsuZJu+sPz1Cf7p2g/U8M+ASOuLNTRId7KokoYvNnlsrg3JpD'
+            'nt0VBtZDjvXF064/GlZrR/q4OXIQiKqI+mKOLsqCHJOkNWVbUBmzHBTCZYZhGKi07JwVBsbmzj8z7F/Dm6+jQqdXAx+ctwuh7StIYzenC9AHB2jb'
+            'HngY8eWJUqQYClvxFmyLdNAa4XpiQ/ZGvX4IW514tzHneJmtb3RCYaRrhJ3q5hhAhqI6wkzVmKrtsRsa7GlbYpKR3QmhutKQe7QVz+71KQ4Cap+m'
+            '7r+E43FXBAUOhxVL0SbOSzW20K03D2G4MjBZfX9BpxRFAu1lD0BrHSqpBbJKZxtcVgsKrk4FUhtAnVKxi+W18G71Ffh6Soty0m6LbjqEM1xkt7Z5'
+            'Np+D1KEGY+8OaN/todEM/qxCsCjtFmOgvFudvGDrzNtEXjiGE45CBtX1aC3xRzhkxHfKxuN6xgmlUbpFh/xsNyT6OlYjNQCvflf06zdF31ugFZiN'
+            'jXfNz50yu0v0QFIvF2eL4ANeBpJIur5p9hqioCaZTDCs485UxeLOsVqu6xe/nggmx3kOa2G6RmobnAYNTUS85V0eY6BofDoh8uvw+XidD6+9D69d'
+            '9xnssnNzq1RsQUz3BqI2yVQEc6NbJnY95NWxC3vbaDdP12mxaG44YQ0nRkMmEFCXHgMAaxj6I/M8QGex64V+j2tkfFFj0Cz0Nb1LZ6VcTlOcmCWb'
+            'co9DWMgRAu/WWUdnhiqlfuQWZ/wsV6Qjz7dOLmmE7Fho2EavGgX9XBjc9p+KhgY1jHaju8oo1F1SgnvSzsn34Xps0IIH/5NzYDa2pwPo96tv2U+F'
+            'XiG3UoB+VNUCN3t/wLBn7XK3sq1rd+3ekbKOEJPmhtZGwfuulYWCnr3V0M+oVuHD6xNLCAp6XHluRCyROLkr2WiH9mhPifqtGgZia5CKftReAx7J'
+            '4UkAYaciLkxucIAGcpiSU1F0GoanKtcrNs3KTVXB+YYCqTY1WU2ZhxpUHmEGMPfqE+djFjOjb3IP0joGKJR5fJssnWm+K/B6UoJmcBm/Qlp9MHRW'
+            'zk28YfIYYzmCM3WGfe8sFKQHv0f0M2Ce5NCtaTIyGvD2VgNiTeriEdUYekFfVXni/JBnX5K1Fl5DPgnub6Bgt9hZx6BTsYtZsP7xBmXRIl0usm1S'
+            'lslBE4LfvcA1+q62CHtmiw4fcUMTqw9sEGCDwZ4GHb0P2cXeUXWMiZzxJo2dnJkNZB89igwQTZgoIKEO+t4QBnYOyxf24aAE5WNQW1OveL6vIoLs'
+            'yKqhp+/qKkxV88yo+cS5vssoMm+Jdr87DHW8cOIpKiTpBIiDn+8sGJIpWiSP0p7kjtiHjh7kGveG+id5de9MY5Umnu87AUaCjBSq70/FF4z0cw9v'
+            'h1+CPiBgT6vT2t6w1RmibW9vWEt96LNW+/rqm01ET8OHZnVm9oO/kauO9vVkNDrlULRWPF4PI7GEI3KOgVEY6j/nASA8lO+vFKmHXAfNoFjEhWzr'
+            'ipq1xwLYMoO+ucfwN+yx0B827DG9QfBgg2of8OGNL65iwu5sahlU+9LbBft61CrKz298LQxbh9RtgtTUomFEOhw6AN74dPfP0+GchLgLUeSRlZ84'
+            'P5GEkeA+nkxYTBauIQ6G+VPZLicm4HFfKQ/dy+FAfFomywSVtST36wSl84ElKOEW16/P+l0KRdEU78ASlL4qQSkkDnFi6579kTeEc6aikvbPvf6Z'
+            'ZYC5a1Zhuz5GmvUr4pSuCSrx/PSOOc4N8fHOw69DUAhO6qCjrONWpLBKTQ+Ur5rpdH3QfvEPV3kBVkkZt1vs0I5QumopEglHwED6ygLKTGyT7F7X'
+            'XHbqko0ybIeW8FODiF2nIjsjBChBXk//3Cnj0OB80OvPWmosS3I61IyjQfutkgwM4hnG+Ro0I5zClmzt7ZSczOeCteTIAakhxvv04I/+SLNpdcPz'
+            'sNdyKy07as5Aj0QHXT8YeV1Xg3lGH4dUomD2+71hGB8AcxCy8HUDZo8oADryUbKS45ziSFuafXee3oP4RiL526RYvObXXw2xnNeRPsvfkdjQH79s'
+            'STgrhHC1wetfCEdrvQLinKXbgoxowRn/xtRP+jbsa/XiZVQkN3h5HxuMRAlJEWOnb4xnBR2hMdX8yP2LEQYe5ihYjJWDz6ipKQcNaEWD4bnXtf2r'
+            'HIBCIhEpIuD9ap2+wR8G/qjYpz/rHJu9YdyqVmQeSLrf0dcKM+iB7XO08Aw4ObMyUIBm2Z3mC1UBXqzCAzM+xwnjZQh7wtRabkkU+GCR4mV7GU/w'
+            'su1VSWpwk/OrnkdsqJKizFnvvKftoIoVzmMNalzpGHpUdXyrzxF5FPAunStImAauXFcYVbS+iYhMdF7jmH6ah5kdr4/3IiyeRzw5ABQTX1abfN7v'
+            'oh/afRgicA0L4lkfNz7+cdbXWGg86PaHB4AEIW5og+xJkD0N5LA/OOuPDLaxREQ2UjwVN1P8EN11lYoaxZ9phSbFC+sIK9tD8axCTciJjgK8O6U4'
+            'vrbDsbGabYJxRXtZJB0/zTywMJlgKD5qXDBk1lrqSnC2YqV/e5CxsXoPTrlbN2NqK7f4JgVNPt+zFTyQ+dA0wPyaLJLUc1g4kvktz4SFc1z1e8Px'
+            'zNvsk6XUHuhXCHaEh9956PVBeVb0Ohx2B2ctdAeUnm2xqnZA9jKoinc0Aq23Xoi9kb1NlOpdnw9pm8Cu1k7Ys95wMgx4110/dK17/kc1TsmhPxIh'
+            'gwyrTFbpc8a/ByOLqmESxtX3FoiUfhUhB7CZsG8bOslbA9yHhFI10QlM9fwAkIsa3hUw0STEexzhqAko4IRT2b7FA6oIZWd9n3rqMFFK4WSA3fWR'
+            'Vvoa9x1OgbNNWi6FceNhv49KOgRFQxQhnjBm9BQKwWuoTWwYD8PBOfXUY2TBd9ptCgL+Ji73HjyeY7gKxiHMEk38QtodB6CNmDvLUq9s7Sq73+Oh'
+            'Q8joqbDuw2S7fSoRoIMN0mr0ba8rkGirt393ZvcnRJYC9RkJ6afZN4X2muF0acFrlCZ2vCHV1TjuR0wI1w7owTDoDw47oG0dT0hVHO6ZxqF688Gk'
+            'N9H0nM0iS9bpPV2p2yaP5LyPEUz6Fr/Ae0gwSGYY0HfGYJAcJET0Kp6RwYBBDMgnJvd2fzgbHiKXhAjA5ml0zYvgaiBHwdn5WXAAyD6cubV8YRiy'
+            'K3l4kCi4573R+dkhswf5OxRcwOQ3iFQCrkt7o/loeDZphosq60gb9LDCNgf8zMEzT4M7G/XPRi3mp+mQ7KbHoR/ARP+MjlW/D2LtXGANCURhjTFo'
+            '/GOg8c7zvr4aD8AeKr48CnXYAZ0AfUvJHk1HvTN5MFKWiP1nzcg4Aoa8q35oERVXwAfaGXw2hbNtpI6A/UwPOPqocioTkzEQ1heHjc5czoaw03rU'
+            '0xDJIXT3zykMtaXpjcTSGHMS5zX0qcXywOqfD2fUU6j1ZJxq0sPeQcsW1tHmxa5v4vbb1xIjJnDrDipNcVTnkonKUFzbJXdFt5Jz4KVbdFShBgvq'
+            'wiwpMIDdd36E0l2HyeIUcHBDYVRFmWwKXmumZSBUF4CxRmTE0/VHyh2/1SJ72tIK20GTK+bEErESEkatB1krNo9w7WBVsE1n8gkM4aghGuqNzzIQ'
+            'KA/gN32HKRugXsHbeXWGZzIYQ1+nLApHmIx/BGR3QLi/KReE8gvyAJR3GU+s4aySpLTz1Hn8+thyfhfvHNDu1r4eIjsvIwaxbvYcs2oF0FIxycoy'
+            'W5lZLg7x1Gv4xXDFuVpBvI/p8b48GSwThH7XjE+7Zz4tw0SPjFL/YF0c1EY8pkgn7YO0KYslYF3fu7hyOCbXnLgurikoFA7A9poy5LRepesbQEPx'
+            'W5bP4umipXa+x2ApLwKcz6HGtW06gIGEtDEHsKfdSkfXeYLx1Jf1nWg4FruElLd9vXWpN500TlEj0/Ryls+yqA951do9xRWs34QcRHPclEUiVfLg'
+            'm10AaoynegCQFmNVD2rvFp+4bkeu/x4yZbqO/gX5ycgiVtMTJakxVt4n+W3iehoNdujM7JLy5zE7AQVM7wTnuFIBBzhC/SJ5vNnkGVCPR95l5B7I'
+            'VOZ5ti6VY+m7pmRhj66PN2455VRzvYcr0e50mxytNUC9B2A9Cptv8e4X3uAmD90822IM+HqN9LO+Yc53ALcqpAc3y2R2XcqWIXNv+JoB0I5gf+Or'
+            'DDUUZk5hLtE34wwkWj6lVWApZFwjSA0HWcPfqVVHa3XUeEaJXqWkgPFhZwMVcTHytE703X6vxeuOXDP2Lf2mFfZrot80b+Fw5HefUrJfu5IWvaeN'
+            '4SnlIrbrGs7MDubwFEFz6T0/3O88DSOy9BsvnbkPhXBrCLJsPncqSHfkzURsre2jY1H8UugMhiOypWh3Kk4o9KzWAQ6qhODwje5vXhwE5Inu67TN'
+            'x36AR9zqQ+/3kYDrx0wfFTk/FmgdzD8IsjKk74arsVJ0NXn4h8YwrXCR6kTkpw4JR9hhn5wgTR3ugdrB7NsmaEX8fwi8AjNs7OEA4LqU8zMZtS+T'
+            '6ZdEl3Kk0QQRrziVqHBGJpMa/gQHIu5eB5MXsxQM7AI6Bmo5mJgIRGWPchgma+Lps3jHfJIqyBAk7DgHQRynr9h4mW3qpcTA76nbVpYELaeBmS8q'
+            'c7+aLuB4Ll9MiuliuS0KHQFt6O+UgSPGLxcXtbhmIQ/VC2jZ4XJwICVLumpBBKoi29AOp1SCvr6kVhmjGrslO6KMdp2ADEhisAYhmkWhCbIXoqnD'
+            'XmnYiQ3fZUeKJjG/k77nWEDExhPC3YZSBQs6AZLL8rjEIE0RXUW3MfoONzA6zMBYeDyOx2M+JIecoIUwLjrMAcRCem6Tm4QHy7LFtmyVcvBhz5cI'
+            '7JwhIjileNqV1KbWzY3VFeeHetYYQvB93R8AAWnuq0lzITJHsZpARxoJ7CnqnGkbIOzqRaxEDebcIgLbZW1xIu6+kx2da+zmdFSZl4kfs21zU8YB'
+            'm1sSw1ZTD7rVfgkEmqTrIVgA+g0AKFFfwxjCM3tZB4+ZwwPNK9iroQ1gMmqVA4OtBF2N5EODq3TCoTZ3kxshj9HQEhjt+taAjSNtaJEVMUBLA1pL'
+            'S5Zziv9qy9yIrvMvTs8Ui5VUvK4RirP5XJdiK+6fgCwFNT4aEQbsuvsE7ar7po8mwf7gIckX74RpJmOMxAuZQRoLKlF6/X59lB5dSfgjUXrC+dVI'
+            'Oz2dQAze0VxChKTIw1j/PUV0GBrE0bdOObPUoNauVTiw2JVu1NUtuCHGvKMDppmzdveNan8pTlDi6NzcB6ogGFZ46+EuProFhAEdRK0NTsNGdzKs'
+            'v2bhFy6RYFBvdw81C38/HsYqxqfRsN/rVlwIFQ9Y2OcRieTHljpe/2zI4jDNAFIRYUWm8ZbXH1UiTOUtZJYAt6Ud36qWeQgjIHWrxsyfUY3ypNgY'
+            'doPIjjTEn+bNIf/9u1eqJQXovMWcHnbLlV+KtBAR/kEMRtW8/vji3dWP7z++jXqXogHmRGEpIvSsI1AgwhLhL/FJvipChnyM7GEpKVju6Xqzv1ZB'
+            '460ADNEoAcpht1OPtfmUaim47OqMSaUeG7isyhIdYUpUHUG1kU5UzUir8+t6xrPYXJVJul7F2yQHxeRLS6tPiVQEYlZ6QU1Uk0wqo9XDyOWIhXtB'
+            'jZ+SDAgp32kjvPr5xeX73yPMafX63U/R1atr+vv9jz9akU4Ez0gMQhnW2kbSD/Hp6MhOl2Un2qInuyglFj2TdLUC+bmaauvjr6/fvbp6+/4XLd3W'
+            'FXDi5DpPksdn3OINeCqYYv/LXLKa3vZtJu7FNTTsBdcs0wurqbdlyWxeygQ1e6CEZ6zy23ijQ7iWCamaG/I6vNkyLgpoVpT8M9sRVuYy2keUVst+'
+            '6KcdiYAXT1oktYw3IjEIHoIKym2/N4iKu3i1AXaUk0LejjZ1GXNE+6584usj6MLX2Xa62IfiHtVgGLLn+RNmA2uaJL8EjSlimbAWKhNqXRpqZZRl'
+            'ySPXGcYOibTU6u0BxpYv7K7+me2KMp1+idizG5V3tvx/f/XxPeff6TotU0rXYDNv9J1GM8z7nCeAjCjfrmHG7HGyOF22V8WNiCW2Wm62xSKCZng0'
+            '0Z66cFqnUJ1t2a/btGwHrohO3q7rTg1KEyfwqrGzPMtK7YLnjeKHpWghCFFLV0X8b9xC8pbnHa/G87BpMLlf98bHpRlbK6NB1duwyuI7X5cxW5bG'
+            'JryanumF50KNxKHZyNbNqnSGjasnrOxD69dsqb2Wwp96YRnLpPfN6ogVSrcPnBOYCpw5fHjFp/xlQnaxMMt3xwWaKeKZndrVd67xLm0qwFHCUv1V'
+            'BjJnaLkcp/G2SPRU5WUmL7GqtOUsY66a1wSYwZblgb1oTPZm1Yzkxec9l6TtNpPsvvGqtFWPBIWxkOoG3a7H/6/W5hes8c+xBcWuq61yBUKVALUq'
+            'Ggkqfjm28gXqHcmclzIxID7MBsrKRoQq0z0LRIc6zur3AU/6tfQxo9r4hv/gacvGpRaeIfJT9i7HSz/i2U/Fq4dqsNpkiJRkI4RA1wyQnUYgZq+3'
+            '+MpcTW5GF5PMa0yVcjIjrPEY2zj8Nc7qnYW/jAMspCiuLMOU3SyV5x55m5kj6ImuSm1LfMfXfPqj2poVCZ3qal4x5NgtSpeH70Cp3EMqTz+AzZYz'
+            'Z7LMpl+KVm0gtEw1Tr3P0zVfRDhs262Tltd6gxc1epct3VKj5Yq1hm6ug51a8alulXcV5g8HoAcvfBcAO8yCA7HRul0n9xvYCMmM3VQpsBeBa3Lk'
+            'or291RhbTmsQsZAbm9+MrdE+NE2kXBuGGWdC7OBCY1Nj1T9PzgAwVLFYedVYoVJrKViC/62jahKf87+h7+C5MNWD0BU0tj2tbftMOQGwtY1/emxm'
+            'liUFo05UTShyTBF3M+7Je/PdqDdIdC/qqZ8q6mX3+zCvKklE7ToKIEPUDhF1yr36z/A6sI0mokT+xhEcnRk6pBr3OZ/7Ii6QwywylADxnd6ozFqu'
+            'DZm/4wtC55K95luwU7gZ7atMHMhcX9GUe/bBPAHYeyAU3QDC6s0ahhGJh1MLipgAgfyv1LezAFHmG3A4SnIBWks4mK7gbzgw2D3FSVYuHPluLs9r'
+            'wCS4Sk7nNz6+TagsZ1pcB8WE6tZkDkLlYhzj1dOjulQy40rdIzMHvZS/aI5puxqPiDHA7lMaxGlwpN6zoEeZPgVeJ7ASAunWCtZHjQ24LkqRZtrR'
+            'UieFlKkMuhrDcUd3X5Rf8GxwatSsRkroAgZ7qLE+plE9uAKjtxFnrRPHn/ivYTF1IyGDWs1fxKnPIjJDwLfTZDUNqcP6cJ+j6RA5nl5brXyHpf6B'
+            'Wl2dtVl7l0W7ztKCn91puaOzbIELOkNXMz2tU4KmBWJa+1vNqwTaFjx4Cm1UsUfIV2rCT10cdNA4ZnzclDmfFXNekdWKyTN7R/gEVHLxbOZ0mW6c'
+            'kt7dieGEzW8S9cglPS+YFCImNcVMitsSLS+HP9GHkq7+JmDNe5GfBO10Bl0vCGF3dbXI7rpv9Cnoup/V7Sj+8J2WO9/ioyLxN06YnkoClpVRTvql'
+            'fN+znqeSZz1j/I7Pt2nzB57xYGXds5DyLvCY3kf81P18Sn+n4u/T4LP7tGfFQQlimuLDXFYsHxz57JmUb6YcwD82HvD1+GEHDR30Re0hX4OhG18z'
+            'poyFLaVROdcq87uXd3FaOiJ5M714d6TldJzpacIa4mJNYQAaHRprV/W06HERWsQtFrDBuMaZJTBuVBSjMKua3hntDNl/Qn7VHAdiyLv4TnsL6pwC'
+            'f0P/zOv5Qw9jsgd+3wpRfePbb7Z5rFvPWBFMxMiep25KZyno12hmj71TP6UK0BJZjgYUFst4sK0eDA2ws3cADclS+WYSq8LmBGcW/8c3DOUj6yZu'
+            's5rHJkmVY3VFxeeqovZIpFZxZ9ZgbwxJWb1dPw/pzcDnB9ICRzbLgBoIX5ge8vy8aStzC4549Jiy35oPwuHLVMQDkWvt39vMeEb2bbLZWAZvw25G'
+            'HzWDINX9HeWQt/Gmag3kDczWmqlCfDLFVfH1gXzvRrVq8aEyqdrIag9yVf2Nr7/Z7tVDrJxD6foWiHJGZ658BuKCv3vF1mubiweql81SPqwuhrtF'
+            '+PyNEuB0QsKSKnuuTLl+3PpTaqMuP40ETtF8DTqLhf0WBskGQ1d7SnpGjyOJA2FMFmYy7LDx9GZt7dFPrKzUX/HbGLwqICr7yxgtTGdCdaR6La2O'
+            'LXPpKcMblqt+M9uLiPsHFTMQGmfsfZs7ekWxzLDrBLPk4wrypxLZBJrVwToz8F/GltGYvzNP85pukSjj4ovzv2zbsos5obiZTJmob1PKQmdPQz0Q'
+            'htV5JZHOCl/g0mLnHpiE6ut7kI6vusGgDwNSv7jus9DvNU9QLNQcuFZ2Ry9ZgkQ3SeSTRXuUanqqLeEva5b4nvxdnpb4tCd/u0JltyQ3FzmIfOfV'
+            'fZJPU2C9OZJD3sH3kTm87QZfbsIYw4QZ3jN87RMfoUf7BmYt3y5nqJFgMg/dKs+3HDmQ8MEk3+Z17Rac3xE7eGhDutUa9BQnFvZCt3ZfN+xnpnNF'
+            'lGFfnNf1i7Hv9NdOXwVQao30Qz+F+36/W1lWdEkz659YV0Qi3jIXu02+PtlIsSRPa53uOvhQKemKo4oVjD3ouE62cCwvRRdccSTfygafRqFXxdXg'
+            'mpn3BM7iqCpPNVD/odhUQBGd2i8dn3ilvHmb4ONkSMjsOEI/QHHYrBpJMPAfR2TxHEOy/kdoTGcqorrsHmqrf3+jhNwVsmDbHUVxQYZkekjq+Cce'
+            'GQegju/NjkoFcSDegKsJMaDh9Nvt4QSjg/uSR3WNRQPGAPTVrUcTe2dYIIoZVx6HqCfOZS5y7gJlLp3fej3+cDG98uXJGH/+JHoBBJysO7M8vqEX'
+            '1MtCv6+csjdtZXhCg75KFUWQDDJ2whyKqS3vpvIdGHmE79O1PEO61WoIW4NXVoq4pAMEpbFurRxRE2kUElg1at89UoV7HkeqjCGdtbxeUyGLm1Rp'
+            'E/vdrheGXc09SCgH5L7G1cF3BcsrWotL+K6/A4Y/UWK6H/fUB8uoyOAHoYEPTqG0+i0Pm9UnHe9qAvj+Q7ACu0a8DRrrNuzK7cZ8FXv/3uQtDGt2'
+            'u2M2qdELd0aGC/KNCmWKqKY/6EW0ByO21VrMJVonjf+FD7ByAJrbjcUMwMfpAi1oh0uKzevb+771Hf7fXV+8lP/YFaY2373GWo8dSV3IdXFJBfF0'
+            'VB/PzAdwreVkHJKWpZC8uUyXJX+W+DbZu5zk+EyWKCXU7XabrfKqxo4X3zY5vd2jvcRbRwi89iFC7aFr/eA6C1mx8djTloSJj9IhccjCamtFrcPq'
+            'Yi2ZGEarxmVPdnyJFVtgdAHllEYwjVoMWnO5sR+PQ5wZLjPaehdJPCM3NCz6CiFJUxt7xlz69FjQECzWJhNvJh1qSxHWUy0MuuFsw8fsD1wd5eRH'
+            'PD56RzWMIPD7vUcPYLv5ng29jw0rX/5201GzfFano4isACrqhJny05s1yLwFKpfsQXFazz2EwmY8hw3crtln1dPEq7e6fZcmqgW+LZObeLrTHn8k'
+            'OkXNmzRtpFtmAhNbgiLa4i9YmpbCiuYrj9cigR3DJUOmkuNTYdxWunbwMBMZbsjfR/5v8YucEv4jfcG9Xt3rMHl2g7zOTuSfuk97IcvTrLt/8cUr'
+            'o8I+v7KVMQNvOGgeisATfbuHuHQr+/ebazkiHmkT3N/fqfAh+5fvf393gpxwYDX7k8yY9QCBdJKIU017/xz3zI1UWKKxQ+ye+9wrDMr/sF+FdmKn'
+            'vuv9HhXWRmdc/w/5WESlZ11maGxbU/wDzhZhNeWMZJnB6Ui2ROQpxIsPjhx4fJwM3VurYb/7pZn6E6diaOfRC7ZLoaN7HiqhFQwpFmcmywiIHXAO'
+            'zf6gGbzZdMVYusOt5Q93yaNRtHPuRv/xxHlJBwa3UOChQeKw8JPjID3g81COWXnitYP2XRVesIISZW2gYJzD4u6pKn+7G//5UKw8q2S110JqKGsz'
+            'kMWuGhzEX7ywO6uGIFN7ikJm/9IDkfGcpInZVwPsgWFNHpAM//LZe+9UyUOnj/pDG/d9vGKPyabrctzV0jDksNb61zkF7GzXX/D0Jfj0q/DpefCi'
+            'baWrYrc+ePAya2eGJVtWRKJ+KfLfe+Zvy5aoxUs/F2h5+fOv737BR4hOAzyHLupf81sBWDg4zKsJY3beVUJqf0pwnjw40myiT4FgKr8a/WSXGljA'
+            'bf1IYh7TM1b1fXGVCIcSY2HR7poZt1DGBMGmGuQzjj/R/YkXHz+++Hv026uP16/+9tloCueGbPl6XfZC1s7+0Ka3jQ1or99dAjA+Q5KZaoqNvsqs'
+            'xPMZqYdGzAN2uG1TjyJi8OijdkGx5h1AzMoBQL1aiS9b7i7GNZFPbuWx1C+a8NjwUuqtOtTZ2mAkHR0ZbZrMp3+eftk7E6zw+XP9k6VGBCF7Cfy2'
+            'WpOCnPhj4Hrg363PHg2pthA6tLxBbyQ4whO22yOJG5o/H6uQR/X12VgPmuz2qshh73IjYzgdB0c1b8M2hV4F/O9wT+AVNIdRP+8NmKEFf2JkFRun'
+            '8fW5Gid+r9lf7CYb42x1Q41B0ReaJDMj8GF2+LBdn0Lz2nzU6vOu+pYtAvySbPTM89UnejGqDSnPCtZDuDVUaBEqqBXYvinqTfyHgzgV88EGn77A'
+            'yOkf2oxYwWmgF9XMCpcFsNRBoBgo2X0orI1ufRmxbfQucTZnufNIUHsgbBL6FKv2jKRIRmzP+lWZBL235FJP8nS+E/IDC550ktlN0nAJhB2ZmhSC'
+            'j1iW/KZfRDdno/e/XJCnkwtXnnKFMD8L2vI8zQqA1jzPqbj4PGc45PIp6bZiRHSFENh63YVdceH3abnaPF3eZbNont73A3+zE3d8+0H04cX1y5+P'
+            'j+Z5tgIcl4tlOnHSFUVLfICfR/zfeeI5WXH0wxg/tuUdYn4j9Ng9+jerhG4Xw/ejWQKLBsdcu/Bib8KpLS4KYH5O4bPbQrELCrTnzNmYnCLb5pgv'
+            'aj1dwLr9p6r13xfOf8afLoKg+/m/j4/UagCgPNks4bRrQx9ewLtNZoAcjDzx5iKyZzP+4elaBCxufLRPgBCQ3Jft+bq9ASjxjP1M1tMMTQnj4205'
+            '74yOXderfGK9LMW1rrYII0f7xUrkugIinGIgQw7Lj9mMtPxERNmon7HNjnLoEggoWYp8hgwRTC6FxRnnx+1/XRXuf7CUz3hqzJzx2OE3vy7+sfZP'
+            '/rX9r2NV/l//oSEJJVeXoW01zoEDJPSQ2gafxnL1ZVnR6I4jugDVPkbesYKt7TlsfS5kFAvd/XImmP52weM1tusZ66Lw1tTJdrKmLo6PjxuGbRz2'
+            '/NLjxd4b5S/5dRTM5Wc+wmpJ5wyaKuZ3OZgwi05Bj3Mc9wjG5xUeUdo4MNCxHnOuL4jtiAjr2L6ifuxJUuCkwZQWSReMoMfH+mNloCxuzAeH2MXs'
+            'f6wNAhc7iCDwv045ShGhhcqUQAFrbTEvWkrtFj6GokeZFgnH6nkb7RzgfWqtRCwqjVlrg1hzT4//sWZ3x1WLgzMC4Dw5OqsX9489hkGOzvm2aERn'
+            'md3AGRjxKuoe9T/Wmrctwgu5sM1Av2Df1WwfgW8S62AWERkOKlfWYepIWcybhwoavw/VcLGdIHGMMh1HA2Bf0Ky7tq0c/RUiUKNkdNBQo4lWtIBJ'
+            'vZ6nwO6Jn+SIfOL8yBL6pUzLj2/h0I21wDX9gXpK5ur/qUTVD/o/Ek0QOTHycI/wGLDK/uoU470HwFE8PnC78R/GlbFKYoeWS3u8GMvDMT491nVZ'
+            'Yx3o6G9r35i0v3F1Sn7c3kW5fDSAMQA69IOwqDnoYBVZ9gI9XlJEvgrJhpyRVUN/AYQPR9xkV/URwFqzlTCzbSBWHlgKg5PaoRKgZpVx5ekzE9vG'
+            'xm61WhzrEdB2GDGrqIy8Ryu6TdhH0MZV8MRI+AiixiEcXJPln+r3zyL0tZKVm9ZKdYk1RDqbavw29fVQFSa00kigmxTO9ZLeMet2u6wz53Ts5LAf'
+            'j757Lx5xJiexyvxQ7BUY+fAZr3TGca6l+JAlMzhYo2QNCvWr9W2aZ2u8w6iKLYO8lkmJcnzweufREvPxUMCacMO8fvejVUyOrn0VOOev9NWGqh7/'
+            'X8x8EEbKV6mAou1e1DBddLWokXXqwMD+pPCALcU1Fs6LH67ev/n1+pXtDKYQOWcBPGopvHKkjjBVhGKufID1JsvIL7elDKUURyI8zLegB9zhO3Fw'
+            'osXOAngZevrySVo6GEdV8HcPeBYaOWi+kxTaPeng1Ekf532hh8dUGS2ejK4ImW7mwzKxjQpQ4L6eP3Zik6WmbKvqlMym5bp/GYfNo+JHMC+vP2EF'
+            'Y37oXK3jUJpPQTsD1NTRrhhvItSdJWJk4i/l9x3DPxmqbJIcy9o2JY6ny3i1meMLjGGnLRb1lMLdTgJ804ayXOIVoJGrS1h75iFeGMOtk8znCQ2B'
+            'ddfWRGQdmj0snHJlFsyoxgdM1YzByW5hl0sFvF1PMtXnAHFlZfaJFm4cItWLumBiYcs2CE80rUm5UU9VCEkSFf6QFwfMQJIPqBibke8wNcxfNqNm'
+            '4rXrOX+JWGTQx52AAT8sK2+ZcXC6iyVZF77zC76hTm8ZoEnXdOyQWx7xxPRZMmDQ8wjK2RJjMIvOS2t3QEc7HWrdqQSGbpp3ZRwQfWJOyaj4ukU5'
+            'pE3Wy8BAEdUbs9oVp6l6n1kbIVVlNjDlsnbrGzNl+cEJ6r5vfJtMdb6B5btwPjAh55KY+RV+wwQ+jIg4QNAXyCRFLkKfsf2ImlM2FMUGZwmSQczu'
+            'MqlxsZGe0uxOQi2PNqn11rEkTIsFXg8ntw3Pt84yoFphFozBGBc3Q0wjCTPV02Kyt5GG2uVMeuQs1HJL4qcR1jI/0S42vtCT8ca9TWVjWM/SGSUh'
+            'q0yeXhTm75TImbknwivOkSM81Hvu9KNQYIvrsuOKP946F7gX9xtmxvzqNhilJTSgenpyh03B33lVSKbw/9Wll2bsQWgAn9fSqL877fmDhuE8cV7w'
+            '7FaIw7t4VzgsiOcmveXX0u/oNWzU8ogx8LzvBUtxJXyxfnW9lnRrjpOfPIp0+qL7kZz+AnqrCP7+XO+SKdONvvBy1vraI7xav8iehaosN3TkNpjX'
+            'aUpa9GTFMwIS1pfa0efxDq1jnB18jHf/tk3y3YcYrcKwvkXv0ucJoRg5eDAKnSB42MXveLn57YurX7xPinvkcKq4nxvnTazERwtljm/4ROgUg//d'
+            '2nv8f2y2Ir8SW/laetOY2FiuoUUYwLbGFXoxe8OXfDl7k9957+z7kUbgmJZtHed5dgdjyukSQ56s0GNBfME8ObVgg0mySNfsDKQz0+CNmAOCaBc4'
+            'IrIsuh3OHm3oPpJ7Me6knmdz/z9iUN9F/HIIf2QLmKzx2XgPbyS+9l375GFy3kPSJllLkpZ1SDq0I5W0HjXZ15bJ8a7cjjRYUwB4lMLWoI5xS5HS'
+            '9g2BWAtl4gqZnfbzz1Dn6kfNR9Y0cIaiQmKkXiccg05Yb3bda5M9wBy7X1k0psZHqvO7GmuMudMq5YbUJ/7jONoXiqlZZsaGOcaqpMwyYzS21Jcy'
+            'fbO5nJAxrrXEmA1s5dacWp32XE8kmkqiByypr3XJVawqIv9C5WJ8bWVh6STessmWtHkjDCyhFKv+h5//fvX65VX0+t31q48f3r95cf36/bvo7fvL'
+            'VzKfdKV/PJrxfkVtKeiEY7HOc56goFInux2fDbRABb3wCyiHUVxgUkAJSPtW20ZemJct5BezvjAJjjWLYB2qRT0fL2EzXwNDmt7uh5+il+/fvP/4'
+            'cFNKtT0WGefDIIiDQaupy3g1SQE8e/4mYh5do98Xb394/erddXT1/tePL1/tHYMJyxzG5CwOR/GBw0hAdLlBXblXv2qJGt/YgCNrKx+rvgtqgZXZ'
+            'JqKcWerc4ltqHyOqlpnHXg1rAY1t3VbmLPcEU+vgNXFvmhV2gRqrOuFUDyzLHhlI4zsnp/tb7BKPvJiBKaV1f8hyJ8Q/7ucgfiVuNFyT+QV27dq4'
+            'FYRRfnfrgswncALzHGYw1KcYQLBiaSk2eg4vjhLLDNxgLJOWEDlFzUiZfN3CqUHPUt5r2PEMfuw2NdDH4VlMmhrVS0ky8pLbYzAC02LhFKWshenU'
+            '+LKEZ0Y/Bj2N5jxtOvpA3Vry2WNa6tTO4qj+6FKdHjWdXvpgtEqGj6CpknnONQ+Me41YOAwhVH6uGDYNkyxRv5IEDRgHWkAfOCRNw+SPLLsHbZmY'
+            'MuyQ4iQmgw6JfKcu/1Dgk8fuwk2S8g6vQooMG7g1hU2xeTXrkXaq0UIFAno1MEijRmOhmxm1ED1rRVXiO1QxRDqatlsN69d9YLXM1BK2jNUSfkJz'
+            'ZfYY2tGx96DvlwW1sSchav2/Rt4ch5Z/uUxm5DZ+wQzFzMFE1/4vyKHEk6UUzm/hOcm5KBMwNgi1HIU69Ef9iO8E5jPlr5pT8BFySWbsp+i1H95f'
+            '/yysz7F89rygqDbpaLZfLjjE7c+igI7JD6cceRQWxQzcx9oDBejisotElgFewOKo0JuupUtWEYFMRDiu+JZZFhqxgg86mA+r3hjQIMbMtBDxywhp'
+            'qPj3WnowAkCly+2yKbvlUm3kKcx5+papDWw4LFxBJ1lGb5qbU7uiyB8TBvSXmXUhnqj3Pab14Q8TIj+6ny4pXsS5A30yGHYxUo5FrlAom8eCVdEU'
+            'yRNwBuHIuXeCfh9q8tgzAPsBN2oOWlVaesons4o3zlOnTJYJMgcY3VMKLSymlA2ZW4/w5jA+6YGBrTewD+4TLYZCPTxy/NcHqPqvgqqn5PGXwXiM'
+            'Qq0gA+l6TPCBIxSAkvt2UXr3Xe9b12OWFtdcrbqqwYFVg8OhBv+nBiCrHpsoYNpzL8LAx4huolhkKjhuT8VlF+o2GGHMNX4G2s+ASmsH+QDc4CG4'
+            'QQNcdInWTeHwpX4kth+5jn9G9ccPRi2/HXDD7o+D/oqBu0r+pgtDsGOZ6fXjK4q/AN3blWE4j2+oRQgaBCeMTtyaauRFgqpXi3heqjtNz6y7TCqu'
+            'R4+wY60eEWD3j7WUPAySvHCuWKTbNQzSi6W12Zuof07VP03naGgfTXStD/gi+ZU6Gzh9EHWoXKDiRPb1PLmhJGy4iiowmWlpIF9Q+DWoZsCwWTop'
+            'XyGW4cgyiFv4k0dkXKu6sGru896w2wXkEp+eHFxzekhNbXeqV4MxzH36+aJCvPj4yMbfValdHJ/SDxDXz5v5AYRCHdMtwhgvCWlNJ4c0nVDTidV0'
+            'ekjTKXtBRTXF+JV0PW9/xfGwfyH4r5hf2X0+VnDUJSW64IM+B9aG/qXaPBt3Ghvxjnayox022pkd8TtDei872Yto8ExrQFeP/vylBOEYbQgoGrDg'
+            'A36tkoEBmWOKdgfUmO4W8Edcny68oCGqZaL82ehnqbkEx2pVhm8Ifsy2E/T5bCIaBsqO7Y0t1lESaMUO1btnfPoWw65A/bT5PP60YM8Cas28hftZ'
+            'taxzfNVSHnu7Z6Mob9/9Ocay60aE96DY1ToNW+LWlsZjqre3TAJJ913bquLxtqu7BMWNrJp6QbVeWlcvrKl3Glg1Yb3bt0Hntituhd2G9KMu7gb/'
+            'C5S30ASEM74lmrrtereBdxt+rpFMiD7r19J8Q+GWrjh+c2uO/KKkFGvsTckK6dyay681QqMn36AaxXT4QcxuVAIE8YHAHKJhW3enQCkEDYDp82Xh'
+            'T+c3ILA/pKYqMYXnJX06RQt3P+yeH1e+hT2CaLdgvoi+H/hnfu+8dVxfMui1oPUjlLB+EL1+BxzzzRu6Doc6jLgGxdP6/1VkS6LLP3g06tcClizi'
+            'eJmuvzBVTbyrtsabU8gwjukGnLjOdrTZgYa67jmdlbPZkckrBbDVe3CyYk3R/wY9UKqMBd8AAA=='
+        )
+        body = gzip.decompress(base64.b64decode(encoded))
+        assert hashlib.sha256(body).hexdigest() == '24454f0ff793674ad5716c1c5a03a5ebe45bb291ec1b4837acbe78ba0d98db93', 'FIX64: extracted script checksum mismatch'
+        Path('/tmp/lwod_fix64_05.sh').write_bytes(body)
+        print('FIX64_SCRIPT_RESTORED: step 5, bytes',len(body))
+        LWOD64_05
+        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_05.sh'
     - name: FIX55 Drei Flugschuebe und 10s Aufladen installieren
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lwod_fix55_boost.py\" <<'PYFIX55'\nfrom pathlib import Path\np = Path('android/scripts/V414Fusion.gd')\n\
-        s = p.read_text(encoding='utf-8')\n\ndef replace_once(old: str, new: str):\n    global s\n    count = s.count(old)\n  \
-        \  if count != 1:\n        raise SystemExit(f'FIX55: unexpected flight code anchor (found {count}): {old[:100]!r}')\n \
-        \   s=s.replace(old,new,1)\n\nreplace_once('const MAX_HEIGHT: float = 180.0\\n', '''const MAX_HEIGHT: float = 180.0\n#\
-        \ FIX55: three flight boosts; each slot recharges independently in ten seconds.\nconst BOOST_CAPACITY: int = 3\nconst BOOST_RECHARGE_SECONDS:\
-        \ float = 10.0\nconst BOOST_SPEED: float = 55.0\nconst BOOST_SECONDS: float = 0.72\n''')\nreplace_once('var bird_was_visible:\
-        \ bool = true\\n','''var bird_was_visible: bool = true\nvar boost_button: Button\nvar boost_charges: int = BOOST_CAPACITY\n\
-        var boost_cooldowns: Array[float] = []\nvar boost_seconds_left: float = 0.0\nvar boost_direction: Vector3 = Vector3.FORWARD\n\
-        ''')\nreplace_once('    button.pressed.connect(toggle_fusion)\\n    _refresh_button()\\n','''    button.pressed.connect(toggle_fusion)\n\
-        \    _refresh_button()\n    _attach_boost_button()\n''')\n# Insert methods before refresh, keeping the flight UI style.\n\
-        replace_once('func _refresh_button() -> void:\\n', '''func _attach_boost_button() -> void:\n    if is_instance_valid(boost_button)\
-        \ or not is_instance_valid(button):\n        return\n    boost_button = Button.new()\n    boost_button.name = \"FlugSchubButtonV455\"\
-        \n    boost_button.focus_mode = Control.FOCUS_NONE\n    boost_button.mouse_filter = Control.MOUSE_FILTER_STOP\n    boost_button.tooltip_text\
-        \ = \"Kraeftiger Vorwaertsschub im Flug: drei Ladungen, je 10 Sekunden\"\n    button.get_parent().add_child(boost_button)\n\
-        \    boost_button.anchor_left = button.anchor_left\n    boost_button.anchor_right = button.anchor_right\n    boost_button.anchor_top\
-        \ = button.anchor_top\n    boost_button.anchor_bottom = button.anchor_bottom\n    boost_button.offset_left = button.offset_left\n\
-        \    boost_button.offset_right = button.offset_right\n    boost_button.offset_top = button.offset_bottom + 8.0\n    boost_button.offset_bottom\
-        \ = boost_button.offset_top + 57.0\n    # On smaller landscape screens put the boost beside Fly, not beyond the bottom\
-        \ edge.\n    if boost_button.offset_bottom > get_viewport().get_visible_rect().size.y - 8.0:\n        boost_button.offset_top\
-        \ = button.offset_top\n        boost_button.offset_bottom = button.offset_bottom\n        boost_button.offset_right = button.offset_left\
-        \ - 8.0\n        boost_button.offset_left = boost_button.offset_right - 152.0\n    boost_button.add_theme_font_size_override(\"\
-        font_size\",18)\n    boost_button.add_theme_color_override(\"font_color\",Color(\"#f7e2bd\"))\n    for style_name in [\"\
-        normal\",\"hover\",\"pressed\",\"focus\"]:\n        boost_button.add_theme_stylebox_override(style_name,button.get_theme_stylebox(style_name))\n\
-        \    boost_button.pressed.connect(_start_boost)\n    _refresh_boost_button()\n\nfunc _refresh_boost_button() -> void:\n\
-        \    if not is_instance_valid(boost_button):\n        return\n    boost_button.visible = active and _playing()\n    boost_button.disabled\
-        \ = not active or landing or launching or boost_charges <= 0\n    var label: String = \"Schub %d/%d\" % [boost_charges,\
-        \ BOOST_CAPACITY]\n    if boost_charges == 0 and not boost_cooldowns.is_empty():\n        var next_charge: float = boost_cooldowns[0]\n\
-        \        for seconds in boost_cooldowns:\n            next_charge = minf(next_charge,seconds)\n        label += \" (%ds)\"\
-        \ % maxi(1,ceili(next_charge))\n    if boost_button.text != label:\n        boost_button.text = label\n\nfunc _start_boost()\
-        \ -> void:\n    if not active or landing or launching or boost_charges <= 0 or not _playing() or not is_instance_valid(actor):\n\
-        \        return\n    var direction: Vector3 = -actor.global_transform.basis.z\n    var cam: Camera3D = game.get(\"camera_node\"\
-        ) as Camera3D\n    if is_instance_valid(cam):\n        direction = -cam.global_transform.basis.z\n    if direction.length_squared()\
-        \ < 0.0001:\n        direction = Vector3.FORWARD\n    boost_direction = direction.normalized()\n    boost_seconds_left\
-        \ = BOOST_SECONDS\n    boost_charges -= 1\n    boost_cooldowns.append(BOOST_RECHARGE_SECONDS)\n    _refresh_boost_button()\n\
-        \nfunc _advance_boost_recharges(delta: float) -> void:\n    var dt: float = maxf(delta,0.0)\n    for i in range(boost_cooldowns.size()-1,-1,-1):\n\
-        \        boost_cooldowns[i] -= dt\n        if boost_cooldowns[i] <= 0.0:\n            boost_cooldowns.remove_at(i)\n  \
-        \          boost_charges = mini(boost_charges+1,BOOST_CAPACITY)\n\nfunc _refresh_button() -> void:\n''')\nreplace_once('\
-        \    if active:\\n        landing = true\\n        launching = false\\n        _refresh_button()\\n        return\\n','''\
-        \    if active:\n        landing = true\n        launching = false\n        boost_seconds_left = 0.0\n        _refresh_button()\n\
-        \        _refresh_boost_button()\n        return\n''')\nreplace_once('    last_position = actor.global_position\\n    _refresh_button()\\\
-        n','''    last_position = actor.global_position\n    _refresh_button()\n    _refresh_boost_button()\n''')\nreplace_once('\
-        \    active = false\\n    landing = false\\n    launching = false\\n    actor = null\\n    bird = null\\n    _refresh_button()\\\
-        n','''    active = false\n    landing = false\n    launching = false\n    boost_seconds_left = 0.0\n    actor = null\n\
-        \    bird = null\n    _refresh_button()\n    _refresh_boost_button()\n''')\n# Boost works even with the normal movement\
-        \ joystick released.\nreplace_once('    _animate_wings(not landing and not launching and desired_y <= 0.2 and horizontal.length()\
-        \ > 0.1)\\n','''    if boost_seconds_left > 0.0 and not landing:\n        # Velocity rather than teleportation: existing\
-        \ move_and_slide handles collisions.\n        hero.velocity = boost_direction * BOOST_SPEED\n        var time_step: float\
-        \ = maxf(delta,0.001)\n        hero.velocity.y = clampf(hero.velocity.y,\n            (floor_y-p.y)/time_step,\n      \
-        \      (floor_y+MAX_HEIGHT-p.y)/time_step)\n        boost_seconds_left = maxf(0.0,boost_seconds_left-delta)\n        _animate_wings(false)\n\
-        \        return\n    _animate_wings(not landing and not launching and desired_y <= 0.2 and horizontal.length() > 0.1)\n\
-        ''')\nreplace_once('func _process(_delta: float) -> void:\\n    if not active:\\n        return\\n','''func _process(delta:\
-        \ float) -> void:\n    # Cooldowns continue between landings: no exploit by toggling fusion.\n    _advance_boost_recharges(delta)\n\
-        \    _refresh_boost_button()\n    if not active:\n        return\n''')\nassert 'func _start_boost()' in s and 'func _advance_boost_recharges('\
-        \ in s\nassert 'boost_direction * BOOST_SPEED' in s and 'var boost_button: Button' in s\np.write_text(s,encoding='utf-8')\n\
-        print('FIX55: real flight source patched: 3 charges / 10 sec / strong forward thrust')\nPYFIX55\npython3 -m py_compile\
-        \ \"$RUNNER_TEMP/lwod_fix55_boost.py\"\npython3 \"$RUNNER_TEMP/lwod_fix55_boost.py\"\nmkdir -p android/tests\ncat > android/tests/V455BoostSmoke.gd\
-        \ <<'FIX55_TEST'\nextends SceneTree\nconst Fusion = preload(\"res://scripts/V414Fusion.gd\")\n\nclass TestGame:\n    extends\
-        \ Node3D\n    var state: int = 2\n    var hero: CharacterBody3D\n    var camera_node: Camera3D\n    var joystick_axis:\
-        \ Vector2 = Vector2.ZERO\n\nclass TestTerrain:\n    extends Node3D\n    func surface_height_at(_x: float,_z: float) ->\
-        \ float:\n        return 0.0\n\nfunc _initialize() -> void:\n    call_deferred(\"_run\")\n\nfunc fail(message: String)\
-        \ -> void:\n    push_error(\"FIX55: \" + message)\n    quit(1)\n\nfunc _run() -> void:\n    var world := TestGame.new()\n\
-        \    root.add_child(world)\n    world.hero = CharacterBody3D.new()\n    world.hero.position = Vector3(0,10,0)\n    world.add_child(world.hero)\n\
-        \    var bird := Node3D.new()\n    world.add_child(bird)\n    world.camera_node = Camera3D.new()\n    world.add_child(world.camera_node)\n\
-        \    world.camera_node.global_position = Vector3(0,12,5)\n    world.camera_node.look_at(world.hero.global_position)\n \
-        \   var t := TestTerrain.new()\n    world.add_child(t)\n    var flight: Node = Fusion.new()\n    world.add_child(flight)\n\
-        \    flight.game = world\n    flight.actor = world.hero\n    flight.bird = bird\n    flight.terrain = t\n    flight.active\
-        \ = true\n    flight.launching = false\n    flight.last_position = world.hero.global_position\n    if int(flight.get(\"\
-        boost_charges\")) != 3:\n        fail(\"must begin with three flight boosts\")\n        return\n    for i in range(3):\n\
-        \        flight.call(\"_start_boost\")\n        if int(flight.get(\"boost_charges\")) != 2-i:\n            fail(\"charge\
-        \ not consumed\")\n            return\n    flight.call(\"_start_boost\")\n    if int(flight.get(\"boost_charges\")) !=\
-        \ 0:\n        fail(\"a fourth free boost was permitted\")\n        return\n    flight.before_move(world.hero,0.016)\n \
-        \   if world.hero.velocity.length() < 40.0:\n        fail(\"boost failed to propel player\")\n        return\n    flight.call(\"\
-        _advance_boost_recharges\",9.98)\n    if int(flight.get(\"boost_charges\")) != 0:\n        fail(\"charge restored before\
-        \ 10 seconds\")\n        return\n    flight.call(\"_advance_boost_recharges\",0.03)\n    if int(flight.get(\"boost_charges\"\
-        )) != 3:\n        fail(\"all charge timers did not restore in ten seconds\")\n        return\n    flight.call(\"_start_boost\"\
-        )\n    flight.call(\"_advance_boost_recharges\",5.0)\n    flight.call(\"_start_boost\")\n    flight.call(\"_advance_boost_recharges\"\
-        ,5.01)\n    if int(flight.get(\"boost_charges\")) != 2:\n        fail(\"independent cooldown: first slot not restored\"\
-        )\n        return\n    flight.call(\"_advance_boost_recharges\",5.01)\n    if int(flight.get(\"boost_charges\")) != 3:\n\
-        \        fail(\"independent cooldown: second slot not restored\")\n        return\n    print(\"FIX55_BOOST_OK: 3 charges,\
-        \ 10-second individual recharges, forward thrust\")\n    quit(0)\nFIX55_TEST\ntest -s android/scripts/V414Fusion.gd\ntest\
-        \ -s android/tests/V455BoostSmoke.gd\ngrep -Fq 'Schub %d/%d' android/scripts/V414Fusion.gd\n"
+      run: |
+        set -euo pipefail
+        python3 - <<'LWOD64_06'
+        import base64, gzip, hashlib
+        from pathlib import Path
+        encoded = (
+            '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'
+            '3iP8Tx2g7gQwJgAA'
+        )
+        body = gzip.decompress(base64.b64decode(encoded))
+        assert hashlib.sha256(body).hexdigest() == 'a3f463d1f66907c57380e6ced04d73745924374e7d7b62b4b24bc6b12fb241d6', 'FIX64: extracted script checksum mismatch'
+        Path('/tmp/lwod_fix64_06.sh').write_bytes(body)
+        print('FIX64_SCRIPT_RESTORED: step 6, bytes',len(body))
+        LWOD64_06
+        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_06.sh'
     - name: FIX58 Leistungsarme Wege wiederherstellen und 0.95s Flugschub sichern
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lwod_fix56.py\" <<'PYFIX58'\nfrom pathlib import Path\nimport re\n\nfusion\
-        \ = Path('android/scripts/V414Fusion.gd')\nfusion_src = fusion.read_text(encoding='utf-8')\nold = 'const BOOST_SECONDS:\
-        \ float = 0.72'\nassert fusion_src.count(old) == 1, 'FIX58: FIX55 flight-boost anchor missing'\nfusion_src = fusion_src.replace(old,'const\
-        \ BOOST_SECONDS: float = 0.95',1)\nassert 'const BOOST_RECHARGE_SECONDS: float = 10.0' in fusion_src\nassert 'const BOOST_CAPACITY:\
-        \ int = 3' in fusion_src\nfusion.write_text(fusion_src,encoding='utf-8')\n\np = Path('android/scripts/V408Regions.gd')\n\
-        s = p.read_text(encoding='utf-8')\nstart = re.search(r'(?m)^func _make_path\\(',s)\nassert start is not None and s.count('func\
-        \ _make_path(')==1,'FIX58: active global path renderer not found exactly once'\nend = re.search(r'(?m)^(?:func |static\
-        \ func |const |var |@)',s[start.end():])\nfinish = start.end()+end.start() if end else len(s)\nold_renderer = s[start.start():finish]\n\
-        assert '_road_vertex' in old_renderer and 'SurfaceTool.new()' in old_renderer and 'road_meshes' in old_renderer, 'FIX58:\
-        \ unexpected original path renderer'\n\nnew_renderer = r\"\"\"# FIX58: Wurzelheim-like path surface used by every village\
-        \ and intercity road.\n# Smooth corner bends but preserve route endpoints, gates, map geography, and path width.\nfunc\
-        \ _v456_smooth_road(points: PackedVector2Array) -> PackedVector2Array:\n    var out := PackedVector2Array()\n    if points.size()\
-        \ < 2:\n        return out\n    var closed: bool = points[0].distance_squared_to(points[points.size()-1]) < 0.01\n    var\
-        \ controls := PackedVector2Array()\n    controls.append(points[0])\n    for i in range(1,points.size()-1):\n        var\
-        \ prev: Vector2 = points[i-1]\n        var middle: Vector2 = points[i]\n        var following: Vector2 = points[i+1]\n\
-        \        if closed or prev.distance_to(middle)<0.15 or following.distance_to(middle)<0.15:\n            controls.append(middle)\n\
-        \            continue\n        # A maximum 2.8m corner radius: visual curve cannot shift the actual route.\n        var\
-        \ corner: float = minf(2.8, minf(prev.distance_to(middle),middle.distance_to(following))*0.19)\n        var entering: Vector2\
-        \ = middle+(prev-middle).normalized()*corner\n        var leaving: Vector2 = middle+(following-middle).normalized()*corner\n\
-        \        controls.append(entering)\n        for j in range(1,6):\n            var t: float = float(j)/5.0\n           \
-        \ var curve: Vector2 = entering*(1.0-t)*(1.0-t)+middle*(2.0*t*(1.0-t))+leaving*t*t\n            controls.append(curve)\n\
-        \    controls.append(points[points.size()-1])\n    out.append(controls[0])\n    for i in range(controls.size()-1):\n  \
-        \      var a: Vector2 = controls[i]\n        var b: Vector2 = controls[i+1]\n        var count: int = maxi(1,ceili(a.distance_to(b)/4.0))\n\
-        \        for j in range(1,count+1):\n            var pt: Vector2 = a.lerp(b,float(j)/float(count))\n            if out[out.size()-1].distance_squared_to(pt)>0.00001:\n\
-        \                out.append(pt)\n    return out\n\nfunc _v456_road_vertex(st: SurfaceTool, p: Vector2, tint: Color) ->\
-        \ void:\n    st.set_color(tint)\n    # Use Wurzelheim's ground sampling, raised 12cm to avoid terrain z-fighting.\n   \
-        \ st.add_vertex(Vector3(p.x,_ground(p.x,p.y)+0.12,p.y))\n\nfunc _make_path(parent: Node3D, points: PackedVector2Array,\
-        \ width: float, _tint: Color) -> void:\n    if points.size() < 2:\n        return\n    var spine: PackedVector2Array =\
-        \ _v456_smooth_road(points)\n    if spine.size() < 2:\n        return\n    var closed: bool = spine[0].distance_squared_to(spine[spine.size()-1])\
-        \ < 0.01\n    var left := PackedVector2Array()\n    var right := PackedVector2Array()\n    for i in range(spine.size()):\n\
-        \        var p: Vector2 = spine[i]\n        var prev: int = maxi(i-1,0)\n        var following: int = mini(i+1,spine.size()-1)\n\
-        \        if closed and i==0:\n            prev = spine.size()-2\n        if closed and i==spine.size()-1:\n           \
-        \ following = 1\n        var d0: Vector2 = (p-spine[prev]).normalized()\n        var d1: Vector2 = (spine[following]-p).normalized()\n\
-        \        if d0.is_zero_approx():\n            d0 = d1\n        if d1.is_zero_approx():\n            d1 = d0\n        var\
-        \ n0 := Vector2(-d0.y,d0.x)\n        var n1 := Vector2(-d1.y,d1.x)\n        var bisector: Vector2 = (n0+n1).normalized()\n\
-        \        if bisector.is_zero_approx():\n            bisector = n1\n        # Bounded joins avoid spiky triangles at nearly\
-        \ reversed corners.\n        var scale: float = minf(1.6,1.0/maxf(0.55,absf(bisector.dot(n1))))\n        var offset: Vector2\
-        \ = bisector*(width*0.5*scale)\n        left.append(p-offset)\n        right.append(p+offset)\n    var st := SurfaceTool.new()\n\
-        \    st.begin(Mesh.PRIMITIVE_TRIANGLES)\n    var colour: Color = Color(\"#b6a28b\") if width < 5.0 else Color(\"#bca27c\"\
-        )\n    for i in range(spine.size()-1):\n        _v456_road_vertex(st,left[i],colour)\n        _v456_road_vertex(st,right[i],colour)\n\
-        \        _v456_road_vertex(st,right[i+1],colour)\n        _v456_road_vertex(st,left[i],colour)\n        _v456_road_vertex(st,right[i+1],colour)\n\
-        \        _v456_road_vertex(st,left[i+1],colour)\n    st.generate_normals()\n    var surface := MeshInstance3D.new()\n \
-        \   surface.name = \"Einzelweg\"\n    surface.mesh = st.commit()\n    surface.material_override = _material(Color.WHITE,true)\n\
-        \    surface.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF\n    parent.add_child(surface)\n    road_meshes\
-        \ += 1\n\n\"\"\"\n# Only replace road surface builder; all route definitions and terrain logic stay intact.\ns = s[:start.start()]\
-        \ + new_renderer + s[finish:]\nassert s.count('func _make_path(')==1\np.write_text(s,encoding='utf-8')\ncfg = Path('android/export_presets.cfg')\n\
-        config = cfg.read_text(encoding='utf-8')\nassert config.count('version/code=4223')==1 and config.count('version/name=\"\
-        4.1.7.53\"')==1, 'FIX58: base Android export version unexpected'\nconfig = config.replace('version/code=4223','version/code=4228',1).replace('version/name=\"\
-        4.1.7.53\"','version/name=\"4.1.7.58\"',1)\ncfg.write_text(config,encoding='utf-8')\nprint('FIX58_INSTALL_OK: working FIX56\
-        \ lightweight Wurzelheim-style paths restored; boost=0.95s; 3x10s recharge intact')\nPYFIX58\npython3 -m py_compile \"\
-        $RUNNER_TEMP/lwod_fix56.py\"\npython3 \"$RUNNER_TEMP/lwod_fix56.py\"\ncat > android/tests/V456RoadsSmoke.gd <<'GDFIX58'\n\
-        extends SceneTree\nconst Regions = preload(\"res://scripts/V408Regions.gd\")\nconst Territory = preload(\"res://scripts/V417Territories.gd\"\
-        )\n\nfunc _initialize() -> void:\n    call_deferred(\"_run\")\n\nfunc fail(reason: String) -> void:\n    push_error(\"\
-        FIX58: \"+reason)\n    quit(1)\n\nfunc _run() -> void:\n    var road_renderer := Regions.new()\n    root.add_child(road_renderer)\n\
-        \    var count: int = 0\n    if Territory.ROUTES.size() != 9:\n        fail(\"intercity route count unexpectedly changed\"\
-        )\n        return\n    for link in Territory.ROUTES:\n        var original: PackedVector2Array = Territory.road_world(link,true)\n\
-        \        var smoothed: PackedVector2Array = road_renderer._v456_smooth_road(original)\n        if smoothed.size()<original.size():\n\
-        \            fail(\"road lost its curve detail\")\n            return\n        if smoothed[0].distance_to(original[0])>0.01\
-        \ or smoothed[smoothed.size()-1].distance_to(original[original.size()-1])>0.01:\n            fail(\"road no longer reaches\
-        \ its real town gate\")\n            return\n        for point in smoothed:\n            var nearest: float = 999999999.0\n\
-        \            for i in range(original.size()-1):\n                nearest = minf(nearest,Geometry2D.get_closest_point_to_segment(point,original[i],original[i+1]).distance_to(point))\n\
-        \            if nearest>3.01:\n                fail(\"curve bends a road away from its original mapped route\")\n     \
-        \           return\n        count+=1\n    var bent := PackedVector2Array([Vector2(0,0),Vector2(12,0),Vector2(12,14)])\n\
-        \    var sampled: PackedVector2Array = road_renderer._v456_smooth_road(bent)\n    if sampled.size()<8 or sampled[0]!=bent[0]\
-        \ or sampled[sampled.size()-1]!=bent[2]:\n        fail(\"curves lost their continuous endpoints\")\n        return\n  \
-        \  var flight_text: String = FileAccess.get_file_as_string(\"res://scripts/V414Fusion.gd\")\n    if not flight_text.contains(\"\
-        const BOOST_SECONDS: float = 0.95\") or not flight_text.contains(\"const BOOST_RECHARGE_SECONDS: float = 10.0\") or not\
-        \ flight_text.contains(\"const BOOST_CAPACITY: int = 3\"):\n        fail(\"flight boost settings were not preserved\")\n\
-        \        return\n    print(\"FIX61_ROADS_OK: 9 historic routes, curved terrain paths, gate endpoints, 0.95s boost, independent\
-        \ 3x10s charges\")\n    quit(0)\nGDFIX58\ntest -s android/tests/V456RoadsSmoke.gd\ngrep -Fq 'func _v456_smooth_road(' android/scripts/V408Regions.gd\n\
-        grep -Fq 'Color(\"#bca27c\")' android/scripts/V408Regions.gd\ngrep -Fq 'Color(\"#b6a28b\")' android/scripts/V408Regions.gd\n\
-        grep -Fq 'const BOOST_SECONDS: float = 0.95' android/scripts/V414Fusion.gd\n"
+      run: |
+        set -euo pipefail
+        python3 - <<'LWOD64_07'
+        import base64, gzip, hashlib
+        from pathlib import Path
+        encoded = (
+            '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'
+            'svc/anT+D4/yJDE7IgAA'
+        )
+        body = gzip.decompress(base64.b64decode(encoded))
+        assert hashlib.sha256(body).hexdigest() == '3a54e757b4136ba7dbbd33432dd45feade1f5b2a74c7ff3e2a86407d970d7502', 'FIX64: extracted script checksum mismatch'
+        Path('/tmp/lwod_fix64_07.sh').write_bytes(body)
+        print('FIX64_SCRIPT_RESTORED: step 7, bytes',len(body))
+        LWOD64_07
+        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_07.sh'
     - name: FIX61 Gepflasterte Wege mit geschwungenen Kurven installieren
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lwod_fix61_paving.py\" <<'PYFIX61'\nfrom pathlib import Path\nimport re\n\n\
-        shader_path = Path('android/shaders/LWODPaving.gdshader')\nshader_path.parent.mkdir(parents=True,exist_ok=True)\nshader_path.write_text('shader_type\
-        \ spatial;\\nrender_mode cull_disabled;\\n\\n// Uneven, staggered paving stones. UVs are supplied in world meters\\n//\
-        \ along each road, so the pattern follows bends without extra geometry.\\nvoid fragment() {\\n    vec2 tile = UV / vec2(0.78,\
-        \ 0.92);\\n    float row = floor(tile.y);\\n    tile.x += mod(row, 2.0) * 0.5;\\n    vec2 stone_id = floor(tile);\\n  \
-        \  vec2 tile_part = fract(tile);\\n    vec2 edge = min(tile_part, vec2(1.0) - tile_part);\\n    float distance_to_joint\
-        \ = min(edge.x, edge.y);\\n    float stone_mask = smoothstep(0.045, 0.085, distance_to_joint);\\n    float variation =\
-        \ fract(sin(dot(stone_id, vec2(31.417, 73.921))) * 43758.5453);\\n    float vein = fract(sin(dot(stone_id + vec2(2.7, 8.3),\
-        \ vec2(13.19, 17.71))) * 18345.137);\\n    vec3 stone = mix(vec3(0.58, 0.53, 0.47), vec3(0.73, 0.66, 0.57), variation);\\\
-        n    stone *= 0.96 + vein * 0.08;\\n    vec3 mortar = vec3(0.32, 0.29, 0.25);\\n    ALBEDO = mix(mortar, stone, stone_mask);\\\
-        n    ROUGHNESS = 0.98;\\n    SPECULAR = 0.10;\\n}\\n',encoding='utf-8')\np=Path('android/scripts/V408Regions.gd')\ns=p.read_text(encoding='utf-8')\n\
-        assert s.count('func _v456_smooth_road(')==1\nassert s.count('func _make_path(')==1\n\n# Wurzelheim-style bends: widen\
-        \ the gentle turn, but leave mapped gates and endpoints alone.\nold_corner='var corner: float = minf(2.8, minf(prev.distance_to(middle),middle.distance_to(following))*0.19)'\n\
-        new_corner='var corner: float = minf(4.0, minf(prev.distance_to(middle),middle.distance_to(following))*0.25)'\nassert s.count(old_corner)==1,'FIX61:\
-        \ original curve anchor changed'\ns=s.replace(old_corner,new_corner,1)\n\nold_vertex='''func _v456_road_vertex(st: SurfaceTool,\
-        \ p: Vector2, tint: Color) -> void:\n    st.set_color(tint)\n    # Use Wurzelheim's ground sampling, raised 12cm to avoid\
-        \ terrain z-fighting.\n    st.add_vertex(Vector3(p.x,_ground(p.x,p.y)+0.12,p.y))'''\nnew_vertex='''func _v456_road_vertex(st:\
-        \ SurfaceTool, p: Vector2, tint: Color, uv: Vector2) -> void:\n    st.set_color(tint)\n    st.set_uv(uv)\n    # Same gentle\
-        \ terrain sampling as FIX60; no extra 3D paving stones.\n    st.add_vertex(Vector3(p.x,_ground(p.x,p.y)+0.12,p.y))'''\n\
-        assert s.count(old_vertex)==1,'FIX61: vertex anchor changed'\ns=s.replace(old_vertex,new_vertex,1)\n\nold_triangles='''\
-        \    for i in range(spine.size()-1):\n        _v456_road_vertex(st,left[i],colour)\n        _v456_road_vertex(st,right[i],colour)\n\
-        \        _v456_road_vertex(st,right[i+1],colour)\n        _v456_road_vertex(st,left[i],colour)\n        _v456_road_vertex(st,right[i+1],colour)\n\
-        \        _v456_road_vertex(st,left[i+1],colour)'''\nnew_triangles='''    var traveled: float = 0.0\n    for i in range(spine.size()-1):\n\
-        \        var next_traveled: float = traveled + spine[i].distance_to(spine[i+1])\n        _v456_road_vertex(st,left[i],colour,Vector2(0.0,traveled))\n\
-        \        _v456_road_vertex(st,right[i],colour,Vector2(width,traveled))\n        _v456_road_vertex(st,right[i+1],colour,Vector2(width,next_traveled))\n\
-        \        _v456_road_vertex(st,left[i],colour,Vector2(0.0,traveled))\n        _v456_road_vertex(st,right[i+1],colour,Vector2(width,next_traveled))\n\
-        \        _v456_road_vertex(st,left[i+1],colour,Vector2(0.0,next_traveled))\n        traveled = next_traveled'''\nassert\
-        \ s.count(old_triangles)==1, 'FIX61: original six-triangle vertex anchor changed'\ns=s.replace(old_triangles,new_triangles,1)\n\
-        \nold_material='    surface.material_override = _material(Color.WHITE,true)'\nnew_material='    surface.material_override\
-        \ = _v461_paving_material()'\nassert s.count(old_material)==1,'FIX61: global road material anchor changed'\ns=s.replace(old_material,new_material,1)\n\
-        \nmarker='# FIX58: Wurzelheim-like path surface used by every village and intercity road.'\nassert s.count(marker)==1\n\
-        material_code='''# FIX61: one lightweight shader for all paved road meshes, no extra meshes.\nconst V461_PAVING_SHADER\
-        \ = preload(\"res://shaders/LWODPaving.gdshader\")\nvar _v461_shared_paving: ShaderMaterial\n\nfunc _v461_paving_material()\
-        \ -> ShaderMaterial:\n    if _v461_shared_paving == null:\n        _v461_shared_paving = ShaderMaterial.new()\n       \
-        \ _v461_shared_paving.shader = V461_PAVING_SHADER\n    return _v461_shared_paving\n\n'''\ns=s.replace(marker,material_code+marker,1)\n\
-        p.write_text(s,encoding='utf-8')\n\n# No changes to terrain height, city locations, path count or collision.\nassert s.count('func\
-        \ _make_path(')==1\nassert 'ceili(a.distance_to(b)/4.0)' in s\nassert '_v457_road_sections' not in s\nassert s.count('surface.material_override\
-        \ = _v461_paving_material()')==1\nassert s.count('st.set_uv(uv)')==1\nassert shader_path.is_file()\n\n# Reuse the existing\
-        \ road tests, and provide a dedicated paving material smoke test.\ntest = Path('android/tests/V461PavingSmoke.gd')\ntest.write_text(r'''extends\
-        \ SceneTree\nconst Regions = preload(\"res://scripts/V408Regions.gd\")\n\nfunc _initialize() -> void:\n    call_deferred(\"\
-        _run\")\n\nfunc _fail(reason: String) -> void:\n    push_error(\"FIX61: \"+reason)\n    quit(1)\n\nfunc _run() -> void:\n\
-        \    var roads := Regions.new()\n    root.add_child(roads)\n    var paving: ShaderMaterial = roads._v461_paving_material()\n\
-        \    if paving == null or paving.shader == null:\n        _fail(\"paving shader not created\")\n        return\n    if\
-        \ not paving.shader.code.contains(\"stone_mask\") or not paving.shader.code.contains(\"UV\"):\n        _fail(\"paving shader\
-        \ missing staggered stone joints\")\n        return\n    var corners := PackedVector2Array([Vector2(0,0),Vector2(15,0),Vector2(15,20)])\n\
-        \    var curved: PackedVector2Array = roads._v456_smooth_road(corners)\n    if curved.size() < 8 or curved[0] != corners[0]\
-        \ or curved[curved.size()-1] != corners[2]:\n        _fail(\"curved road no longer reaches mapped endpoints\")\n      \
-        \  return\n    print(\"FIX61_PAVING_OK: one reusable stone shader, alternating paving joints, road-aligned UVs, smoothly\
-        \ curved routes\")\n    quit(0)\n''',encoding='utf-8')\nassert test.stat().st_size>100\nprint('FIX61_INSTALL_OK: roads\
-        \ paved with one shared shader, wider smooth bends, unchanged 4m mesh resolution')\nPYFIX61\npython3 -m py_compile \"$RUNNER_TEMP/lwod_fix61_paving.py\"\
-        \npython3 \"$RUNNER_TEMP/lwod_fix61_paving.py\"\npython3 - <<'PYVERIFY61'\nfrom pathlib import Path\ns=Path('android/scripts/V408Regions.gd').read_text(encoding='utf-8')\n\
-        assert 'const V461_PAVING_SHADER = preload(\"res://shaders/LWODPaving.gdshader\")' in s\nassert '_v461_paving_material()'\
-        \ in s\nassert 'var traveled: float = 0.0' in s\nassert s.count('_v456_road_vertex(st,') == 6\nassert 'ceili(a.distance_to(b)/4.0)'\
-        \ in s\nassert 'const BOOST_SECONDS: float = 0.95' in Path('android/scripts/V414Fusion.gd').read_text(encoding='utf-8')\n\
-        cfg=Path('android/export_presets.cfg')\nt=cfg.read_text(encoding='utf-8')\nassert 'version/code=4228' in t and 'version/name=\"\
-        4.1.7.58\"' in t\nt=t.replace('version/code=4228','version/code=4231',1).replace('version/name=\"4.1.7.58\"','version/name=\"\
-        4.1.7.61\"',1)\ncfg.write_text(t,encoding='utf-8')\nprint('FIX61_ROADS_INSTALLED: pavers and curves; flight boost untouched')\n\
-        PYVERIFY61\n"
+      run: |
+        set -euo pipefail
+        python3 - <<'LWOD64_08'
+        import base64, gzip, hashlib
+        from pathlib import Path
+        encoded = (
+            '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'
+            'AA=='
+        )
+        body = gzip.decompress(base64.b64decode(encoded))
+        assert hashlib.sha256(body).hexdigest() == '30e24c097f45f6f839c6a98f1bcb0592f120fb5b61e0f2b4cc35db5ab266e93d', 'FIX64: extracted script checksum mismatch'
+        Path('/tmp/lwod_fix64_08.sh').write_bytes(body)
+        print('FIX64_SCRIPT_RESTORED: step 8, bytes',len(body))
+        LWOD64_08
+        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_08.sh'
     - name: FIX62 Sonnental Wurzelheim und fehlende Dorfwege pflastern
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lwod_fix62_roads.py\" <<'PYFIX62'\nfrom pathlib import Path\nimport re\n\n\
-        p=Path('android/scripts/V408Regions.gd')\ns=p.read_text(encoding='utf-8')\nsh=Path('android/shaders/LWODPaving.gdshader')\n\
-        shader=sh.read_text(encoding='utf-8')\n\n# The previous UV-only shader works on V408's road ribbons, but not on the\n#\
-        \ pre-existing triangulated Wurzelheim network. Give it a world-space option.\nanchor='void fragment() {\\n    vec2 tile\
-        \ = UV / vec2(0.78, 0.92);'\nassert shader.count(anchor)==1, 'FIX62: shader from FIX61 changed'\nshader=shader.replace(anchor,'''uniform\
-        \ bool use_world_space = false;\nvarying vec2 stone_world_uv;\nvoid vertex() {\n    stone_world_uv = (MODEL_MATRIX * vec4(VERTEX,1.0)).xz;\n\
-        }\nvoid fragment() {\n    vec2 tile = (use_world_space ? stone_world_uv : UV) / vec2(0.78, 0.92);''',1)\nsh.write_text(shader,encoding='utf-8')\n\
-        \nmaterial_anchor='# FIX58: Wurzelheim-like path surface used by every village and intercity road.'\nassert s.count(material_anchor)==1,\
-        \ 'FIX62: missing road renderer anchor'\nworld_material='''# FIX62: baked Wurzelheim and original road meshes have no path\
-        \ UVs.\nvar _v462_world_paving: ShaderMaterial\nvar _v462_road_lift: float = 0.0\n\nfunc _v462_paving_world() -> ShaderMaterial:\n\
-        \    if _v462_world_paving == null:\n        _v462_world_paving = ShaderMaterial.new()\n        _v462_world_paving.shader\
-        \ = V461_PAVING_SHADER\n        _v462_world_paving.set_shader_parameter(\"use_world_space\",true)\n    return _v462_world_paving\n\
-        \n'''\ns=s.replace(material_anchor,world_material+material_anchor,1)\n\n# Raise only *new* connection and overlay surfaces\
-        \ above the old plain road\n# without affecting collision, original geometry or the flight system.\nvertex='st.add_vertex(Vector3(p.x,_ground(p.x,p.y)+0.12,p.y))'\n\
-        assert s.count(vertex)>=2,'FIX62: ground-road vertex anchor missing'\nrv=re.search(r'(?ms)^func _v456_road_vertex\\(.*?(?=^func\
-        \ |^static func |\\Z)',s)\nassert rv and vertex in rv.group(), 'FIX62: active V456 road renderer not found'\nnew_rv=rv.group().replace(vertex,'st.add_vertex(Vector3(p.x,_ground(p.x,p.y)+0.12+_v462_road_lift,p.y))',1)\n\
-        s=s[:rv.start()]+new_rv+s[rv.end():]\n\n# Wurzelheim has a distinct baked single-mesh ground network, so the shared\n#\
-        \ _make_path() material never reached it. Replace only that mesh's material.\nwm=re.search(r'(?ms)^func _v431_ground_paths\\\
-        (.*?(?=^func |^static func |^const |^var |\\Z)',s)\nassert wm and 'WurzelheimBodenwege' in wm.group(), 'FIX62: Wurzelheim\
-        \ ground network missing'\nassert wm.group().count('path.material_override = _material(Color.WHITE,true)')==1,'FIX62: baked\
-        \ Wurzelheim path material changed'\nnew_wm=wm.group().replace('path.material_override = _material(Color.WHITE,true)','path.material_override\
-        \ = _v462_paving_world()',1)\ns=s[:wm.start()]+new_wm+s[wm.end():]\n\n# Existing regional ring and gate roads omit the\
-        \ inner village links. Restore\n# an 8m inner ring and four short connectors to the original ring radius.\nregion_fn=re.search(r'(?ms)^func\
-        \ _create_town_paths\\(.*?(?=^func |^static func |^const |^var |\\Z)',s)\nassert region_fn and '_make_path(' in region_fn.group()\
-        \ and 'city: String' in region_fn.group().splitlines()[0],'FIX62: regional roads signature changed'\nassert '_v462_restore_inner_roads('\
-        \ not in region_fn.group()\nregional=region_fn.group().rstrip()+'''\\n    _v462_restore_inner_roads(root,centre,city)\\\
-        n\\n'''\ns=s[:region_fn.start()]+regional+s[region_fn.end():]\n\n# Place decorative connection geometry only, not new ground\
-        \ colliders.\n# Wurzelheim uses its own complete path network and remains untouched here.\nextra='''# FIX62: Previously\
-        \ missing connections from village plaza to outer ring.\nfunc _v462_restore_inner_roads(root: Node3D, centre: Vector2,\
-        \ city: String) -> void:\n    if city == \"Wurzelheim\":\n        return\n    var inner := PackedVector2Array()\n    for\
-        \ j in range(49):\n        var a: float = TAU*float(j)/48.0\n        inner.append(centre+Vector2(sin(a),cos(a))*9.0)\n\
-        \    _v462_road_lift = 0.075\n    _make_path(root,inner,6.0,Color(\"#bca27c\"))\n    # Connect the old 22.5m ring to the\
-        \ inner plaza in four directions.\n    for k in range(4):\n        var a: float = TAU*float(k)/4.0\n        var direction\
-        \ := Vector2(sin(a),cos(a))\n        var side := Vector2(-direction.y,direction.x)\n        var strip := PackedVector2Array([\n\
-        \            centre+direction*8.1,\n            centre+direction*15.3+side*0.55,\n            centre+direction*23.2\n \
-        \       ])\n        _make_path(root,strip,4.35,Color(\"#bca27c\"))\n    _v462_road_lift = 0.0\n\n# FIX62: Sonnental's legacy\
-        \ V403 roads use another, untextured mesh system.\n# Build a very small paved surface on top of its historic round plaza/radial\n\
-        # streets, rather than rebuilding the whole village or adding many stones.\nfunc _v462_pave_sonnental() -> void:\n    if\
-        \ not is_instance_valid(game):\n        return\n    var previous: Node = game.get_node_or_null(\"V462SonnentalPflaster\"\
-        )\n    if is_instance_valid(previous):\n        game.remove_child(previous)\n        previous.queue_free()\n    var root\
-        \ := Node3D.new()\n    root.name = \"V462SonnentalPflaster\"\n    game.add_child(root)\n    var centre: Vector2 = V417Territories.city_world(\"\
-        Sonnental\")\n    _v462_road_lift = 0.14\n    var ring := PackedVector2Array()\n    for j in range(65):\n        var a:\
-        \ float = TAU*float(j)/64.0\n        ring.append(centre+Vector2(sin(a),cos(a))*21.7)\n    _make_path(root,ring,8.2,Color(\"\
-        #bca27c\"))\n    # Preserve the two authentic historical gate directions/positions.\n    for gate in V417Territories.gate_names(\"\
-        Sonnental\"):\n        var d: Vector2 = V417Territories.gate_direction(\"Sonnental\",gate)\n        var route := PackedVector2Array([\n\
-        \            centre+d*7.8,\n            centre+d*23.0,\n            centre+d*46.0\n        ])\n        _make_path(root,route,7.6,Color(\"\
-        #bca27c\"))\n    # Paved centre between the old circular plaza and the fountain.\n    var centre_ring := PackedVector2Array()\n\
-        \    for j in range(41):\n        var a: float = TAU*float(j)/40.0\n        centre_ring.append(centre+Vector2(sin(a),cos(a))*9.5)\n\
-        \    _make_path(root,centre_ring,7.0,Color(\"#b6a28b\"))\n    _v462_road_lift = 0.0\n\n'''\nmarker='# FIX58: Wurzelheim-like\
-        \ path surface used by every village and intercity road.'\nassert s.count(marker)==1\ns=s.replace(marker,extra+marker,1)\n\
-        \n# Install Sonnental paving every time the long-distance road network is built.\n# Not in _process() -- no additional\
-        \ frame cost.\nbuilder=re.search(r'(?ms)^func _build_long_distance_roads\\(.*?(?=^func |^static func |^const |^var |\\\
-        Z)',s)\nassert builder and '_make_path(network,' in builder.group(),'FIX62: intercity builder changed'\nassert '_v462_pave_sonnental()'\
-        \ not in builder.group()\nb=s[builder.start():builder.end()]\nb=b.rstrip()+'''\\n    _v462_pave_sonnental()\\n\\n'''\n\
-        s=s[:builder.start()]+b+s[builder.end():]\n\nassert s.count('func _v431_ground_paths(')==1\nassert s.count('path.material_override\
-        \ = _v462_paving_world()')==1\nassert s.count('func _create_town_paths(')==1\nassert s.count('_v462_restore_inner_roads(root,centre,city)')==1\n\
-        assert s.count('func _v462_pave_sonnental()')==1\nassert s.count('    _v462_pave_sonnental()')==1\nassert s.count('func\
-        \ _make_path(')==1\np.write_text(s,encoding='utf-8')\n\ncfg=Path('android/export_presets.cfg')\nt=cfg.read_text(encoding='utf-8')\n\
-        assert t.count('version/code=4231')==1 and t.count('version/name=\"4.1.7.61\"')==1\ncfg.write_text(t.replace('version/code=4231','version/code=4232',1).replace('version/name=\"\
-        4.1.7.61\"','version/name=\"4.1.7.62\"',1),encoding='utf-8')\n\nsmoke=Path('android/tests/V462AllRoadsSmoke.gd')\nsmoke.write_text('''extends\
-        \ SceneTree\nconst Roads = preload(\"res://scripts/V408Regions.gd\")\n\nfunc _initialize() -> void:\n    call_deferred(\"\
-        _run\")\n\nfunc _fail(message: String) -> void:\n    push_error(\"FIX62: \" + message)\n    quit(1)\n\nfunc _run() -> void:\n\
-        \    var regions := Roads.new()\n    root.add_child(regions)\n    var material: ShaderMaterial = regions._v462_paving_world()\n\
-        \    if material == null or material.shader == null:\n        _fail(\"no world-space paving material for Wurzelheim\")\n\
-        \        return\n    if not bool(material.get_shader_parameter(\"use_world_space\")):\n        _fail(\"baked Wurzelheim\
-        \ roads would still render unpaved\")\n        return\n    if not material.shader.code.contains(\"stone_world_uv\"):\n\
-        \        _fail(\"shader lacks UV fallback for existing village roads\")\n        return\n    var source: String = FileAccess.get_file_as_string(\"\
-        res://scripts/V408Regions.gd\")\n    if not source.contains(\"path.material_override = _v462_paving_world()\"):\n     \
-        \   _fail(\"Wurzelheim baked road material is still plain\")\n        return\n    if not source.contains(\"_v462_restore_inner_roads(root,centre,city)\"\
-        ):\n        _fail(\"regional village connection strips are missing\")\n        return\n    if not source.contains(\"  \
-        \  _v462_pave_sonnental()\"):\n        _fail(\"Sonnental paving was not connected to world initialization\")\n        return\n\
-        \    print(\"FIX62_ALL_ROADS_OK: Wurzelheim baked paving, Sonnental plaza, regional inner rings and four spokes per village\"\
-        )\n    quit(0)\n''',encoding='utf-8')\nprint('FIX62_ROADS_INSTALLED: Wurzelheim world-space shader, Sonnental overlay,\
-        \ regional rings and spokes; no new collisions')\nPYFIX62\npython3 -m py_compile \"$RUNNER_TEMP/lwod_fix62_roads.py\"\n\
-        python3 \"$RUNNER_TEMP/lwod_fix62_roads.py\"\ntest -s android/tests/V462AllRoadsSmoke.gd\n"
-    - name: FIX63 Dörfer mit Laternen Sitzbänken Blumen und Brunnen beleben
+      run: |
+        set -euo pipefail
+        python3 - <<'LWOD64_09'
+        import base64, gzip, hashlib
+        from pathlib import Path
+        encoded = (
+            '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'
+        )
+        body = gzip.decompress(base64.b64decode(encoded))
+        assert hashlib.sha256(body).hexdigest() == '01197f3ab2e841c3b24e4b83c866200b43e8492654527ccdc55ee93b925f010c', 'FIX64: extracted script checksum mismatch'
+        Path('/tmp/lwod_fix64_09.sh').write_bytes(body)
+        print('FIX64_SCRIPT_RESTORED: step 9, bytes',len(body))
+        LWOD64_09
+        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_09.sh'
+    - name: FIX64 Dörfer mit Laternen Sitzbänken Blumen und Brunnen beleben
       shell: bash
-      run: "set -euo pipefail\nmkdir -p android/scripts android/tests\ncat > android/scripts/V463VillageLife.gd <<'V463_VILLAGE_SOURCE'\n\
-        extends Node3D\n# LWOD V41.7 FIX63 – biome-adapted, batched decoration. Visual-only objects\n# are placed away from established\
-        \ city gates and the central paved paths.\nvar _height_fn: Callable\nvar _materials: Dictionary = {}\nvar _stone_tint:\
-        \ Color = Color(\"#80776b\")\nvar _wood_tint: Color = Color(\"#66503b\")\nvar _plant_tint: Color = Color(\"#568454\")\n\
-        var _flower_tint: Color = Color(\"#edb763\")\nvar _lamp_tint: Color = Color(\"#ffd591\")\n\nfunc _material(key: String,\
-        \ tint: Color, glow: bool = false, colored: bool = false) -> StandardMaterial3D:\n    if _materials.has(key):\n       \
-        \ return _materials[key] as StandardMaterial3D\n    var result := StandardMaterial3D.new()\n    result.albedo_color = tint\n\
-        \    result.roughness = 0.91\n    result.vertex_color_use_as_albedo = colored\n    if glow:\n        result.emission_enabled\
-        \ = true\n        result.emission = tint\n        result.emission_energy_multiplier = 1.35\n    _materials[key] = result\n\
-        \    return result\n\nfunc _ground(q: Vector2) -> float:\n    if _height_fn.is_valid():\n        return float(_height_fn.call(q.x,\
-        \ q.y))\n    return 0.0\n\nfunc _box(label: String, position: Vector3, size: Vector3, mat: StandardMaterial3D, yaw: float\
-        \ = 0.0) -> void:\n    var piece := MeshInstance3D.new()\n    piece.name = label\n    var mesh := BoxMesh.new()\n    mesh.size\
-        \ = size\n    piece.mesh = mesh\n    piece.material_override = mat\n    piece.position = position\n    piece.rotation.y\
-        \ = yaw\n    piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF\n    add_child(piece)\n\nfunc _sphere(label:\
-        \ String, position: Vector3, radius: float, mat: StandardMaterial3D) -> void:\n    var piece := MeshInstance3D.new()\n\
-        \    piece.name = label\n    var mesh := SphereMesh.new()\n    mesh.radius = radius\n    mesh.height = radius * 2.0\n \
-        \   mesh.radial_segments = 8\n    mesh.rings = 4\n    piece.mesh = mesh\n    piece.material_override = mat\n    piece.position\
-        \ = position\n    piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF\n    add_child(piece)\n\nfunc _round(label:\
-        \ String, position: Vector3, radius: float, height: float, mat: StandardMaterial3D) -> void:\n    var piece := MeshInstance3D.new()\n\
-        \    piece.name = label\n    var mesh := CylinderMesh.new()\n    mesh.top_radius = radius\n    mesh.bottom_radius = radius\n\
-        \    mesh.height = height\n    mesh.radial_segments = 12\n    piece.mesh = mesh\n    piece.material_override = mat\n  \
-        \  piece.position = position\n    piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF\n    add_child(piece)\n\
-        \nfunc _lantern(q: Vector2, lit: bool, wooden: bool) -> void:\n    var y: float = _ground(q)\n    var pole := _material(\"\
-        lamp_wood\" if wooden else \"lamp_iron\", _wood_tint if wooden else Color(\"#504b42\"))\n    var metal := _material(\"\
-        lamp_metal\", Color(\"#4b4842\"))\n    var glow := _material(\"lamp_glow\", _lamp_tint, true)\n    _box(\"Laternenmast\"\
-        , Vector3(q.x,y+1.42,q.y), Vector3(0.17,2.84,0.17),pole)\n    _box(\"Laternenhalter\",Vector3(q.x,y+2.84,q.y),Vector3(0.65,0.15,0.65),metal)\n\
-        \    _sphere(\"Laternenlicht\",Vector3(q.x,y+3.06,q.y),0.31,glow)\n    _box(\"Laternenhaube\",Vector3(q.x,y+3.40,q.y),Vector3(0.72,0.15,0.72),metal)\n\
-        \    if lit:\n        var light := OmniLight3D.new()\n        light.name = \"Abendlicht\"\n        light.position = Vector3(q.x,y+3.0,q.y)\n\
-        \        light.light_color = _lamp_tint\n        light.light_energy = 1.2\n        light.omni_range = 8.5\n        light.shadow_enabled\
-        \ = false\n        add_child(light)\n\nfunc _bench(q: Vector2, yaw: float) -> void:\n    var y: float = _ground(q)\n  \
-        \  var wood := _material(\"bench_wood\",_wood_tint)\n    var frame := _material(\"bench_frame\",_stone_tint)\n    _box(\"\
-        Sitzbank\",Vector3(q.x,y+0.69,q.y),Vector3(2.0,0.22,0.58),wood,yaw)\n    _box(\"Rueckenlehne\",Vector3(q.x,y+1.23,q.y+0.24),Vector3(2.0,0.78,0.14),wood,yaw)\n\
-        \    _box(\"BankfussLinks\",Vector3(q.x-0.7,y+0.31,q.y),Vector3(0.2,0.62,0.58),frame,yaw)\n    _box(\"BankfussRechts\"\
-        ,Vector3(q.x+0.7,y+0.31,q.y),Vector3(0.2,0.62,0.58),frame,yaw)\n\nfunc _planter(q: Vector2) -> void:\n    var y: float\
-        \ = _ground(q)\n    var wooden := _material(\"planter_wood\", _wood_tint)\n    var earth := _material(\"planter_earth\"\
-        , Color(\"#48392d\"))\n    _box(\"BlumenbeetRand\",Vector3(q.x,y+0.18,q.y),Vector3(1.6,0.32,1.05),wooden)\n    _box(\"\
-        Beeterde\",Vector3(q.x,y+0.35,q.y),Vector3(1.40,0.06,0.88),earth)\n\nfunc _well(q: Vector2, water: Color) -> void:\n  \
-        \  var y: float = _ground(q)\n    var stone := _material(\"well_stone\",_stone_tint)\n    var wet := _material(\"well_water\"\
-        ,water)\n    var wood := _material(\"well_beam\",_wood_tint)\n    _round(\"DorfbrunnenStein\",Vector3(q.x,y+0.43,q.y),1.05,0.84,stone)\n\
-        \    _round(\"DorfbrunnenWasser\",Vector3(q.x,y+0.88,q.y),0.84,0.06,wet)\n    _box(\"BrunnenPfostenL\",Vector3(q.x-0.8,y+1.50,q.y),Vector3(0.15,1.8,0.15),wood)\n\
-        \    _box(\"BrunnenPfostenR\",Vector3(q.x+0.8,y+1.50,q.y),Vector3(0.15,1.8,0.15),wood)\n    _box(\"BrunnenQuerbalken\"\
-        ,Vector3(q.x,y+2.37,q.y),Vector3(1.9,0.14,0.2),wood)\n\nfunc _flower_cluster(center: Vector2, count: int, seed: int) ->\
-        \ void:\n    # A single multimesh per flowerbed instead of individual scene nodes.\n    var rng := RandomNumberGenerator.new()\n\
-        \    rng.seed = seed\n    var mesh := SphereMesh.new()\n    mesh.radius = 0.14\n    mesh.height = 0.25\n    mesh.radial_segments\
-        \ = 6\n    mesh.rings = 3\n    var batch := MultiMesh.new()\n    batch.transform_format = MultiMesh.TRANSFORM_3D\n    batch.use_colors\
-        \ = true\n    batch.mesh = mesh\n    batch.instance_count = count\n    for i in range(count):\n        var q := center\
-        \ + Vector2(rng.randf_range(-0.61,0.61),rng.randf_range(-0.35,0.35))\n        var pos := Vector3(q.x,_ground(q)+rng.randf_range(0.43,0.65),q.y)\n\
-        \        batch.set_instance_transform(i,Transform3D(Basis(),pos))\n        batch.set_instance_color(i,_flower_tint.lerp(Color(\"\
-        #e9dfd5\"),rng.randf_range(0.0,0.72)))\n    var flowers := MultiMeshInstance3D.new()\n    flowers.name = \"Blumen_\" +\
-        \ str(seed)\n    flowers.multimesh = batch\n    flowers.material_override = _material(\"flower_multimesh\",Color.WHITE,false,true)\n\
-        \    flowers.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF\n    add_child(flowers)\n\nfunc _regional_palette(city:\
-        \ String) -> void:\n    match city:\n        \"Wurzelheim\":\n            _wood_tint = Color(\"#6e5136\")\n           \
-        \ _stone_tint = Color(\"#746951\")\n            _plant_tint = Color(\"#416e44\")\n            _flower_tint = Color(\"#ebc678\"\
-        )\n        \"Moordorf\":\n            _wood_tint = Color(\"#493e34\")\n            _stone_tint = Color(\"#5a5d52\")\n \
-        \           _plant_tint = Color(\"#4e6b50\")\n            _flower_tint = Color(\"#ab9cbb\")\n            _lamp_tint = Color(\"\
-        #ffcc81\")\n        \"Aschefurt\":\n            _wood_tint = Color(\"#514038\")\n            _stone_tint = Color(\"#6d504b\"\
-        )\n            _flower_tint = Color(\"#db8060\")\n            _lamp_tint = Color(\"#ffb465\")\n        \"Frostholm\":\n\
-        \            _wood_tint = Color(\"#685c54\")\n            _stone_tint = Color(\"#a5b2bb\")\n            _flower_tint =\
-        \ Color(\"#a4c8e9\")\n            _lamp_tint = Color(\"#ffdcaa\")\n        \"Sandhafen\", \"Sandhain\":\n            _wood_tint\
-        \ = Color(\"#a47e55\")\n            _stone_tint = Color(\"#c4ab84\")\n            _flower_tint = Color(\"#daba62\")\n \
-        \       \"Felswacht\", \"Steinland\":\n            _wood_tint = Color(\"#685f54\")\n            _stone_tint = Color(\"\
-        #797973\")\n            _flower_tint = Color(\"#c5c69c\")\n        _:\n            _wood_tint = Color(\"#74513a\")\n  \
-        \          _stone_tint = Color(\"#9d9380\")\n            _flower_tint = Color(\"#efb98e\")\n\nfunc build_village(centre:\
-        \ Vector2, city: String, ground_function: Callable) -> void:\n    if bool(get_meta(\"v463_built\",false)):\n        return\n\
-        \    _height_fn = ground_function\n    _regional_palette(city)\n    # Keep all props off the 9m central ring and 22m ring;\
-        \ avoid four main gates.\n    var is_woods: bool = city == \"Wurzelheim\"\n    for k in range(4):\n        var a: float\
-        \ = PI*0.25+float(k)*PI*0.5\n        var direction := Vector2(sin(a),cos(a))\n        _lantern(centre + direction*27.0,k%2==0,is_woods)\n\
-        \        _bench(centre + direction*15.6,a)\n    for k in range(6):\n        var a: float = PI/6.0+float(k)*TAU/6.0\n  \
-        \      var direction := Vector2(sin(a),cos(a))\n        var bed: Vector2 = centre + direction*12.7\n        _planter(bed)\n\
-        \        _flower_cluster(bed,12,k+city.length()*791)\n    if city != \"Sonnental\" and city != \"Wurzelheim\":\n      \
-        \  var water: Color = Color(\"#547e93\") if city != \"Aschefurt\" else Color(\"#a56e49\")\n        _well(centre + Vector2(-11.3,-11.3),water)\n\
-        \    set_meta(\"v463_built\",true)\n    set_meta(\"v463_city\",city)\n    set_meta(\"v463_lanterns\",4)\n    set_meta(\"\
-        v463_benches\",4)\n    set_meta(\"v463_flowerbeds\",6)\n    set_meta(\"v463_wells\",0 if city in [\"Sonnental\",\"Wurzelheim\"\
-        ] else 1)\nV463_VILLAGE_SOURCE\ncat > \"$RUNNER_TEMP/lwod_fix63.py\" <<'PY_FIX63'\nfrom pathlib import Path\nimport re\n\
-        \np=Path('android/scripts/V408Regions.gd')\ns=p.read_text(encoding='utf-8')\nassert s.count('func _create_town_paths(')==1,\
-        \ 'FIX63: village road builder missing'\nassert s.count('func _v462_pave_sonnental(')==1, 'FIX63: Sonnental paving missing'\n\
-        assert s.count('    _v462_restore_inner_roads(root,centre,city)')==1, 'FIX63: FIX62 village paths missing'\nassert 'func\
-        \ _v463_add_village(' not in s\n\n# The existing regional path generator knows the centre and parent for every\n# town.\
-        \ Attach village life only after all old paths have been built.\nold='    _v462_restore_inner_roads(root,centre,city)'\n\
-        s=s.replace(old,old+'\\n    _v463_add_village(root,centre,city)',1)\n\n# Sonnental retains its separate village/path generator,\
-        \ so install decoration\n# into its existing FIX62 paving container (not in an update loop).\nfn=re.search(r'(?ms)^func\
-        \ _v462_pave_sonnental\\(.*?(?=^func |^static func |^const |^var |\\Z)',s)\nassert fn, 'FIX63: Sonnental build entry absent'\n\
-        part=fn.group()\nold='    _v462_road_lift = 0.0'\nassert part.count(old)==1, 'FIX63: Sonnental paving completion anchor\
-        \ missing'\npart=part.replace(old,old+'\\n    _v463_add_village(root,centre,\"Sonnental\")',1)\ns=s[:fn.start()]+part+s[fn.end():]\n\
-        \n# Reuse one scene script for each biome. The village root owns its decorations;\n# the marker prevents duplicate props\
-        \ whenever the regional mesh is rebuilt.\nextra=\"\"\"\n# FIX63: Biome-aware lanterns, benches, planted flowerbeds and\
-        \ village wells.\nfunc _v463_add_village(root: Node3D, centre: Vector2, city: String) -> void:\n    if not is_instance_valid(root):\n\
-        \        return\n    var tag: String = \"V463LebendigesDorf_\" + city\n    if is_instance_valid(root.get_node_or_null(tag)):\n\
-        \        return\n    var decorator := preload(\"res://scripts/V463VillageLife.gd\").new()\n    decorator.name = tag\n \
-        \   root.add_child(decorator)\n    decorator.build_village(centre,city,Callable(self,\"_ground\"))\n\"\"\"\ns=s.rstrip()+'\\\
-        n'+extra+'\\n'\nassert s.count('func _v463_add_village(')==1\nassert s.count('    _v463_add_village(root,centre,city)')==1\n\
-        assert s.count('    _v463_add_village(root,centre,\"Sonnental\")')==1\nassert s.count('func _v431_ground_paths(')==1\n\
-        assert s.count('func _make_path(')==1\np.write_text(s,encoding='utf-8')\n\ncfg=Path('android/export_presets.cfg')\nt=cfg.read_text(encoding='utf-8')\n\
-        assert t.count('version/code=4232')==1 and t.count('version/name=\"4.1.7.62\"')==1, 'FIX63: incorrect FIX62 APK base version'\n\
-        t=t.replace('version/code=4232','version/code=4233',1).replace('version/name=\"4.1.7.62\"','version/name=\"4.1.7.63\"',1)\n\
-        cfg.write_text(t,encoding='utf-8')\nprint('FIX63_VILLAGES_INSTALLED: village and Sonnental hooks, 4 lamps, 4 benches and\
-        \ 6 flowerbeds per settlement')\nPY_FIX63\npython3 -m py_compile \"$RUNNER_TEMP/lwod_fix63.py\"\npython3 \"$RUNNER_TEMP/lwod_fix63.py\"\
-        \ntest -s android/scripts/V463VillageLife.gd\ncat > android/tests/V463VillagesSmoke.gd <<'V463_VILLAGE_TEST'\nextends SceneTree\n\
-        const Villages = preload(\"res://scripts/V463VillageLife.gd\")\nconst Regions = preload(\"res://scripts/V408Regions.gd\"\
-        )\n\nclass FlatGround:\n    extends RefCounted\n    func height(_x: float, _z: float) -> float:\n        return 6.0\n\n\
-        func _initialize() -> void:\n    call_deferred(\"_run\")\n\nfunc _fail(message: String) -> void:\n    push_error(\"FIX63:\
-        \ \" + message)\n    quit(1)\n\nfunc _run() -> void:\n    var terrain := FlatGround.new()\n    var city_names := [\"Sonnental\"\
-        ,\"Wurzelheim\",\"Moordorf\",\"Felswacht\",\"Aschefurt\",\"Frostholm\",\"Sandhafen\",\"Steinland\"]\n    var built: int\
-        \ = 0\n    for city in city_names:\n        var life := Villages.new()\n        root.add_child(life)\n        life.build_village(Vector2(115.0,210.0),city,Callable(terrain,\"\
-        height\"))\n        if not bool(life.get_meta(\"v463_built\",false)):\n            _fail(city+\" decorations missing\"\
-        )\n            return\n        if life.get_meta(\"v463_lanterns\",0)!=4 or life.get_meta(\"v463_benches\",0)!=4 or life.get_meta(\"\
-        v463_flowerbeds\",0)!=6:\n            _fail(city+\" has incomplete props\")\n            return\n        if life.get_child_count()<40:\n\
-        \            _fail(city+\" generated too few decorations\")\n            return\n        if city in [\"Sonnental\",\"Wurzelheim\"\
-        ] and life.get_meta(\"v463_wells\",-1)!=0:\n            _fail(\"a second well was placed on existing town landmark\")\n\
-        \            return\n        if city==\"Moordorf\" and life.get_meta(\"v463_wells\",0)!=1:\n            _fail(\"village\
-        \ well missing\")\n            return\n        var before: int = life.get_child_count()\n        life.build_village(Vector2(115.0,210.0),city,Callable(terrain,\"\
-        height\"))\n        if before!=life.get_child_count():\n            _fail(\"repeated village build duplicated decorations\"\
-        )\n            return\n        built+=1\n    var regions_src: String = FileAccess.get_file_as_string(\"res://scripts/V408Regions.gd\"\
-        )\n    if regions_src.count(\"_v463_add_village(root,centre,\")!=2:\n        _fail(\"regional villages or Sonnental are\
-        \ not hooked up\")\n        return\n    if not regions_src.contains(\"_v462_paving_world()\"):\n        _fail(\"FIX62 Wurzelheim\
-        \ paving was lost\")\n        return\n    print(\"FIX63_VILLAGES_OK: \"+str(built)+\" region palettes, 4 lanterns, 4 benches,\
-        \ 6 flowerbeds, unique existing wells\")\n    quit(0)\nV463_VILLAGE_TEST\n"
+      run: |
+        set -euo pipefail
+        python3 - <<'LWOD64_10'
+        import base64, gzip, hashlib
+        from pathlib import Path
+        encoded = (
+            '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'
+        )
+        body = gzip.decompress(base64.b64decode(encoded))
+        assert hashlib.sha256(body).hexdigest() == 'a300d53ba6e0907fa5331404fba9a3dc9a6126ba59fe346727c8b2e2c9989805', 'FIX64: extracted script checksum mismatch'
+        Path('/tmp/lwod_fix64_10.sh').write_bytes(body)
+        print('FIX64_SCRIPT_RESTORED: step 10, bytes',len(body))
+        LWOD64_10
+        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_10.sh'
     - name: FIX61 Weltkarte importieren und echten Spielstart testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\npython3 - <<'PYSTARTGUARD' | tee build/diagnose/FIX58_Startschutz.log\n\
-        from pathlib import Path\nimport re\npath = Path('android/scripts/V408Regions.gd')\ns = path.read_text(encoding='utf-8')\n\
-        start = s.index('func _make_path(')\nend = re.search(r'(?m)^(?:func |static func |const |var |@)',s[start+1:])\nmethod\
-        \ = s[start:(start+1+end.start()) if end else len(s)]\nassert s.count('func _make_path(')==1, 'unexpected duplicate path\
-        \ renderer'\nassert 'func _v456_smooth_road(' in s, 'safe curved renderer missing'\nassert 'ceili(a.distance_to(b)/4.0)'\
-        \ in s, '4m sampling budget missing'\nassert '_v457_road_sections' not in s, 'expensive FIX57 multi-band mesh still active'\n\
-        assert 'st.generate_normals()' in method and 'road_meshes += 1' in method\nassert 'Color(\"#bca27c\")' in method, 'Wurzelheim\
-        \ road palette missing'\nfusion = Path('android/scripts/V414Fusion.gd').read_text(encoding='utf-8')\nfor token in ['const\
-        \ BOOST_SECONDS: float = 0.95','const BOOST_CAPACITY: int = 3',\n              'const BOOST_RECHARGE_SECONDS: float = 10.0']:\n\
-        \    assert token in fusion, f'flight mode regression: {token}'\nprint('FIX58_START_GUARD_OK: heavy 1.5m x many road strips\
-        \ removed; known-loading 4m lightweight renderer restored; boost intact')\nPYSTARTGUARD\n# FIX61: Import image assets before\
-        \ loading scripts with preload(\"res://...webp\").\n# Running a project without an editor import can falsely report \"\
-        no resource loaders\"\n# for the atlas, even when an Android export works. Keep the atlas and the map intact.\ntest -s\
-        \ android/assets/maps/LWOD_Atlas_HD.webp || {\n  echo '::error::World atlas is missing before Godot import'; exit 1;\n\
-        }\nset +e\ntimeout --signal=TERM --kill-after=5s 180s godot --headless --path android --editor --import \\\n  > build/diagnose/FIX61_Asset_Import.log\
-        \ 2>&1\nimport_status=$?\nset -e\ncat build/diagnose/FIX61_Asset_Import.log\nif [ \"$import_status\" -ne 0 ]; then\n  echo\
-        \ \"::error::Godot resource import failed (status=$import_status)\"\n  exit 1\nfi\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed\
-        \ to load script|Import failed|Error importing' build/diagnose/FIX61_Asset_Import.log; then\n  echo '::error::Asset importer\
-        \ reported a script or resource error'\n  exit 1\nfi\n# Require an import metadata/asset marker, rather than just a zero\
-        \ process status.\nif [ ! -f android/assets/maps/LWOD_Atlas_HD.webp.import ]; then\n  echo '::error::Atlas import metadata\
-        \ not generated'\n  exit 1\nfi\nif ! grep -Fq 'res://.godot/imported/' android/assets/maps/LWOD_Atlas_HD.webp.import; then\n\
-        \  echo '::error::Atlas import metadata has no Godot imported path'\n  exit 1\nfi\necho 'FIX61_ATLAS_IMPORT_OK: world-map\
-        \ texture imported before runtime preload'\n\n# Launch the actual project, not only standalone smoke tests.\nset +e\ntimeout\
-        \ --signal=TERM --kill-after=5s 160s godot --headless --path android --quit-after 90 \\\n  > build/diagnose/FIX61_Projektstart.log\
-        \ 2>&1\nlaunch_status=$?\nset -e\ncat build/diagnose/FIX61_Projektstart.log\nif [ \"$launch_status\" -ne 0 ]; then\n  echo\
-        \ \"::error::Godot project start failed or timed out (status=$launch_status)\"\n  exit 1\nfi\nif grep -Eiq 'SCRIPT ERROR:|Parse\
-        \ Error:|Failed to load script|Invalid call' build/diagnose/FIX61_Projektstart.log; then\n  echo '::error::Godot script/runtime\
-        \ error during startup'\n  exit 1\nfi\nfor ready in 'V408_WORLD_READY:' 'V4081_TELEPORT_READY:'; do\n  if ! grep -Fq \"\
-        $ready\" build/diagnose/FIX61_Projektstart.log; then\n    echo \"::error::Game readiness marker missing: $ready\"\n   \
-        \ exit 1\n  fi\ndone\necho 'FIX61_GAME_START_OK: main scene created, regions and teleport loaded, 90 frames completed'\n"
+      run: |
+        set -euo pipefail
+        python3 - <<'LWOD64_11'
+        import base64, gzip, hashlib
+        from pathlib import Path
+        encoded = (
+            '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'
+        )
+        body = gzip.decompress(base64.b64decode(encoded))
+        assert hashlib.sha256(body).hexdigest() == 'dc862c45d5142b20420df666d4bbb767089871988cdd3b194cb65bd64e71d7a3', 'FIX64: extracted script checksum mismatch'
+        Path('/tmp/lwod_fix64_11.sh').write_bytes(body)
+        print('FIX64_SCRIPT_RESTORED: step 11, bytes',len(body))
+        LWOD64_11
+        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_11.sh'
     - name: Sicherungen und alle FIX39 Godot-Tests
       shell: bash
-      run: "set -euo pipefail\nfor i in 11 12 13 14 15 16; do\n  echo \"::group::FIX39 Originaltest $i\"\n  bash --noprofile --norc\
-        \ -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\"\n  echo '::endgroup::'\ndone\n"
+      run: |
+        set -euo pipefail
+        for i in 11 12 13 14 15 16; do
+          echo "::group::FIX39 Originaltest $i"
+          bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
+          echo '::endgroup::'
+        done
     - name: FIX54 Dungeon-Dekoration und Kamera testen
       shell: bash
-      run: 'set -euo pipefail
-
+      run: |
+        set -euo pipefail
         mkdir -p build/diagnose
-
-        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd
-        2>&1 | tee build/diagnose/FIX54_Ruine.log
-
-        if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX54: '' build/diagnose/FIX54_Ruine.log;
-        then exit 1; fi
-
-        grep -Fq ''FIX54_RUINE_OK:'' build/diagnose/FIX54_Ruine.log
-
-        '
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX54_Ruine.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX54: ' build/diagnose/FIX54_Ruine.log; then exit 1; fi
+        grep -Fq 'FIX54_RUINE_OK:' build/diagnose/FIX54_Ruine.log
     - name: FIX55 Flugschub und unabhängige Ladezeiten testen
       shell: bash
-      run: 'set -euo pipefail
-
+      run: |
+        set -euo pipefail
         mkdir -p build/diagnose
-
-        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script res://tests/V455BoostSmoke.gd
-        2>&1 | tee build/diagnose/FIX55_Flugschub.log
-
-        if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX55: '' build/diagnose/FIX55_Flugschub.log;
-        then exit 1; fi
-
-        grep -Fq ''FIX55_BOOST_OK:'' build/diagnose/FIX55_Flugschub.log
-
-        '
+        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script res://tests/V455BoostSmoke.gd 2>&1 | tee build/diagnose/FIX55_Flugschub.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX55: ' build/diagnose/FIX55_Flugschub.log; then exit 1; fi
+        grep -Fq 'FIX55_BOOST_OK:' build/diagnose/FIX55_Flugschub.log
     - name: FIX61 Neun Stadtwege Kurven und Flugschub testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\nset -o pipefail\ntimeout --signal=TERM --kill-after=5s 150s godot --headless\
-        \ --path android --quit-after 300 --script res://tests/V456RoadsSmoke.gd 2>&1 | tee build/diagnose/FIX61_Wegenetz.log\n\
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX61: ' build/diagnose/FIX61_Wegenetz.log;\
-        \ then\n  exit 1\nfi\ngrep -Fq 'FIX61_ROADS_OK:' build/diagnose/FIX61_Wegenetz.log\n"
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        set -o pipefail
+        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script res://tests/V456RoadsSmoke.gd 2>&1 | tee build/diagnose/FIX61_Wegenetz.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX61: ' build/diagnose/FIX61_Wegenetz.log; then
+          exit 1
+        fi
+        grep -Fq 'FIX61_ROADS_OK:' build/diagnose/FIX61_Wegenetz.log
     - name: FIX61 Pflasteroptik und Kurven automatisch testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 120s godot --headless --path android\
-        \ --quit-after 300 --script res://tests/V461PavingSmoke.gd 2>&1 | tee build/diagnose/FIX61_Pflasterwege.log\nif grep -Eiq\
-        \ 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX61: ' build/diagnose/FIX61_Pflasterwege.log; then\n\
-        \  echo '::error::Pflasterweg- oder Kurventest fehlgeschlagen'; exit 1\nfi\ngrep -Fq 'FIX61_PAVING_OK:' build/diagnose/FIX61_Pflasterwege.log\n"
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V461PavingSmoke.gd 2>&1 | tee build/diagnose/FIX61_Pflasterwege.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX61: ' build/diagnose/FIX61_Pflasterwege.log; then
+          echo '::error::Pflasterweg- oder Kurventest fehlgeschlagen'; exit 1
+        fi
+        grep -Fq 'FIX61_PAVING_OK:' build/diagnose/FIX61_Pflasterwege.log
     - name: FIX62 Komplettes Dorfwegenetz und Pflaster nachpruefen
- 
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V462AllRoadsSmoke.gd 2>&1 | tee build/diagnose/FIX62_Alle_Wege.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX62: ' build/diagnose/FIX62_Alle_Wege.log; then
+          echo '::error::Wurzelheim, Sonnental oder Dorfwegetest fehlgeschlagen'; exit 1
+        fi
+        grep -Fq 'FIX62_ALL_ROADS_OK:' build/diagnose/FIX62_Alle_Wege.log
+    - name: FIX64 Alle Dorfdekorationen und Regionsvarianten testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V463VillagesSmoke.gd 2>&1 | tee build/diagnose/FIX64_Doerfer.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX64: ' build/diagnose/FIX64_Doerfer.log; then
+          echo '::error::FIX64 Dorf-Dekoration kann nicht geladen werden'; exit 1
+        fi
+        grep -Fq 'FIX64_VILLAGES_OK:' build/diagnose/FIX64_Doerfer.log
+    - name: FIX64 Android APK exportieren und pruefen
+      run: |
+        set -euo pipefail
+        mkdir -p build/android build/diagnose
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX64.apk"
+        rm -f "$APK"
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX64_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX64_APK_Export.log; then
+          exit 1
+        fi
+        test -s "$APK"
+        unzip -t "$APK" >/dev/null
+        unzip -Z1 "$APK" | grep -Fx 'AndroidManifest.xml' >/dev/null
+        ls -lh "$APK"
+        sha256sum "$APK"
+      shell: bash
+    - id: apk_upload
+      name: FIX64 APK als Download hochladen
+      uses: actions/upload-artifact@v4
+      with:
+        compression-level: 0
+        if-no-files-found: error
+        name: LWOD_ANDROID_V41_7_FIX64_APK
+        path: build/android/LWOD-Android-V41.7-FIX64.apk
+        retention-days: 14
+    - env:
+        APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
+        APK_ARTIFACT_URL: ${{ steps.apk_upload.outputs.artifact-url }}
+      name: Erfolgreichen APK Upload bestaetigen
+      run: |
+        set -euo pipefail
+        test -n "$APK_ARTIFACT_ID"
+        test -n "$APK_ARTIFACT_URL"
+        printf '### Android APK Download\n\n[FIX64 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+      shell: bash
+    - if: always()
+      name: FIX64 Testprotokolle hochladen
+      uses: actions/upload-artifact@v4
+      with:
+        if-no-files-found: warn
+        name: LWOD_FIX64_TESTPROTOKOLLE
+        path: build/diagnose
+        retention-days: 14
