@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX67 Wegueberlappungen und Blumen am Grasrand – Basisreparatur
+name: LWOD Android V41.7 FIX68 Gepflasterte Wege und freie Grasraender
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX67 APK
+    name: LWOD Android V41.7 FIX68 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -541,6 +541,109 @@ jobs:
         )\ndata=gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(data).hexdigest() == 'f9611a1663bfb9175c1b8954f4e3cb12a30d2d22c7d7d682f29aad0ea0e8a28a',\
         \ 'FIX66 patch checksum mismatch'\nPath('/tmp/lwod_fix66_patch.py').write_bytes(data)\nprint('FIX66_PATCH_RESTORED:\
         \ bytes',len(data))\nFIX66_UNPACK\npython3 -m py_compile /tmp/lwod_fix66_patch.py\npython3 /tmp/lwod_fix66_patch.py\n"
+    - name: FIX68 Gehwegkollisionen und Grasrand-Positionen korrigieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        cat > /tmp/lwod_fix68.py <<'PYFIX68'
+        from pathlib import Path
+        import re
+        
+        regions = Path('android/scripts/V408Regions.gd')
+        s = regions.read_text(encoding='utf-8')
+        
+        # FIX66 had used the centre of each new paved segment. Even when the centre
+        # was free, its edges intersected existing 4–8m wide road surfaces. Keep
+        # the full half-width plus a 0.45m gap in the overlap test.
+        old = 'if not _v466_is_paved(q,0.28):'
+        assert s.count(old)==1, 'FIX68: expected the single FIX66 gap check'
+        s = s.replace(old,'if not _v466_is_paved(q,2.65):',1)
+        
+        # Defer decorating until the current town has finished constructing all road
+        # meshes. The live callback will check the full road registry at that time.
+        old = 'decorator.build_village(centre,city,Callable(self,"_ground"),Callable(self,"_v466_is_paved"),root,_v466_roads_near(centre,55.0))'
+        assert s.count(old)==1, 'FIX68: FIX66 village hook changed'
+        new = 'decorator.call_deferred("build_village",centre,city,Callable(self,"_ground"),Callable(self,"_v466_is_paved"),root,_v466_roads_near(centre,55.0))'
+        s=s.replace(old,new,1)
+        assert s.count('func _v466_is_paved(')==1
+        assert s.count('func _v462_restore_inner_roads(')==1
+        regions.write_text(s,encoding='utf-8')
+        
+        life = Path('android/scripts/V463VillageLife.gd')
+        t = life.read_text(encoding='utf-8')
+        # FIX66's if/elif silently skipped the global map whenever a local road list
+        # existed. This is the key issue: a decorator can be placed on another road
+        # crossing the same village. Always check BOTH sources.
+        old = '''func _v466_on_grass(q: Vector2, footprint: float) -> bool:
+            if not _v466_local_roads.is_empty():'''
+        new = '''func _v466_on_grass(q: Vector2, footprint: float) -> bool:
+            if _v466_road_check.is_valid() and bool(_v466_road_check.call(q,footprint+1.25)):
+                return false
+            if not _v466_local_roads.is_empty():'''
+        assert t.count(old)==1, 'FIX68: FIX66 grass checker not found'
+        t=t.replace(old,new,1)
+        # The original fallback elif can stay: it is redundant when the local list is
+        # empty, but ensures the existing scene test code and behavior are preserved.
+        # Extend the real Wurzelheim mesh search to catch the named paved walkways.
+        old = 'if String(road.name).contains("WurzelheimBodenwege") and road.mesh is ArrayMesh:'
+        new = 'if (String(road.name).contains("WurzelheimBodenwege") or String(road.name).contains("WurzelheimPflaster")) and road.mesh is ArrayMesh:'
+        assert t.count(old)==1, 'FIX68: Wurzelheim mesh filter changed'
+        t=t.replace(old,new,1)
+        assert t.count('func build_village(')==1 and t.count('func _v466_find_grass(')==1
+        life.write_text(t,encoding='utf-8')
+        
+        cfg=Path('android/export_presets.cfg')
+        c=cfg.read_text(encoding='utf-8')
+        assert c.count('version/code=4235')==1, 'FIX68: unexpected FIX66 APK base'
+        assert c.count('version/name="4.1.7.66"')==1, 'FIX68: unexpected FIX66 version name'
+        c=c.replace('version/code=4235','version/code=4237',1).replace('version/name="4.1.7.66"','version/name="4.1.7.68"',1)
+        cfg.write_text(c,encoding='utf-8')
+        
+        Path('android/tests/V468GrassRoadSmoke.gd').write_text('''extends SceneTree
+        const Regions = preload("res://scripts/V408Regions.gd")
+        const Decor = preload("res://scripts/V463VillageLife.gd")
+        
+        func _initialize() -> void:
+            call_deferred("_run")
+        
+        func fail(msg: String) -> void:
+            push_error("FIX68: " + msg)
+            quit(1)
+        
+        func _run() -> void:
+            var roads := Regions.new()
+            root.add_child(roads)
+            var crossing := PackedVector2Array([Vector2(-35,0),Vector2(35,0)])
+            roads._v466_record_road(crossing,6.0)
+            var decor := Decor.new()
+            root.add_child(decor)
+            decor._v466_road_check=Callable(roads,"_v466_is_paved")
+            var separate: Array[Dictionary] = []
+            separate.append({"a":Vector2(40,0),"b":Vector2(40,20),"half":2.0})
+            decor._v466_local_roads=separate
+            if decor._v466_on_grass(Vector2(0,0),0.8):
+                fail("local road list hides a crossing road from the global registry")
+                return
+            if not decor._v466_on_grass(Vector2(80,80),0.8):
+                fail("free meadow is incorrectly blocked")
+                return
+            if not roads._v466_is_paved(Vector2(0,5.6),2.65):
+                fail("road overlap check ignores the width of an intersecting walkway")
+                return
+            var src := FileAccess.get_file_as_string("res://scripts/V408Regions.gd")
+            if not src.contains("decorator.call_deferred(\\"build_village\\""):
+                fail("decorations are created before the path network is finished")
+                return
+            if not src.contains("if not _v466_is_paved(q,2.65):"):
+                fail("inner path gaps do not respect the full path width")
+                return
+            print("FIX68_GRASS_OK: complete road checks, margin for paving width and delayed village decoration")
+            quit(0)
+        ''',encoding='utf-8')
+        print('FIX68_INSTALLED: cross-street-safe grass placement, pavement width clearance, deferred decoration, historic routes unchanged')
+        PYFIX68
+        python3 -m py_compile /tmp/lwod_fix68.py
+        python3 /tmp/lwod_fix68.py
     - name: FIX61 Weltkarte importieren und echten Spielstart testen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LWOD64_11'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
@@ -633,21 +736,31 @@ jobs:
         \ android --quit-after 300 --script res://tests/V466VillageSafetySmoke.gd 2>&1 | tee build/diagnose/FIX66_Freie_Wege.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX66: ' build/diagnose/FIX66_Freie_Wege.log;\
         \ then\n  echo '::error::Wege oder Deko blockieren Laufwege'; exit 1\nfi\ngrep -Fq 'FIX66_SAFE_OK:' build/diagnose/FIX66_Freie_Wege.log\n"
-    - name: FIX67 Android APK exportieren und pruefen
-      run: "set -euo pipefail\nmkdir -p build/android build/diagnose\nAPK=\"$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX67.apk\"\
+    - name: FIX68 Dorfwege und freie Wiesen testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V468GrassRoadSmoke.gd 2>&1 | tee build/diagnose/FIX68_GrassRoads.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX68: ' build/diagnose/FIX68_GrassRoads.log; then
+          echo '::error::FIX68 road-safety test failed'; exit 1
+        fi
+        grep -Fq 'FIX68_GRASS_OK:' build/diagnose/FIX68_GrassRoads.log
+    - name: FIX68 Android APK exportieren und pruefen
+      run: "set -euo pipefail\nmkdir -p build/android build/diagnose\nAPK=\"$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX68.apk\"\
         \nrm -f \"$APK\"\ntimeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android\
         \ \"$APK\" 2>&1 | tee build/diagnose/FIX67_APK_Export.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to\
         \ load script' build/diagnose/FIX67_APK_Export.log; then\n  exit 1\nfi\ntest -s \"$APK\"\nunzip -t \"$APK\" >/dev/null\n\
         unzip -Z1 \"$APK\" | grep -Fx 'AndroidManifest.xml' >/dev/null\nls -lh \"$APK\"\nsha256sum \"$APK\"\n"
       shell: bash
     - id: apk_upload
-      name: FIX67 APK als Download hochladen
+      name: FIX68 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX67_APK
-        path: build/android/LWOD-Android-V41.7-FIX67.apk
+        name: LWOD_ANDROID_V41_7_FIX68_APK
+        path: build/android/LWOD-Android-V41.7-FIX68.apk
         retention-days: 14
     - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
@@ -659,15 +772,15 @@ jobs:
 
         test -n "$APK_ARTIFACT_URL"
 
-        printf ''### Android APK Download\n\n[FIX67 APK herunterladen](%s)\n'' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        printf ''### Android APK Download\n\n[FIX68 APK herunterladen](%s)\n'' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
 
         '
       shell: bash
     - if: always()
-      name: FIX67 Testprotokolle hochladen
+      name: FIX68 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX67_TESTPROTOKOLLE
+        name: LWOD_FIX68_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
