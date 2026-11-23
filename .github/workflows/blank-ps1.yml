@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX68 Gepflasterte Wege und freie Grasraender
+name: LWOD Android V41.7 FIX69 Walddrache und rundenbasiertes Kampfsystem
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX68 APK
+    name: LWOD Android V41.7 FIX69 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -25,17 +25,15 @@ jobs:
         ref: 9b01d317fffd8d5abf0b2d0afbffb8846c44f1c6
     - name: Python und YAML bereitstellen
       shell: bash
-      run: "set -euo pipefail\nif ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1;\
-        \ then\n  apt-get update -qq\n  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-yaml\n\
-        fi\n"
+      run: "set -euo pipefail\nif ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1; then\n\
+        \  apt-get update -qq\n  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-yaml\nfi\n"
     - name: FIX39 Schritte sichern
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'PYREPLAY'\nimport hashlib,os,subprocess,yaml\nfrom pathlib import Path\n\
-        raw=Path('.github/workflows/blank-ps1.yml').read_bytes()\nassert hashlib.sha1(('blob %d\\0'%len(raw)).encode()+raw).hexdigest()=='148a908318b1d91002357f1acfa18fbf60e347c3','FIX39\
-        \ source checksum mismatch'\nsteps=yaml.safe_load(raw)['jobs']['android']['steps']\nassert len(steps)==21 and\
-        \ steps[10]['name'].startswith('FIX39 Sichtweite und Terrain') and steps[16]['name'].startswith('FIX39 Sichtweite\
-        \ und Chunk')\nfolder=Path(os.environ['RUNNER_TEMP'])/'fix41_base';folder.mkdir(exist_ok=True)\nfor i in range(2,17):\n\
-        \    s=steps[i];assert s.get('shell')=='bash' and 'if' not in s\n    f=folder/('%02d.sh'%i);f.write_text(s['run']+'\\\
+      run: "set -euo pipefail\npython3 - <<'PYREPLAY'\nimport hashlib,os,subprocess,yaml\nfrom pathlib import Path\nraw=Path('.github/workflows/blank-ps1.yml').read_bytes()\n\
+        assert hashlib.sha1(('blob %d\\0'%len(raw)).encode()+raw).hexdigest()=='148a908318b1d91002357f1acfa18fbf60e347c3','FIX39\
+        \ source checksum mismatch'\nsteps=yaml.safe_load(raw)['jobs']['android']['steps']\nassert len(steps)==21 and steps[10]['name'].startswith('FIX39\
+        \ Sichtweite und Terrain') and steps[16]['name'].startswith('FIX39 Sichtweite und Chunk')\nfolder=Path(os.environ['RUNNER_TEMP'])/'fix41_base';folder.mkdir(exist_ok=True)\n\
+        for i in range(2,17):\n    s=steps[i];assert s.get('shell')=='bash' and 'if' not in s\n    f=folder/('%02d.sh'%i);f.write_text(s['run']+'\\\
         n',encoding='utf-8');subprocess.run(['bash','-n',str(f)],check=True)\n    print('FIX39 gesichert',i,s['name'],flush=True)\n\
         PYREPLAY\n"
     - name: Erfolgreichen FIX19 Stand laden
@@ -44,26 +42,25 @@ jobs:
         ref: a50b23c0dbeebc464305c0451b98245a0632aebc
     - name: FIX67 Alte Spielbasis mit Neustartschutz rekonstruieren
       shell: bash
-      run: "set -euo pipefail\n# FIX67: A failure in the deeply nested V7 -> V40.2 source recovery must\n# not silently\
-        \ discard the underlying game. Keep immutable original scripts.\ntest -s \"$RUNNER_TEMP/fix41_base/02.sh\"\n\
-        test -s \"$RUNNER_TEMP/fix41_base/10.sh\"\nLOGDIR=\"$RUNNER_TEMP/lwod_fix67_recovery\"\nmkdir -p \"$LOGDIR\"\
-        \ build/diagnose\nfor attempt in 1 2; do\n  echo \"::group::FIX67 Basisaufbau – Versuch $attempt/2\"\n  if [\
-        \ \"$attempt\" -eq 2 ]; then\n    # Clear only generated project files. The pinned FIX19 checkout and\n    #\
-        \ original replay scripts in RUNNER_TEMP remain untouched.\n    git reset --hard HEAD\n    git clean -fdx\n \
-        \   mkdir -p build/diagnose\n  fi\n  logfile=\"$LOGDIR/FIX67_Basis_Versuch_${attempt}.log\"\n  echo \"FIX67_VERSUCH_START=$attempt\"\
-        \ | tee \"$logfile\"\n  failed=0\n  for i in 02 03 04 05 06 07 08 09 10; do\n    echo \"::group::FIX39 Originalinstallation\
-        \ $i\"\n    set +e\n    bash --noprofile --norc -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\" 2>&1 | tee -a\
-        \ \"$logfile\"\n    status=${PIPESTATUS[0]}\n    set -e\n    echo '::endgroup::'\n    if [ \"$status\" -ne 0\
-        \ ]; then\n      echo \"FIX67_BASIS_FEHLER: Versuch $attempt, Schritt $i, Exit $status\" | tee -a \"$logfile\"\
-        \n      failed=1\n      break\n    fi\n  done\n  echo '::endgroup::'\n  cp -f \"$LOGDIR\"/*.log build/diagnose/\
-        \ || true\n  if [ \"$failed\" -eq 0 ]; then\n    echo 'FIX67_BASE_REBUILT_OK: vollständige Originalspielbasis\
-        \ vorhanden'\n    exit 0\n  fi\n  if [ \"$attempt\" -eq 1 ]; then\n    echo '::warning::Alte Basisrekonstruktion\
-        \ fehlgeschlagen; einmaliger sauberer Wiederholungsversuch'\n  fi\ndone\necho '::error::Auch der zweite Basisaufbau\
-        \ ist gescheitert. Siehe FIX67_Basis_Versuch_*.log in Testprotokolle.'\nexit 1\n"
+      run: "set -euo pipefail\n# FIX67: A failure in the deeply nested V7 -> V40.2 source recovery must\n# not silently discard\
+        \ the underlying game. Keep immutable original scripts.\ntest -s \"$RUNNER_TEMP/fix41_base/02.sh\"\ntest -s \"$RUNNER_TEMP/fix41_base/10.sh\"\
+        \nLOGDIR=\"$RUNNER_TEMP/lwod_fix67_recovery\"\nmkdir -p \"$LOGDIR\" build/diagnose\nfor attempt in 1 2; do\n  echo\
+        \ \"::group::FIX67 Basisaufbau – Versuch $attempt/2\"\n  if [ \"$attempt\" -eq 2 ]; then\n    # Clear only generated\
+        \ project files. The pinned FIX19 checkout and\n    # original replay scripts in RUNNER_TEMP remain untouched.\n \
+        \   git reset --hard HEAD\n    git clean -fdx\n    mkdir -p build/diagnose\n  fi\n  logfile=\"$LOGDIR/FIX67_Basis_Versuch_${attempt}.log\"\
+        \n  echo \"FIX67_VERSUCH_START=$attempt\" | tee \"$logfile\"\n  failed=0\n  for i in 02 03 04 05 06 07 08 09 10; do\n\
+        \    echo \"::group::FIX39 Originalinstallation $i\"\n    set +e\n    bash --noprofile --norc -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\"\
+        \ 2>&1 | tee -a \"$logfile\"\n    status=${PIPESTATUS[0]}\n    set -e\n    echo '::endgroup::'\n    if [ \"$status\"\
+        \ -ne 0 ]; then\n      echo \"FIX67_BASIS_FEHLER: Versuch $attempt, Schritt $i, Exit $status\" | tee -a \"$logfile\"\
+        \n      failed=1\n      break\n    fi\n  done\n  echo '::endgroup::'\n  cp -f \"$LOGDIR\"/*.log build/diagnose/ ||\
+        \ true\n  if [ \"$failed\" -eq 0 ]; then\n    echo 'FIX67_BASE_REBUILT_OK: vollständige Originalspielbasis vorhanden'\n\
+        \    exit 0\n  fi\n  if [ \"$attempt\" -eq 1 ]; then\n    echo '::warning::Alte Basisrekonstruktion fehlgeschlagen;\
+        \ einmaliger sauberer Wiederholungsversuch'\n  fi\ndone\necho '::error::Auch der zweite Basisaufbau ist gescheitert.\
+        \ Siehe FIX67_Basis_Versuch_*.log in Testprotokolle.'\nexit 1\n"
     - name: FIX54 Dungeon-Dekoration und Statuen installieren
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_05'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
-        \ = (\n    'H4sIAAAAAAAC/919a3PbuJLod/8KHqX2WrQpRqQeln2ibGXizExq8trYM3PO5mRZlERZPJFEhaRsK7v732934w2SspyZu/fWnapJIgJoAI1Go19o'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_05'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
+        \ (\n    'H4sIAAAAAAAC/919a3PbuJLod/8KHqX2WrQpRqQeln2ibGXizExq8trYM3PO5mRZlERZPJFEhaRsK7v732934w2SspyZu/fWnapJIgJoAI1Go19o'\n\
         \    'FEnpdJJt5mzSTTKP0+XR6ssszZ3OxonXszxLZ0+LaZ5uykL+LpOiLI6mcek8d46tSk9/6/eDN/Eu25b+zezYefbs+MfXfxv0I/r+4u/vf70+Pkru'\n\
         \    'y2Q9K5yPyfxltl2XyezoiXO1iPNk5kyzLJ+l6xg6ceZZ7uTbdO05s+36JsngH5tlvEty5yaHdjMckTONV0ke+0fTbF2UzrUzdjZ5ssziWbuVJ8XF'\n\
         \    'U21kwdl1kudpmeVpUsDwWi5vBaN69TH624Uzh4YlgBj2/a5R9u+q7CyEsifO+02y7sSAqaKEP++S5RJGt9gV6TReLnfOdFs6Gf4/d8pF4pTQcZyu'\n\
@@ -252,13 +249,13 @@ jobs:
         \    'C5S30ASEM74lmrrtereBdxt+rpFMiD7r19J8Q+GWrjh+c2uO/KKkFGvsTckK6dyay681QqMn36AaxXT4QcxuVAIE8YHAHKJhW3enQCkEDYDp82Xh'\n\
         \    'T+c3ILA/pKYqMYXnJX06RQt3P+yeH1e+hT2CaLdgvoi+H/hnfu+8dVxfMui1oPUjlLB+EL1+BxzzzRu6Doc6jLgGxdP6/1VkS6LLP3g06tcClizi'\n\
         \    'eJmuvzBVTbyrtsabU8gwjukGnLjOdrTZgYa67jmdlbPZkckrBbDVe3CyYk3R/wY9UKqMBd8AAA=='\n)\nbody = gzip.decompress(base64.b64decode(encoded))\n\
-        assert hashlib.sha256(body).hexdigest() == '24454f0ff793674ad5716c1c5a03a5ebe45bb291ec1b4837acbe78ba0d98db93',\
-        \ 'FIX65: extracted script checksum mismatch'\nPath('/tmp/lwod_fix64_05.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
+        assert hashlib.sha256(body).hexdigest() == '24454f0ff793674ad5716c1c5a03a5ebe45bb291ec1b4837acbe78ba0d98db93', 'FIX65:\
+        \ extracted script checksum mismatch'\nPath('/tmp/lwod_fix64_05.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
         \ step 5, bytes',len(body))\nLWOD64_05\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_05.sh'\n"
     - name: FIX55 Drei Flugschuebe und 10s Aufladen installieren
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_06'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
-        \ = (\n    'H4sIAAAAAAAC/7Vae3PbNhL/X58CpS8j8kLRkh1fU12cmcSxk0ybOGM5ufZSDwciIQk1XwFA20qn372LBymQImW3uct0ahrYXSwW+/gtYE4EGpEy'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_06'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
+        \ (\n    'H4sIAAAAAAAC/7Vae3PbNhL/X58CpS8j8kLRkh1fU12cmcSxk0ybOGM5ufZSDwciIQk1XwFA20qn372LBymQImW3uct0ahrYXSwW+/gtYE4EGpEy'\n\
         \    'RwUtyALTZBBhgZ4j5x8XH9+/P70IL0/ffdhPbvM4XNC7o6NwnudcBMXaQc+eDT/8cvb256Oj4WDB8hQVWKwSOkc0LXIm0Af4dVCgY/XhDnEWs5zG'\n\
         \    '+zxitBB8/9OTyZOzktM8C5bx0BtwoCwCRnAcCnInXJJFeUyz5fGwFIvRU6AYxGSBGCkSHJEwzyLi5kk8RVwwH2XkVn150wGCf8skn+MEcfVLlJeZ'\n\
         \    'AOk8UF+Sy1MTdGHmvjtGE80o/zFMOUGzNRckPb2jwl0M1TanqMzIXUEiQWK0SOhyJYA/Jghn0SpnyF2AsBj9rmT+4U3R77DS5+lkPL76jv0x1Gvy'\n\
@@ -300,8 +297,8 @@ jobs:
         bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_06.sh'\n"
     - name: FIX58 Leistungsarme Wege wiederherstellen und 0.95s Flugschub sichern
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_07'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
-        \ = (\n    'H4sIAAAAAAAC/50aa3PbNvK7fgWq3IxIi6JF+RFHjdK6sZN6LrUzltpeJ+fjUCQkISYJFqBsK5Mff7sA36LkpP4QkcS+sNg3ImlKBnTNScISuvBY'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_07'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
+        \ (\n    'H4sIAAAAAAAC/50aa3PbNvK7fgWq3IxIi6JF+RFHjdK6sZN6LrUzltpeJ+fjUCQkISYJFqBsK5Mff7sA36LkpP4QkcS+sNg3ImlKBnTNScISuvBY'\n\
         \    '2PG9lLwh3X/d/n59fXnrzi5/+3gYPvLAXbCnk1M72XTJ69e9j3+9u/rPyVmvsxA8IomXrkI2JyxKuEjJR3jtZM+CdjqLtWQ8JhO1YPS8OBCcBYfS'\n\
         \    'FyxJ5eEfx87xOwViL4OemYG7UviAol9sQb3ATelTatDY5wGLl5PeOl0MzgCehwEA9nwey5T8cnMznbnTy7c31xfTMVmEHPYzIUP75ajX8aSkIFPJ'\n\
         \    'wPb5Ok4NoGCSyYQ4FumpfY0J/pwAOluu0sGccyDtxf6KCxIxKYF/r01ORVPQJPR8ilSt56R6ddKzHDMXrAZ9e/n21/Pb95fbaM7QHvYIiytMWym8'\n\
@@ -343,8 +340,8 @@ jobs:
         bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_07.sh'\n"
     - name: FIX61 Gepflasterte Wege mit geschwungenen Kurven installieren
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_08'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
-        \ = (\n    'H4sIAAAAAAAC/71ZbVPbOhb+nl+hTXfGcTEmzgtQaDrDLfSW2V5gCNC903Y8xlYSLbbllZxAurP/fR9JthMnoUBvZ/mQOPLR0Xl9ztFB0pxs0ykn'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_08'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
+        \ (\n    'H4sIAAAAAAAC/71ZbVPbOhb+nl+hTXfGcTEmzgtQaDrDLfSW2V5gCNC903Y8xlYSLbbllZxAurP/fR9JthMnoUBvZ/mQOPLR0Xl9ztFB0pxs0ykn'\n\
         \    'GcvoKGBxIwxy8o40/355fXZ2culfnfxxsRPf88gfsYddz8+CGUvHbjZvkrdvrYs/P5z+c9ezGiPBE5IF+SRmt4QlGRc5ucDPRvEsaKMhJ0FEha+o'\n\
         \    'yEC/bVlBGgnOoh3zTu58+nx+fGGOGEdm0bKXd7pZIGiau8ldxETL/JCDKzGlDn1gMvf5nf5V33QvWE79nD7kLatYz+cZJRJvWRAffk3BR60mPKIk'\n\
         \    'nMaxHzEZ3MY0wruv6c4OuU7pjKYOkXkwHlNBI2JMgQWeUumS6xtJIA6R0yyLGd6zlNxzEUckoTl001yCmGMLDcIJETyIwI6TfEKV6UCTkhGPY34v'\n\
@@ -374,14 +371,13 @@ jobs:
         \    'lQWIU8z8G9k8n/C0S7YTks1RE5NMDZ6f8Y+DaudLaLfNvxtuTi5PP/z5w/84yGeO+J4z3rN+UWu1Xm43Fsk61aN3UmtzWd54kbFshYm7P9ETGNV/'\n\
         \    'Oz8fXvnDk/fnZ8fDZSne9DX9Y7b2eh+mumd50tThaLziMfqgvOnDwOgOoN5orKruAN/P8hmUVyfv6Fa71+nsa0Fz3RtUL9MgoYNmz/XcPbe/3zQk'\n\
         \    'OCSvur4NfJzVta5noQNc37LK3dn4Ztdrqu3KAsv9RL5pbr2c5JfnR8fDMtVPjg90jgsz99XwIg/hKH2buOUcTkR48CnAMNLpW+ZQ438Mfq/r/RsA'\n\
-        \    'AA=='\n)\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest() ==\
-        \ '30e24c097f45f6f839c6a98f1bcb0592f120fb5b61e0f2b4cc35db5ab266e93d', 'FIX65: extracted script checksum mismatch'\n\
-        Path('/tmp/lwod_fix64_08.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED: step 8, bytes',len(body))\nLWOD64_08\n\
-        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_08.sh'\n"
+        \    'AA=='\n)\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest() == '30e24c097f45f6f839c6a98f1bcb0592f120fb5b61e0f2b4cc35db5ab266e93d',\
+        \ 'FIX65: extracted script checksum mismatch'\nPath('/tmp/lwod_fix64_08.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
+        \ step 8, bytes',len(body))\nLWOD64_08\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_08.sh'\n"
     - name: FIX62 Sonnental Wurzelheim und fehlende Dorfwege pflastern
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_09'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
-        \ = (\n    'H4sIAAAAAAAC/71abXPbNhL+zl+BUW6GpE3Rlvwap2rGbdw2c3nx2I7buyTlQBQksaYIFoAkK3f3328XAF9EUUrcmzl/sCUS2F3sPnh2F7BkinTZ'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_09'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
+        \ (\n    'H4sIAAAAAAAC/71abXPbNhL+zl+BUW6GpE3Rlvwap2rGbdw2c3nx2I7buyTlQBQksaYIFoAkK3f3328XAF9EUUrcmzl/sCUS2F3sPnh2F7BkinTZ'\n\
         \    'nJM8ydmYJqkTU0W+J52/3Xx49+7qJrq7ent9kC75KBonj6f9SHA6kmG+6pDvvnOv//HT699O+64zFnxGcqqmaTIkySznQpFr+OrYz4I5Tj7AJ55L'\n\
         \    's5HgyehAxiLJlTy4Pz48v2GThGcynIxc35GDPBSMjiLFHpXHspiPkmwycOdq3D3H99OmpCkdMSEP3vz6/tU1XcBgEGQe6uH4YSCnO4U6z8jdlJFc'\n\
         \    'sEXC55J8uO/yLF0RM5ssuXiQhGcErXUlQTcQkQyHYHVAhnNFMq7wvZoyEAViuuwxkQp0ECUSmk3mKVVsRH6diy8snbJkRjKmUGxIfk4WjCSKUFST'\n\
@@ -419,14 +415,14 @@ jobs:
         \    'vA3HG9x0CF+0Y8q77aKU0Ka226P7eT4XcQlECO5PScouY8zo2l9j+BpRGUn9/qt7o7ZMI7m2sCflj5Z11/xvAmIuNgtYQG1iQqEvuXZGYMO0J2Sa'\n\
         \    'FsPKM9XC57XDRZ3MJaFQSdtTvadZtj0jtRiyUdktqdRirUHgM2X3Finpi6Kd7UblEHNlOSi6fPMmunl/+eo2ev/3tdsQEwyjMahXl9ggBNWJc3U0'\n\
         \    'L2tn8zkQtSR5dbLfqRHcoY8ldUtGMJaZWs1a9frd7R3YePVqzbg6kdj/A6iZaK9Lg/UbCGOesewFlrR4HFzejUpQb/+9xslXasqzI9KdkXwV4Skw'\n\
-        \    '/gfD1/9Fp5z4DUMxz5Gutukrec/5L+OdGx40JAAA'\n)\nbody = gzip.decompress(base64.b64decode(encoded))\nassert\
-        \ hashlib.sha256(body).hexdigest() == '01197f3ab2e841c3b24e4b83c866200b43e8492654527ccdc55ee93b925f010c', 'FIX65:\
-        \ extracted script checksum mismatch'\nPath('/tmp/lwod_fix64_09.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
-        \ step 9, bytes',len(body))\nLWOD64_09\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_09.sh'\n"
+        \    '/gfD1/9Fp5z4DUMxz5Gutukrec/5L+OdGx40JAAA'\n)\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest()\
+        \ == '01197f3ab2e841c3b24e4b83c866200b43e8492654527ccdc55ee93b925f010c', 'FIX65: extracted script checksum mismatch'\n\
+        Path('/tmp/lwod_fix64_09.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED: step 9, bytes',len(body))\nLWOD64_09\n\
+        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_09.sh'\n"
     - name: FIX67 Dörfer mit Laternen Sitzbänken Blumen und Brunnen beleben
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD65_10'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
-        \ = (\n            'H4sIANMNBGsC/9U77XLjRnL/+RRjOC4BKwhLkABIqsxzyd5de8vaj0iynWS9hxoAAxIlEOBiwJXkXKryDnnDPEm6Z/AxAEEtdTlXKuuySGJ6erp7+nsGnJXk'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD65_10'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
+        \ (\n            'H4sIANMNBGsC/9U77XLjRnL/+RRjOC4BKwhLkABIqsxzyd5de8vaj0iynWS9hxoAAxIlEOBiwJXkXKryDnnDPEm6Z/AxAEEtdTlXKuuySGJ6erp7+nsGnJXk'\n\
         \            'jO1ysk22LKZJOtrcRklBzraEZlGRJ9FzHhbJtuTN75Lxko9CWpK/9GGe/+p401+TNKUrdpnEzFpF5NtvT/Cp/+vry8uLH1/61+9+ufrh5cmI3Zcsizh5m0ds'\n\
         \            '+mL0Nbn87d0L8qtjWzPy6vW/eC757//8LxKxjLOCfJY44WeYF7RM8oxsUxqyiASMJxEjW1quOYHH5ZqRVUE5twDl+yLfAuEFI7dsWxJ6Rx9IXOQbAbWln2F+'\n\
         \            'yLISxoERsqIlfNlui5yGawYIPtOC+GuWrNalH2fn5AcKVAQpkwMbAC8SmvJz8iIJkSZaPJAl+ff/kOO8zDPml0lWwsw8zQsYE5+69vV8PJt5gWZIyLs8jw4A'\n\
@@ -485,8 +481,8 @@ jobs:
         \ step 10, bytes',len(body))\nLWOD65_10\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix65_10.sh'\n"
     - name: FIX67 Doppelte Wege bereinigen und Dekoration auf Wiesen legen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'FIX66_UNPACK'\nimport base64,gzip,hashlib\nfrom pathlib import Path\nencoded\
-        \ = (\n    'H4sIAGobBGsC/81bfXPbuNH/X58Cx5uMSIum9WIpiS7KjXvJ3XiapjdOmvZ5HJdDkZDEmiJpgrItt/3u3V0AfJfte+lMPZOIIhaLxWKx+8MutMqSLUu9fBOF'\n\
+      run: "set -euo pipefail\npython3 - <<'FIX66_UNPACK'\nimport base64,gzip,hashlib\nfrom pathlib import Path\nencoded =\
+        \ (\n    'H4sIAGobBGsC/81bfXPbuNH/X58Cx5uMSIum9WIpiS7KjXvJ3XiapjdOmvZ5HJdDkZDEmiJpgrItt/3u3V0AfJfte+lMPZOIIhaLxWKx+8MutMqSLUu9fBOF'\n\
         \    'SxZu0yTL2c/wtaeeM97rZXwdJrFgC2ox+14cZEkYnAg/C9NcnHw5Hb66kDTOOuhbPSRVnZyMe4Gb8/vc5LGfBGG8XvR3+er4FdD1vmXYT+Q8Y/mGM8/Pd15E'\n\
         \    '4gi25jHPvJwHbLmnVhzm5K+77IFHGx5uj0W+jziMEwc845nT82J/k2QwdP9b9uP536av5qxCHYXXnDgzsctWns/ZTkje/JZne3YbRpG3BhnigIUxSOSH+Z5l'\n\
         \    'iRc4/Z4nBAdlCMdPdnFuypEstliwkc36MNhsNif5mMgzzvNCKqaE2oZCwNT7PWToZjRpGBRk7UtpkQG2sVWS5GkGEgjmZZz5nr/h+DYDnqCbdQayHCdxtGdp'\n\
@@ -543,111 +539,77 @@ jobs:
         \ bytes',len(data))\nFIX66_UNPACK\npython3 -m py_compile /tmp/lwod_fix66_patch.py\npython3 /tmp/lwod_fix66_patch.py\n"
     - name: FIX68 Gehwegkollisionen und Grasrand-Positionen korrigieren
       shell: bash
-      run: |
-        set -euo pipefail
-        cat > /tmp/lwod_fix68.py <<'PYFIX68'
-        from pathlib import Path
-        import re
-        
-        regions = Path('android/scripts/V408Regions.gd')
-        s = regions.read_text(encoding='utf-8')
-        
-        # FIX66 had used the centre of each new paved segment. Even when the centre
-        # was free, its edges intersected existing 4–8m wide road surfaces. Keep
-        # the full half-width plus a 0.45m gap in the overlap test.
-        old = 'if not _v466_is_paved(q,0.28):'
-        assert s.count(old)==1, 'FIX68: expected the single FIX66 gap check'
-        s = s.replace(old,'if not _v466_is_paved(q,2.65):',1)
-        
-        # Defer decorating until the current town has finished constructing all road
-        # meshes. The live callback will check the full road registry at that time.
-        old = 'decorator.build_village(centre,city,Callable(self,"_ground"),Callable(self,"_v466_is_paved"),root,_v466_roads_near(centre,55.0))'
-        assert s.count(old)==1, 'FIX68: FIX66 village hook changed'
-        new = 'decorator.call_deferred("build_village",centre,city,Callable(self,"_ground"),Callable(self,"_v466_is_paved"),root,_v466_roads_near(centre,55.0))'
-        s=s.replace(old,new,1)
-        assert s.count('func _v466_is_paved(')==1
-        assert s.count('func _v462_restore_inner_roads(')==1
-        regions.write_text(s,encoding='utf-8')
-        
-        life = Path('android/scripts/V463VillageLife.gd')
-        t = life.read_text(encoding='utf-8')
-        # FIX66's if/elif silently skipped the global map whenever a local road list
-        # existed. This is the key issue: a decorator can be placed on another road
-        # crossing the same village. Always check BOTH sources.
-        old = '''func _v466_on_grass(q: Vector2, footprint: float) -> bool:
-            if not _v466_local_roads.is_empty():'''
-        new = '''func _v466_on_grass(q: Vector2, footprint: float) -> bool:
-            if _v466_road_check.is_valid() and bool(_v466_road_check.call(q,footprint+1.25)):
-                return false
-            if not _v466_local_roads.is_empty():'''
-        assert t.count(old)==1, 'FIX68: FIX66 grass checker not found'
-        t=t.replace(old,new,1)
-        # The original fallback elif can stay: it is redundant when the local list is
-        # empty, but ensures the existing scene test code and behavior are preserved.
-        # Extend the real Wurzelheim mesh search to catch the named paved walkways.
-        old = 'if String(road.name).contains("WurzelheimBodenwege") and road.mesh is ArrayMesh:'
-        new = 'if (String(road.name).contains("WurzelheimBodenwege") or String(road.name).contains("WurzelheimPflaster")) and road.mesh is ArrayMesh:'
-        assert t.count(old)==1, 'FIX68: Wurzelheim mesh filter changed'
-        t=t.replace(old,new,1)
-        assert t.count('func build_village(')==1 and t.count('func _v466_find_grass(')==1
-        life.write_text(t,encoding='utf-8')
-        
-        cfg=Path('android/export_presets.cfg')
-        c=cfg.read_text(encoding='utf-8')
-        assert c.count('version/code=4235')==1, 'FIX68: unexpected FIX66 APK base'
-        assert c.count('version/name="4.1.7.66"')==1, 'FIX68: unexpected FIX66 version name'
-        c=c.replace('version/code=4235','version/code=4237',1).replace('version/name="4.1.7.66"','version/name="4.1.7.68"',1)
-        cfg.write_text(c,encoding='utf-8')
-        
-        Path('android/tests/V468GrassRoadSmoke.gd').write_text('''extends SceneTree
-        const Regions = preload("res://scripts/V408Regions.gd")
-        const Decor = preload("res://scripts/V463VillageLife.gd")
-        
-        func _initialize() -> void:
-            call_deferred("_run")
-        
-        func fail(msg: String) -> void:
-            push_error("FIX68: " + msg)
-            quit(1)
-        
-        func _run() -> void:
-            var roads := Regions.new()
-            root.add_child(roads)
-            var crossing := PackedVector2Array([Vector2(-35,0),Vector2(35,0)])
-            roads._v466_record_road(crossing,6.0)
-            var decor := Decor.new()
-            root.add_child(decor)
-            decor._v466_road_check=Callable(roads,"_v466_is_paved")
-            var separate: Array[Dictionary] = []
-            separate.append({"a":Vector2(40,0),"b":Vector2(40,20),"half":2.0})
-            decor._v466_local_roads=separate
-            if decor._v466_on_grass(Vector2(0,0),0.8):
-                fail("local road list hides a crossing road from the global registry")
-                return
-            if not decor._v466_on_grass(Vector2(80,80),0.8):
-                fail("free meadow is incorrectly blocked")
-                return
-            if not roads._v466_is_paved(Vector2(0,5.6),2.65):
-                fail("road overlap check ignores the width of an intersecting walkway")
-                return
-            var src := FileAccess.get_file_as_string("res://scripts/V408Regions.gd")
-            if not src.contains("decorator.call_deferred(\\"build_village\\""):
-                fail("decorations are created before the path network is finished")
-                return
-            if not src.contains("if not _v466_is_paved(q,2.65):"):
-                fail("inner path gaps do not respect the full path width")
-                return
-            print("FIX68_GRASS_OK: complete road checks, margin for paving width and delayed village decoration")
-            quit(0)
-        ''',encoding='utf-8')
-        print('FIX68_INSTALLED: cross-street-safe grass placement, pavement width clearance, deferred decoration, historic routes unchanged')
-        PYFIX68
-        python3 -m py_compile /tmp/lwod_fix68.py
-        python3 /tmp/lwod_fix68.py
+      run: "set -euo pipefail\ncat > /tmp/lwod_fix68.py <<'PYFIX68'\nfrom pathlib import Path\nimport re\n\nregions = Path('android/scripts/V408Regions.gd')\n\
+        s = regions.read_text(encoding='utf-8')\n\n# FIX66 had used the centre of each new paved segment. Even when the centre\n\
+        # was free, its edges intersected existing 4–8m wide road surfaces. Keep\n# the full half-width plus a 0.45m gap in\
+        \ the overlap test.\nold = 'if not _v466_is_paved(q,0.28):'\nassert s.count(old)==1, 'FIX68: expected the single FIX66\
+        \ gap check'\ns = s.replace(old,'if not _v466_is_paved(q,2.65):',1)\n\n# Defer decorating until the current town has\
+        \ finished constructing all road\n# meshes. The live callback will check the full road registry at that time.\nold\
+        \ = 'decorator.build_village(centre,city,Callable(self,\"_ground\"),Callable(self,\"_v466_is_paved\"),root,_v466_roads_near(centre,55.0))'\n\
+        assert s.count(old)==1, 'FIX68: FIX66 village hook changed'\nnew = 'decorator.call_deferred(\"build_village\",centre,city,Callable(self,\"\
+        _ground\"),Callable(self,\"_v466_is_paved\"),root,_v466_roads_near(centre,55.0))'\ns=s.replace(old,new,1)\nassert\
+        \ s.count('func _v466_is_paved(')==1\nassert s.count('func _v462_restore_inner_roads(')==1\nregions.write_text(s,encoding='utf-8')\n\
+        \nlife = Path('android/scripts/V463VillageLife.gd')\nt = life.read_text(encoding='utf-8')\n# FIX66's if/elif silently\
+        \ skipped the global map whenever a local road list\n# existed. This is the key issue: a decorator can be placed on\
+        \ another road\n# crossing the same village. Always check BOTH sources.\nold = '''func _v466_on_grass(q: Vector2,\
+        \ footprint: float) -> bool:\n    if not _v466_local_roads.is_empty():'''\nnew = '''func _v466_on_grass(q: Vector2,\
+        \ footprint: float) -> bool:\n    if _v466_road_check.is_valid() and bool(_v466_road_check.call(q,footprint+1.25)):\n\
+        \        return false\n    if not _v466_local_roads.is_empty():'''\nassert t.count(old)==1, 'FIX68: FIX66 grass checker\
+        \ not found'\nt=t.replace(old,new,1)\n# The original fallback elif can stay: it is redundant when the local list is\n\
+        # empty, but ensures the existing scene test code and behavior are preserved.\n# Extend the real Wurzelheim mesh search\
+        \ to catch the named paved walkways.\nold = 'if String(road.name).contains(\"WurzelheimBodenwege\") and road.mesh\
+        \ is ArrayMesh:'\nnew = 'if (String(road.name).contains(\"WurzelheimBodenwege\") or String(road.name).contains(\"\
+        WurzelheimPflaster\")) and road.mesh is ArrayMesh:'\nassert t.count(old)==1, 'FIX68: Wurzelheim mesh filter changed'\n\
+        t=t.replace(old,new,1)\nassert t.count('func build_village(')==1 and t.count('func _v466_find_grass(')==1\nlife.write_text(t,encoding='utf-8')\n\
+        \ncfg=Path('android/export_presets.cfg')\nc=cfg.read_text(encoding='utf-8')\nassert c.count('version/code=4235')==1,\
+        \ 'FIX68: unexpected FIX66 APK base'\nassert c.count('version/name=\"4.1.7.66\"')==1, 'FIX68: unexpected FIX66 version\
+        \ name'\nc=c.replace('version/code=4235','version/code=4237',1).replace('version/name=\"4.1.7.66\"','version/name=\"\
+        4.1.7.68\"',1)\ncfg.write_text(c,encoding='utf-8')\n\nPath('android/tests/V468GrassRoadSmoke.gd').write_text('''extends\
+        \ SceneTree\nconst Regions = preload(\"res://scripts/V408Regions.gd\")\nconst Decor = preload(\"res://scripts/V463VillageLife.gd\"\
+        )\n\nfunc _initialize() -> void:\n    call_deferred(\"_run\")\n\nfunc fail(msg: String) -> void:\n    push_error(\"\
+        FIX68: \" + msg)\n    quit(1)\n\nfunc _run() -> void:\n    var roads := Regions.new()\n    root.add_child(roads)\n\
+        \    var crossing := PackedVector2Array([Vector2(-35,0),Vector2(35,0)])\n    roads._v466_record_road(crossing,6.0)\n\
+        \    var decor := Decor.new()\n    root.add_child(decor)\n    decor._v466_road_check=Callable(roads,\"_v466_is_paved\"\
+        )\n    var separate: Array[Dictionary] = []\n    separate.append({\"a\":Vector2(40,0),\"b\":Vector2(40,20),\"half\"\
+        :2.0})\n    decor._v466_local_roads=separate\n    if decor._v466_on_grass(Vector2(0,0),0.8):\n        fail(\"local\
+        \ road list hides a crossing road from the global registry\")\n        return\n    if not decor._v466_on_grass(Vector2(80,80),0.8):\n\
+        \        fail(\"free meadow is incorrectly blocked\")\n        return\n    if not roads._v466_is_paved(Vector2(0,5.6),2.65):\n\
+        \        fail(\"road overlap check ignores the width of an intersecting walkway\")\n        return\n    var src :=\
+        \ FileAccess.get_file_as_string(\"res://scripts/V408Regions.gd\")\n    if not src.contains(\"decorator.call_deferred(\\\
+        \\\"build_village\\\\\"\"):\n        fail(\"decorations are created before the path network is finished\")\n     \
+        \   return\n    if not src.contains(\"if not _v466_is_paved(q,2.65):\"):\n        fail(\"inner path gaps do not respect\
+        \ the full path width\")\n        return\n    print(\"FIX68_GRASS_OK: complete road checks, margin for paving width\
+        \ and delayed village decoration\")\n    quit(0)\n''',encoding='utf-8')\nprint('FIX68_INSTALLED: cross-street-safe\
+        \ grass placement, pavement width clearance, deferred decoration, historic routes unchanged')\nPYFIX68\npython3 -m\
+        \ py_compile /tmp/lwod_fix68.py\npython3 /tmp/lwod_fix68.py\n"
+    - name: FIX69 Walddrache Stufe 5 und separate Kampfarena installieren
+      shell: bash
+      run: "set -euo pipefail\nmkdir -p android/scripts android/tests\npython3 - <<'FIX69_SOURCE'\nimport base64,gzip,hashlib\n\
+        from pathlib import Path\nassets = {\n\"android/scripts/V469Battle.gd\": ('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',\
+        \ '16536bbfe2da491ef079530507bf133bd2d6a52d3598b5cf21451cb591c855a3'),\n\"android/tests/V469CombatSmoke.gd\": ('H4sIAM6uBGsC/5VX7U7jOBT9z1N48isRIbRAYai2I1FGzIxG7CDRnV1ptYrc5Dbx4tpZ22mB59ln2BeYF9trO0mhpIhBQiTOPfa5X8cXuDcgck1uMxAwUwB7mRTakCmZkEoBlzQPAwV6fHioM8Uqow+/n5yeT6kxHJIiD6IGMHsNMDybgVLMSMVAe9RexqnW5IrewSe6hPEewR9o2Pwqczj+6JZWVBFtqIExYcLgIUfdcglKjsllSRXNDKipzB+egKpSgmD34+3NMjxN0VTgKoLdC35t6XBqPilZi3wnoUUtMpIWzihMcf8F+mzi9LF5isjBB/80JgpMrQQ5TwZ7ex7HBDOMcvYIoTNcSdYclVHO0xwWGCjAEKYGtLFxcrgFZTxUQLUUY3JrFBPFFryqdZkiVqowuPryx+n5mAT7HhE5g39qZsJhu6HbfpsCW5BpYqOaYkAZpjWMEu2ovpucEanwayaXFRX4rcdk5HdxQbJ8g6xNDaEiJx2ULEHUmiyZ1ugHaTYKog7tw+ajjad6A0w/+TO4EIVii0UQBx8xVEKzFT5e04IB/p2Czsr1j/8UCHz7YmCp7SoTuVu44nVWmuCvDU10WEjz0umS6tC/RRvjjV8t84rTB+j4BfsN5BniZ325+vFvyYo7YOaJY79DVmrgopd7X0re6ICul0tk81YHXH1USv4NmNQ8zemSFhAeD+JRbFQNWALDY18m/UYLyrW1OnpRKbbuRQYkl6CdWyXlK3x14P7KcGTmmFt0JMVKQ3h4Norfn+IBg2TgeWx9Rxb4/Rf8frLNoLHEKsW/LoyuaNeAAiUgP8gVLTBGfiPM3wqbOO9nZlWmIONJJ26JgHXoTZWUJqF5jowYz8PCrxauACdbUvYEVjzFOON2vZG5iVeonZDGLOoI4imKYhlamp3o7YA3thvwghWlsdDpDoQz8MvuMdEYnios4mareJZkzDyka6nQOriVQoAwlAdR1CbX49a422Qias5tQjdrSQEmXYKhYcBhBTyID4ZWgnZawUry2ua1sRzutuSAAmXbL0C74GbBqXiEYLtgLMq2NOooaYqjaauYrJXEUuqOtEf5Jc91Vz1v0bFXVCpVar0Pg690WS2mgH1WqloU+lEKOLyUnDONR9yWtML8B5EPVi/ZtoSpsB02B2IkCiLkO/lYM88JvZTYkPlmX1+FScHlnPK0kto1zeSpC88/7X9HQZDqOBwmJ/EgHmwO9Zh0DgUT6dxNFmG0rXPeyH9NZQUuqEXiRoN3k+M+lXPukZzlbgNMKWq1hgp7zADxO/nRItipeM8Sk+JAAyC2y7GVXZczV/5phs1kuluzNcNriW6nZ8O2Y4Z6juSIM7dwjTUjyLw2xopSU2NvpewutjlVvexOnrBDkVs+7LbsY/z5JibX+HvxG7G4t1FrjstKKTWE3R24wdA1ZYZgpDEWqWE4n4WD5PQsSuyzrE2Pk557WX2YvD/tI4qpptldVwn+ViGmhKYlfiqY9pjh0aDvHMeDuJHPVdw9ZLV51l+7A4JjZlv7we1S3sHBzCrLHAsuBxQjf3e+FqVhMhi9EqVdrXPU50nTHW3ErMih0qFHFZdYpOy1mFU4nZpmCE0vv11PL2bpt69jr31k9FwzYy9CBEfaogAVv2xQ+49JTM72R+2gGJPPN1h3WHYxaeaGmDTXd0w2OWgnSjf4otz8DyMrX8/rDAAA',\
+        \ '31d17ae76939f4f8441711f9b9f1cc82f92d543155495bda713cffeed7b3f1a8')\n}\nfor path,(encoded,checksum) in assets.items():\n\
+        \    content=gzip.decompress(base64.b64decode(encoded))\n    assert hashlib.sha256(content).hexdigest()==checksum,\
+        \ f\"FIX69 checksum {path}\"\n    Path(path).write_bytes(content)\n    print(\"FIX69_WRITTEN\",path,len(content))\n\
+        FIX69_SOURCE\ncat > /tmp/lwod_fix69_patch.py <<'FIX69_PATCH'\nfrom pathlib import Path\np=Path(\"android/scripts/V408Regions.gd\"\
+        )\ns=p.read_text(encoding=\"utf-8\")\nanchor='func _v463_add_village(root: Node3D, centre: Vector2, city: String)\
+        \ -> void:\\n'\nassert s.count(anchor)==1, \"FIX69: FIX68 Sonnental-village entry not found\"\ns=s.replace(anchor,anchor+'''\
+        \    # FIX69: one wild level-five forest dragon near Sonnental's southern gate.\n    if city == \"Sonnental\":\n \
+        \       _v469_spawn_forest_dragon(centre)\n''',1)\nassert 'func _v469_spawn_forest_dragon(' not in s\ns+='''\n# FIX69:\
+        \ isolated encounter – existing roads, landscape and player untouched.\nfunc _v469_spawn_forest_dragon(centre: Vector2)\
+        \ -> void:\n    if not is_instance_valid(game):\n        return\n    if is_instance_valid(game.get_node_or_null(\"\
+        V469WalddrachenBegegnung\")):\n        return\n    var fight := preload(\"res://scripts/V469Battle.gd\").new()\n \
+        \   game.add_child(fight)\n    fight.setup(game,self,centre)\n'''\nassert s.count('func _v469_spawn_forest_dragon(')==1\n\
+        assert s.count('    _v469_spawn_forest_dragon(centre)')==1\np.write_text(s,encoding=\"utf-8\")\nc=Path(\"android/export_presets.cfg\"\
+        )\ncfg=c.read_text(encoding=\"utf-8\")\nassert cfg.count('version/name=\"4.1.7.68\"')==1, \"FIX69: FIX68 version expected\"\
+        \nassert cfg.count(\"version/code=4237\")==1, \"FIX69: FIX68 version code expected\"\ncfg=cfg.replace('version/name=\"\
+        4.1.7.68\"','version/name=\"4.1.7.69\"',1).replace('version/code=4237','version/code=4238',1)\nc.write_text(cfg,encoding=\"\
+        utf-8\")\nprint(\"FIX69_INSTALL_OK: Sonnental forest dragon, separate 3D arena and battle menus installed\")\nFIX69_PATCH\n\
+        python3 -m py_compile /tmp/lwod_fix69_patch.py\npython3 /tmp/lwod_fix69_patch.py\ntest -s android/scripts/V469Battle.gd\n\
+        test -s android/tests/V469CombatSmoke.gd\n"
     - name: FIX61 Weltkarte importieren und echten Spielstart testen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_11'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
-        \ = (\n    'H4sIAAAAAAAC/61XbVPbRhD+rl+xcTKVPVgyToAQETd1wRAmpGaMW5pJqeYsreyLJZ1yd+Ilcf57906ywXkbmCkfGOm09+zLPfvcWqEGD0sBBS8w'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_11'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
+        \ (\n    'H4sIAAAAAAAC/61XbVPbRhD+rl+xcTKVPVgyToAQETd1wRAmpGaMW5pJqeYsreyLJZ1yd+Ilcf57906ywXkbmCkfGOm09+zLPfvcWqEGD0sBBS8w'\n\
         \    'YTx1snnMJXgFTEqexp2Ys2kuFDrFjZ6J/Bl48PKle/rubNwfjY/+7I8OXFiARvzKvnN4/Pf2bnimmdQqmpX6k5+KqZNIkUHB9CzlE+BZIaSGU3p1'\n\
         \    '6mdJjugVena16bI8loLHHRVJXmjV+Wtrc3eEUy5y5U9jt+UoMjU7fIksDjVe6ybmkYh5Pu25pU68XWNkoiBD5fM8xuumm5R5BGHG5hgW1k/LwTwm'\n\
         \    'C4m+QiajWVO6zVdZ69/mq8AaLwhD8wiql4j8a1hcMgmL31puW723Lja6wUXLyZAqZcDq1aBZf9wgH759brZawBMwPjFVCCnmTdW6cJhSSJEqPxJl'\n\
@@ -714,8 +676,7 @@ jobs:
       run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 120s godot --headless --path\
         \ android --quit-after 300 --script res://tests/V461PavingSmoke.gd 2>&1 | tee build/diagnose/FIX61_Pflasterwege.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX61: ' build/diagnose/FIX61_Pflasterwege.log;\
-        \ then\n  echo '::error::Pflasterweg- oder Kurventest fehlgeschlagen'; exit 1\nfi\ngrep -Fq 'FIX61_PAVING_OK:'\
-        \ build/diagnose/FIX61_Pflasterwege.log\n"
+        \ then\n  echo '::error::Pflasterweg- oder Kurventest fehlgeschlagen'; exit 1\nfi\ngrep -Fq 'FIX61_PAVING_OK:' build/diagnose/FIX61_Pflasterwege.log\n"
     - name: FIX62 Komplettes Dorfwegenetz und Pflaster nachpruefen
       shell: bash
       run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 120s godot --headless --path\
@@ -738,29 +699,31 @@ jobs:
         \ then\n  echo '::error::Wege oder Deko blockieren Laufwege'; exit 1\nfi\ngrep -Fq 'FIX66_SAFE_OK:' build/diagnose/FIX66_Freie_Wege.log\n"
     - name: FIX68 Dorfwege und freie Wiesen testen
       shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V468GrassRoadSmoke.gd 2>&1 | tee build/diagnose/FIX68_GrassRoads.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX68: ' build/diagnose/FIX68_GrassRoads.log; then
-          echo '::error::FIX68 road-safety test failed'; exit 1
-        fi
-        grep -Fq 'FIX68_GRASS_OK:' build/diagnose/FIX68_GrassRoads.log
-    - name: FIX68 Android APK exportieren und pruefen
-      run: "set -euo pipefail\nmkdir -p build/android build/diagnose\nAPK=\"$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX68.apk\"\
+      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 140s godot --headless --path\
+        \ android --quit-after 300 --script res://tests/V468GrassRoadSmoke.gd 2>&1 | tee build/diagnose/FIX68_GrassRoads.log\n\
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX68: ' build/diagnose/FIX68_GrassRoads.log;\
+        \ then\n  echo '::error::FIX68 road-safety test failed'; exit 1\nfi\ngrep -Fq 'FIX68_GRASS_OK:' build/diagnose/FIX68_GrassRoads.log\n"
+    - name: FIX69 Echtkampf- und Menutests
+      shell: bash
+      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 160s godot --headless --path\
+        \ android --quit-after 300 --script res://tests/V469CombatSmoke.gd 2>&1 | tee build/diagnose/FIX69_Kampfsystem.log\n\
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX69: ' build/diagnose/FIX69_Kampfsystem.log;\
+        \ then\n  echo '::error::FIX69 combat scene or game logic failed'\n  exit 1\nfi\ngrep -Fq 'FIX69_COMBAT_OK:' build/diagnose/FIX69_Kampfsystem.log\n"
+    - name: FIX69 Android APK exportieren und pruefen
+      run: "set -euo pipefail\nmkdir -p build/android build/diagnose\nAPK=\"$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX69.apk\"\
         \nrm -f \"$APK\"\ntimeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android\
-        \ \"$APK\" 2>&1 | tee build/diagnose/FIX67_APK_Export.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to\
-        \ load script' build/diagnose/FIX67_APK_Export.log; then\n  exit 1\nfi\ntest -s \"$APK\"\nunzip -t \"$APK\" >/dev/null\n\
+        \ \"$APK\" 2>&1 | tee build/diagnose/FIX69_APK_Export.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load\
+        \ script' build/diagnose/FIX69_APK_Export.log; then\n  exit 1\nfi\ntest -s \"$APK\"\nunzip -t \"$APK\" >/dev/null\n\
         unzip -Z1 \"$APK\" | grep -Fx 'AndroidManifest.xml' >/dev/null\nls -lh \"$APK\"\nsha256sum \"$APK\"\n"
       shell: bash
     - id: apk_upload
-      name: FIX68 APK als Download hochladen
+      name: FIX69 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX68_APK
-        path: build/android/LWOD-Android-V41.7-FIX68.apk
+        name: LWOD_ANDROID_V41_7_FIX69_APK
+        path: build/android/LWOD-Android-V41.7-FIX69.apk
         retention-days: 14
     - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
@@ -772,15 +735,15 @@ jobs:
 
         test -n "$APK_ARTIFACT_URL"
 
-        printf ''### Android APK Download\n\n[FIX68 APK herunterladen](%s)\n'' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        printf ''### Android APK Download\n\n[FIX69 APK herunterladen](%s)\n'' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
 
         '
       shell: bash
     - if: always()
-      name: FIX68 Testprotokolle hochladen
+      name: FIX69 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX68_TESTPROTOKOLLE
+        name: LWOD_FIX69_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
