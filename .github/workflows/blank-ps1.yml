@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX66 Wegueberlappungen und Blumen am Grasrand
+name: LWOD Android V41.7 FIX67 Wegueberlappungen und Blumen am Grasrand – Basisreparatur
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX66 APK
+    name: LWOD Android V41.7 FIX67 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -25,29 +25,45 @@ jobs:
         ref: 9b01d317fffd8d5abf0b2d0afbffb8846c44f1c6
     - name: Python und YAML bereitstellen
       shell: bash
-      run: "set -euo pipefail\nif ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1; then\n\
-        \  apt-get update -qq\n  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-yaml\nfi\n"
+      run: "set -euo pipefail\nif ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1;\
+        \ then\n  apt-get update -qq\n  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-yaml\n\
+        fi\n"
     - name: FIX39 Schritte sichern
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'PYREPLAY'\nimport hashlib,os,subprocess,yaml\nfrom pathlib import Path\nraw=Path('.github/workflows/blank-ps1.yml').read_bytes()\n\
-        assert hashlib.sha1(('blob %d\\0'%len(raw)).encode()+raw).hexdigest()=='148a908318b1d91002357f1acfa18fbf60e347c3','FIX39\
-        \ source checksum mismatch'\nsteps=yaml.safe_load(raw)['jobs']['android']['steps']\nassert len(steps)==21 and steps[10]['name'].startswith('FIX39\
-        \ Sichtweite und Terrain') and steps[16]['name'].startswith('FIX39 Sichtweite und Chunk')\nfolder=Path(os.environ['RUNNER_TEMP'])/'fix41_base';folder.mkdir(exist_ok=True)\n\
-        for i in range(2,17):\n    s=steps[i];assert s.get('shell')=='bash' and 'if' not in s\n    f=folder/('%02d.sh'%i);f.write_text(s['run']+'\\\
+      run: "set -euo pipefail\npython3 - <<'PYREPLAY'\nimport hashlib,os,subprocess,yaml\nfrom pathlib import Path\n\
+        raw=Path('.github/workflows/blank-ps1.yml').read_bytes()\nassert hashlib.sha1(('blob %d\\0'%len(raw)).encode()+raw).hexdigest()=='148a908318b1d91002357f1acfa18fbf60e347c3','FIX39\
+        \ source checksum mismatch'\nsteps=yaml.safe_load(raw)['jobs']['android']['steps']\nassert len(steps)==21 and\
+        \ steps[10]['name'].startswith('FIX39 Sichtweite und Terrain') and steps[16]['name'].startswith('FIX39 Sichtweite\
+        \ und Chunk')\nfolder=Path(os.environ['RUNNER_TEMP'])/'fix41_base';folder.mkdir(exist_ok=True)\nfor i in range(2,17):\n\
+        \    s=steps[i];assert s.get('shell')=='bash' and 'if' not in s\n    f=folder/('%02d.sh'%i);f.write_text(s['run']+'\\\
         n',encoding='utf-8');subprocess.run(['bash','-n',str(f)],check=True)\n    print('FIX39 gesichert',i,s['name'],flush=True)\n\
         PYREPLAY\n"
     - name: Erfolgreichen FIX19 Stand laden
       uses: actions/checkout@v4
       with:
         ref: a50b23c0dbeebc464305c0451b98245a0632aebc
-    - name: FIX39 vollstaendig rekonstruieren
+    - name: FIX67 Alte Spielbasis mit Neustartschutz rekonstruieren
       shell: bash
-      run: "set -euo pipefail\nfor i in 02 03 04 05 06 07 08 09 10; do\n  echo \"::group::FIX39 Installationsschritt $i\"\n\
-        \  bash --noprofile --norc -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\"\n  echo '::endgroup::'\ndone\n"
+      run: "set -euo pipefail\n# FIX67: A failure in the deeply nested V7 -> V40.2 source recovery must\n# not silently\
+        \ discard the underlying game. Keep immutable original scripts.\ntest -s \"$RUNNER_TEMP/fix41_base/02.sh\"\n\
+        test -s \"$RUNNER_TEMP/fix41_base/10.sh\"\nLOGDIR=\"$RUNNER_TEMP/lwod_fix67_recovery\"\nmkdir -p \"$LOGDIR\"\
+        \ build/diagnose\nfor attempt in 1 2; do\n  echo \"::group::FIX67 Basisaufbau – Versuch $attempt/2\"\n  if [\
+        \ \"$attempt\" -eq 2 ]; then\n    # Clear only generated project files. The pinned FIX19 checkout and\n    #\
+        \ original replay scripts in RUNNER_TEMP remain untouched.\n    git reset --hard HEAD\n    git clean -fdx\n \
+        \   mkdir -p build/diagnose\n  fi\n  logfile=\"$LOGDIR/FIX67_Basis_Versuch_${attempt}.log\"\n  echo \"FIX67_VERSUCH_START=$attempt\"\
+        \ | tee \"$logfile\"\n  failed=0\n  for i in 02 03 04 05 06 07 08 09 10; do\n    echo \"::group::FIX39 Originalinstallation\
+        \ $i\"\n    set +e\n    bash --noprofile --norc -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\" 2>&1 | tee -a\
+        \ \"$logfile\"\n    status=${PIPESTATUS[0]}\n    set -e\n    echo '::endgroup::'\n    if [ \"$status\" -ne 0\
+        \ ]; then\n      echo \"FIX67_BASIS_FEHLER: Versuch $attempt, Schritt $i, Exit $status\" | tee -a \"$logfile\"\
+        \n      failed=1\n      break\n    fi\n  done\n  echo '::endgroup::'\n  cp -f \"$LOGDIR\"/*.log build/diagnose/\
+        \ || true\n  if [ \"$failed\" -eq 0 ]; then\n    echo 'FIX67_BASE_REBUILT_OK: vollständige Originalspielbasis\
+        \ vorhanden'\n    exit 0\n  fi\n  if [ \"$attempt\" -eq 1 ]; then\n    echo '::warning::Alte Basisrekonstruktion\
+        \ fehlgeschlagen; einmaliger sauberer Wiederholungsversuch'\n  fi\ndone\necho '::error::Auch der zweite Basisaufbau\
+        \ ist gescheitert. Siehe FIX67_Basis_Versuch_*.log in Testprotokolle.'\nexit 1\n"
     - name: FIX54 Dungeon-Dekoration und Statuen installieren
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_05'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/919a3PbuJLod/8KHqX2WrQpRqQeln2ibGXizExq8trYM3PO5mRZlERZPJFEhaRsK7v732934w2SspyZu/fWnapJIgJoAI1Go19o'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_05'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
+        \ = (\n    'H4sIAAAAAAAC/919a3PbuJLod/8KHqX2WrQpRqQeln2ibGXizExq8trYM3PO5mRZlERZPJFEhaRsK7v732934w2SspyZu/fWnapJIgJoAI1Go19o'\n\
         \    'FEnpdJJt5mzSTTKP0+XR6ssszZ3OxonXszxLZ0+LaZ5uykL+LpOiLI6mcek8d46tSk9/6/eDN/Eu25b+zezYefbs+MfXfxv0I/r+4u/vf70+Pkru'\n\
         \    'y2Q9K5yPyfxltl2XyezoiXO1iPNk5kyzLJ+l6xg6ceZZ7uTbdO05s+36JsngH5tlvEty5yaHdjMckTONV0ke+0fTbF2UzrUzdjZ5ssziWbuVJ8XF'\n\
         \    'U21kwdl1kudpmeVpUsDwWi5vBaN69TH624Uzh4YlgBj2/a5R9u+q7CyEsifO+02y7sSAqaKEP++S5RJGt9gV6TReLnfOdFs6Gf4/d8pF4pTQcZyu'\n\
@@ -236,13 +252,13 @@ jobs:
         \    'C5S30ASEM74lmrrtereBdxt+rpFMiD7r19J8Q+GWrjh+c2uO/KKkFGvsTckK6dyay681QqMn36AaxXT4QcxuVAIE8YHAHKJhW3enQCkEDYDp82Xh'\n\
         \    'T+c3ILA/pKYqMYXnJX06RQt3P+yeH1e+hT2CaLdgvoi+H/hnfu+8dVxfMui1oPUjlLB+EL1+BxzzzRu6Doc6jLgGxdP6/1VkS6LLP3g06tcClizi'\n\
         \    'eJmuvzBVTbyrtsabU8gwjukGnLjOdrTZgYa67jmdlbPZkckrBbDVe3CyYk3R/wY9UKqMBd8AAA=='\n)\nbody = gzip.decompress(base64.b64decode(encoded))\n\
-        assert hashlib.sha256(body).hexdigest() == '24454f0ff793674ad5716c1c5a03a5ebe45bb291ec1b4837acbe78ba0d98db93', 'FIX65:\
-        \ extracted script checksum mismatch'\nPath('/tmp/lwod_fix64_05.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
+        assert hashlib.sha256(body).hexdigest() == '24454f0ff793674ad5716c1c5a03a5ebe45bb291ec1b4837acbe78ba0d98db93',\
+        \ 'FIX65: extracted script checksum mismatch'\nPath('/tmp/lwod_fix64_05.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
         \ step 5, bytes',len(body))\nLWOD64_05\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_05.sh'\n"
     - name: FIX55 Drei Flugschuebe und 10s Aufladen installieren
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_06'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/7Vae3PbNhL/X58CpS8j8kLRkh1fU12cmcSxk0ybOGM5ufZSDwciIQk1XwFA20qn372LBymQImW3uct0ahrYXSwW+/gtYE4EGpEy'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_06'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
+        \ = (\n    'H4sIAAAAAAAC/7Vae3PbNhL/X58CpS8j8kLRkh1fU12cmcSxk0ybOGM5ufZSDwciIQk1XwFA20qn372LBymQImW3uct0ahrYXSwW+/gtYE4EGpEy'\n\
         \    'RwUtyALTZBBhgZ4j5x8XH9+/P70IL0/ffdhPbvM4XNC7o6NwnudcBMXaQc+eDT/8cvb256Oj4WDB8hQVWKwSOkc0LXIm0Af4dVCgY/XhDnEWs5zG'\n\
         \    '+zxitBB8/9OTyZOzktM8C5bx0BtwoCwCRnAcCnInXJJFeUyz5fGwFIvRU6AYxGSBGCkSHJEwzyLi5kk8RVwwH2XkVn150wGCf8skn+MEcfVLlJeZ'\n\
         \    'AOk8UF+Sy1MTdGHmvjtGE80o/zFMOUGzNRckPb2jwl0M1TanqMzIXUEiQWK0SOhyJYA/Jghn0SpnyF2AsBj9rmT+4U3R77DS5+lkPL76jv0x1Gvy'\n\
@@ -284,8 +300,8 @@ jobs:
         bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_06.sh'\n"
     - name: FIX58 Leistungsarme Wege wiederherstellen und 0.95s Flugschub sichern
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_07'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/50aa3PbNvK7fgWq3IxIi6JF+RFHjdK6sZN6LrUzltpeJ+fjUCQkISYJFqBsK5Mff7sA36LkpP4QkcS+sNg3ImlKBnTNScISuvBY'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_07'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
+        \ = (\n    'H4sIAAAAAAAC/50aa3PbNvK7fgWq3IxIi6JF+RFHjdK6sZN6LrUzltpeJ+fjUCQkISYJFqBsK5Mff7sA36LkpP4QkcS+sNg3ImlKBnTNScISuvBY'\n\
         \    '2PG9lLwh3X/d/n59fXnrzi5/+3gYPvLAXbCnk1M72XTJ69e9j3+9u/rPyVmvsxA8IomXrkI2JyxKuEjJR3jtZM+CdjqLtWQ8JhO1YPS8OBCcBYfS'\n\
         \    'FyxJ5eEfx87xOwViL4OemYG7UviAol9sQb3ATelTatDY5wGLl5PeOl0MzgCehwEA9nwey5T8cnMznbnTy7c31xfTMVmEHPYzIUP75ajX8aSkIFPJ'\n\
         \    'wPb5Ok4NoGCSyYQ4FumpfY0J/pwAOluu0sGccyDtxf6KCxIxKYF/r01ORVPQJPR8ilSt56R6ddKzHDMXrAZ9e/n21/Pb95fbaM7QHvYIiytMWym8'\n\
@@ -327,8 +343,8 @@ jobs:
         bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_07.sh'\n"
     - name: FIX61 Gepflasterte Wege mit geschwungenen Kurven installieren
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_08'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/71ZbVPbOhb+nl+hTXfGcTEmzgtQaDrDLfSW2V5gCNC903Y8xlYSLbbllZxAurP/fR9JthMnoUBvZ/mQOPLR0Xl9ztFB0pxs0ykn'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_08'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
+        \ = (\n    'H4sIAAAAAAAC/71ZbVPbOhb+nl+hTXfGcTEmzgtQaDrDLfSW2V5gCNC903Y8xlYSLbbllZxAurP/fR9JthMnoUBvZ/mQOPLR0Xl9ztFB0pxs0ykn'\n\
         \    'GcvoKGBxIwxy8o40/355fXZ2culfnfxxsRPf88gfsYddz8+CGUvHbjZvkrdvrYs/P5z+c9ezGiPBE5IF+SRmt4QlGRc5ucDPRvEsaKMhJ0FEha+o'\n\
         \    'yEC/bVlBGgnOoh3zTu58+nx+fGGOGEdm0bKXd7pZIGiau8ldxETL/JCDKzGlDn1gMvf5nf5V33QvWE79nD7kLatYz+cZJRJvWRAffk3BR60mPKIk'\n\
         \    'nMaxHzEZ3MY0wruv6c4OuU7pjKYOkXkwHlNBI2JMgQWeUumS6xtJIA6R0yyLGd6zlNxzEUckoTl001yCmGMLDcIJETyIwI6TfEKV6UCTkhGPY34v'\n\
@@ -358,13 +374,14 @@ jobs:
         \    'lQWIU8z8G9k8n/C0S7YTks1RE5NMDZ6f8Y+DaudLaLfNvxtuTi5PP/z5w/84yGeO+J4z3rN+UWu1Xm43Fsk61aN3UmtzWd54kbFshYm7P9ETGNV/'\n\
         \    'Oz8fXvnDk/fnZ8fDZSne9DX9Y7b2eh+mumd50tThaLziMfqgvOnDwOgOoN5orKruAN/P8hmUVyfv6Fa71+nsa0Fz3RtUL9MgoYNmz/XcPbe/3zQk'\n\
         \    'OCSvur4NfJzVta5noQNc37LK3dn4Ztdrqu3KAsv9RL5pbr2c5JfnR8fDMtVPjg90jgsz99XwIg/hKH2buOUcTkR48CnAMNLpW+ZQ438Mfq/r/RsA'\n\
-        \    'AA=='\n)\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest() == '30e24c097f45f6f839c6a98f1bcb0592f120fb5b61e0f2b4cc35db5ab266e93d',\
-        \ 'FIX65: extracted script checksum mismatch'\nPath('/tmp/lwod_fix64_08.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
-        \ step 8, bytes',len(body))\nLWOD64_08\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_08.sh'\n"
+        \    'AA=='\n)\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest() ==\
+        \ '30e24c097f45f6f839c6a98f1bcb0592f120fb5b61e0f2b4cc35db5ab266e93d', 'FIX65: extracted script checksum mismatch'\n\
+        Path('/tmp/lwod_fix64_08.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED: step 8, bytes',len(body))\nLWOD64_08\n\
+        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_08.sh'\n"
     - name: FIX62 Sonnental Wurzelheim und fehlende Dorfwege pflastern
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_09'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/71abXPbNhL+zl+BUW6GpE3Rlvwap2rGbdw2c3nx2I7buyTlQBQksaYIFoAkK3f3328XAF9EUUrcmzl/sCUS2F3sPnh2F7BkinTZ'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_09'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
+        \ = (\n    'H4sIAAAAAAAC/71abXPbNhL+zl+BUW6GpE3Rlvwap2rGbdw2c3nx2I7buyTlQBQksaYIFoAkK3f3328XAF9EUUrcmzl/sCUS2F3sPnh2F7BkinTZ'\n\
         \    'nJM8ydmYJqkTU0W+J52/3Xx49+7qJrq7ent9kC75KBonj6f9SHA6kmG+6pDvvnOv//HT699O+64zFnxGcqqmaTIkySznQpFr+OrYz4I5Tj7AJ55L'\n\
         \    's5HgyehAxiLJlTy4Pz48v2GThGcynIxc35GDPBSMjiLFHpXHspiPkmwycOdq3D3H99OmpCkdMSEP3vz6/tU1XcBgEGQe6uH4YSCnO4U6z8jdlJFc'\n\
         \    'sEXC55J8uO/yLF0RM5ssuXiQhGcErXUlQTcQkQyHYHVAhnNFMq7wvZoyEAViuuwxkQp0ECUSmk3mKVVsRH6diy8snbJkRjKmUGxIfk4WjCSKUFST'\n\
@@ -402,14 +419,14 @@ jobs:
         \    'vA3HG9x0CF+0Y8q77aKU0Ka226P7eT4XcQlECO5PScouY8zo2l9j+BpRGUn9/qt7o7ZMI7m2sCflj5Z11/xvAmIuNgtYQG1iQqEvuXZGYMO0J2Sa'\n\
         \    'FsPKM9XC57XDRZ3MJaFQSdtTvadZtj0jtRiyUdktqdRirUHgM2X3Finpi6Kd7UblEHNlOSi6fPMmunl/+eo2ev/3tdsQEwyjMahXl9ggBNWJc3U0'\n\
         \    'L2tn8zkQtSR5dbLfqRHcoY8ldUtGMJaZWs1a9frd7R3YePVqzbg6kdj/A6iZaK9Lg/UbCGOesewFlrR4HFzejUpQb/+9xslXasqzI9KdkXwV4Skw'\n\
-        \    '/gfD1/9Fp5z4DUMxz5Gutukrec/5L+OdGx40JAAA'\n)\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest()\
-        \ == '01197f3ab2e841c3b24e4b83c866200b43e8492654527ccdc55ee93b925f010c', 'FIX65: extracted script checksum mismatch'\n\
-        Path('/tmp/lwod_fix64_09.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED: step 9, bytes',len(body))\nLWOD64_09\n\
-        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_09.sh'\n"
-    - name: FIX66 Dörfer mit Laternen Sitzbänken Blumen und Brunnen beleben
+        \    '/gfD1/9Fp5z4DUMxz5Gutukrec/5L+OdGx40JAAA'\n)\nbody = gzip.decompress(base64.b64decode(encoded))\nassert\
+        \ hashlib.sha256(body).hexdigest() == '01197f3ab2e841c3b24e4b83c866200b43e8492654527ccdc55ee93b925f010c', 'FIX65:\
+        \ extracted script checksum mismatch'\nPath('/tmp/lwod_fix64_09.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
+        \ step 9, bytes',len(body))\nLWOD64_09\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_09.sh'\n"
+    - name: FIX67 Dörfer mit Laternen Sitzbänken Blumen und Brunnen beleben
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD65_10'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n            'H4sIANMNBGsC/9U77XLjRnL/+RRjOC4BKwhLkABIqsxzyd5de8vaj0iynWS9hxoAAxIlEOBiwJXkXKryDnnDPEm6Z/AxAEEtdTlXKuuySGJ6erp7+nsGnJXk'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD65_10'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
+        \ = (\n            'H4sIANMNBGsC/9U77XLjRnL/+RRjOC4BKwhLkABIqsxzyd5de8vaj0iynWS9hxoAAxIlEOBiwJXkXKryDnnDPEm6Z/AxAEEtdTlXKuuySGJ6erp7+nsGnJXk'\n\
         \            'jO1ysk22LKZJOtrcRklBzraEZlGRJ9FzHhbJtuTN75Lxko9CWpK/9GGe/+p401+TNKUrdpnEzFpF5NtvT/Cp/+vry8uLH1/61+9+ufrh5cmI3Zcsizh5m0ds'\n\
         \            '+mL0Nbn87d0L8qtjWzPy6vW/eC757//8LxKxjLOCfJY44WeYF7RM8oxsUxqyiASMJxEjW1quOYHH5ZqRVUE5twDl+yLfAuEFI7dsWxJ6Rx9IXOQbAbWln2F+'\n\
         \            'yLISxoERsqIlfNlui5yGawYIPtOC+GuWrNalH2fn5AcKVAQpkwMbAC8SmvJz8iIJkSZaPJAl+ff/kOO8zDPml0lWwsw8zQsYE5+69vV8PJt5gWZIyLs8jw4A'\n\
@@ -466,10 +483,10 @@ jobs:
         )\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest() == '245e6e95b0c8b133b1303d221c41e53bcfca57971f40e6bc494d4a2883741a28',\
         \ 'FIX65: extracted script checksum mismatch'\nPath('/tmp/lwod_fix65_10.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
         \ step 10, bytes',len(body))\nLWOD65_10\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix65_10.sh'\n"
-    - name: FIX66 Doppelte Wege bereinigen und Dekoration auf Wiesen legen
+    - name: FIX67 Doppelte Wege bereinigen und Dekoration auf Wiesen legen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'FIX66_UNPACK'\nimport base64,gzip,hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAGobBGsC/81bfXPbuNH/X58Cx5uMSIum9WIpiS7KjXvJ3XiapjdOmvZ5HJdDkZDEmiJpgrItt/3u3V0AfJfte+lMPZOIIhaLxWKx+8MutMqSLUu9fBOF'\n\
+      run: "set -euo pipefail\npython3 - <<'FIX66_UNPACK'\nimport base64,gzip,hashlib\nfrom pathlib import Path\nencoded\
+        \ = (\n    'H4sIAGobBGsC/81bfXPbuNH/X58Cx5uMSIum9WIpiS7KjXvJ3XiapjdOmvZ5HJdDkZDEmiJpgrItt/3u3V0AfJfte+lMPZOIIhaLxWKx+8MutMqSLUu9fBOF'\n\
         \    'SxZu0yTL2c/wtaeeM97rZXwdJrFgC2ox+14cZEkYnAg/C9NcnHw5Hb66kDTOOuhbPSRVnZyMe4Gb8/vc5LGfBGG8XvR3+er4FdD1vmXYT+Q8Y/mGM8/Pd15E'\n\
         \    '4gi25jHPvJwHbLmnVhzm5K+77IFHGx5uj0W+jziMEwc845nT82J/k2QwdP9b9uP536av5qxCHYXXnDgzsctWns/ZTkje/JZne3YbRpG3BhnigIUxSOSH+Z5l'\n\
         \    'iRc4/Z4nBAdlCMdPdnFuypEstliwkc36MNhsNif5mMgzzvNCKqaE2oZCwNT7PWToZjRpGBRk7UtpkQG2sVWS5GkGEgjmZZz5nr/h+DYDnqCbdQayHCdxtGdp'\n\
@@ -526,8 +543,8 @@ jobs:
         \ bytes',len(data))\nFIX66_UNPACK\npython3 -m py_compile /tmp/lwod_fix66_patch.py\npython3 /tmp/lwod_fix66_patch.py\n"
     - name: FIX61 Weltkarte importieren und echten Spielstart testen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_11'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/61XbVPbRhD+rl+xcTKVPVgyToAQETd1wRAmpGaMW5pJqeYsreyLJZ1yd+Ilcf57906ywXkbmCkfGOm09+zLPfvcWqEGD0sBBS8w'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_11'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded\
+        \ = (\n    'H4sIAAAAAAAC/61XbVPbRhD+rl+xcTKVPVgyToAQETd1wRAmpGaMW5pJqeYsreyLJZ1yd+Ilcf57906ywXkbmCkfGOm09+zLPfvcWqEGD0sBBS8w'\n\
         \    'YTx1snnMJXgFTEqexp2Ys2kuFDrFjZ6J/Bl48PKle/rubNwfjY/+7I8OXFiARvzKvnN4/Pf2bnimmdQqmpX6k5+KqZNIkUHB9CzlE+BZIaSGU3p1'\n\
         \    '6mdJjugVena16bI8loLHHRVJXmjV+Wtrc3eEUy5y5U9jt+UoMjU7fIksDjVe6ybmkYh5Pu25pU68XWNkoiBD5fM8xuumm5R5BGHG5hgW1k/LwTwm'\n\
         \    'C4m+QiajWVO6zVdZ69/mq8AaLwhD8wiql4j8a1hcMgmL31puW723Lja6wUXLyZAqZcDq1aBZf9wgH759brZawBMwPjFVCCnmTdW6cJhSSJEqPxJl'\n\
@@ -594,7 +611,8 @@ jobs:
       run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 120s godot --headless --path\
         \ android --quit-after 300 --script res://tests/V461PavingSmoke.gd 2>&1 | tee build/diagnose/FIX61_Pflasterwege.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX61: ' build/diagnose/FIX61_Pflasterwege.log;\
-        \ then\n  echo '::error::Pflasterweg- oder Kurventest fehlgeschlagen'; exit 1\nfi\ngrep -Fq 'FIX61_PAVING_OK:' build/diagnose/FIX61_Pflasterwege.log\n"
+        \ then\n  echo '::error::Pflasterweg- oder Kurventest fehlgeschlagen'; exit 1\nfi\ngrep -Fq 'FIX61_PAVING_OK:'\
+        \ build/diagnose/FIX61_Pflasterwege.log\n"
     - name: FIX62 Komplettes Dorfwegenetz und Pflaster nachpruefen
       shell: bash
       run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 120s godot --headless --path\
@@ -602,34 +620,34 @@ jobs:
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX62: ' build/diagnose/FIX62_Alle_Wege.log;\
         \ then\n  echo '::error::Wurzelheim, Sonnental oder Dorfwegetest fehlgeschlagen'; exit 1\nfi\ngrep -Fq 'FIX62_ALL_ROADS_OK:'\
         \ build/diagnose/FIX62_Alle_Wege.log\n"
-    - name: FIX66 Alle Dorfdekorationen und Regionsvarianten testen
+    - name: FIX67 Alle Dorfdekorationen und Regionsvarianten testen
       shell: bash
       run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 140s godot --headless --path\
         \ android --quit-after 300 --script res://tests/V463VillagesSmoke.gd 2>&1 | tee build/diagnose/FIX66_Doerfer.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX65: ' build/diagnose/FIX66_Doerfer.log;\
         \ then\n  echo '::error::FIX65 Dorf-Dekoration kann nicht geladen werden'; exit 1\nfi\ngrep -Fq 'FIX66_VILLAGES_OK:'\
         \ build/diagnose/FIX66_Doerfer.log\n"
-    - name: FIX66 Freie Wege und sichere Pflanzenpositionen testen
+    - name: FIX67 Freie Wege und sichere Pflanzenpositionen testen
       shell: bash
       run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 150s godot --headless --path\
         \ android --quit-after 300 --script res://tests/V466VillageSafetySmoke.gd 2>&1 | tee build/diagnose/FIX66_Freie_Wege.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX66: ' build/diagnose/FIX66_Freie_Wege.log;\
         \ then\n  echo '::error::Wege oder Deko blockieren Laufwege'; exit 1\nfi\ngrep -Fq 'FIX66_SAFE_OK:' build/diagnose/FIX66_Freie_Wege.log\n"
-    - name: FIX66 Android APK exportieren und pruefen
-      run: "set -euo pipefail\nmkdir -p build/android build/diagnose\nAPK=\"$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX66.apk\"\
+    - name: FIX67 Android APK exportieren und pruefen
+      run: "set -euo pipefail\nmkdir -p build/android build/diagnose\nAPK=\"$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX67.apk\"\
         \nrm -f \"$APK\"\ntimeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android\
-        \ \"$APK\" 2>&1 | tee build/diagnose/FIX66_APK_Export.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load\
-        \ script' build/diagnose/FIX66_APK_Export.log; then\n  exit 1\nfi\ntest -s \"$APK\"\nunzip -t \"$APK\" >/dev/null\n\
+        \ \"$APK\" 2>&1 | tee build/diagnose/FIX67_APK_Export.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to\
+        \ load script' build/diagnose/FIX67_APK_Export.log; then\n  exit 1\nfi\ntest -s \"$APK\"\nunzip -t \"$APK\" >/dev/null\n\
         unzip -Z1 \"$APK\" | grep -Fx 'AndroidManifest.xml' >/dev/null\nls -lh \"$APK\"\nsha256sum \"$APK\"\n"
       shell: bash
     - id: apk_upload
-      name: FIX66 APK als Download hochladen
+      name: FIX67 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX66_APK
-        path: build/android/LWOD-Android-V41.7-FIX66.apk
+        name: LWOD_ANDROID_V41_7_FIX67_APK
+        path: build/android/LWOD-Android-V41.7-FIX67.apk
         retention-days: 14
     - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
@@ -641,15 +659,15 @@ jobs:
 
         test -n "$APK_ARTIFACT_URL"
 
-        printf ''### Android APK Download\n\n[FIX65 APK herunterladen](%s)\n'' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        printf ''### Android APK Download\n\n[FIX67 APK herunterladen](%s)\n'' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
 
         '
       shell: bash
     - if: always()
-      name: FIX66 Testprotokolle hochladen
+      name: FIX67 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX66_TESTPROTOKOLLE
+        name: LWOD_FIX67_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
