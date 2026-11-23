@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX70 Walddrache und rundenbasiertes Kampfsystem
+name: LWOD Android V41.7 FIX71 Kampf UI, Team und Speichern
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX70 APK
+    name: LWOD Android V41.7 FIX71 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -606,6 +606,140 @@ jobs:
         utf-8\")\nprint(\"FIX70_INSTALL_OK: Sonnental forest dragon, separate 3D arena and battle menus installed\")\nFIX70_PATCH\n\
         python3 -m py_compile /tmp/lwod_fix69_patch.py\npython3 /tmp/lwod_fix69_patch.py\ntest -s android/scripts/V469Battle.gd\n\
         test -s android/tests/V469CombatSmoke.gd\n"
+    - name: FIX71 Kampfkamera, Menue, Drachen-Team und Speicherlogik korrigieren
+      shell: bash
+      run: "set -euo pipefail\nmkdir -p android/scripts android/tests\npython3 - <<'FIX71_SOURCE'\nimport base64,gzip,hashlib\n\
+        from pathlib import Path\nassets = {\n  'android/scripts/V469Battle.gd': (\n    'H4sIAJm3BGsC/8V923LbyJLgu78CRkfHkjbE5p2Uxu4N2ZLbXl/Dst1nT4cDARJFEi0QYOMiWd7YiP2H+YX+hjMv52n8J/Mlm5l1B4q07DNnpiPaIlFZWV'\n\
+        \    'l5z0JVkX2qWBaX3qs8ZqOzOz94L359feZ9GA96M+/Js7/M+t5//L9/9ZIsZjuAY1nlsWyZ11nFCi/KYq+qi+xoEZUs9hZRVaXMK5cFY1kPUP2apLG3ygtW'\n\
+        \    'Vl5cROs88zrsKk/rKoGPg8BL2RVLvUnXy+uqTGLmXeRZBmNE6f8ovRIebliReeuoYr07yzwDNEDY7B0riqTKi4SV3kNvV7A0j+KOD8Oc/PQTjJ7sqvKnBm'\n\
+        \    'BvHftdgePi9MN5+Ob03dMT76IqkmwNWPy6ZAV0T6/zOLwazwZhGV2xOORz6i1Xa1/0fvf6/eOn4dvTs2fvL068FYxdQf9hbzoRAC9P/xK+Oz99eQJcw6bR'\n\
+        \    'nTtXUQGz2LITYjP/WgATY+PBEuZdAMQHtgSSh9BRfOr99fztawK5Bn6eSEnhA05dmINoTrxFnqfQaxWlJccYbuuyClMGEwk/5xlzgADP8hTm6eoNjL1K8r'\n\
+        \    'oMywoEIGcz5I0gmPzEe7yJimgJqvAoj28ETSGXPzRG2VVUvohuWCH61DDO4xymmaf8CfQFTShPvF+KJMaWKMkk9JaVZbSGcV9EC5bqUUEkBfT48Cj/1OjB'\n\
+        \    'Mra92d8cFSyLLPbxR2Iu7eernNmPl3UBDZWpNk9ZGieZz9tjtgIbgRYXO9FQwjRfXrq5XQC+k4feW7CpfPuq3i5Y8QtMqIhABXoZu+50zUludlIe86n5fK'\n\
+        \    'ueD63nUS2fj8cGKzWawbBvPNdopuZjjUU+3m1yliWfDETHQ7tFoxrP7RaNbTLhLdxVmJPrWw0a18juYaBS9EYpCALpXpTaErmC5nVaVmAQZUOpF2iSAqfT'\n\
+        \    'nrhKghTXpg74hoAzkpzEy4lBTxLuompjdFI+SPRl0Task7BKlpfaqfR7/Tt30PqSpbeqs6XHpcCNptP1jn723kSoUBztaVFENyd3PPivYEhNu7Xzm3+arY'\n\
+        \    'tktfID/wzVtUyu4OPLaJ0w+PuIlcvN9Ze/gZrDt2cV25b4FN0/PniS1stN5X/s2mQt8+0uyoCofwptT778uUnWlyypDEJ/ZctNydKsRcuuyH8HvwmuO462'\n\
+        \    'IKzOLr8WAgm8qNjm8vO6joq4aYtENzRzSlE0bLUCdMmVcoDb6FPSGQSE9oi+9APC2+2a0xNgS5akSYcE2lGouvc6/d7ES1aSCI/B2N6g1+92G9NZJORQwu'\n\
+        \    'UmypasIzyQNJEAh5FfiHYaiVMP6Hmr9wBUycshxKjenoDscIjuPaCnz7sZc0D9M74u02i7WwHpo5l33+sAuUccicbb/clCS3jnAeCB/4+HMDeaVAn4dp38'\n\
+        \    'GtxbqMNiAOOseTjgX5dJdRM2wiJN8ipPYk5sBr3RBD+Mp8e/RmkMWcZyw7JHbM3WWZ1B0EaoNYfSA/KnFIHhuRiWHvLh4KExODWgg+4V5J2Tz6zDZR1i5g'\n\
+        \    'GKVkXyQbmLrrMQA3XIMx7RAFMGx3dTJssSAmu+BE/SqYqaSZYQWeEqgXDSoX+lr6AJf4iKJMq0XLO88pIyTCDdQLUIr8DZxR1E0W0JMavTlJ6BX/NwPjeg'\n\
+        \    'LMSS3hqJKiB7KGCuaVJWHaM7DMMp6FAnBO74yG+wPr/b9R6CyRChqocxqETP52IZBtEjJh2hTLmzaKQS2gBhbjXKn7MAJGOyykeP6HclXwgWOOPGZhDBAa'\n\
+        \    'MW4D5Cua5ANEnWm6rzh62Ots055EKdu5Qu88+9TVRCNKk2OUxBIPfbouO2JLosozTVwMEfvU/w/41wOhRm6mIVLYUxAZ+UiDP4HuZFiBPq+B+GM0yMkqyG'\n\
+        \    '3A4zZEiR/O4eylGjuHNSauQEFGPzOYov1iTFM8HBMKr2Tlf25vNt92vM3HBVQlYOE7SdBjYBf3hmJ3Ir+bwnPYr2JuF5Vl1DXE7BnwzCi6pesYmvO6Blwy'\n\
+        \    'yjjs9StgVbAft4s0qj7DPzuy6wcseWUJFgEFNjuCGpPPKDibNRFVJ+MOAAURxDnACoDoIaioGFlKOw6KBfxqAj5dqqmSDvD5EhZcdXlZnfRcHCgy9/jwHO'\n\
+        \    'lCMNhPhdeOKkYJQdmLgCjUYSQUh6KcvW1SYs/4AAyWKQ4AMU8cQxlmsuspHjyvJiC1r6GfEopvxhMkR4/fu8w73JVAQ+Yvk6zRdRGu7yMqG6VY456qAmNl'\n\
+        \    '1D936/N+iTgmoURY4hPc96N9AbokU27Bxx2j4F4oMAFyobrlkOYi5uSJQYPCeadPDK6zWU31AunBYssnRYtCk1fo4h+xGDSLMpQH9LrAN9C3KZp+D6MXlL'\n\
+        \    'sVSjrNXdvo3KSywVrOZtnpGYKavFiKZnrfVRAOspbJIKyX8scV9sop1tjAChJtEE87Vq7yAAMER1QZ/aeDgERO44qXG5wCzf1UAldkN9IWD12CFyoWYTzG'\n\
+        \    'lsjuvZQle7aQGxBQoxiDIM/Dgq/7LqhMDRKod82hBsgusnMBkqeW25YpPDOZnuiMNU7FNlw3jei6ueZwGtIAKEJZgElkxjo2GXfGKpbIE59qdG4yJJ00UO'\n\
+        \    'GSu0PYpK9hLsGqIyUvro2YsXj16fvj0Lz1+dPnpxfmbidLAxGPWGwERzcts8rlPA6JFeQF7g/xBPVuPF2HSOhk5hJ6PlCjRkkWJvzI7kwoYMCpLZHZSFrO'\n\
+        \    'obcQGcD7ZiZqMyE4xniK+1lqIcUbiA9DETC0Udlc81k70wrkRh5xhVL+Ngmi5px8/uTI/8ezN+cv+BCZGnJ3A4YyRoNyLUxzgpK12NEnDTG/YQhjBWecfl'\n\
+        \    'Lu8Lkffev1HEYB/vZ9sW7w96U4OpDXarOtzE8MDG8P2ysp/eVjz/XP7/4J3l1As6FJUXyXJFr74ubkA0N+h48yv4WoGh8+DRk4NGi3LVcYvt5sglLIhCUB'\n\
+        \    'mOTEkYJJl8MHy9Q1a6zVj1smRorpaokKMX0GxYUV+a6230XK6F8WUw49F2x1fAjEdRzRe/lJB4PyrTx5NAPnI6FE0KxRy+HLqnIKFWI5vBr1iRqEUFIsBe'\n\
+        \    'W8XIg39VO6XuJRZcHF0w6mrCe5AU5liean/Kl4i5hteY+ApR8aVYVZtGNx3/HIo/nB6w3YgQUMx7RpobeBRXcGWeFSUAAPV3fYlmk19DLpAYqz3SkLYiIH'\n\
+        \    'SW6MBPuB8PPLZNKsc6ywWYQgzRRIcRXfUBJorqLRAjJgJML0oXLM5DGg8TOfyrGsFi1psMvC/FstlcNSyhmAm3vExqBLLH71+8CM+eXeggBlKkCSjpIAZ4'\n\
+        \    'UlJSxLIIlCQ2lb4JY9HlQMCKNahsnVbJLk24OfTm9lpSpeIYOI7OLuLL0DyKBR58V4vS8C0vZW47CrwS6igWfrr5bDwzpUOSeMnKzTPhmkwp5IvfUQp2sy'\n\
+        \    'EBaJc5CdKgpQcddFKG3U2x4VeVj/V7E/2UJ9GYY4oEXMGCkyrZGssr7DQwW2HS+GyqKKLRH1KrfiYkHKKvLBKSfENd9ZSMhAU+qsfESrRVyVJq4cIwEhMA'\n\
+        \    'tUpT+C6l10zum4LkmFcUO3TgxbLGDkoUnJHBrRrWVcD+L7UQFqs5SMfx+tW5d88a1z0po5zc5mBQJzpJGy3n84lM0hBghS/tDIDJbDGbHhsAYNGXJsBwNJ'\n\
+        \    'mOmAEAwWRlAszni3i8lA6IbCAO/Oc5K3as8AOdVQ56gzlklerJoAe+fYCp5hD+6QZIewPLowLCl42jPw2O0F9oPFiAYcMI8v4J4EECG3iegl+z0UxHiOZ4'\n\
+        \    'aKKZjZCcIaCZOal5nu9WJpZhrz8LjrCLOan+GBHMcLpADPK7geZiucmi+jOzCZqPEdVx3yRojlMaI77jqUkRrhaWyTrDxcLfoBfx5aMRwuRQp/XaGAa73A'\n\
+        \    'OESPlwhMPNRuZwKB7xDwwn5bsaxaMpyLfbRv+m3kHV4RhhiCPQhObWCMAvQI4c7s/0CIPZaDIcO0d4BEVHtcmLrDXGaAxjTCYkxWNzDCxdelOcxXBuKoNk'\n\
+        \    '3GfONdQhFNTwo71IqoeGwNoadTogJQs+myOSGvf7Qv3QgLpulM/TqG5zazrmTPl8hH8sxMiuESKe9U1VkqZ4nfAXkza7VmnN1rg2ZY0DFM6BzGNUqdFEjz'\n\
+        \    'Ls4ZPBMbSNJk1+4QB6geQz+KYjJeI9QJj5CJjBTGnr78j0IsrWrDPuOhT1bc0gDc0WSH/DxFCcg8l9YO70Hl+F/L1rMmk0IjHitOYmk24zLJjidZR9NkcE'\n\
+        \    'dZofyXFwElO05BmOf+wcfzaywMlkLQyk9LNjUzOaBLTmDaMNoQzvW+6AFHZAPlMKSsQuSpD3RK5GeDKzFNRIlsSHnDSMOiFXhiT1tc1OJpPRfCVt1kb6C4'\n\
+        \    'PqetOU48hGO50GhBttSqNls8UqmrnRfkjylFWQkT+N4ImNfUQ2ZNONbB/jKNNjPcBsOhks1ADckULCcdCRSgJOi61pVDG7R2ICw5nZcyMXdIweaLJvam3s'\n\
+        \    'F1UCFVbaGmHILdYeYURRqi+UXg4xZuP+KHJzD7L1hW/HFgjAFAUHEysKDJTVDTXqaA6JBFGv1lD4ToHbaR29LCL5manD8WI6ZEPfRe7bemsHW1D6ftA0h4'\n\
+        \    'FgBPCAY3ehcoTtIU17auljX4YNUx8Xs/mIsT0cxTi+MCWGVB6PEffUYukQVZESi7EhrdU8HsyXtiruj+ltfy/peLLP36NqTkZ2ynWMVAwppMxsph3296O+'\n\
+        \    'y6mOuvtsBR0bS1YrFptJYOf3owG6xCEaB5JGttnIQOYoV1P34ulxtIoM3dtGlywcxVBCQ4HWuUrYNVRY9eIDfNjlRXMRj+8Ycr1U4i0qK79gQD2UHeXojJ'\n\
+        \    'bmwRpjsZwNmI2Em/czkuo0z4tQFlZ7KzIE3aVRRsvIb/BDo/qixp5Y4JUvT4bAjrnQETWOrKOoR6vtYD2lPOHseDBR6idYoeeo8Wn9TLTkj7u2alYFY86i'\n\
+        \    'x4kcoXUzfnMtRB8NIHje55E06d6DdC/oB0dTtbUh8X70RqhOo6ZPRYzk8rbbRnBr+NEhZpGoh8Ox1rfpdGK40SbW5wW+prH8ydi2sQlGzDkP06oQ60/n46'\n\
+        \    'HNbbkeuUcv+YKSUs5dwlJWrIt6txNviUwwF/soP0ZTH7fRWvna0Ztn92St35KV0ctY6NJ+v92udugdmBu0OqrhX9g6A3/RBHRMTigDCK6F1praLWYGffa8'\n\
+        \    '39MAFH6MGpiWQkDdz+SL0yh9gc+sqRKUIseUDDg51Dmkf2TC0r9i1YkWF8Z7SCdATc8SOFlEFFrpk0UGb3S/6Zng+9BZb25BrvIrfPU0E+s8rcE5mNUFnM'\n\
+        \    'VlCCbZSiQtKL1WrNbjaBtXdoWk/5oXaXyeXSVgYLiYZEwBIHpMtwCCW8H1FtHyUrwDFiuKZr9Hv4SPX794/fZrXeUCpkpblos46vvuIaPtIsH9VlyUZV4X'\n\
+        \    'y+a4py8fPTt/9S68eP3+7ePzAzTYuJpkLOJ4tBjcigylUZCW7hEqdNbvXFzr1I2gyh8jOXorsWnmYqe59a57AWhxN5hvgchX27jN1d4qISCk26ljmj3tUT'\n\
+        \    'aHggbaewEBd5MXJfyNw3y1gkf4io/hWr3s9ebt+cX5u/AJLiS/PX/8zsCwzesS3xSkFSuMcV6+fn9xHj559uLd+dvw4t3rNxbtBq2AQxvkYq3y3LdgEga1'\n\
+        \    'i3WvKch5HMXHcgUN2v/xuWiyFuuukYDz/Chc5J9oBVinTGo7tpmuGOD/GE0WJo4FPlZVvuWL/8M2FMdvQvUdREFErpYby5+Y7bcR6bNfXr1+e+5inYnKZm'\n\
+        \    'KDeQ2eNRK4pDMY9PvBVMUPBMlxFxT6O0hjm+T3CjzMUYRVVOAOsXoX4xYd4b/MYd+/OTt9dx6evvj19H9fOBhtzURoRzt1NpQ2ArHsV1xqbSivqCWGFM4o'\n\
+        \    'n+9b0ELYVb4zZGi3GSIe9icOgKLx3qGp4QRsrk+vKDRbpwzMqAztEjXBEmHDVpscti+DsNmoJjRot5kTGrkoRmAzlcJTEQCOj9UsCplh7JsGAbTmMZm0G/'\n\
+        \    'VEjuft1uZMrMavTqXQeYhxxAP37WKD1iyOB8seqFdS13w4iIoXj+grQftme0twgmy72Zyyq11Oetp3NBqTPj6e6MoNaQnL6oZvA7rADyCbJ2lkWokB1Vus'\n\
+        \    'w5a1oKGMaDkAS+DjgaNXXqD1N4PEMo4nkQwSJjx3k9TnOomrTYh7M4duuGVe4DZr/oKPAAd9i/0o2WrDtox3AjeiisiOT9j8wEDqDjmEyngnBX4soZdOL+'\n\
+        \    'mTS/ocxhiejmtFkMDo4TkMid4PBuNv7khK8V09QV2gX/+b+3FO6K4GkzmrOJyRx+fpIZuH5sPjlnwFgzaezlrkiuw9T2Us4EdmPLGnzUypRJPasHZWewtW'\n\
+        \    'fPn7psDjgpD3GRv67/p2H02h2slmkKieAVtm3X09Sfubveihr9fPBmyxnKqSWiJZ1iUwOdwmWbKtt2FjNQXK9bnNTJG+ie6ymuS7J6CjdfrNqmM5CAbEek'\n\
+        \    'ugQ7vhoKQ2oSkrqSC363tl9Z00uhK/V2m0LkPoUSXLKDVyn4tnfz0Pz//y5vTVGWZAL1ysEJgE3oKtIMfbkGPXu0lw7wt/tJTMaRzsC2gTYIgapPY/yKMx'\n\
+        \    '2+iT+qgfyY/ixBg+Eh8bxQeuRRGtuB6lxqf99PS4wHpFr09piIJtgY3SEDZqJzZB4dfeHzWrgX2Q3Hf27f1s7fwURqLna7Td3hgmXWe3W1nCiM0WsbQEPV'\n\
+        \    '3nhkwlOi25wH/6xgfhcLkY667jxWSgDMzV7yX02+648PRa12I+i48P9jt974OYuYT1O6UF2POxsc6resp3C7aCQe2xSj4p5RKHUYTmwDf+ucLdXcZ+Gvul'\n\
+        \    'RJFTNv90j8dt7bUAeCPVRHVw6QU1KOf5Y+n9GP/0Y+x7P3q/caI5sYLOj0afw95rgJsLzCFur14jd7dD6oWcE8lmbi5/Ew6rbKDMrsjX4CjKR1FhVw1fm9'\n\
+        \    'NwEgyGGtrwX5CNJZ9RKl/1YNgRz7Xxs0O0dRA+qib5mP7qkXCz3I4VeMKAx0F7MyEUjumBVA+bzRwP2aUb3OnWSLONbXfVzQH01N7OIf0fBqvhfCTfmnGo'\n\
+        \    'g4PhVA/mdUivH+C/t+yg18b8gAhwaQlgUYZsx5DWJt4DG3Cpy/5d0OghaMMTBa0rRi6j7DQ8T2ngCtAc//3fxLZ7sEi5gzWgrr/5m53/UX7mRyWN740283'\n\
+        \    'tU2234vU2HLpLMI0aaoEBtnA3m00BtmQ2G6gs4zPG4a5zSM6aNnD1L+IJ0IY70biNcIlHn4xUn/TebL3/Lkk++85Dg/0E+nBhnyAPJjJPjYYCMODGOkQeS'\n\
+        \    'GyfjeYCcODFOkgeSHSeTyf/VwxsHrA5RoM6dawLmfUGAOnquxx9NxPjq9LkxfF8PHx4aU+w31iMOhnJIcQRfDzjtiwHFKXw93BSGk4EMV8+0pDqX7MYRth'\n\
+        \    'qG8Y2CAzsCtA8f0hTM0/+4xRVPBycdHnT6wfHQ3qDEUtV5a3XeOjqP53s746zNOwTanSeT7i00oDEVpQJtfPP+V2aiVKTddzT5ykSUCjnmYYwbHiReb2dv'\n\
+        \    'oBgMv0a70LV212n/K5QLXdzfc19WH9101N0exhlnY93fuGeB7+PFb/sPn6q6yjw/YheXEoekAaPycpMnS1Z26IDjSfs+gkMFgaqE9tUDCuA7ygEcidaoYC'\n\
+        \    'BOnPUafFFDhU9rHY/oU+NFOG+WE8/kaXejaZVDtiQXe2XK8+T14/cX4avXr86b4F9Jrea2uYpO35VhGf1vnXSaGt7qe6vCZsaOl7H5Jh6ZzM+MHkid6PYB'\n\
+        \    'AnLlT+PpNJ7M/TbonoW3UTyMHODOdbeBE6ydms0PMMaRcHFcfsD/2tzY0Amjw8wgGBcvpsPj4WzityDdrGADNlm0oQ+tQNpQ/zAjCBWUqvjHZgO+iMKLrg'\n\
+        \    '4zQkC5WDGfR2w+8tuw/ymEC2R+ID60esvR1BFUcIF5iec6s5jcoLkdxVwmEtk2YelaTtQ+B+TMus1LqpxH5vaeEbPcdOPuG0Au0xYISeJYGL+qwHEdzcGI'\n\
+        \    'xLnQ4cB7YlJ7LngU0LrUyTU3nl8JzDorkffcNLaFlzDyJQOXemh2Q0iNoQhOVpUXZYYq6StzGljNQ3XWGSVd4OyrbjRljeQScwAoRHhFcn/ehMaDZlACrd'\n\
+        \    'mmwiD2gRUVS+JkXWfrnlkPNfqJSgQ02hhfXPnTZJWpGq6rhJ5AUC0WYEUeVP/eyzddP/D/Whdf/r68hJrpEINd2F7gZmMIZ9stnpUbtfC5GPDrlz83KfNY'\n\
+        \    'koGyrHFjVVbBp79G9QJclSm5Nq3N2e4YOv5hMALhK2gThYtAN5JRMIT6yYA30Zj3P520FaXebsGq8h1fuKZXbW1eydLhY7eZs9oXbFmtdFTfQt+LdnjjYK'\n\
+        \    'd9S8ZX4KVUugc0xu7qlB6Iavvlb8Alur2w9j7XW+/5lz+3O7Amb6H59D9N/sm5BwcLD+4PQO8kOB1dNsqpBw/pviYFZyDjoKpcAcg2I5UB4inpS9wVU2cr'\n\
+        \    'ukWLrI+j7ba6GX5LYyJGdZpdxNVg32qUT1mSXhZRXXmdH+MueQLrorbAv2BgKJDeg9VoGH1h2zfZ3C9szahSiC1rE7eZNWjHGGhf2cRNU18+1ugQLZI0qW'\n\
+        \    '5MYHUpWdt08IIRvK9yj80IBxR8v/GIAb5uNU3A25iL6OO2E5gzsDxGnnvRJcYIaSfFCly+7erERE+cWiZbTf7zG+daJqTPfv/sDafcKOQNXStxXcx4vs80'\n\
+        \    'zuzTz5BBgXMsCrDzhHl8yLt+20DcAYpXxyU7ccHLLW4dfL15CXkXuZNVmrANy3p+wE9D6/lKaZy0WW2WxS5hNY5k71864DA9uvWghHS62nS0ZZr3+SgUuM'\n\
+        \    'UJDbTjWBNwYTOs2InPNjb1JoayH/O+vpjx61z352VoW9EWb0SQ9/O5LwC8r7QjCfnu8qNRMOkG427rKgFxp596dMTxm4fo8W1LeeL9GHsXy00U4/tpfO+i'\n\
+        \    'lnkNugPe+6M7A21q80PTnVvqY6grBJ+Erau73nmxiuhaH+/+aALKxC+Ua+ujrbfqmixMB5Z5yTkXGHynpgMM358w0o0HfA37AaG+YxveK0w7IBnK6jWkKN'\n\
+        \    '7qy98L4CRFJRq06ywQWtkn4A/kOEc4zi2k6NaLYNRtCPY6KS4rIOqu1/YSeDy/8l6wBdquJXGi/pZCfvBfJ2QVpL5DiJjaPxhMDonw9D0XIfl+HSpNj39Q'\n\
+        \    'jmYVcSTfTktHMJoGflZXnyuO/mLHPidRutIBWc1Su6dW0WbnFzbnaTrPCTl3f1/+rHEX55Ztij1TuBXj8G3Ozw9JP8W7neagoGabqMLtLjCPEihOIYI+fb'\n\
+        \    'OnNrKvlzGm4x3J27jarN0IE8Hh74+HppIrXw8erPRYsfnyZwrEJCXkuN546CbEqV6WH2/zXiC4+7Ad9oUu1YVIHOjoCaULkLBmmcjgzGwQ/odJfkbLc7Jm'\n\
+        \    'f4okYn4NPC8pxJf25iIlhzVb1JgbHhhBp6IOXXqCtsDTS8CZfflblax58dCazgH94le96usfGlfAmi/vlNrxNiCp1yIKT8l9+RNdSmNPFV7tUnlRvfI2WO'\n\
+        \    'cAWVDTTfogeVSAPRaspq91D9lipF4PHooJaDpWSZagO+QT6Ti9lysvA925zLdb3A22NZln5mbu2MbzyYzult27ngOtjtqKbpByK1JDF9T6AY1zx1l9SdWi'\n\
+        \    'xJjMitbZnMzVR1fUqr37fYdxGurEunfAeD+hj2Hte0Vx4A2EzSH3u8D26dzWKS2VI7ZZ3Vyjcp+KQlR4WtNE10y0v3pUTIpjAe1JBcoUlZ46e3nXFokrdD'\n\
+        \    's1zHzWeHtlL2eqFbdve39ENk3ApXjN4xJcnJSt24ei6yjB+FyFFQm0tywYbu6vki3D7cGTUbeHn/O6+vZVWnFh131p+/w2ly29y9uTfg/G9/HVUWcemCi6'\n\
+        \    'joR8CMlYMAr0gmX30K1gh0Px4YB4xGkzNsXa92rDQPBvp4GY99U+V/WxQoEz8PECVbyn/bmxZKMciXW7mYHvti7gH3IFt3AJtzW5plMHKh6xdQqOEHQHve'\n\
+        \    'Lz3use5NcJJl44Y++SFgwq75pgzOizz+B1kj9p3t62r/y+rouYkU+m1LpHCf6ZSLeBukUFZlxQsDnLi1W7Om+YhCuCGdFLLNKD54myQ7UiqeJH4/h2nmSH'\n\
+        \    'Nhy5kmjeRyzHj7sHyiYJiaXT/eHXr3QzeNh4ax8sUxYVIf9RErzc7Ttf/xgbArRtadRGH3Et5i3vHrSvK2xePdh20PtvwLbfv9/+/r+DdwA67/lrXAzY3U'\n\
+        \    '9Y4wrQQ1eg7vci4uyjRvODd7HF9xDQt4aaYJOn8b/QzZJiNzizf+QH5JSXkAtGK7Da66iIy55C9bU4dGyHoW8g0jwc2fJT+tCoeX+7cU9/uxJe5pm4bSyD'\n\
+        \    'CuRJghftqje6qIzwvEe/MaR+yaN79+Hr5051NrQUbaJDnZELtD2m49OJPD/wxQq+BJe+RkzCzD/3YcLfDNGIFnyrpIXFLhbVmgiGtiayRPzUx0atA+LKSL'\n\
+        \    'eV9d8KSWks/wXDrrHZGvn3XWKgocpbsFF+cndz8szitrufgz02dw93sxhisNPsBawx9OvOnTs/0O9vDU68ZbQD9QKV4llyiQ6FfsQBDVMWDWCGdNdknVVJ'\n\
+        \    'Si07OvQMaNinXZoskyq98Wq0VmxEz4O/sQUDyhVc7y2ju2Yx0cJlXLBMbIevgANZg/yhzinW0fT7WPo62p4QcbPWayTHDcXWjtyM1VbZX6zyFEPpcnPXrA'\n\
+        \    '0xjfid4epQshVBPDt6B+JVS2Ty7T5UkEnFfTQxuXXKXCulcVs0FwXfMNHs8oN3/okta/CG5PhMhubXmdomAmVwnEKRHZA7BtmwK1bc4PYEmCj9cFpP3FyQ'\n\
+        \    'ppTkFnjVvd+i2Dfpol8KEuXSHvKa+MTpXuqZZKvcWDhrtOzZwfH1cljYL27tKk88equFgZF+SK1OQtlkbHBD05BHa6iXFQWoseRnHih3Fj9Fgg20ta3bEy'\n\
+        \    'c9ysZLvzdpVH1uvnRQ3ZoXo//7v3nyqlv+RfxyA/9i3IjrDXx1K5W40TtmaRXd9k7vb/jFFpGkGL8IhfUWjaaWHqzWB3Qo9xZo9PHosLzJlrwRT9qTsvPt'\n\
+        \    'PUbq15YeztL4JacfvHdFhC/PGGg3eJf3z7xFgSdcmdD5DagN6CCYxcpDh1JGGf9C7ptuaGUiZUANqhOtO7991D/VgDHeaPnNSCqKPK+C/kcNjKtvn/Tvb1'\n\
+        \    'FuBBUN4w3AK8JG+xPF9e6yYTTp9+1MD9VGj0sdfyPoj1pZqbOqh9X2QfUrLIjjt/5HqzVmO/xBDl1oEtDgo734Qr9jw1lva3OdyJe3jbsaQcGQheKi5Y6J'\n\
+        \    'gXSQvuurNLqNxKtOONRD/tsx+ovNbi8XMwCeDW3KrMIz+2q5aS5y8Et8SCD82V1OxZ4ilf+CDTuI0pi6fqanb85jpIEeHhqXK4/g/m/UISAc96X0xC7/Ol'\n\
+        \    'E5zwFLaydBpgnsc590XBAR0ok79ZOKMuVVW4hzfukgoLT0ih47fCs2CN9a5SFeAVV0TDd79vb08dPzVx7+tmXTwWpyqPiImWtE1zqWOvpoHeLESyhcRKX4'\n\
+        \    'yq7T2hqhERjkljvMGViBP24k13WdgCkW5a7X1Oq3+zZ5zu8rhsCK622dkqWrwG+mCY4dAyKA0izk7kuwNLEBk4mKAvHvWY2xesp9m7qTDAgm/7ka7A3TGH'\n\
+        \    '5Kul9aeCjd13X9nnkJm+yKP2IjPvLfEKMTjPbasYbl9NB+JuNZ28YWUB9eOlGA7th3OljIZKtjv9pXLlJQG8kOXqUw7ssbco/Hzn7ujczxeMHmE9/Vw7mZ'\n\
+        \    'ebQP0nGhQmPDZUfxIlJer3urexaMGxbaYrh19rfP24iYVKY5BJDrvPGTmt/gIeg06Fc9hO0W9Lh474lCgBf6JLuQxWsG/tTetjL0hK/oGPDaUTyBKgR0D4'\n\
+        \    'uMHc8yUQ+doObuq65jOVex5I7T4GWqOvQc5/fwg/yBMXf37zo8YQkNaoFDXs9RhHyP81PDfIvz050a75jMuPbfr0K31KB/pm78f8U0/sHbewAA'\n\
+        \    ,'e3b63fe6a2f40b7ac448f1c6063cf73fb3a49d73cc33aa920329bc700c522322'),\n  'android/tests/V471CombatSmoke.gd':\
+        \ (\n    'H4sIAJm3BGsC/61Y3W7bNhS+z1Nw3sVkzFWT/qyrsQxI0qQb1rXFYnTDhoKgpWObq0xqJGXHvdrFHmFvtDfZk+wjKclSbAcpMOciMnm+w3O+80eZbhyp3L'\n\
+        \    'LrjBRNDNFRppV17JydstJQoUWeDAzZ8cOHNjOydPbhuydfPT8XzhWUzvPBsAZM7gKcPJuQMdJpI8l2Uddn7y755PJ6MmbXzkg1h5ZBZckAPpM3z064XeoP'\n\
+        \    'xK1YUZrN5oOjo6wQ1rIr8YFeiiWNjxg+VHvxWuf0+EVYWgnDrBOOxkwqB7WP2uUFGT1mFwthRObInOt80wGVC01K3owbZc2BhXAvja5UfvDIWaUyxudBKO'\n\
+        \    'HQMAMbbsT4x/pxyB58G5+iDv8x5Cqj2PP0+OgoKpBKOikK+ZGSAFhpWZ+ZiaLgOc3AJYFlbioFJmvYTMgiWZK1Yk4Nm7fwZWUXHGBtksHV9788OxmzAfuS'\n\
+        \    '1aBhkPmjki45abVmhsAhn4PqaM2ZMWIzbtmas/FpG4xU0TqJaozWLhV5zrOFLPJkHlfnqecewbhFfgc476KCeLNeBwboyPlBUC043BoZQhIsbaN4CB02ax'\n\
+        \    '9iaH6bj+Lq+4YU8H47NHLGrmRBZ1kGMtMZHjndSOts0qb4cBv0F9LUkoaWekVcTK0uKkfJW6N/p8xdk3OIH2ql0NOQC7wUbtFRtvVOGDOOYQE1/YBtGRi3'\n\
+        \    'QYIQEL8dv79Fz7hDTi1zspWZyfnCeQbPO8SFxdTXZrAOqNa+HWKDbA8Gdsuk4XY0STPpNnytDYQH11opUk4Ug9pR8BthaC26WFHOdG1UyqdeAZ9pbDm/rL'\n\
+        \    'Srt9Y4OV1JK6cFbdmPpTLwmyw3Yq4VW1aAhoCxKXlNUGDwxfuWo+5KZAINhreqtpPTdaB4qS2qFxpPuybc3vySvUOQtXmcnKTHI/x1ieFacaerbNHLfxCw'\n\
+        \    '9Wsa2i/XJakdtwKURQm2lNYij/Zb7uOaISOMQDcM/x+/aO3mwpAS6ZwcVyg3rg1XVQH9jeRgyIRtcY2NUR87PWVe2kcjrqSN7+lH9u2pb3f79jbsm1P2JH'\n\
+        \    '2641RWaEuMClohufPmlLIQGS2RJ3f72eYOR8vBMTZ4FdKSZ8gdlww/O322cyaaLbO0IsUyvQSfrEbHZJlJh8HC3IJQPzLffzIyiU0r5xByyB4yAkQnneZQ'\n\
+        \    'RzppgJadh6cha7WlGUzQS77ErFhWS27RIDx57MnT9HirqUtgdCHCLaqbMB0lPHRaM7uErx0P9uTJVAO4HLO3QlFxoVGaUpHZZsuiyvfkynlABUxMlz68iU'\n\
+        \    '5U3k2auJIKlS2gzOkSvh2nT7/eCVINjZyy0qsP7PmuiurWa7UW5kB0Pkf2hsJm2UKoOVmWVZisSCeL1gx9I8+XD4DXuCHH1rjDYOyDNJZL+yHtVu0MscB4'\n\
+        \    'nUqVIxOTPVV7R6Nqutoe/3w7rruUl0dHhWMwwGfeLXsPpv8njKYmXwIz/kIWW6CoQLNw0l9BNmwt3UKDGn9TA3la20bycKepVNDE7zOuGtn+2Opo6I6vZn'\n\
+        \    'nviOpt3jGq2hM7I6uH3asujLAWOuoaePL+HiOtr24nP/rb3cnnM6G/e+eoAx/MU9wGDkgfsdDJoLcUa8U68/BQvUyQcyF3PNiRWOLuqKovLBIQ9/mc2cKX'\n\
+        \    'nldqF3odUzSWWKM5bcNWiA2SB+G6EGol7Cv/9cClLIhusyNWOZD9btIBB0BHQUAMu0d7EqDh3bm+2acgAPoWALHV4KSfrlDwSkwhuAWGjdTh7cC/ybz46e'\n\
+        \    'ziu8vXbHJ59iP798+/2WP29tU/f01+vRw0dkJt55wA3x4T+PQZHbv+9hi/0Z7yiF0ZkiBzgohgJrqPB7R7VEe5L4Z6yOw9Y7vfHnVdSlB/XZLMcDVRh87Z'\n\
+        \    'InsXG7tRGfdpwwXyvCNl++2y9S7NYmxsMvhZFDlSCMcODnUr6jXKuhb84O2nbCD10cFeGQzouI6XWmspT6XFZQEljLeWPLlAGxTQHq+1o4G/s8XmEqVR4z'\n\
+        \    'tGtlZ4wVA44axWqW/qtSOsJGMhTSo70FH3WUhLvLpFabEWuJ/UzdVJ3JaS4/Tk6TD1zwhW19lPHw50UxYSvS16kss86PHDkULNd4fW4YFw/3GwbxjsHQV3'\n\
+        \    'DIL7jYHdIbAzAnYHQNP+P7H5N4l2sP3fFugOgHu3/t4bTFAZf6Txixq3h8wVm/0x+t9eUkvcI1z9iwO/ePPj+dmEv/lhjLNE7ououZWOOhf8cN+P1/xRnU'\n\
+        \    '9t8Y7gxoOQevXoArDOyLi8Wz3hVw28Zf0H6+bome8SAAA='\n    ,'d9b976f19105614c700dabf6211d62f1dc6826f4c22d81a0223663bdd78432ee'),\n\
+        }\nfor path,(parts,checksum) in assets.items():\n    blob=gzip.decompress(base64.b64decode(''.join(parts)))\n    assert\
+        \ hashlib.sha256(blob).hexdigest()==checksum, 'FIX71: source checksum '+path\n    Path(path).write_bytes(blob)\n \
+        \   print('FIX71_WRITTEN',path,len(blob))\nFIX71_SOURCE\npython3 - <<'FIX71_VERSION'\nfrom pathlib import Path\np=Path('android/export_presets.cfg')\n\
+        s=p.read_text(encoding='utf-8')\nassert s.count('version/name=\"4.1.7.70\"') == 1 and s.count(\"version/code=4239\"\
+        ) == 1, \"FIX71: base version missing\"\ns=s.replace('version/name=\"4.1.7.70\"','version/name=\"4.1.7.71\"',1).replace(\"\
+        version/code=4239\",\"version/code=4240\",1)\np.write_text(s,encoding='utf-8')\nprint('FIX71_INSTALL_OK: battle camera\
+        \ and UI, session capture and team menu bridge')\nFIX71_VERSION\ngrep -Fq 'func _sync_team_and_save_buttons(' android/scripts/V469Battle.gd\n\
+        test -s android/tests/V471CombatSmoke.gd\n"
     - name: FIX61 Weltkarte importieren und echten Spielstart testen
       shell: bash
       run: "set -euo pipefail\npython3 - <<'LWOD64_11'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
@@ -703,27 +837,34 @@ jobs:
         \ android --quit-after 300 --script res://tests/V468GrassRoadSmoke.gd 2>&1 | tee build/diagnose/FIX68_GrassRoads.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX68: ' build/diagnose/FIX68_GrassRoads.log;\
         \ then\n  echo '::error::FIX68 road-safety test failed'; exit 1\nfi\ngrep -Fq 'FIX68_GRASS_OK:' build/diagnose/FIX68_GrassRoads.log\n"
-    - name: FIX70 Echtkampf- und Menutests
+    - name: FIX70 (Regression) Echtkampf- und Menutests
       shell: bash
       run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 160s godot --headless --path\
         \ android --quit-after 300 --script res://tests/V469CombatSmoke.gd 2>&1 | tee build/diagnose/FIX70_Kampfsystem.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX70: ' build/diagnose/FIX70_Kampfsystem.log;\
         \ then\n  echo '::error::FIX70 combat scene or game logic failed'\n  exit 1\nfi\ngrep -Fq 'FIX70_COMBAT_OK:' build/diagnose/FIX70_Kampfsystem.log\n"
-    - name: FIX70 Android APK exportieren und pruefen
-      run: "set -euo pipefail\nmkdir -p build/android build/diagnose\nAPK=\"$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX70.apk\"\
+    - name: FIX71 Kampfkamera, Teamplatz und Speichern wirklich testen
+      shell: bash
+      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 160s godot --headless --path\
+        \ android --quit-after 300 --script res://tests/V471CombatSmoke.gd 2>&1 | tee build/diagnose/FIX71_Kampf_Team_Speichern.log\n\
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX71: ' build/diagnose/FIX71_Kampf_Team_Speichern.log;\
+        \ then\n  echo '::error::FIX71 Kampftest, Kamera, Team- oder Speicherfehler'; exit 1\nfi\ngrep -Fq 'FIX71_COMBAT_OK:'\
+        \ build/diagnose/FIX71_Kampf_Team_Speichern.log\n"
+    - name: FIX71 Android APK exportieren und pruefen
+      run: "set -euo pipefail\nmkdir -p build/android build/diagnose\nAPK=\"$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX71.apk\"\
         \nrm -f \"$APK\"\ntimeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android\
-        \ \"$APK\" 2>&1 | tee build/diagnose/FIX70_APK_Export.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load\
-        \ script' build/diagnose/FIX70_APK_Export.log; then\n  exit 1\nfi\ntest -s \"$APK\"\nunzip -t \"$APK\" >/dev/null\n\
+        \ \"$APK\" 2>&1 | tee build/diagnose/FIX71_APK_Export.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load\
+        \ script' build/diagnose/FIX71_APK_Export.log; then\n  exit 1\nfi\ntest -s \"$APK\"\nunzip -t \"$APK\" >/dev/null\n\
         unzip -Z1 \"$APK\" | grep -Fx 'AndroidManifest.xml' >/dev/null\nls -lh \"$APK\"\nsha256sum \"$APK\"\n"
       shell: bash
     - id: apk_upload
-      name: FIX70 APK als Download hochladen
+      name: FIX71 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX70_APK
-        path: build/android/LWOD-Android-V41.7-FIX70.apk
+        name: LWOD_ANDROID_V41_7_FIX71_APK
+        path: build/android/LWOD-Android-V41.7-FIX71.apk
         retention-days: 14
     - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
@@ -735,15 +876,15 @@ jobs:
 
         test -n "$APK_ARTIFACT_URL"
 
-        printf ''### Android APK Download\n\n[FIX70 APK herunterladen](%s)\n'' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        printf ''### Android APK Download\n\n[FIX71 APK herunterladen](%s)\n'' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
 
         '
       shell: bash
     - if: always()
-      name: FIX70 Testprotokolle hochladen
+      name: FIX71 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX70_TESTPROTOKOLLE
+        name: LWOD_FIX71_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
