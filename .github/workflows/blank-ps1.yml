@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX53 Dungeon-Kamera direkter Touch-Winkel
+name: LWOD Android V41.7 FIX54 Dungeon-Dekoration und Phönix-Statuen
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX53 APK
+    name: LWOD Android V41.7 FIX54 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -61,12 +61,12 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX53 Dungeon-Kamerasteuerung und Phoenix installieren
+    - name: FIX54 Dungeon-Dekoration und Statuen installieren
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p android/scripts android/tests
-        cat > 'android/scripts/V441Layout.gd' <<'FIX53_V441LAYOUT'
+        cat > 'android/scripts/V441Layout.gd' <<'FIX54_V441LAYOUT'
         extends RefCounted
         # Shared coordinates for ruin, dungeon, player ground and camera.
         const T = preload("res://scripts/V417Territories.gd")
@@ -244,8 +244,8 @@ jobs:
             if not solved and have_fallback: best=fallback
             cam.global_position=best
             cam.look_at(focus)
-        FIX53_V441LAYOUT
-        cat > 'android/scripts/V441Castle.gd' <<'FIX53_V441CASTLE'
+        FIX54_V441LAYOUT
+        cat > 'android/scripts/V441Castle.gd' <<'FIX54_V441CASTLE'
         extends Node3D
         const L = preload("res://scripts/V441Layout.gd")
         var game: Node
@@ -449,6 +449,65 @@ jobs:
             _solid(dungeon_body,p,size)
             dungeon_body.get_child(dungeon_body.get_child_count()-1).name = label
 
+        func _standing_torch(q: Vector2, floor_y: float) -> void:
+            _stone(Vector3(q.x,floor_y+0.95,q.y),Vector3(0.26,1.9,0.26),Color("#4f4032"))
+            _stone(Vector3(q.x,floor_y+0.18,q.y),Vector3(0.74,0.14,0.74),Color("#5a5046"))
+            _stone(Vector3(q.x,floor_y+1.86,q.y),Vector3(0.34,0.14,0.34),Color("#645748"))
+            var flame := OmniLight3D.new()
+            flame.light_color = Color("#ffb670")
+            flame.light_energy = 2.7
+            flame.omni_range = 13.0
+            flame.shadow_enabled = false
+            flame.position = Vector3(q.x,floor_y+2.15,q.y)
+            add_child(flame)
+            var ember := MeshInstance3D.new()
+            var sm := SphereMesh.new()
+            sm.radius = 0.12
+            sm.height = 0.26
+            ember.mesh = sm
+            ember.material_override = torch_mat
+            ember.position = Vector3(q.x,floor_y+2.0,q.y)
+            add_child(ember)
+
+        func _pillar(q: Vector2, floor_y: float, broken: bool=false, fallen: bool=false, rot: float=0.0) -> void:
+            if fallen:
+                _stone(Vector3(q.x,floor_y+0.46,q.y),Vector3(0.82,0.92,4.2),Color("#666057"),rot,PI*0.5)
+                _stone(Vector3(q.x+sin(rot)*2.1,floor_y+0.32,q.y+cos(rot)*2.1),Vector3(0.96,0.34,1.1),Color("#736b61"),rot,0.2)
+                return
+            var h: float = 6.8 if not broken else 4.4
+            _stone(Vector3(q.x,floor_y+h*0.5,q.y),Vector3(0.94,h,0.94),Color("#666057"))
+            _stone(Vector3(q.x,floor_y+0.24,q.y),Vector3(1.35,0.18,1.35),Color("#7b7369"))
+            _stone(Vector3(q.x,floor_y+h+0.18,q.y),Vector3(1.28,0.22,1.28),Color("#7b7369"))
+            if broken:
+                _stone(Vector3(q.x+0.42,floor_y+4.8,q.y-0.18),Vector3(0.58,0.42,0.46),Color("#6c645b"),0.5,-0.3)
+                _stone(Vector3(q.x-0.58,floor_y+0.25,q.y+0.24),Vector3(0.52,0.28,0.68),Color("#6a6259"),0.3,0.2)
+
+        func _vine_patch(q: Vector2, floor_y: float, height: float=2.8, wide: float=1.4) -> void:
+            for i in range(5):
+                var ox: float = rng.randf_range(-wide,wide)
+                var oy: float = rng.randf_range(0.25,height)
+                var oz: float = rng.randf_range(-0.35,0.35)
+                _stone(Vector3(q.x+ox*0.24,floor_y+oy,q.y+oz),Vector3(rng.randf_range(0.20,0.42),rng.randf_range(0.14,0.28),rng.randf_range(0.08,0.18)),Color("#456145"))
+            _stone(Vector3(q.x,floor_y+0.10,q.y),Vector3(wide*0.9,0.08,0.72),Color("#3f5b3b"))
+
+        func _phoenix_statue(q: Vector2, floor_y: float, broken: bool=false) -> void:
+            _stone(Vector3(q.x,floor_y+0.45,q.y),Vector3(2.6,0.90,2.6),Color("#6c655e"))
+            _stone(Vector3(q.x,floor_y+1.35,q.y),Vector3(1.55,0.90,1.55),Color("#746d66"))
+            _stone(Vector3(q.x,floor_y+2.55,q.y),Vector3(0.95,1.55,0.95),Color("#817971"))
+            _stone(Vector3(q.x,floor_y+4.12,q.y-0.18),Vector3(0.62,1.60,0.82),Color("#93897e"))
+            _stone(Vector3(q.x,floor_y+5.02,q.y+0.28),Vector3(0.56,0.62,1.26),Color("#8f867b"))
+            _stone(Vector3(q.x-1.08,floor_y+4.68,q.y),Vector3(1.56,0.34,0.92),Color("#8d8478"),0.0,-0.34)
+            if not broken:
+                _stone(Vector3(q.x+1.08,floor_y+4.68,q.y),Vector3(1.56,0.34,0.92),Color("#8d8478"),0.0,0.34)
+                _stone(Vector3(q.x,floor_y+5.92,q.y+0.55),Vector3(0.42,0.42,0.58),Color("#94897e"))
+                _stone(Vector3(q.x,floor_y+6.25,q.y+0.82),Vector3(0.18,0.44,0.18),Color("#8c8377"))
+            else:
+                _stone(Vector3(q.x+0.88,floor_y+0.26,q.y+0.42),Vector3(0.62,0.36,0.54),Color("#7c7368"),0.3,0.25)
+                _stone(Vector3(q.x+1.48,floor_y+0.24,q.y+0.10),Vector3(0.44,0.28,0.72),Color("#766d63"),0.6,-0.2)
+                _stone(Vector3(q.x+0.22,floor_y+5.38,q.y+0.52),Vector3(0.28,0.22,0.40),Color("#84796d"),0.2,-0.2)
+            _vine_patch(q+Vector2(-0.7,0.2),floor_y+0.05,1.5,0.8)
+            _vine_patch(q+Vector2(0.8,-0.15),floor_y+0.05,1.8,0.9)
+
         func _dungeon() -> void:
             # Shorter, fully roofed descent. Forty-eight contiguous steps descend physically.
             var step_count: int = 48
@@ -505,8 +564,34 @@ jobs:
             _roof_seal("SchachtAbschluss",Vector3(0,(top+bottom)*0.5,L.END_Z-0.9),Vector3(L.HALF_WIDTH*2.0+2.0,top-bottom,1.8))
             for p in [Vector2(-5.10,L.START_Z-4.0),Vector2(5.10,L.START_Z-12.0),Vector2(-5.10,L.END_Z+4.0),Vector2(-14.12,L.END_Z-8.0),Vector2(14.12,L.END_Z-22.0),Vector2(-32.92,center_z),Vector2(32.92,center_z),Vector2(-14.12,L.HALL_BACK+3.0)]:
                 _light(p,L.level(p)+2.5)
+            # Decorative dungeon set: 4 phoenix statues, rubble, torch stands, broken pillars and vegetation.
+            _phoenix_statue(Vector2(-23.0,L.END_Z-7.0),floor_y,false)
+            _phoenix_statue(Vector2(23.0,L.END_Z-7.0),floor_y,true)
+            _phoenix_statue(Vector2(-23.0,L.HALL_BACK+11.0),floor_y,false)
+            _phoenix_statue(Vector2(23.0,L.HALL_BACK+11.0),floor_y,false)
+            for q in [Vector2(-25.0,center_z-5.0),Vector2(25.0,center_z-5.0),Vector2(-7.5,L.END_Z-20.0),Vector2(7.5,L.HALL_BACK+9.0)]:
+                _standing_torch(q,floor_y)
+            _pillar(Vector2(-9.5,center_z+8.0),floor_y,false,false)
+            _pillar(Vector2(9.5,center_z+8.0),floor_y,true,false)
+            _pillar(Vector2(-18.0,center_z-10.0),floor_y,false,true,0.45)
+            _pillar(Vector2(18.0,center_z-14.0),floor_y,false,true,-0.55)
+            _pillar(Vector2(-27.0,L.HALL_BACK+15.0),floor_y,true,false)
+            _pillar(Vector2(27.0,L.HALL_BACK+15.0),floor_y,false,false)
+            for q in [Vector2(-12.5,L.END_Z-14.0),Vector2(10.0,L.END_Z-28.0),Vector2(-26.0,center_z+4.0),Vector2(22.0,center_z-11.0),Vector2(-4.0,L.HALL_BACK+6.0),Vector2(6.5,L.HALL_BACK+12.0)]:
+                var n: int = 4 + int(absf(q.x)) % 3
+                for i in range(n):
+                    var off := Vector2(rng.randf_range(-1.2,1.2),rng.randf_range(-1.0,1.0))
+                    var w: float = rng.randf_range(0.45,1.45)
+                    _stone(Vector3(q.x+off.x,floor_y+w*0.22,q.y+off.y),Vector3(w,w*0.44,w*rng.randf_range(0.75,1.3)),_stone_color(),rng.randf_range(0,TAU),rng.randf_range(-0.35,0.35))
+            for q in [Vector2(-30.0,L.END_Z-5.0),Vector2(30.0,L.END_Z-5.0),Vector2(-28.0,center_z-6.0),Vector2(28.0,center_z-6.0),Vector2(-12.0,L.HALL_BACK+4.0),Vector2(14.0,L.HALL_BACK+8.0),Vector2(0.0,L.HALL_BACK+5.0)]:
+                _vine_patch(q,floor_y+0.02,3.2,1.6)
+            for q in [Vector2(-20.0,L.HALL_BACK+4.0),Vector2(20.0,L.HALL_BACK+4.0),Vector2(-6.0,L.END_Z-9.0),Vector2(6.0,L.END_Z-16.0)]:
+                _stone(Vector3(q.x,floor_y+0.10,q.y),Vector3(1.65,0.12,1.0),Color("#456145"))
+                _stone(Vector3(q.x-0.35,floor_y+0.22,q.y+0.15),Vector3(0.28,0.22,0.22),Color("#4a6a46"))
+                _stone(Vector3(q.x+0.30,floor_y+0.24,q.y-0.18),Vector3(0.24,0.18,0.24),Color("#54764d"))
             set_meta("dungeon_steps",48)
             set_meta("continuous_stair",true)
+            set_meta("phoenix_statues",4)
 
         func _commit_stones() -> void:
             var mesh := BoxMesh.new()
@@ -529,8 +614,8 @@ jobs:
             colors.clear()
 
 
-        FIX53_V441CASTLE
-        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX53_V441RUINESMOKE'
+        FIX54_V441CASTLE
+        cat > 'android/tests/V441RuineSmoke.gd' <<'FIX54_V441RUINESMOKE'
         extends SceneTree
         const L = preload("res://scripts/V441Layout.gd")
         const Landmarks = preload("res://scripts/V417Landmarks.gd")
@@ -552,7 +637,7 @@ jobs:
         func _initialize() -> void:
             call_deferred("_run")
         func fail(msg: String) -> void:
-            push_error("FIX53: "+msg)
+            push_error("FIX54: "+msg)
             quit(1)
         func _run() -> void:
             var g := TestGame.new()
@@ -585,7 +670,7 @@ jobs:
             l.terrain=t
             var ruin: Node3D=l._create("Ruine",L.centre())
             var castle: Node3D=ruin.get_node_or_null("V441VerfalleneBurg") as Node3D
-            if castle==null or ruin.get_child_count()!=1 or not bool(castle.get_meta("continuous_stair",false)) or castle.get_meta("dungeon_steps",0)!=48:
+            if castle==null or ruin.get_child_count()!=1 or not bool(castle.get_meta("continuous_stair",false)) or castle.get_meta("dungeon_steps",0)!=48 or castle.get_meta("phoenix_statues",0)!=4:
                 fail("missing continuous staircase or old blocks")
                 return
             if not castle.find_children("*","Label3D",true,false).is_empty() or castle.get_node_or_null("DungeonKollision/HallenDecke")==null or castle.get_node_or_null("DungeonKollision/TreppenDach")==null or castle.get_node_or_null("DungeonKollision/EingangsVordach")==null:
@@ -836,9 +921,9 @@ jobs:
                 fail("could not verify actual cutout edges")
                 return
             world.free()
-            print("FIX53_RUINE_OK: wide camera, real V33 touch drag, staircase tilt, companion spacing, 66 stair frames")
+            print("FIX54_RUINE_OK: wide camera, real V33 touch drag, staircase tilt, companion spacing, 66 stair frames")
             quit(0)
-        FIX53_V441RUINESMOKE
+        FIX54_V441RUINESMOKE
         cat > '/tmp/lwod_fix41.py' <<'FIX41_PATCH'
         from pathlib import Path
         import re, os
@@ -886,7 +971,7 @@ jobs:
         a='    if is_instance_valid(terrain) and terrain.has_method("surface_height_at"):\n'
         s=once(s,a,a+'        if V441Layout.in_stair(V441Layout.local(p)):\n            return V441Layout.dungeon_floor(terrain,p)+0.085\n')
         p.write_text(s,encoding='utf-8')
-        # FIX53: independent current camera, not the outdoor camera shared by legacy controllers.
+        # FIX54: independent current camera, not the outdoor camera shared by legacy controllers.
         p=B/'V27CameraMap.gd'
         s=p.read_text(encoding='utf-8')
         anchor='func _physics_process(delta: float) -> void:\n'
@@ -1042,14 +1127,14 @@ jobs:
             _v442_indoor_camera(false)
         '''
         p.write_text(s,encoding='utf-8')
-        print('FIX53 independent current indoor camera installed')
+        print('FIX54 independent current indoor camera installed')
         # Actual touch owner: V33 disables V29 and keeps its own view_pitch.
         # Forward the real final yaw/pitch from BOTH render and physics paths.
         p=B/'V33TouchCamera.gd'; s=p.read_text(encoding='utf-8')
-        assert 'var view_pitch:' in s and 'var camera_yaw:' in s and 'var old_look:' in s, 'FIX53: unexpected V33 touch source'
+        assert 'var view_pitch:' in s and 'var camera_yaw:' in s and 'var old_look:' in s, 'FIX54: unexpected V33 touch source'
         s=once(s,'func _update_camera(delta: float) -> void:\n','func _update_camera(delta: float) -> void:\n    if is_instance_valid(old_look) and old_look.has_method("v453_touch_camera"):\n        if bool(old_look.call("v453_touch_camera",camera_yaw,view_pitch)):\n            return\n')
         p.write_text(s,encoding='utf-8')
-        print('FIX53: V33 real touch controller connected to dungeon camera')
+        print('FIX54: V33 real touch controller connected to dungeon camera')
         # Old decoration exclusion was 160 m around Ruine, covering entire 128 x 144 m castle.
         # Preserve it, existing map / teleporter / landscape and the old streaming fixes.
         p=B/'V27Terrain.gd';s=p.read_text(encoding='utf-8');assert 'city == "Ruine"' in s
@@ -1072,22 +1157,22 @@ jobs:
           bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
           echo '::endgroup::'
         done
-    - name: FIX53 Aktive Dungeon-Kamera und Treppenlauf testen
+    - name: FIX54 Dungeon-Dekoration und Kamera testen
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/diagnose
-        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX53_Ruine.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX53: ' build/diagnose/FIX53_Ruine.log; then exit 1; fi
-        grep -Fq 'FIX53_RUINE_OK:' build/diagnose/FIX53_Ruine.log
-    - name: FIX53 Android APK exportieren und pruefen
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX54_Ruine.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX54: ' build/diagnose/FIX54_Ruine.log; then exit 1; fi
+        grep -Fq 'FIX54_RUINE_OK:' build/diagnose/FIX54_Ruine.log
+    - name: FIX54 Android APK exportieren und pruefen
       run: |
         set -euo pipefail
         mkdir -p build/android build/diagnose
-        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX53.apk"
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX54.apk"
         rm -f "$APK"
-        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX53_APK_Export.log
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX53_APK_Export.log; then
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX54_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX54_APK_Export.log; then
           exit 1
         fi
         test -s "$APK"
@@ -1097,13 +1182,13 @@ jobs:
         sha256sum "$APK"
       shell: bash
     - id: apk_upload
-      name: FIX53 APK als Download hochladen
+      name: FIX54 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX53_APK
-        path: build/android/LWOD-Android-V41.7-FIX53.apk
+        name: LWOD_ANDROID_V41_7_FIX54_APK
+        path: build/android/LWOD-Android-V41.7-FIX54.apk
         retention-days: 14
     - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
@@ -1113,13 +1198,13 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX53 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        printf '### Android APK Download\n\n[FIX54 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
       shell: bash
     - if: always()
-      name: FIX53 Testprotokolle hochladen
+      name: FIX54 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX53_TESTPROTOKOLLE
+        name: LWOD_FIX54_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
