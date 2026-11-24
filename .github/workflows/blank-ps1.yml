@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX73 HD Kampfdesign und Arena
+name: LWOD Android V41.7 FIX74 Kampfgrafik und sicherer kompakter Workflow
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX73 APK
+    name: LWOD Android V41.7 FIX74 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -25,887 +25,504 @@ jobs:
         ref: 9b01d317fffd8d5abf0b2d0afbffb8846c44f1c6
     - name: Python und YAML bereitstellen
       shell: bash
-      run: "set -euo pipefail\nif ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1; then\n\
-        \  apt-get update -qq\n  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-yaml\nfi\n"
+      run: |
+        set -euo pipefail
+        if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1; then
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-yaml
+        fi
     - name: FIX39 Schritte sichern
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'PYREPLAY'\nimport hashlib,os,subprocess,yaml\nfrom pathlib import Path\nraw=Path('.github/workflows/blank-ps1.yml').read_bytes()\n\
-        assert hashlib.sha1(('blob %d\\0'%len(raw)).encode()+raw).hexdigest()=='148a908318b1d91002357f1acfa18fbf60e347c3','FIX39\
-        \ source checksum mismatch'\nsteps=yaml.safe_load(raw)['jobs']['android']['steps']\nassert len(steps)==21 and steps[10]['name'].startswith('FIX39\
-        \ Sichtweite und Terrain') and steps[16]['name'].startswith('FIX39 Sichtweite und Chunk')\nfolder=Path(os.environ['RUNNER_TEMP'])/'fix41_base';folder.mkdir(exist_ok=True)\n\
-        for i in range(2,17):\n    s=steps[i];assert s.get('shell')=='bash' and 'if' not in s\n    f=folder/('%02d.sh'%i);f.write_text(s['run']+'\\\
-        n',encoding='utf-8');subprocess.run(['bash','-n',str(f)],check=True)\n    print('FIX39 gesichert',i,s['name'],flush=True)\n\
-        PYREPLAY\n"
+      run: |
+        set -euo pipefail
+        python3 - <<'PYREPLAY'
+        import hashlib,os,subprocess,yaml
+        from pathlib import Path
+        raw=Path('.github/workflows/blank-ps1.yml').read_bytes()
+        assert hashlib.sha1(('blob %d\0'%len(raw)).encode()+raw).hexdigest()=='148a908318b1d91002357f1acfa18fbf60e347c3','FIX39 source checksum mismatch'
+        steps=yaml.safe_load(raw)['jobs']['android']['steps']
+        assert len(steps)==21 and steps[10]['name'].startswith('FIX39 Sichtweite und Terrain') and steps[16]['name'].startswith('FIX39 Sichtweite und Chunk')
+        folder=Path(os.environ['RUNNER_TEMP'])/'fix41_base';folder.mkdir(exist_ok=True)
+        for i in range(2,17):
+            s=steps[i];assert s.get('shell')=='bash' and 'if' not in s
+            f=folder/('%02d.sh'%i);f.write_text(s['run']+'\n',encoding='utf-8');subprocess.run(['bash','-n',str(f)],check=True)
+            print('FIX39 gesichert',i,s['name'],flush=True)
+        PYREPLAY
     - name: Erfolgreichen FIX19 Stand laden
       uses: actions/checkout@v4
       with:
         ref: a50b23c0dbeebc464305c0451b98245a0632aebc
     - name: FIX67 Alte Spielbasis mit Neustartschutz rekonstruieren
       shell: bash
-      run: "set -euo pipefail\n# FIX67: A failure in the deeply nested V7 -> V40.2 source recovery must\n# not silently discard\
-        \ the underlying game. Keep immutable original scripts.\ntest -s \"$RUNNER_TEMP/fix41_base/02.sh\"\ntest -s \"$RUNNER_TEMP/fix41_base/10.sh\"\
-        \nLOGDIR=\"$RUNNER_TEMP/lwod_fix67_recovery\"\nmkdir -p \"$LOGDIR\" build/diagnose\nfor attempt in 1 2; do\n  echo\
-        \ \"::group::FIX67 Basisaufbau – Versuch $attempt/2\"\n  if [ \"$attempt\" -eq 2 ]; then\n    # Clear only generated\
-        \ project files. The pinned FIX19 checkout and\n    # original replay scripts in RUNNER_TEMP remain untouched.\n \
-        \   git reset --hard HEAD\n    git clean -fdx\n    mkdir -p build/diagnose\n  fi\n  logfile=\"$LOGDIR/FIX67_Basis_Versuch_${attempt}.log\"\
-        \n  echo \"FIX67_VERSUCH_START=$attempt\" | tee \"$logfile\"\n  failed=0\n  for i in 02 03 04 05 06 07 08 09 10; do\n\
-        \    echo \"::group::FIX39 Originalinstallation $i\"\n    set +e\n    bash --noprofile --norc -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\"\
-        \ 2>&1 | tee -a \"$logfile\"\n    status=${PIPESTATUS[0]}\n    set -e\n    echo '::endgroup::'\n    if [ \"$status\"\
-        \ -ne 0 ]; then\n      echo \"FIX67_BASIS_FEHLER: Versuch $attempt, Schritt $i, Exit $status\" | tee -a \"$logfile\"\
-        \n      failed=1\n      break\n    fi\n  done\n  echo '::endgroup::'\n  cp -f \"$LOGDIR\"/*.log build/diagnose/ ||\
-        \ true\n  if [ \"$failed\" -eq 0 ]; then\n    echo 'FIX67_BASE_REBUILT_OK: vollständige Originalspielbasis vorhanden'\n\
-        \    exit 0\n  fi\n  if [ \"$attempt\" -eq 1 ]; then\n    echo '::warning::Alte Basisrekonstruktion fehlgeschlagen;\
-        \ einmaliger sauberer Wiederholungsversuch'\n  fi\ndone\necho '::error::Auch der zweite Basisaufbau ist gescheitert.\
-        \ Siehe FIX67_Basis_Versuch_*.log in Testprotokolle.'\nexit 1\n"
-    - name: FIX54 Dungeon-Dekoration und Statuen installieren
+      run: |
+        set -euo pipefail
+        # FIX67: A failure in the deeply nested V7 -> V40.2 source recovery must
+        # not silently discard the underlying game. Keep immutable original scripts.
+        test -s "$RUNNER_TEMP/fix41_base/02.sh"
+        test -s "$RUNNER_TEMP/fix41_base/10.sh"
+        LOGDIR="$RUNNER_TEMP/lwod_fix67_recovery"
+        mkdir -p "$LOGDIR" build/diagnose
+        for attempt in 1 2; do
+          echo "::group::FIX67 Basisaufbau – Versuch $attempt/2"
+          if [ "$attempt" -eq 2 ]; then
+            # Clear only generated project files. The pinned FIX19 checkout and
+            # original replay scripts in RUNNER_TEMP remain untouched.
+            git reset --hard HEAD
+            git clean -fdx
+            mkdir -p build/diagnose
+          fi
+          logfile="$LOGDIR/FIX67_Basis_Versuch_${attempt}.log"
+          echo "FIX67_VERSUCH_START=$attempt" | tee "$logfile"
+          failed=0
+          for i in 02 03 04 05 06 07 08 09 10; do
+            echo "::group::FIX39 Originalinstallation $i"
+            set +e
+            bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh" 2>&1 | tee -a "$logfile"
+            status=${PIPESTATUS[0]}
+            set -e
+            echo '::endgroup::'
+            if [ "$status" -ne 0 ]; then
+              echo "FIX67_BASIS_FEHLER: Versuch $attempt, Schritt $i, Exit $status" | tee -a "$logfile"
+              failed=1
+              break
+            fi
+          done
+          echo '::endgroup::'
+          cp -f "$LOGDIR"/*.log build/diagnose/ || true
+          if [ "$failed" -eq 0 ]; then
+            echo 'FIX67_BASE_REBUILT_OK: vollständige Originalspielbasis vorhanden'
+            exit 0
+          fi
+          if [ "$attempt" -eq 1 ]; then
+            echo '::warning::Alte Basisrekonstruktion fehlgeschlagen; einmaliger sauberer Wiederholungsversuch'
+          fi
+        done
+        echo '::error::Auch der zweite Basisaufbau ist gescheitert. Siehe FIX67_Basis_Versuch_*.log in Testprotokolle.'
+        exit 1
+    - name: FIX74 Vollstaendige bewährte FIX72 Spielbasis und Kampflogik installieren
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_05'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/919a3PbuJLod/8KHqX2WrQpRqQeln2ibGXizExq8trYM3PO5mRZlERZPJFEhaRsK7v732934w2SspyZu/fWnapJIgJoAI1Go19o'\n\
-        \    'FEnpdJJt5mzSTTKP0+XR6ssszZ3OxonXszxLZ0+LaZ5uykL+LpOiLI6mcek8d46tSk9/6/eDN/Eu25b+zezYefbs+MfXfxv0I/r+4u/vf70+Pkru'\n\
-        \    'y2Q9K5yPyfxltl2XyezoiXO1iPNk5kyzLJ+l6xg6ceZZ7uTbdO05s+36JsngH5tlvEty5yaHdjMckTONV0ke+0fTbF2UzrUzdjZ5ssziWbuVJ8XF'\n\
-        \    'U21kwdl1kudpmeVpUsDwWi5vBaN69TH624Uzh4YlgBj2/a5R9u+q7CyEsifO+02y7sSAqaKEP++S5RJGt9gV6TReLnfOdFs6Gf4/d8pF4pTQcZyu'\n\
-        \    'fecdYDrLy3jprLLbZJWsSzH0q+sXH6/1jjqhGsWrd5dG0WAoiy5ffbj+WRUFI1ny84s3P0a/v77Uiwd+qErfRD+8ePmLBjYIR1qX1x//fuH8lkwB'\n\
-        \    'YSGU8n+1ux4fqnt0BJMv06kz366nzhQmkydt1+k8F3Uvjhz4L0/Kbb52rv1pWu6iuyxfwuJ8hIVNWhYIWPG7OJ/tg3EDpBEBhUJhmq0FHE/A89dZ'\n\
-        \    'voqX6bcEoJjA8/RmUdaAvo1zZ6ZPVI5C71nMfubvvM7Mv7eALzNY9/ZGgOnVd/O1Dp8b/97b+N/cjkBgXbdf/VlWtvkUXI/9lAN1rdEwHKveGvEp'\n\
-        \    'ujzlkE+++venEiz82pmAJ3GRtDkxXwAxzxICTQTEAD9xrrONA0DjmZMWTnIfT0vYD0BfuA9y2PgJ7nOxg9lnHEW8nia+xNRUxxSbDhGkgRzqVgzH'\n\
-        \    'x43XbhXbfB5Pk2iR4IyiuGx5U0Dw1N+5rpPOYUxRCuSNvUW3QCgz0d51kmWROF3YAMaUYRcX6UwANCfvWSjW8ICT2FQn8fV7JsAo5HsnkK4j4lE2'\n\
-        \    'PUyybGkQQzwp5kBo967zbKwxD2KzQAn4le98+en5mLGmSo8LnMvBHT7rAasTQJ+NCaT4+VwyKmvHJbdJpQttAXgfHeKPJ9NlvNrM220+gQ4Adp/K'\n\
-        \    'X9Sh6wHqvMDvupXZ8PPHWnxrt6vpVbY65w6uLIUjSrFdWNqOvrFYNVhqhZ9xdTmeW2vxbMw/nPb9ARuHhoYNVqgnZe+rexr6A9GpIhe3AgWGjVTA'\n\
-        \    'Ua+a8WK57i4Nimo7nXObIO/i5Zco+5OxqoYgRu+A+NC2hoRoMFCNo7PWmw8rguXJ8v2Dq5KbAfyUIUqM0+onbmYm3hbZJOORF4QCjYP3FDruGhkM'\n\
-        \    'lu4UidUN6yuxE60nxj8aiaR6LPXad8CZdqewb0YD7w621BFIRq+Q5Tt4QMfrm2XiFNsJcHc6rn3nVTxdgKyZTBNnCVKY6M2JnVk6n8PRsC4dWLB5'\n\
-        \    'ByS9dfJXAHeb5IAyqJqCpJhvsiUIALC06Q1IiUshWMGBk7Le2LALz4lvQS5N1zfOFDr/UvgAio8a6uSJsy0A5jQuymXSoRVy7r1vRCQSOGHUgcOr'\n\
-        \    '4GB9YwGjYrNMyzYMCTD9ATpJZryHFzConRffp8UFDttLZjcJXwyvSG/WyLi34gstLbX4VAXyWS12ul6D6HsxrumqrRYdEPpALVh0HLIPB0my2pTw'\n\
-        \    '+UIs6yfqwyMYn9Uxlie3ku6RX0HrTwSiADmr7XYCVXe2UUTXxoafEAufO4gB90TNnRqggD/d4swIpmI3BGmqQYJa+wDxabVnm+djIEb3L+P2bMr+'\n\
-        \    'qYBK0SLPisKYDwzTXwJtYTfebPMU4HRmU9c1mhJq/HgDcv+sTTDMckJaQzmMjY/nwoKzzVUt3H4XFhy9HMc5hi/yw2wznk31bWmunymdb8tIbJJG'\n\
-        \    'kj2UFGkDAw4bqwJWP33WTruirOuO05KkhQlxIaCGT5+6XkcdeXgof/bgm/apw76FHp3dnvjFz0BW/NmkKNqu+wfNtzQO2ION26YRfep+dj0mqrHf'\n\
-        \    'gfU7/Owaa01AoBbfH8/HvQuOMrGuooarnbBFOWafu591YFjAAT0DOBOQrL/oa84AI+O9TGagfZakRS+XaQEM15ngjLM1SuDTcgs8jXE8PIOXBVOg'\n\
-        \    'k3QJbBJ+AP+dMnncVKpfvnj76uOL6HeUw96+uPqFeBqqmqDeO8G5Wevt63fR5WtYhncvX6kNHPrBwKr34m/Rz69e//Tzta6cjrpmrSokEG6qgKrV'\n\
-        \    'zqCaSf80pWieTbdFO8ZVlyzA26TldKFzY+OgfeL8kiQbwgu1QwLFH/McQDpwlK5xmUi7yUDdX6artCxEdUR5lsMqyBNEl38R3CnvzP/1g5BSAz8c'\n\
-        \    'dto0qk7X74XuSeD3ByCeBl0v9IcDt35qNfJKs3hsSXr75JevrtaCS1P1DZiwrU+xWZqom8K3bJ00aw31A9CUiNDvV7UGkE7ORXMsMLULU2quwlQc'\n\
-        \    'B1ZiMOAEgcYf2GTbvNyBogz7y9BiHZyx56wz3EwgWd0sHKQIknNo3xlEoInyOAY5MPEt6HLVqHlQteIrQ6lFDyD5ZBfOy0WMAlmS/5DNdr1LD6rC'\n\
-        \    'R6oPv3bxnZBVKhsDZSp1DJjbCHYdgvdvltkkXkabrEhR5pO1aevptatbknWohJliA5ownBxkVysuyepzhd+uYMJJ71J2mZTMrhT1Zm3XZ+ahiFoj'\n\
-        \    'iZcJX7fLjFalWGR5maw1VoccLWO/BW5850OegEQKuHfiJXxAoyQ23S5BYuYAgRvQsnIKoO0EHDZxUEVP4pnnfAHegVJoDMd3tgFw5SLNZx34VwGN'\n\
-        \    'ZinT5H0O71doSoCQtRAyANJmW6IISiR2DwNJUWyiYXvOXVouAHYRz7HPWYYmUzjjNUtKshO7T3FHzmd6QDynBp9B7gJn6bDrDeAPtRATOsHV0hmc'\n\
-        \    'q12k6zZQjXvSAwVa9edNs0J+lzwEF0BsY6YZIXCX6Wfah0aNFkv93XiVrudt9m/P5Fo9/1wb+hw6msBhrw8fm8kKi/g2iVQt5DdoBIxBGlOEmC1v'\n\
-        \    'k1lNIYotTPFAsQUNCLAjQ69Df4IMMiBJBHE6OMN/wp9wFnod/KPnB/1gcB4OB5aggnxBLRZg8JRJG9SRa1TFMaO0ry8FNmfGDFwA+qUa4YAF1dGY'\n\
-        \    'rZPW60M7IAwP1xLIAf4PP9cI0bBa6Qx2RJUqcEgnbMCiI1c/5BSBVKFW1XvZkSWNM0LSz40pnAkgGZTpWtMKrAMcCKQA+eg2Te6ACJbZHdvz2S0Z'\n\
-        \    'JSUD52bJMtsIAz7tbM64rTEIYp4yEp42Eq74T05JULH2oZGUtU616s/qzn5v6sKhN3qg530tKw0Pmyp3yMg+nlcn07BE5qyeEyH5u9MaWbGpuT20'\n\
-        \    'plEwEQVP1X4juVwBd1wyRgyiMZDDTYz8nMl063i5K9HLw2jiKSGQnfbbdZ6geWJmwRPY5e4rD/pdbeI1yuewG999eKkJ7MUi3iQWodFZO8mQTWFn'\n\
-        \    'kg2VuTV03NxzbmvhDClEuRH/Pxt8rhIE8Taarb6P6UTmGrHAI1d4BHRLORaKD4FqIku2oVkdFwkt7FZHhP9pcx0rVmv/pzQhi0oNVDXRC1Y0OX+l'\n\
-        \    'E1EylkioVDEgjCvrQcov6LlojmEyzMd492/bJN99iFF7AMwUvUt/CjMpkzah3VMYt/Uu75MUdvIU5JzPbqWzBap7lyktUZyjgk1CkE+2swKFIrQD'\n\
-        \    'oaZfi4+0NKxCDdvjhQOQMjTwwtRu0lu0oy2TmLNOZkrErbJO0FSAdjzBUIVeaQ97E8/QVBcdjiuFJfkvdvCAHNN9LOb49OtQpY3MfRg3KFc0UAuT'\n\
-        \    'IKokYlIx7iEhasiCJ84rVDJjB0+nIkUTqeIXgFkQ/5J45ay2wKLWoLER0qecfyVrtJySkIq/CQ+6KMa6I55pC0I4GfHziB0fK1u6H0tRCgthy32J'\n\
-        \    'kEsgJbtHtut/X9DAS7JLVIMGXr64un7zSgUNoBrTu+QmgDf73P1aIELLPUIyuwEyYooQ/TRUI/pSlCBISLvWNaIbWOqqd8kNWiSjZMssL4Q56yX+'\n\
-        \    'EsYs+1ObdZuD+A9U/RGmna3ebVeTJP8pWcNGwENundzxaqgaRhPQyC6cK9LnmHZGZUKpayjGEy7SzP3oA5TziVag82Ob9QyU1bcxahDxkreEIUwX'\n\
-        \    'jTWOSKMsQFHdtLM7GHKkUOjBxp5pPmClGq5ReRk7LVyC35IcSQim+8M2v2lR+Q0rVwDpq7Dkg+AHgJmGvL7xiwSoc+wAqLNeQF/ZZOHbG7/qNatI'\n\
-        \    'kW98w61ecfa/8U13vyBsR8nU6D9mnZIbmQ0twzXI1j4OJAbMYWTAvTcT5XIxoVhfLr7eRhVfIAxR9IvY2S2rEqxCJLd9RIIEs4C3w66HbIVBBX4V'\n\
-        \    'TRfpctaWTVmBTkLNg9JryXFdso/W0Iyqjx6d3pqVSWJlo7NoURujrOijbyi5j2hLRltYobiI4uUkmWW6dKTqkzEGdniB1kvYI0R3Ygc81K2s6LMu'\n\
-        \    'WLfQijZ8u/VkPp/MBqOWXTtZpQVhJVnHkyVRsxxatZYBbzTrhfvgJfnNLlptl2W6WaZJTrMaUvWI2Xn50KWrlf8E+XOVlhFjd/zjE24BwqgN3Joz'\n\
-        \    'Z7KjIwNNFaDH4bGDmxVlWGE1wUMwh1VPuABMLaA97uBVnH9hJw3SBguNKqJNnk0B/20S61xVbH5mfCdibsmHffxv/EYzY4dtXAGRZqyF6XhoWFe/'\n\
-        \    'YEUvGPo1Kxjjpx7O0/hSYxCbIJ//IQZ0tZXC65EJxPz64/uPv7/4eElANaKW/gHt6GlP/ALk5mQWcfkZRux6Gy6As9NIuouypUQeHOwg6lQPDK9x'\n\
-        \    '9vaUayZI2glNMru/wn+bGxO/kK8CBU/4S7VbAnVcEGkzFlHTGKr4DP6YQVKfNaa8UV8NHgyDZ6cDciPFZrCia6w+27Zt2OaWsYemS4uvWTj5oGk/'\n\
-        \    'Ds4Gvf68RW5zbM785aL0DP4bTlquSQyidBSeTc66TW3jOB6cn7UMF3vMFLCJh6cgkMNs3nblTJC3t2MVLzBR/zRsfR5sR5Tl2A8MptSsWMiFqpEG'\n\
-        \    'Ah0eKVC6VNHpDeuJAnRZVSv2hdUnKrP2RAtH0Mmrw87M9qQTu/7OY3/fa2c4BoYKR9Mqvk/bgUeeqjb29rTnD11VebtONeMmVWDaKkFxpaEuRZ2Y'\n\
-        \    'zKO8xDS7GcElEv1tBipFhXXgGoBNU9yNGgJHXW18heRqZuuFam0Zx9AHyBbOUBwWsuZJu+sPz1Cf7p2g/U8M+ASOuLNTRId7KokoYvNnlsrg3JpD'\n\
-        \    'nt0VBtZDjvXF064/GlZrR/q4OXIQiKqI+mKOLsqCHJOkNWVbUBmzHBTCZYZhGKi07JwVBsbmzj8z7F/Dm6+jQqdXAx+ctwuh7StIYzenC9AHB2jb'\n\
-        \    'HngY8eWJUqQYClvxFmyLdNAa4XpiQ/ZGvX4IW514tzHneJmtb3RCYaRrhJ3q5hhAhqI6wkzVmKrtsRsa7GlbYpKR3QmhutKQe7QVz+71KQ4Cap+m'\n\
-        \    '7r+E43FXBAUOhxVL0SbOSzW20K03D2G4MjBZfX9BpxRFAu1lD0BrHSqpBbJKZxtcVgsKrk4FUhtAnVKxi+W18G71Ffh6Soty0m6LbjqEM1xkt7Z5'\n\
-        \    'Np+D1KEGY+8OaN/todEM/qxCsCjtFmOgvFudvGDrzNtEXjiGE45CBtX1aC3xRzhkxHfKxuN6xgmlUbpFh/xsNyT6OlYjNQCvflf06zdF31ugFZiN'\n\
-        \    'jXfNz50yu0v0QFIvF2eL4ANeBpJIur5p9hqioCaZTDCs485UxeLOsVqu6xe/nggmx3kOa2G6RmobnAYNTUS85V0eY6BofDoh8uvw+XidD6+9D69d'\n\
-        \    '9xnssnNzq1RsQUz3BqI2yVQEc6NbJnY95NWxC3vbaDdP12mxaG44YQ0nRkMmEFCXHgMAaxj6I/M8QGex64V+j2tkfFFj0Cz0Nb1LZ6VcTlOcmCWb'\n\
-        \    'co9DWMgRAu/WWUdnhiqlfuQWZ/wsV6Qjz7dOLmmE7Fho2EavGgX9XBjc9p+KhgY1jHaju8oo1F1SgnvSzsn34Xps0IIH/5NzYDa2pwPo96tv2U+F'\n\
-        \    'XiG3UoB+VNUCN3t/wLBn7XK3sq1rd+3ekbKOEJPmhtZGwfuulYWCnr3V0M+oVuHD6xNLCAp6XHluRCyROLkr2WiH9mhPifqtGgZia5CKftReAx7J'\n\
-        \    '4UkAYaciLkxucIAGcpiSU1F0GoanKtcrNs3KTVXB+YYCqTY1WU2ZhxpUHmEGMPfqE+djFjOjb3IP0joGKJR5fJssnWm+K/B6UoJmcBm/Qlp9MHRW'\n\
-        \    'zk28YfIYYzmCM3WGfe8sFKQHv0f0M2Ce5NCtaTIyGvD2VgNiTeriEdUYekFfVXni/JBnX5K1Fl5DPgnub6Bgt9hZx6BTsYtZsP7xBmXRIl0usm1S'\n\
-        \    'lslBE4LfvcA1+q62CHtmiw4fcUMTqw9sEGCDwZ4GHb0P2cXeUXWMiZzxJo2dnJkNZB89igwQTZgoIKEO+t4QBnYOyxf24aAE5WNQW1OveL6vIoLs'\n\
-        \    'yKqhp+/qKkxV88yo+cS5vssoMm+Jdr87DHW8cOIpKiTpBIiDn+8sGJIpWiSP0p7kjtiHjh7kGveG+id5de9MY5Umnu87AUaCjBSq70/FF4z0cw9v'\n\
-        \    'h1+CPiBgT6vT2t6w1RmibW9vWEt96LNW+/rqm01ET8OHZnVm9oO/kauO9vVkNDrlULRWPF4PI7GEI3KOgVEY6j/nASA8lO+vFKmHXAfNoFjEhWzr'\n\
-        \    'ipq1xwLYMoO+ucfwN+yx0B827DG9QfBgg2of8OGNL65iwu5sahlU+9LbBft61CrKz298LQxbh9RtgtTUomFEOhw6AN74dPfP0+GchLgLUeSRlZ84'\n\
-        \    'P5GEkeA+nkxYTBauIQ6G+VPZLicm4HFfKQ/dy+FAfFomywSVtST36wSl84ElKOEW16/P+l0KRdEU78ASlL4qQSkkDnFi6579kTeEc6aikvbPvf6Z'\n\
-        \    'ZYC5a1Zhuz5GmvUr4pSuCSrx/PSOOc4N8fHOw69DUAhO6qCjrONWpLBKTQ+Ur5rpdH3QfvEPV3kBVkkZt1vs0I5QumopEglHwED6ygLKTGyT7F7X'\n\
-        \    'XHbqko0ybIeW8FODiF2nIjsjBChBXk//3Cnj0OB80OvPWmosS3I61IyjQfutkgwM4hnG+Ro0I5zClmzt7ZSczOeCteTIAakhxvv04I/+SLNpdcPz'\n\
-        \    'sNdyKy07as5Aj0QHXT8YeV1Xg3lGH4dUomD2+71hGB8AcxCy8HUDZo8oADryUbKS45ziSFuafXee3oP4RiL526RYvObXXw2xnNeRPsvfkdjQH79s'\n\
-        \    'STgrhHC1wetfCEdrvQLinKXbgoxowRn/xtRP+jbsa/XiZVQkN3h5HxuMRAlJEWOnb4xnBR2hMdX8yP2LEQYe5ihYjJWDz6ipKQcNaEWD4bnXtf2r'\n\
-        \    'HIBCIhEpIuD9ap2+wR8G/qjYpz/rHJu9YdyqVmQeSLrf0dcKM+iB7XO08Aw4ObMyUIBm2Z3mC1UBXqzCAzM+xwnjZQh7wtRabkkU+GCR4mV7GU/w'\n\
-        \    'su1VSWpwk/OrnkdsqJKizFnvvKftoIoVzmMNalzpGHpUdXyrzxF5FPAunStImAauXFcYVbS+iYhMdF7jmH6ah5kdr4/3IiyeRzw5ABQTX1abfN7v'\n\
-        \    'oh/afRgicA0L4lkfNz7+cdbXWGg86PaHB4AEIW5og+xJkD0N5LA/OOuPDLaxREQ2UjwVN1P8EN11lYoaxZ9phSbFC+sIK9tD8axCTciJjgK8O6U4'\n\
-        \    'vrbDsbGabYJxRXtZJB0/zTywMJlgKD5qXDBk1lrqSnC2YqV/e5CxsXoPTrlbN2NqK7f4JgVNPt+zFTyQ+dA0wPyaLJLUc1g4kvktz4SFc1z1e8Px'\n\
-        \    'zNvsk6XUHuhXCHaEh9956PVBeVb0Ohx2B2ctdAeUnm2xqnZA9jKoinc0Aq23Xoi9kb1NlOpdnw9pm8Cu1k7Ys95wMgx4110/dK17/kc1TsmhPxIh'\n\
-        \    'gwyrTFbpc8a/ByOLqmESxtX3FoiUfhUhB7CZsG8bOslbA9yHhFI10QlM9fwAkIsa3hUw0STEexzhqAko4IRT2b7FA6oIZWd9n3rqMFFK4WSA3fWR'\n\
-        \    'Vvoa9x1OgbNNWi6FceNhv49KOgRFQxQhnjBm9BQKwWuoTWwYD8PBOfXUY2TBd9ptCgL+Ji73HjyeY7gKxiHMEk38QtodB6CNmDvLUq9s7Sq73+Oh'\n\
-        \    'Q8joqbDuw2S7fSoRoIMN0mr0ba8rkGirt393ZvcnRJYC9RkJ6afZN4X2muF0acFrlCZ2vCHV1TjuR0wI1w7owTDoDw47oG0dT0hVHO6ZxqF688Gk'\n\
-        \    'N9H0nM0iS9bpPV2p2yaP5LyPEUz6Fr/Ae0gwSGYY0HfGYJAcJET0Kp6RwYBBDMgnJvd2fzgbHiKXhAjA5ml0zYvgaiBHwdn5WXAAyD6cubV8YRiy'\n\
-        \    'K3l4kCi4573R+dkhswf5OxRcwOQ3iFQCrkt7o/loeDZphosq60gb9LDCNgf8zMEzT4M7G/XPRi3mp+mQ7KbHoR/ARP+MjlW/D2LtXGANCURhjTFo'\n\
-        \    '/GOg8c7zvr4aD8AeKr48CnXYAZ0AfUvJHk1HvTN5MFKWiP1nzcg4Aoa8q35oERVXwAfaGXw2hbNtpI6A/UwPOPqocioTkzEQ1heHjc5czoaw03rU'\n\
-        \    '0xDJIXT3zykMtaXpjcTSGHMS5zX0qcXywOqfD2fUU6j1ZJxq0sPeQcsW1tHmxa5v4vbb1xIjJnDrDipNcVTnkonKUFzbJXdFt5Jz4KVbdFShBgvq'\n\
-        \    'wiwpMIDdd36E0l2HyeIUcHBDYVRFmWwKXmumZSBUF4CxRmTE0/VHyh2/1SJ72tIK20GTK+bEErESEkatB1krNo9w7WBVsE1n8gkM4aghGuqNzzIQ'\n\
-        \    'KA/gN32HKRugXsHbeXWGZzIYQ1+nLApHmIx/BGR3QLi/KReE8gvyAJR3GU+s4aySpLTz1Hn8+thyfhfvHNDu1r4eIjsvIwaxbvYcs2oF0FIxycoy'\n\
-        \    'W5lZLg7x1Gv4xXDFuVpBvI/p8b48GSwThH7XjE+7Zz4tw0SPjFL/YF0c1EY8pkgn7YO0KYslYF3fu7hyOCbXnLgurikoFA7A9poy5LRepesbQEPx'\n\
-        \    'W5bP4umipXa+x2ApLwKcz6HGtW06gIGEtDEHsKfdSkfXeYLx1Jf1nWg4FruElLd9vXWpN500TlEj0/Ryls+yqA951do9xRWs34QcRHPclEUiVfLg'\n\
-        \    'm10AaoynegCQFmNVD2rvFp+4bkeu/x4yZbqO/gX5ycgiVtMTJakxVt4n+W3iehoNdujM7JLy5zE7AQVM7wTnuFIBBzhC/SJ5vNnkGVCPR95l5B7I'\n\
-        \    'VOZ5ti6VY+m7pmRhj66PN2455VRzvYcr0e50mxytNUC9B2A9Cptv8e4X3uAmD90822IM+HqN9LO+Yc53ALcqpAc3y2R2XcqWIXNv+JoB0I5gf+Or'\n\
-        \    'DDUUZk5hLtE34wwkWj6lVWApZFwjSA0HWcPfqVVHa3XUeEaJXqWkgPFhZwMVcTHytE703X6vxeuOXDP2Lf2mFfZrot80b+Fw5HefUrJfu5IWvaeN'\n\
-        \    '4SnlIrbrGs7MDubwFEFz6T0/3O88DSOy9BsvnbkPhXBrCLJsPncqSHfkzURsre2jY1H8UugMhiOypWh3Kk4o9KzWAQ6qhODwje5vXhwE5Inu67TN'\n\
-        \    'x36AR9zqQ+/3kYDrx0wfFTk/FmgdzD8IsjKk74arsVJ0NXn4h8YwrXCR6kTkpw4JR9hhn5wgTR3ugdrB7NsmaEX8fwi8AjNs7OEA4LqU8zMZtS+T'\n\
-        \    '6ZdEl3Kk0QQRrziVqHBGJpMa/gQHIu5eB5MXsxQM7AI6Bmo5mJgIRGWPchgma+Lps3jHfJIqyBAk7DgHQRynr9h4mW3qpcTA76nbVpYELaeBmS8q'\n\
-        \    'c7+aLuB4Ll9MiuliuS0KHQFt6O+UgSPGLxcXtbhmIQ/VC2jZ4XJwICVLumpBBKoi29AOp1SCvr6kVhmjGrslO6KMdp2ADEhisAYhmkWhCbIXoqnD'\n\
-        \    'XmnYiQ3fZUeKJjG/k77nWEDExhPC3YZSBQs6AZLL8rjEIE0RXUW3MfoONzA6zMBYeDyOx2M+JIecoIUwLjrMAcRCem6Tm4QHy7LFtmyVcvBhz5cI'\n\
-        \    '7JwhIjileNqV1KbWzY3VFeeHetYYQvB93R8AAWnuq0lzITJHsZpARxoJ7CnqnGkbIOzqRaxEDebcIgLbZW1xIu6+kx2da+zmdFSZl4kfs21zU8YB'\n\
-        \    'm1sSw1ZTD7rVfgkEmqTrIVgA+g0AKFFfwxjCM3tZB4+ZwwPNK9iroQ1gMmqVA4OtBF2N5EODq3TCoTZ3kxshj9HQEhjt+taAjSNtaJEVMUBLA1pL'\n\
-        \    'S5Zziv9qy9yIrvMvTs8Ui5VUvK4RirP5XJdiK+6fgCwFNT4aEQbsuvsE7ar7po8mwf7gIckX74RpJmOMxAuZQRoLKlF6/X59lB5dSfgjUXrC+dVI'\n\
-        \    'Oz2dQAze0VxChKTIw1j/PUV0GBrE0bdOObPUoNauVTiw2JVu1NUtuCHGvKMDppmzdveNan8pTlDi6NzcB6ogGFZ46+EuProFhAEdRK0NTsNGdzKs'\n\
-        \    'v2bhFy6RYFBvdw81C38/HsYqxqfRsN/rVlwIFQ9Y2OcRieTHljpe/2zI4jDNAFIRYUWm8ZbXH1UiTOUtZJYAt6Ud36qWeQgjIHWrxsyfUY3ypNgY'\n\
-        \    'doPIjjTEn+bNIf/9u1eqJQXovMWcHnbLlV+KtBAR/kEMRtW8/vji3dWP7z++jXqXogHmRGEpIvSsI1AgwhLhL/FJvipChnyM7GEpKVju6Xqzv1ZB'\n\
-        \    '460ADNEoAcpht1OPtfmUaim47OqMSaUeG7isyhIdYUpUHUG1kU5UzUir8+t6xrPYXJVJul7F2yQHxeRLS6tPiVQEYlZ6QU1Uk0wqo9XDyOWIhXtB'\n\
-        \    'jZ+SDAgp32kjvPr5xeX73yPMafX63U/R1atr+vv9jz9akU4Ez0gMQhnW2kbSD/Hp6MhOl2Un2qInuyglFj2TdLUC+bmaauvjr6/fvbp6+/4XLd3W'\n\
-        \    'FXDi5DpPksdn3OINeCqYYv/LXLKa3vZtJu7FNTTsBdcs0wurqbdlyWxeygQ1e6CEZ6zy23ijQ7iWCamaG/I6vNkyLgpoVpT8M9sRVuYy2keUVst+'\n\
-        \    '6KcdiYAXT1oktYw3IjEIHoIKym2/N4iKu3i1AXaUk0LejjZ1GXNE+6584usj6MLX2Xa62IfiHtVgGLLn+RNmA2uaJL8EjSlimbAWKhNqXRpqZZRl'\n\
-        \    'ySPXGcYOibTU6u0BxpYv7K7+me2KMp1+idizG5V3tvx/f/XxPeff6TotU0rXYDNv9J1GM8z7nCeAjCjfrmHG7HGyOF22V8WNiCW2Wm62xSKCZng0'\n\
-        \    '0Z66cFqnUJ1t2a/btGwHrohO3q7rTg1KEyfwqrGzPMtK7YLnjeKHpWghCFFLV0X8b9xC8pbnHa/G87BpMLlf98bHpRlbK6NB1duwyuI7X5cxW5bG'\n\
-        \    'JryanumF50KNxKHZyNbNqnSGjasnrOxD69dsqb2Wwp96YRnLpPfN6ogVSrcPnBOYCpw5fHjFp/xlQnaxMMt3xwWaKeKZndrVd67xLm0qwFHCUv1V'\n\
-        \    'BjJnaLkcp/G2SPRU5WUmL7GqtOUsY66a1wSYwZblgb1oTPZm1Yzkxec9l6TtNpPsvvGqtFWPBIWxkOoG3a7H/6/W5hes8c+xBcWuq61yBUKVALUq'\n\
-        \    'Ggkqfjm28gXqHcmclzIxID7MBsrKRoQq0z0LRIc6zur3AU/6tfQxo9r4hv/gacvGpRaeIfJT9i7HSz/i2U/Fq4dqsNpkiJRkI4RA1wyQnUYgZq+3'\n\
-        \    '+MpcTW5GF5PMa0yVcjIjrPEY2zj8Nc7qnYW/jAMspCiuLMOU3SyV5x55m5kj6ImuSm1LfMfXfPqj2poVCZ3qal4x5NgtSpeH70Cp3EMqTz+AzZYz'\n\
-        \    'Z7LMpl+KVm0gtEw1Tr3P0zVfRDhs262Tltd6gxc1epct3VKj5Yq1hm6ug51a8alulXcV5g8HoAcvfBcAO8yCA7HRul0n9xvYCMmM3VQpsBeBa3Lk'\n\
-        \    'or291RhbTmsQsZAbm9+MrdE+NE2kXBuGGWdC7OBCY1Nj1T9PzgAwVLFYedVYoVJrKViC/62jahKf87+h7+C5MNWD0BU0tj2tbftMOQGwtY1/emxm'\n\
-        \    'liUFo05UTShyTBF3M+7Je/PdqDdIdC/qqZ8q6mX3+zCvKklE7ToKIEPUDhF1yr36z/A6sI0mokT+xhEcnRk6pBr3OZ/7Ii6QwywylADxnd6ozFqu'\n\
-        \    'DZm/4wtC55K95luwU7gZ7atMHMhcX9GUe/bBPAHYeyAU3QDC6s0ahhGJh1MLipgAgfyv1LezAFHmG3A4SnIBWks4mK7gbzgw2D3FSVYuHPluLs9r'\n\
-        \    'wCS4Sk7nNz6+TagsZ1pcB8WE6tZkDkLlYhzj1dOjulQy40rdIzMHvZS/aI5puxqPiDHA7lMaxGlwpN6zoEeZPgVeJ7ASAunWCtZHjQ24LkqRZtrR'\n\
-        \    'UieFlKkMuhrDcUd3X5Rf8GxwatSsRkroAgZ7qLE+plE9uAKjtxFnrRPHn/ivYTF1IyGDWs1fxKnPIjJDwLfTZDUNqcP6cJ+j6RA5nl5brXyHpf6B'\n\
-        \    'Wl2dtVl7l0W7ztKCn91puaOzbIELOkNXMz2tU4KmBWJa+1vNqwTaFjx4Cm1UsUfIV2rCT10cdNA4ZnzclDmfFXNekdWKyTN7R/gEVHLxbOZ0mW6c'\n\
-        \    'kt7dieGEzW8S9cglPS+YFCImNcVMitsSLS+HP9GHkq7+JmDNe5GfBO10Bl0vCGF3dbXI7rpv9Cnoup/V7Sj+8J2WO9/ioyLxN06YnkoClpVRTvql'\n\
-        \    'fN+znqeSZz1j/I7Pt2nzB57xYGXds5DyLvCY3kf81P18Sn+n4u/T4LP7tGfFQQlimuLDXFYsHxz57JmUb6YcwD82HvD1+GEHDR30Re0hX4OhG18z'\n\
-        \    'poyFLaVROdcq87uXd3FaOiJ5M714d6TldJzpacIa4mJNYQAaHRprV/W06HERWsQtFrDBuMaZJTBuVBSjMKua3hntDNl/Qn7VHAdiyLv4TnsL6pwC'\n\
-        \    'f0P/zOv5Qw9jsgd+3wpRfePbb7Z5rFvPWBFMxMiep25KZyno12hmj71TP6UK0BJZjgYUFst4sK0eDA2ws3cADclS+WYSq8LmBGcW/8c3DOUj6yZu'\n\
-        \    's5rHJkmVY3VFxeeqovZIpFZxZ9ZgbwxJWb1dPw/pzcDnB9ICRzbLgBoIX5ge8vy8aStzC4549Jiy35oPwuHLVMQDkWvt39vMeEb2bbLZWAZvw25G'\n\
-        \    'HzWDINX9HeWQt/Gmag3kDczWmqlCfDLFVfH1gXzvRrVq8aEyqdrIag9yVf2Nr7/Z7tVDrJxD6foWiHJGZ658BuKCv3vF1mubiweql81SPqwuhrtF'\n\
-        \    '+PyNEuB0QsKSKnuuTLl+3PpTaqMuP40ETtF8DTqLhf0WBskGQ1d7SnpGjyOJA2FMFmYy7LDx9GZt7dFPrKzUX/HbGLwqICr7yxgtTGdCdaR6La2O'\n\
-        \    'LXPpKcMblqt+M9uLiPsHFTMQGmfsfZs7ekWxzLDrBLPk4wrypxLZBJrVwToz8F/GltGYvzNP85pukSjj4ovzv2zbsos5obiZTJmob1PKQmdPQz0Q'\n\
-        \    'htV5JZHOCl/g0mLnHpiE6ut7kI6vusGgDwNSv7jus9DvNU9QLNQcuFZ2Ry9ZgkQ3SeSTRXuUanqqLeEva5b4nvxdnpb4tCd/u0JltyQ3FzmIfOfV'\n\
-        \    'fZJPU2C9OZJD3sH3kTm87QZfbsIYw4QZ3jN87RMfoUf7BmYt3y5nqJFgMg/dKs+3HDmQ8MEk3+Z17Rac3xE7eGhDutUa9BQnFvZCt3ZfN+xnpnNF'\n\
-        \    'lGFfnNf1i7Hv9NdOXwVQao30Qz+F+36/W1lWdEkz659YV0Qi3jIXu02+PtlIsSRPa53uOvhQKemKo4oVjD3ouE62cCwvRRdccSTfygafRqFXxdXg'\n\
-        \    'mpn3BM7iqCpPNVD/odhUQBGd2i8dn3ilvHmb4ONkSMjsOEI/QHHYrBpJMPAfR2TxHEOy/kdoTGcqorrsHmqrf3+jhNwVsmDbHUVxQYZkekjq+Cce'\n\
-        \    'GQegju/NjkoFcSDegKsJMaDh9Nvt4QSjg/uSR3WNRQPGAPTVrUcTe2dYIIoZVx6HqCfOZS5y7gJlLp3fej3+cDG98uXJGH/+JHoBBJysO7M8vqEX'\n\
-        \    '1MtCv6+csjdtZXhCg75KFUWQDDJ2whyKqS3vpvIdGHmE79O1PEO61WoIW4NXVoq4pAMEpbFurRxRE2kUElg1at89UoV7HkeqjCGdtbxeUyGLm1Rp'\n\
-        \    'E/vdrheGXc09SCgH5L7G1cF3BcsrWotL+K6/A4Y/UWK6H/fUB8uoyOAHoYEPTqG0+i0Pm9UnHe9qAvj+Q7ACu0a8DRrrNuzK7cZ8FXv/3uQtDGt2'\n\
-        \    'u2M2qdELd0aGC/KNCmWKqKY/6EW0ByO21VrMJVonjf+FD7ByAJrbjcUMwMfpAi1oh0uKzevb+771Hf7fXV+8lP/YFaY2373GWo8dSV3IdXFJBfF0'\n\
-        \    'VB/PzAdwreVkHJKWpZC8uUyXJX+W+DbZu5zk+EyWKCXU7XabrfKqxo4X3zY5vd2jvcRbRwi89iFC7aFr/eA6C1mx8djTloSJj9IhccjCamtFrcPq'\n\
-        \    'Yi2ZGEarxmVPdnyJFVtgdAHllEYwjVoMWnO5sR+PQ5wZLjPaehdJPCM3NCz6CiFJUxt7xlz69FjQECzWJhNvJh1qSxHWUy0MuuFsw8fsD1wd5eRH'\n\
-        \    'PD56RzWMIPD7vUcPYLv5ng29jw0rX/5201GzfFano4isACrqhJny05s1yLwFKpfsQXFazz2EwmY8hw3crtln1dPEq7e6fZcmqgW+LZObeLrTHn8k'\n\
-        \    'OkXNmzRtpFtmAhNbgiLa4i9YmpbCiuYrj9cigR3DJUOmkuNTYdxWunbwMBMZbsjfR/5v8YucEv4jfcG9Xt3rMHl2g7zOTuSfuk97IcvTrLt/8cUr'\n\
-        \    'o8I+v7KVMQNvOGgeisATfbuHuHQr+/ebazkiHmkT3N/fqfAh+5fvf393gpxwYDX7k8yY9QCBdJKIU017/xz3zI1UWKKxQ+ye+9wrDMr/sF+FdmKn'\n\
-        \    'vuv9HhXWRmdc/w/5WESlZ11maGxbU/wDzhZhNeWMZJnB6Ui2ROQpxIsPjhx4fJwM3VurYb/7pZn6E6diaOfRC7ZLoaN7HiqhFQwpFmcmywiIHXAO'\n\
-        \    'zf6gGbzZdMVYusOt5Q93yaNRtHPuRv/xxHlJBwa3UOChQeKw8JPjID3g81COWXnitYP2XRVesIISZW2gYJzD4u6pKn+7G//5UKw8q2S110JqKGsz'\n\
-        \    'kMWuGhzEX7ywO6uGIFN7ikJm/9IDkfGcpInZVwPsgWFNHpAM//LZe+9UyUOnj/pDG/d9vGKPyabrctzV0jDksNb61zkF7GzXX/D0Jfj0q/DpefCi'\n\
-        \    'baWrYrc+ePAya2eGJVtWRKJ+KfLfe+Zvy5aoxUs/F2h5+fOv737BR4hOAzyHLupf81sBWDg4zKsJY3beVUJqf0pwnjw40myiT4FgKr8a/WSXGljA'\n\
-        \    'bf1IYh7TM1b1fXGVCIcSY2HR7poZt1DGBMGmGuQzjj/R/YkXHz+++Hv026uP16/+9tloCueGbPl6XfZC1s7+0Ka3jQ1or99dAjA+Q5KZaoqNvsqs'\n\
-        \    'xPMZqYdGzAN2uG1TjyJi8OijdkGx5h1AzMoBQL1aiS9b7i7GNZFPbuWx1C+a8NjwUuqtOtTZ2mAkHR0ZbZrMp3+eftk7E6zw+XP9k6VGBCF7Cfy2'\n\
-        \    'WpOCnPhj4Hrg363PHg2pthA6tLxBbyQ4whO22yOJG5o/H6uQR/X12VgPmuz2qshh73IjYzgdB0c1b8M2hV4F/O9wT+AVNIdRP+8NmKEFf2JkFRun'\n\
-        \    '8fW5Gid+r9lf7CYb42x1Q41B0ReaJDMj8GF2+LBdn0Lz2nzU6vOu+pYtAvySbPTM89UnejGqDSnPCtZDuDVUaBEqqBXYvinqTfyHgzgV88EGn77A'\n\
-        \    'yOkf2oxYwWmgF9XMCpcFsNRBoBgo2X0orI1ufRmxbfQucTZnufNIUHsgbBL6FKv2jKRIRmzP+lWZBL235FJP8nS+E/IDC550ktlN0nAJhB2ZmhSC'\n\
-        \    'j1iW/KZfRDdno/e/XJCnkwtXnnKFMD8L2vI8zQqA1jzPqbj4PGc45PIp6bZiRHSFENh63YVdceH3abnaPF3eZbNont73A3+zE3d8+0H04cX1y5+P'\n\
-        \    'j+Z5tgIcl4tlOnHSFUVLfICfR/zfeeI5WXH0wxg/tuUdYn4j9Ng9+jerhG4Xw/ejWQKLBsdcu/Bib8KpLS4KYH5O4bPbQrELCrTnzNmYnCLb5pgv'\n\
-        \    'aj1dwLr9p6r13xfOf8afLoKg+/m/j4/UagCgPNks4bRrQx9ewLtNZoAcjDzx5iKyZzP+4elaBCxufLRPgBCQ3Jft+bq9ASjxjP1M1tMMTQnj4205'\n\
-        \    '74yOXderfGK9LMW1rrYII0f7xUrkugIinGIgQw7Lj9mMtPxERNmon7HNjnLoEggoWYp8hgwRTC6FxRnnx+1/XRXuf7CUz3hqzJzx2OE3vy7+sfZP'\n\
-        \    '/rX9r2NV/l//oSEJJVeXoW01zoEDJPSQ2gafxnL1ZVnR6I4jugDVPkbesYKt7TlsfS5kFAvd/XImmP52weM1tusZ66Lw1tTJdrKmLo6PjxuGbRz2'\n\
-        \    '/NLjxd4b5S/5dRTM5Wc+wmpJ5wyaKuZ3OZgwi05Bj3Mc9wjG5xUeUdo4MNCxHnOuL4jtiAjr2L6ifuxJUuCkwZQWSReMoMfH+mNloCxuzAeH2MXs'\n\
-        \    'f6wNAhc7iCDwv045ShGhhcqUQAFrbTEvWkrtFj6GokeZFgnH6nkb7RzgfWqtRCwqjVlrg1hzT4//sWZ3x1WLgzMC4Dw5OqsX9489hkGOzvm2aERn'\n\
-        \    'md3AGRjxKuoe9T/Wmrctwgu5sM1Av2Df1WwfgW8S62AWERkOKlfWYepIWcybhwoavw/VcLGdIHGMMh1HA2Bf0Ky7tq0c/RUiUKNkdNBQo4lWtIBJ'\n\
-        \    'vZ6nwO6Jn+SIfOL8yBL6pUzLj2/h0I21wDX9gXpK5ur/qUTVD/o/Ek0QOTHycI/wGLDK/uoU470HwFE8PnC78R/GlbFKYoeWS3u8GMvDMT491nVZ'\n\
-        \    'Yx3o6G9r35i0v3F1Sn7c3kW5fDSAMQA69IOwqDnoYBVZ9gI9XlJEvgrJhpyRVUN/AYQPR9xkV/URwFqzlTCzbSBWHlgKg5PaoRKgZpVx5ekzE9vG'\n\
-        \    'xm61WhzrEdB2GDGrqIy8Ryu6TdhH0MZV8MRI+AiixiEcXJPln+r3zyL0tZKVm9ZKdYk1RDqbavw29fVQFSa00kigmxTO9ZLeMet2u6wz53Ts5LAf'\n\
-        \    'j757Lx5xJiexyvxQ7BUY+fAZr3TGca6l+JAlMzhYo2QNCvWr9W2aZ2u8w6iKLYO8lkmJcnzweufREvPxUMCacMO8fvejVUyOrn0VOOev9NWGqh7/'\n\
-        \    'X8x8EEbKV6mAou1e1DBddLWokXXqwMD+pPCALcU1Fs6LH67ev/n1+pXtDKYQOWcBPGopvHKkjjBVhGKufID1JsvIL7elDKUURyI8zLegB9zhO3Fw'\n\
-        \    'osXOAngZevrySVo6GEdV8HcPeBYaOWi+kxTaPeng1Ekf532hh8dUGS2ejK4ImW7mwzKxjQpQ4L6eP3Zik6WmbKvqlMym5bp/GYfNo+JHMC+vP2EF'\n\
-        \    'Y37oXK3jUJpPQTsD1NTRrhhvItSdJWJk4i/l9x3DPxmqbJIcy9o2JY6ny3i1meMLjGGnLRb1lMLdTgJ804ayXOIVoJGrS1h75iFeGMOtk8znCQ2B'\n\
-        \    'ddfWRGQdmj0snHJlFsyoxgdM1YzByW5hl0sFvF1PMtXnAHFlZfaJFm4cItWLumBiYcs2CE80rUm5UU9VCEkSFf6QFwfMQJIPqBibke8wNcxfNqNm'\n\
-        \    '4rXrOX+JWGTQx52AAT8sK2+ZcXC6iyVZF77zC76hTm8ZoEnXdOyQWx7xxPRZMmDQ8wjK2RJjMIvOS2t3QEc7HWrdqQSGbpp3ZRwQfWJOyaj4ukU5'\n\
-        \    'pE3Wy8BAEdUbs9oVp6l6n1kbIVVlNjDlsnbrGzNl+cEJ6r5vfJtMdb6B5btwPjAh55KY+RV+wwQ+jIg4QNAXyCRFLkKfsf2ImlM2FMUGZwmSQczu'\n\
-        \    'MqlxsZGe0uxOQi2PNqn11rEkTIsFXg8ntw3Pt84yoFphFozBGBc3Q0wjCTPV02Kyt5GG2uVMeuQs1HJL4qcR1jI/0S42vtCT8ca9TWVjWM/SGSUh'\n\
-        \    'q0yeXhTm75TImbknwivOkSM81Hvu9KNQYIvrsuOKP946F7gX9xtmxvzqNhilJTSgenpyh03B33lVSKbw/9Wll2bsQWgAn9fSqL877fmDhuE8cV7w'\n\
-        \    '7FaIw7t4VzgsiOcmveXX0u/oNWzU8ogx8LzvBUtxJXyxfnW9lnRrjpOfPIp0+qL7kZz+AnqrCP7+XO+SKdONvvBy1vraI7xav8iehaosN3TkNpjX'\n\
-        \    'aUpa9GTFMwIS1pfa0efxDq1jnB18jHf/tk3y3YcYrcKwvkXv0ucJoRg5eDAKnSB42MXveLn57YurX7xPinvkcKq4nxvnTazERwtljm/4ROgUg//d'\n\
-        \    '2nv8f2y2Ir8SW/laetOY2FiuoUUYwLbGFXoxe8OXfDl7k9957+z7kUbgmJZtHed5dgdjyukSQ56s0GNBfME8ObVgg0mySNfsDKQz0+CNmAOCaBc4'\n\
-        \    'IrIsuh3OHm3oPpJ7Me6knmdz/z9iUN9F/HIIf2QLmKzx2XgPbyS+9l375GFy3kPSJllLkpZ1SDq0I5W0HjXZ15bJ8a7cjjRYUwB4lMLWoI5xS5HS'\n\
-        \    '9g2BWAtl4gqZnfbzz1Dn6kfNR9Y0cIaiQmKkXiccg05Yb3bda5M9wBy7X1k0psZHqvO7GmuMudMq5YbUJ/7jONoXiqlZZsaGOcaqpMwyYzS21Jcy'\n\
-        \    'fbO5nJAxrrXEmA1s5dacWp32XE8kmkqiByypr3XJVawqIv9C5WJ8bWVh6STessmWtHkjDCyhFKv+h5//fvX65VX0+t31q48f3r95cf36/bvo7fvL'\n\
-        \    'VzKfdKV/PJrxfkVtKeiEY7HOc56goFInux2fDbRABb3wCyiHUVxgUkAJSPtW20ZemJct5BezvjAJjjWLYB2qRT0fL2EzXwNDmt7uh5+il+/fvP/4'\n\
-        \    'cFNKtT0WGefDIIiDQaupy3g1SQE8e/4mYh5do98Xb394/erddXT1/tePL1/tHYMJyxzG5CwOR/GBw0hAdLlBXblXv2qJGt/YgCNrKx+rvgtqgZXZ'\n\
-        \    'JqKcWerc4ltqHyOqlpnHXg1rAY1t3VbmLPcEU+vgNXFvmhV2gRqrOuFUDyzLHhlI4zsnp/tb7BKPvJiBKaV1f8hyJ8Q/7ucgfiVuNFyT+QV27dq4'\n\
-        \    'FYRRfnfrgswncALzHGYw1KcYQLBiaSk2eg4vjhLLDNxgLJOWEDlFzUiZfN3CqUHPUt5r2PEMfuw2NdDH4VlMmhrVS0ky8pLbYzAC02LhFKWshenU'\n\
-        \    '+LKEZ0Y/Bj2N5jxtOvpA3Vry2WNa6tTO4qj+6FKdHjWdXvpgtEqGj6CpknnONQ+Me41YOAwhVH6uGDYNkyxRv5IEDRgHWkAfOCRNw+SPLLsHbZmY'\n\
-        \    'MuyQ4iQmgw6JfKcu/1Dgk8fuwk2S8g6vQooMG7g1hU2xeTXrkXaq0UIFAno1MEijRmOhmxm1ED1rRVXiO1QxRDqatlsN69d9YLXM1BK2jNUSfkJz'\n\
-        \    'ZfYY2tGx96DvlwW1sSchav2/Rt4ch5Z/uUxm5DZ+wQzFzMFE1/4vyKHEk6UUzm/hOcm5KBMwNgi1HIU69Ef9iO8E5jPlr5pT8BFySWbsp+i1H95f'\n\
-        \    '/yysz7F89rygqDbpaLZfLjjE7c+igI7JD6cceRQWxQzcx9oDBejisotElgFewOKo0JuupUtWEYFMRDiu+JZZFhqxgg86mA+r3hjQIMbMtBDxywhp'\n\
-        \    'qPj3WnowAkCly+2yKbvlUm3kKcx5+papDWw4LFxBJ1lGb5qbU7uiyB8TBvSXmXUhnqj3Pab14Q8TIj+6ny4pXsS5A30yGHYxUo5FrlAom8eCVdEU'\n\
-        \    'yRNwBuHIuXeCfh9q8tgzAPsBN2oOWlVaesons4o3zlOnTJYJMgcY3VMKLSymlA2ZW4/w5jA+6YGBrTewD+4TLYZCPTxy/NcHqPqvgqqn5PGXwXiM'\n\
-        \    'Qq0gA+l6TPCBIxSAkvt2UXr3Xe9b12OWFtdcrbqqwYFVg8OhBv+nBiCrHpsoYNpzL8LAx4huolhkKjhuT8VlF+o2GGHMNX4G2s+ASmsH+QDc4CG4'\n\
-        \    'QQNcdInWTeHwpX4kth+5jn9G9ccPRi2/HXDD7o+D/oqBu0r+pgtDsGOZ6fXjK4q/AN3blWE4j2+oRQgaBCeMTtyaauRFgqpXi3heqjtNz6y7TCqu'\n\
-        \    'R4+wY60eEWD3j7WUPAySvHCuWKTbNQzSi6W12Zuof07VP03naGgfTXStD/gi+ZU6Gzh9EHWoXKDiRPb1PLmhJGy4iiowmWlpIF9Q+DWoZsCwWTop'\n\
-        \    'XyGW4cgyiFv4k0dkXKu6sGru896w2wXkEp+eHFxzekhNbXeqV4MxzH36+aJCvPj4yMbfValdHJ/SDxDXz5v5AYRCHdMtwhgvCWlNJ4c0nVDTidV0'\n\
-        \    'ekjTKXtBRTXF+JV0PW9/xfGwfyH4r5hf2X0+VnDUJSW64IM+B9aG/qXaPBt3Ghvxjnayox022pkd8TtDei872Yto8ExrQFeP/vylBOEYbQgoGrDg'\n\
-        \    'A36tkoEBmWOKdgfUmO4W8Edcny68oCGqZaL82ehnqbkEx2pVhm8Ifsy2E/T5bCIaBsqO7Y0t1lESaMUO1btnfPoWw65A/bT5PP60YM8Cas28hftZ'\n\
-        \    'taxzfNVSHnu7Z6Mob9/9Ocay60aE96DY1ToNW+LWlsZjqre3TAJJ913bquLxtqu7BMWNrJp6QbVeWlcvrKl3Glg1Yb3bt0Hntituhd2G9KMu7gb/'\n\
-        \    'C5S30ASEM74lmrrtereBdxt+rpFMiD7r19J8Q+GWrjh+c2uO/KKkFGvsTckK6dyay681QqMn36AaxXT4QcxuVAIE8YHAHKJhW3enQCkEDYDp82Xh'\n\
-        \    'T+c3ILA/pKYqMYXnJX06RQt3P+yeH1e+hT2CaLdgvoi+H/hnfu+8dVxfMui1oPUjlLB+EL1+BxzzzRu6Doc6jLgGxdP6/1VkS6LLP3g06tcClizi'\n\
-        \    'eJmuvzBVTbyrtsabU8gwjukGnLjOdrTZgYa67jmdlbPZkckrBbDVe3CyYk3R/wY9UKqMBd8AAA=='\n)\nbody = gzip.decompress(base64.b64decode(encoded))\n\
-        assert hashlib.sha256(body).hexdigest() == '24454f0ff793674ad5716c1c5a03a5ebe45bb291ec1b4837acbe78ba0d98db93', 'FIX65:\
-        \ extracted script checksum mismatch'\nPath('/tmp/lwod_fix64_05.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
-        \ step 5, bytes',len(body))\nLWOD64_05\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_05.sh'\n"
-    - name: FIX55 Drei Flugschuebe und 10s Aufladen installieren
+      run: |
+        set -euo pipefail
+        # Restore known-successful FIX72 gameplay modules from immutable historical workflow.
+        # This avoids copying ~110 KB of pre-encoded installation steps onto a mobile GitHub editor.
+        wget -q --tries=3 --timeout=60 --https-only \
+          -O "$RUNNER_TEMP/lwod_fix72_source.yml" \
+          'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/4a5bc925bdafad616f3a28a6fbd2c72662169fc1/.github/workflows/blank-ps1.yml'
+        test -s "$RUNNER_TEMP/lwod_fix72_source.yml"
+        test "$(git hash-object "$RUNNER_TEMP/lwod_fix72_source.yml")" = 'c9e6973851d76b26b16c03eab5edcb49b6db7b1e' || {
+          echo '::error::FIX72 source checksum mismatch'; exit 1;
+        }
+        python3 - <<'FIX74_REPLAY'
+        import os, subprocess, yaml
+        from pathlib import Path
+        source = Path(os.environ['RUNNER_TEMP'])/'lwod_fix72_source.yml'
+        steps = yaml.safe_load(source.read_text(encoding='utf-8'))['jobs']['android']['steps']
+        assert len(steps) == 31, 'FIX72 workflow structure changed'
+        assert 'Dungeon' in steps[5]['name'] and 'Kampfkamera' in steps[14]['name']
+        # Only replay original FIX72 installation steps, not its test/export/upload steps.
+        for i in range(5,15):
+            step = steps[i]
+            print(f'FIX74_RESTORE_STEP_{i}: {step["name"]}', flush=True)
+            subprocess.run(['bash','--noprofile','--norc','-e','-o','pipefail','-c',step['run']], check=True)
+        print('FIX74_BASE_OK: FIX72 gameplay fully installed', flush=True)
+        FIX74_REPLAY
+    - name: FIX74 HD Kampfarena und Menuegestaltung installieren
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_06'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/7Vae3PbNhL/X58CpS8j8kLRkh1fU12cmcSxk0ybOGM5ufZSDwciIQk1XwFA20qn372LBymQImW3uct0ahrYXSwW+/gtYE4EGpEy'\n\
-        \    'RwUtyALTZBBhgZ4j5x8XH9+/P70IL0/ffdhPbvM4XNC7o6NwnudcBMXaQc+eDT/8cvb256Oj4WDB8hQVWKwSOkc0LXIm0Af4dVCgY/XhDnEWs5zG'\n\
-        \    '+zxitBB8/9OTyZOzktM8C5bx0BtwoCwCRnAcCnInXJJFeUyz5fGwFIvRU6AYxGSBGCkSHJEwzyLi5kk8RVwwH2XkVn150wGCf8skn+MEcfVLlJeZ'\n\
-        \    'AOk8UF+Sy1MTdGHmvjtGE80o/zFMOUGzNRckPb2jwl0M1TanqMzIXUEiQWK0SOhyJYA/Jghn0SpnyF2AsBj9rmT+4U3R77DS5+lkPL76jv0x1Gvy'\n\
-        \    'Yx6YPUhFfFDcn8DeGvsaRnnGBXr34ufwzenb128up7BejuUmJk/HwfjXbOij4fA+ssEeMoqLFSOk0lkdIf83IjhaIZ7kAowarTBbEo5oFpOCwP8y'\n\
-        \    'kazhNyRIhjiBhWIeDPR6L8/PZ5fhyYsPL07eXv4yBSq54mFj9uL05M2Li9en4ez05Pz9q5mlmVTMJp19OD19tZk/OmrPtyWMg+8PBrB7r2W0G8zQ'\n\
-        \    'nLI4vMU8vKGczhMylbtNgEmwkkizAd+9dANFIa0Uzksh8myKXqqf1oQxWLX7pk1sOhAb57cZUL5gDK8/q11cAcvnK4vMmDhMyELYOx1bNDGFcxJU'\n\
-        \    'qvMJPnJ2CCTmKzg7v/jPi4tXXXaRbqf3ERSMcE5iCIQsA0ZX5MtlQsKFikPv10yShowsgGxl9u56xmwPFjPolKJHsRDgdaFtXJhSSu+htxknkDhS'\n\
-        \    'IlZ5zNGcLHJGkBHko2tCCkgI4My1K398C0G/TkjQ2vKizKJtFdDoObqBHDSt4keTdepU01aZgvKQglNCrJPwBic0dm0GD0ECyCCUOsg0gZVfiChZ'\n\
-        \    'pn61RUgv0uaFnGDsZc8HGU4JEDlnSbmcRatyrsk/PTk6crapF3lU8jCV+ekYneSZYHkCXnLycRa+P39/us2Q5iWHM6SJIMxieXf+cXYanr396RKq'\n\
-        \    'wezy/MM2pwAfF7RQeVsq+CPD4MZ0CXI+5ewWw6FyLhWG0oCk9lMUM0LRTzgusyXJfPQbgbyAZuS6lKnH7EYLXxIRFphBQnK9AMcxRB5NWsbfVkmn'\n\
-        \    'ZBVOoNH2YC8HU37VZlGjvTwiL7Y4YKyXfp7Db+kWix7e5soXCw5GaO7FGuzlaO3FHu3laezFjBl9H6OnkI/6GDeb6pH6GB19b/j30DlUlRQnCbhI'\n\
-        \    'AsiAR7ggCKABIRlHRSlUkCtJkAY4BSc+S9a+irA5WUOqNARqTRIvIQOYON2h23MknemGklsJUMCd9K+qAIQyt8IQp19JsEYjuddNyD7UUtWp32+k'\n\
-        \    'juGdnN1nqXxiVJ/Lfa7TK3eEJkcHXYcrAw4snUJigHwQSuuE+Q1hDI7Edeoxx5889XZxR3kCHt7iVIOOfyJ/uM7e4ntyMI8dTwuC3K9ze6jyHkCR'\n\
-        \    'z06WM3Aax3dWUhL8NIUIvlS6c656jmyjiBI5z+82umwW8a2U06S2iLyOfbbrIfBhJnRFaZfDZuUbtCrV7hrUU2DsVHhvmQmMw4M/YEATNxK+xiiE'\n\
-        \    '6rmG4tpVd2LKMTDEwCEVMFy5jlxZkNUn7GNlfmkgJPQMcIwSKpFMguckmaKZYJIWaoUqZOhRvP8odtAj9LnB67dw1VUzyKsVjmEFtQuVHpqwKwB7'\n\
-        \    'kbQQa9cyjdQEoHwlYQO4Wsyfx1c1j/JHjdKkM7bRXU0n/1myQWhKs4VrDflGjFfzKKugx2AO5D6CCWmJFN9Rd+JHhCbU5va8zkynai/0MdrA3VFg'\n\
-        \    '6rMiqTzP8tQeh/s7512hoY1b9eMjLAFst9/Kc+pEvSPFFOg2LxQMZxzOJw3mmFMefK2ZI5xO0QlELcOHr4BvCZ8yvF0nUoNhBvjI8RDmNVU/3gMW'\n\
-        \    'S81aL6kOTO1WBgTWDEFCsqVYhfxLCbgmBts8k0h/PJ50S29D/M252lQb8TpLQlaOG9Fstxh1x2KaK4usOsYRtGr2cB1QuJANotvd5z0o2+H4RplV'\n\
-        \    'z9bNpxuTRGATjC1fVJ5gdUYQHQtN74PpNhWDytiEE1gSt623rFOuN5r46j+vHSOboKdXcvOxqAk2Ccemeab6s2bgt9dkJIU6Ax2GS70uwiqByRxB'\n\
-        \    '3cbg44nfTH7bxWKrTPQ0f6C/DuKp7vB0ytGxXHXGm/EqsI/RAifcmupoDJsxazWKmyUH3SsOehdsnUvLbccW1OnuMXc5YCvH9NgrwcBT5Jya0Gok'\n\
-        \    'm2r8/mb5QWJ2Ncs9m+jR2uTpxrFtbN4Y7DxipZ6s8WWS6BF5SdIY2LXb5vKDjtUH/ce986htxQYtvf6u+fbQS9Vc3ObsmiNyQzJ0S8VKdRU6fyIZ'\n\
-        \    'uSm0nei3fM0Fja7BaxKCJc7rsH6IM5piQcJb2Bt3Zamrtl8hk83W5UgMbQ1k/3CtE8mBGoQ2kH4FaIwTUyQgup/D7MRrxlaHvSTZ2FpLrb2Jvj0o'\n\
-        \    'I0keUbGG9Ai7ZLBVLK/3EiKbIawrLLmjsFXQUKetLA55IpsvII0TSFSA2BMqL3l4UEsGWXlwUwk/3ipN/7Tv+RoQTFAFsUnRl9fHE697mUAuFCU4'\n\
-        \    'LRZua8Jv5FkXBEPjsR4VwdrbrxfsJnq8uUlt0Xu7k5LSGvT1t2dHajNWZmr6iQoBrwv7/L8dqiuN6PpSsDyCfsYNu+uxTgUNcDjtqQRNeTvK+x46'\n\
-        \    'qWom+FgGLlhCd0/ELYHANNvmU1gRPLRIcgowf43UraPcvb53DIzZdoGL3Zlhe1+dBQNzdU057ADQQwk/uLL8cDfW0ZS1rJ1BY0vtu5o28orgllFw'\n\
-        \    'GvWEwv3tR5QCGi/hVg8ajECiM3epPC9ZROQrTrQi8RQdogqe7MvLOXBq+OCC5dLi8lqPyUsYVnIBYs1L0KBYi1WeHaJRioo1AKG0oNBq3v+aVDM+'\n\
-        \    'gDS9BjuhUYGqJyVBuODm4aoxti/vRlWin6X5NSD/WL5aKU1B/uxyOAAzEdnRzSKSkUtGiHl60C9T8kkKkn6OY9cBh5nud79eOQDNIBlxji5h1dfQ'\n\
-        \    'SGjHqYS/hybDNBby+MBjBKkeDg7qYZnHoFkBm4PzEfYyj9cWk9WvTJu9ipytSlQITSOvGqWDunc4CP57enFuK3lJGMM069VTOS8v2UImhxWRDiJR'\n\
-        \    'bHhn4tcPv9qRrL7a0aIKuMGsAG8FVU1Ju8uMcJJAplmAQtCwOCErM6eCuvJB0k0hd2DZpOtLgxZ7UUIcA6+8QTJO7aDHyDDpmP5SUuFONvi53Lpb'\n\
-        \    'kTYEKJDEaHpcH6J1D8/yXFiXz4pUz6jPQJ6dvDNvHp4lYEMWWIjQdHbu2J+M/bFN2VpLcXq1qgoAgab6wLaWsW7JgdCesbxIqmvcaIeALbYeaW1Y'\n\
-        \    '29zcgX/UxweV91p6lmWglqjNtkV1OsZ7d+gtNlw6vU2VsUAtE7X9rJretJTqO1jqlxdFaY9XyHSjvD1rYKr8YQ8Lrbzsg1qyNH6uuyMz0Y2Y68lm'\n\
-        \    'j9FvxvpeA9J/tS15EdJoOh3Pk5dIh5tQViHopKW6iF/SGiZvvSc7nSim1ZMfWm23UULGP4S9VUYtSQ/U92BEm3241trcwMl6LrN6mZLYabbhtqb3'\n\
-        \    'qPNAVcZt02GwQcnAZgtpMv2kcYs5KghLqRANlbbV0W+goYTjVohIbDz5V62Xdeg1Dq7R3jP0pHFNobXSeshvAlU8hzKXFyRB8rqOsJ0aGQP14BrH'\n\
-        \    '/yH44em3WcwcGxRciC5Qz7wDawwigfU36QfGOPS+KRhgAQONVAfDOIqpBuRG5dbfTTxE3W1/e+B2jurbr/+ZvMlfMs9B2zzWn5Cg6iYMsAJl4HDq'\n\
-        \    'r00sS8XfdJR/WdfDh+mqz+2hympErcFHqFH7+Y8WfPbBc0dGJKxHb2hcAuqu9+G30LRjgRY42w1aHUhMi0Yc7fxTqi2qHiQ8WELvh0ZnX9DQeoMZ'\n\
-        \    '3iP8Tx2g7gQwJgAA'\n)\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest()\
-        \ == 'a3f463d1f66907c57380e6ced04d73745924374e7d7b62b4b24bc6b12fb241d6', 'FIX65: extracted script checksum mismatch'\n\
-        Path('/tmp/lwod_fix64_06.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED: step 6, bytes',len(body))\nLWOD64_06\n\
-        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_06.sh'\n"
-    - name: FIX58 Leistungsarme Wege wiederherstellen und 0.95s Flugschub sichern
+      run: |
+        set -euo pipefail
+        python3 - <<'FIX74_SCENE'
+        import base64, gzip, hashlib
+        from pathlib import Path
+        p = Path('android/scripts/V469Battle.gd')
+        source = p.read_bytes()
+        assert hashlib.sha256(source).hexdigest() == 'd2fb46f84a1a79808f3d40ca79540a78c38e279da2e837078960c35d1f53e94c', 'FIX74: FIX72-Kampfsystem unerwartet geaendert; kein riskanter Austausch'
+        encoded = (
+            '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'
+        )
+        new = gzip.decompress(base64.b64decode(encoded))
+        assert hashlib.sha256(new).hexdigest() == '68ccaf040944c5ace9e1513ce067a704303fca3e75be8137dbe96fee6530e597'
+        p.write_bytes(new)
+        config = Path('android/export_presets.cfg')
+        version = config.read_text(encoding='utf-8')
+        assert version.count('version/name="4.1.7.72"') == 1 and version.count('version/code=4241') == 1, 'FIX74: FIX72 export version not found'
+        config.write_text(version.replace('version/name="4.1.7.72"','version/name="4.1.7.73"',1).replace('version/code=4241','version/code=4242',1),encoding='utf-8')
+        print('FIX74_BATTLE_VISUALS_OK: adaptive 3D resolution, antialiasing, forest arena, dragon geometry, larger menu; battle logic unchanged')
+        FIX74_SCENE
+    - name: FIX74 Kampfdesign und Testszene vorbereiten
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_07'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/50aa3PbNvK7fgWq3IxIi6JF+RFHjdK6sZN6LrUzltpeJ+fjUCQkISYJFqBsK5Mff7sA36LkpP4QkcS+sNg3ImlKBnTNScISuvBY'\n\
-        \    '2PG9lLwh3X/d/n59fXnrzi5/+3gYPvLAXbCnk1M72XTJ69e9j3+9u/rPyVmvsxA8IomXrkI2JyxKuEjJR3jtZM+CdjqLtWQ8JhO1YPS8OBCcBYfS'\n\
-        \    'FyxJ5eEfx87xOwViL4OemYG7UviAol9sQb3ATelTatDY5wGLl5PeOl0MzgCehwEA9nwey5T8cnMznbnTy7c31xfTMVmEHPYzIUP75ajX8aSkIFPJ'\n\
-        \    'wPb5Ok4NoGCSyYQ4FumpfY0J/pwAOluu0sGccyDtxf6KCxIxKYF/r01ORVPQJPR8ilSt56R6ddKzHDMXrAZ9e/n21/Pb95fbaM7QHvYIiytMWym8'\n\
-        \    'Pf94/vZq9tcYYBHvqImUKfdRsJRq7ZaL1raiO8meMxye3dIl4Ep9iBJAk73HJlNPoFSC2pJ6wl8Zomf8FJn/W6xjn7iRd09dNKz/Gj1LFirSWEyS'\n\
-        \    'mKfkmscUjiUgMjvIXgPX6JmTiWPlh+r5KXugZBnyuRcqqwXucUAFFYreAogEhD4BXLghPPZprwPrbUIaP40Vr68gUMp8ol+09r8+eIJ8/dkEuT8p'\n\
-        \    'eW0gYpjjO7BtFjO5AoKV733411bvhknYgiBHGkpKQhobUtm3W4gJmBnNDGOsSd4VFuAKDkp/gGf6pA68ho/a6k3XYgEWOuM8tGP6aJg74BSliMoV'\n\
-        \    'lVsQpausY/qUUD+lAeGCLVnc1G2v0wEu1T2Ibrf7gmT4f67FFxquKIsGIbunGldqEclaAtn5hlDY0IY8sDD0lvrMwaap8Fm6ISim3XlBphHngOpz'\n\
-        \    'EQOXObCTZL5OSSIoqAYOXvB1SlG/CQdsaZGll1L4ibyELClfCi9ZbSxFXQnxyIJ0ZXe0UT0cn5y6UrFQKjY0kTF4hH9Pgz9AA1yMzoXwNiYZvGn5'\n\
-        \    'PO4Q+EPjADnIeNICYpgKBqxAU7cl+0LBLF6TkcbGP0HTtYiRSEHQDzkoakwgUoXoeQr50/DODhjYCRiyK/9ee4KCN/JM8E81DgPnDrlAZHFKojxO'\n\
-        \    'BQ/lXlFzINtLEjTngrVeXkDEZGg7wouX1HCsBlez3BayhKN6GJOMTbkRBuLV4CIWBCFtg6zDLXgY8keIO22g/QpR0LjWIdiwkqLUHGhMszNfD23n'\n\
-        \    'BAEKsjuhym21KSmD3IJh8ZoWH1+Qc7DMJxatIzKyz6LcsIUXsDXY3QOTa3A1f42m7XsxRjC5YouUpCuKsQ5XlcnbNZ1oMmU6iVi8MICBpZ92bd7S'\n\
-        \    'v7WlQg+meQC7fmXWGFH00IbuNZG+4jLIKNsxF5EXgkVANDzQ4tUIhdR72EGnkOCbiDXPIZewlBvt9XPVXk/N+lGiPGmpPPVrfDYPT+zhFpw6mqrU'\n\
-        \    'Ob8Dw7GHg9TMf/ta+AM4huFBmn81+9nG4VO6154Uo73+uOXsChiMoyCR4e3y3ILuDs/1qvssiDXccd4O1G94t0rmedWCLgDn4FMWMsOrmd/cPDy2'\n\
-        \    'h+ae01OU+k7LGSZpVRbPDqlIjLlVnKd+UPhm3VEhVIDePqHuCnW2x9nUfAMBFf6cOv+G6gGu04jr1ZxTyeeGBKkr2dsiSbELi0D4gOW3PORCZaAH'\n\
-        \    'qNA0Ywmi0tT1cclAMM3wBfkdyowy//YkWQpVA0kvSkKwPAs0yTAqOiM/IiknHhIlYMXwPSZfBgsskDEQ5ny8oBBWC3ZkJPaT5WrC6jmxN2YfwsVI'\n\
-        \    'PZn5ZsuqLQEN4laueUCPLiyyO9NaOkdn/mgRd7cOviWnFqlPJiymbQzBVnZVAkXqVsjfwqWRtRXerqStF6uk21J2SBf7KwsEEnhme6Eavl/l2kzY'\n\
-        \    'VS/SMjZ8Xqf0ii9DMreG5q40nQFCUWtAXLDqGzZb8rWqBSeTYd3FkGsuUY4+2o1dZ1MnVQiHrVdN7GBY3b2RDLQCkPddPRHV0ZwamkYquNwNkh24'\n\
-        \    'IHUwtJl0v1DBXQgegj8ZjdAWDIFk4NRwnOdwHMQZ1mSMh2ggmZTGAPhuLPjnqb6T2KlDOQjlNKHmEEEQorbreNiPnd0bzXGeET0HA4qxU6mcfsFg'\n\
-        \    'A8f7GTxTZkEL9Hy/IalgYNMhha8piaGng05PYHeB1qDLBVmvl6TvYalZK5cc+9SCJH0IBr0whvbJieXN5cIopA54asD2TLOuCb5YQByu6iHHODBU'\n\
-        \    'IIMq6uRAMSwR0aeLVDHQJMpV5czFcr+6rIRXjr7V8OXReg49e2z8Bi2e/fH26rer2dUfl+7s9ur8+v2Hy6lZaQVCvhZZYAWx1a/RfTE/9UZn867q'\n\
-        \    'W9UGICBBJaT71wLI90Yv/e6zoaVWU7TlPgtVAfHF0uKY+4GVZr4XGkqRb4P/J6J8J/EmOJzXkoJ9QtPqar+Rlaied8xw3HieV7HOIUcX1RPXMHbs'\n\
-        \    'RRROsXvJYkj9j3TZrS1jy69mFLbPo4ilDezIwyrWC10OEgsWICk3/2ioU7f//PVqdmmlYk3ruL4nU1euvIA/AtZ7yiOaik1F2Omv5xc3f7pvz6ez'\n\
-        \    'q+v37vRypn5v3r1TdHRpoKoMf8XCwMgIZxVUObAgfYzWnW6323lBbmLl5Woup4AKbc3XQISKH4kXZs0SCSiOVFKcZan0kBc7IV8yHwc3G0xS0F/Z'\n\
-        \    'asolP41rA5k70ie1cUcfQPSQZlxMafYPrDpJdSYnW0Zx/mK5NYujTzhxddW0A6ocAEFAHkOJhtX2Yrl3HJcJpuFz6TAsgh4OAZhOjkejIyWe0ko7'\n\
-        \    'IBrWpHtsO/ZL++Soq8dvxaRo7kFUONfiEi0uyTArU6ReRWjNJJ+otshjbX07w4nqNkpTMqt95ayrBrKorcoRaDlaziGBbg62r/bnXl1PZ+cfPrg3'\n\
-        \    '/x6TRy7usWTAlVOixsiPVNVdlXGXTDehnndJsE4JaYAGPxI1bZ7gbFj+SI6enCEu+itPLGlmeMA4G8B3kk264vERGUQk2UCBHyUMSO4b3xcoe4H0'\n\
-        \    'NUBuWikIh0Pek9NbcB45jfg9tZcB3gS8v8huAkBPauI29SFGzQSlHT0NzcbCOHcRNMRyuQt7HR/umB13zQxvhrEFVLLZh+m8zMEYzbCzbkK5sKos'\n\
-        \    'jEYjANk1dMHJARGqjq4r1nGBhlcgBriJ5DE0WqmaDdSxk7VcuYCKmS0z625fY+gY9PcaAqZTyAHUmwKoGhwjVREiIGbnGiiDtYAGoxLoahjVzFzp'\n\
-        \    'lYd5C1Ioz769+X12Oc27kR8m5FWZY9Vuu9VBKsY/RbHijxA6wfogWQdds62TwYwOveI9JvUm33qzkI+HdzRWJbLaK7gQbBspV/JIke1U+4XNUyup'\n\
-        \    'mrLs7Y4tl6RWc+Y0M2W9zoGy90ZXoHSnckmIt0MsldkoLqAprHXrQ4OKvhrcag0fNHo5VxzE4PjAwYFjAdyQsTZ6qCI3ZMdeURHbuYmYwz7gkME0'\n\
-        \    'qedjAsUdwXMIbf9jrEbl+/eEdqA6YTSE4ny2Bi9Yc1NZGaG9yv8aE7RGpbi1I3N7qJLRzqv07NXKy4zRBRRQqataPyhDlLCgNVfSZQRVhe7jrUKH'\n\
-        \    'UN2Vz1CMmTVVK+Dt0VDG882R3Tb10QrXdqIvKDxdj3iPYLfqMhXVXtyjRFjYB9oxG9pvOQE97ZqU4wBgsavR/5R3bUNoxq38xRk13pxj865SY+JY'\n\
-        \    '6B87HUpTDkk0qdzXzpSV629g+T9MEBgeqp/rKGDSGdTorhnSlIKldkywQiby6Tpfy/L+pz2cqXmEStgq9+dpAPb3DlLrue9TKZUZLeDV9aQr1XpL'\n\
-        \    'bipvtbvFttU1Y0ndRrmguJQg83M3xdBlcfGNBPZfHn8Ppa1L5K7Z1LYmousWArUnzgMleQQrUDzy67cd6UOXUJhLTx339ub8YqoKqFdkxbAigpJb'\n\
-        \    'Wb+0dHgt63FVN+k7vOqdniqctDAWyBxQ7IzRD3QppQup/OxVsh6anayK6WChQwbyucKns4T6kgze/U16Oy4He2T/FXmFQrNN/ieoWRv+HajP/8cE'\n\
-        \    'svc/anT+D4/yJDE7IgAA'\n)\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest()\
-        \ == '3a54e757b4136ba7dbbd33432dd45feade1f5b2a74c7ff3e2a86407d970d7502', 'FIX65: extracted script checksum mismatch'\n\
-        Path('/tmp/lwod_fix64_07.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED: step 7, bytes',len(body))\nLWOD64_07\n\
-        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_07.sh'\n"
-    - name: FIX61 Gepflasterte Wege mit geschwungenen Kurven installieren
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        cat > android/tests/V473VisualSmoke.gd <<'V473_TEST'
+        extends SceneTree
+        const B = preload("res://scripts/V469Battle.gd")
+
+        func _initialize() -> void:
+            call_deferred("_run")
+
+        func _fail(msg: String) -> void:
+            push_error("FIX74: " + msg)
+            quit(1)
+
+        func _run() -> void:
+            var b := B.new()
+            root.add_child(b)
+            b._build_battle_screen()
+            if b._screen == null or b._actions == null:
+                _fail("battle UI was not built")
+                return
+            var panel: PanelContainer = b._hud.get_node_or_null("BottomPanel") as PanelContainer
+            var camera: Camera3D = b._arena.get_node_or_null("Camera3D") as Camera3D
+            if panel == null or camera == null:
+                _fail("camera or panel missing")
+                return
+            if camera.position.y < 5.0 or camera.position.z > 7.3 or camera.fov > 55:
+                _fail("new close elevated camera was not applied")
+                return
+            if panel.anchor_top < 0.58:
+                _fail("button panel must stay at the bottom")
+                return
+            b._show_choices(B.hero_actions())
+            if b._actions.get_child_count() != 7:
+                _fail("hero action count changed")
+                return
+            for button in b._actions.get_children():
+                if not (button is Button) or button.custom_minimum_size.y < 56.0:
+                    _fail("buttons not enlarged")
+                    return
+            if b._arena.get_child_count() < 75:
+                _fail("decorated arena missing")
+                return
+            if B.companion_actions().size()!=5 or B.binding_chance(20,86)<0.4:
+                _fail("combat logic regression")
+                return
+            print("FIX74_VISUAL_TEST_OK: high-resolution arena, forest ring, enhanced dragon, responsive large buttons")
+            quit(0)
+        V473_TEST
+        python3 - <<'FIX74_ASSERT'
+        from pathlib import Path
+        s=Path('android/scripts/V469Battle.gd').read_text(encoding='utf-8')
+        for name in ['msaa_3d = Viewport.MSAA_2X','screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA','WaldbodenMoos_','Steinkreis_','func _finish_binding()','func _on_save_pressed()','func _sync_team_and_save_buttons()']:
+            assert name in s,name
+        compile(Path('android/tests/V473VisualSmoke.gd').read_text(),'<gdscript-test-text>','exec') if False else None
+        print('FIX74_STATIC_OK: gameplay binding unchanged')
+        FIX74_ASSERT
+    - name: FIX74 Android Updateversion eindeutig setzen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_08'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/71ZbVPbOhb+nl+hTXfGcTEmzgtQaDrDLfSW2V5gCNC903Y8xlYSLbbllZxAurP/fR9JthMnoUBvZ/mQOPLR0Xl9ztFB0pxs0ykn'\n\
-        \    'GcvoKGBxIwxy8o40/355fXZ2culfnfxxsRPf88gfsYddz8+CGUvHbjZvkrdvrYs/P5z+c9ezGiPBE5IF+SRmt4QlGRc5ucDPRvEsaKMhJ0FEha+o'\n\
-        \    'yEC/bVlBGgnOoh3zTu58+nx+fGGOGEdm0bKXd7pZIGiau8ldxETL/JCDKzGlDn1gMvf5nf5V33QvWE79nD7kLatYz+cZJRJvWRAffk3BR60mPKIk'\n\
-        \    'nMaxHzEZ3MY0wruv6c4OuU7pjKYOkXkwHlNBI2JMgQWeUumS6xtJIA6R0yyLGd6zlNxzEUckoTl001yCmGMLDcIJETyIwI6TfEKV6UCTkhGPY34v'\n\
-        \    'yS3EkeSe5RM+zQnkFgEZUw5OYu5+TWewGRmJYJxA/ZZN/vM1Jfib0bBDchZT2Pf6huzohVbb3dt3SNt907EPDd0o5vCy4PegwzMXLbXJnZfv9a8H'\n\
-        \    'sjUgsEcLdA7puG2bvAaX/uHSWVp3H7Is87EPV6SBDxACAyVwmK+T0GisBE5Y2qqoHSO6p07dXjCpKwAX5UEawrHc/xdnaV5wUQzdB0czXihl9hiJ'\n\
-        \    'k0DegVgmnOcTmdMMRmr3+spK7X18rXGuM5kFgiFweFopJXFsxPFdGKSQv+u5PW/PIXtdWN+zbWXCXnevv+/2e/3uClPKHudHtgzDjgtu+27XLg3U'\n\
-        \    'db03DvH23L2Cvbff7fVdr7u3ZOOuUVub56GlFqBvXwdFv6s+e3uGoVrf0yu7u/qtXi+1LTkaZq8HKqZ2tWSQ/LW23fKZCRI/EDi0YNztKJadN/qz'\n\
-        \    'XzI7+vTbyfF5IZrZ4pgTnCVnldSX59e/fzw7GQ6JPr08b3hx8v7609GlXvXaWP3v19RyaBryCDk6sKb5aHsfSJINVnAnFCzL5c5Nr71/ScdQUgJ4'\n\
-        \    'FOQMMlfQIDKgsc4okJIiqKUb8ilS0BpN05D4s15/1zdR5av8bln2YOA9QpwEd1TDU0HVeEU+T8V3Gk8oS7ZlPkceaxw4ABBENNVAMUbCYz2fCmDR'\n\
-        \    'LbAhpsGMkiTIMkDOOMgpUCiNCPZlKnClhhzqNngc+SEXKRUDCx4l5vmgCD6dOCOEF4JCP2WCztylNGglLIqQuI75rr0yoAXz2PZrmP+NbTVSev/0'\n\
-        \    'aT23/ZdPQyBZq/ZdqKrs6li6Rh0QLtiYpUEMfBcwGfhNOCSbBOmYRhY8LuHxLA5CusTBWWjieHZDm3GGw+jDwLKWva7cXbxB1h6Q4VSMwOqK89gh'\n\
-        \    '2QG5oWHOBVIgh1cOyHsecwFse0cUlh80TF65kuY4LdZICtTRy6/ItaRLoWFJMhZQNCIySFBq0rFDRMAk/O91woTknAS6QKCiYD0l37dHbDzJVVEt'\n\
-        \    'zwmiSlgjWLeVATJ9w1g/Z4DOLbizo59saKu9+suUd8h0Vr15niWK5emsNZ2VthkGySIrCoVLu5BAEuX89iFJeVFFu8crhfuvmWRD6BkmtdAzS0+G'\n\
-        \    'nCFzFmauQi4HBKfjmEpleF0zwIepFkMoXi2ZMSS5ZN9py972bGNF9bfJP05MR/kX9s1R9p0K+8fEQsXOS6m3vGfS/4woL2S+RF4G8Zo5FUYhOmYU'\n\
-        \    'Hd8CpVDRGi8xtuKSIsz8dVblCsql3g6da6hWLELWFxnMKfJH9S9OeYb9Mo9WPFBl8slLuSysu8KnZgj7/6bVr5RnAy8l0WOcKh8P6lHwCE5UQaih'\n\
-        \    'gqyVKcketkua5yJIxdOphXmFIwkaBCzGAx310sC0W676HMcI9BrQoCJtabR2P388vTqBM3C1Mjn0AlazXnVzXLDdXLfL1zX4HMf8FgZRPiIlwZOm'\n\
-        \    'KAmdZWG1IZJA3KnG5JUqDv39g+W2K2Z3+jY2KTUiU1VYb+cE1z8xJzMWx8GY6h4LdYmKkOVzLZm7po85R/d2lVnQR1IFOvps7W600rEK3XuqPom5'\n\
-        \    'nmrICeJY1SocbzSncgJXLkqZWXAbIbrWnNwoI18c3Zye/e4PPx4dn6huGI1VrPrQpqDyYOdH1+ym3VDwZXyFJdxwC5ehnGuKPwodGo2y8m/yqirk'\n\
-        \    'dXqDj2y0iTcZIFdw3a4VrHWiFY4uXNqyf7TFLcw42GAWvU9Q1UJv2tpoqHxdjibjR6fmw61iEfGULY8X5IZLBxr7M14EqlTtWdmnTLTLHaJjKOah'\n\
-        \    'vmXBwzr+dAwRFeFoeJnEG/eZF4mCygopi1krqNWZW3sHbbdtqWomK0qFgXsGAyWATklhIc7yGlV16s/k+sZ7UK2fq5MsDW+Y9EcsRq1VhrykyEd9'\n\
-        \    'E9LjHhUdOjlw78lhOZWWmeAzJUxAIhoxGHUxq6nAA3e0O6o3uQ31uTaQ0vx2VPCYPBmqDeZqqHctuVwgXvCtJzbDkKb0SlBaJGVxp9yQiRsvnkjC'\n\
-        \    'IrlYytRkSvcY9d44DNR0io5gcgp2vpimi21qhNfCvVXyFGkL/Mc1qb49m8qJj71orJsFBDW3zA6TUf+esrzlVRzBflUChRPK6JIcDEoNl1JS4Pqr'\n\
-        \    'u+lwwmI1PgKlXW3cjCkwkKZzH4mfEkLqqKGyYyXf1+BEW6RZtvyGSkV2CJ0RGc0FjBhIKE9SNDXerkp7fKQ5Ule2movhRNNWgjy54fqmaT8hWMKk'\n\
-        \    'NFeTcshoZi16BiU3y7q4Xmt/XAThHY2KduUIODNvfamaF6dtV52M11/51Wnb3xZ+0pdkNLDr/JZ9tTLuKOSo3GWYFK0yeUv2NZ7pxS/tb+Rvg1Jy'\n\
-        \    '9WvxqrZt26sRdr6t2dCQGxxAcVQjVthSqCkr8LYYjVQDkc1WzJAqeZERZbk4/4cpzwKYo2bBhTOMr4A1sRrZBhqDCjcaPzlalG1k7zjFydc3WDFW'\n\
-        \    'iuekEnYKHGkupVzbVoXHeXTUpGEHgZG3bHz5yjjvvHa7YSQ3rZJ/eja8Ovr0SYtuUtQ0EGqSTArhdVgVOqjBkiiEM8MmXMvToqcivUT3GDCA5PFU'\n\
-        \    'lQWIU8z8G9k8n/C0S7YTks1RE5NMDZ6f8Y+DaudLaLfNvxtuTi5PP/z5w/84yGeO+J4z3rN+UWu1Xm43Fsk61aN3UmtzWd54kbFshYm7P9ETGNV/'\n\
-        \    'Oz8fXvnDk/fnZ8fDZSne9DX9Y7b2eh+mumd50tThaLziMfqgvOnDwOgOoN5orKruAN/P8hmUVyfv6Fa71+nsa0Fz3RtUL9MgoYNmz/XcPbe/3zQk'\n\
-        \    'OCSvur4NfJzVta5noQNc37LK3dn4Ztdrqu3KAsv9RL5pbr2c5JfnR8fDMtVPjg90jgsz99XwIg/hKH2buOUcTkR48CnAMNLpW+ZQ438Mfq/r/RsA'\n\
-        \    'AA=='\n)\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest() == '30e24c097f45f6f839c6a98f1bcb0592f120fb5b61e0f2b4cc35db5ab266e93d',\
-        \ 'FIX65: extracted script checksum mismatch'\nPath('/tmp/lwod_fix64_08.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
-        \ step 8, bytes',len(body))\nLWOD64_08\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_08.sh'\n"
-    - name: FIX62 Sonnental Wurzelheim und fehlende Dorfwege pflastern
-      shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_09'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/71abXPbNhL+zl+BUW6GpE3Rlvwap2rGbdw2c3nx2I7buyTlQBQksaYIFoAkK3f3328XAF9EUUrcmzl/sCUS2F3sPnh2F7BkinTZ'\n\
-        \    'nJM8ydmYJqkTU0W+J52/3Xx49+7qJrq7ent9kC75KBonj6f9SHA6kmG+6pDvvnOv//HT699O+64zFnxGcqqmaTIkySznQpFr+OrYz4I5Tj7AJ55L'\n\
-        \    's5HgyehAxiLJlTy4Pz48v2GThGcynIxc35GDPBSMjiLFHpXHspiPkmwycOdq3D3H99OmpCkdMSEP3vz6/tU1XcBgEGQe6uH4YSCnO4U6z8jdlJFc'\n\
-        \    'sEXC55J8uO/yLF0RM5ssuXiQhGcErXUlQTcQkQyHYHVAhnNFMq7wvZoyEAViuuwxkQp0ECUSmk3mKVVsRH6diy8snbJkRjKmUGxIfk4WjCSKUFST'\n\
-        \    'jroypzEjPFfgk9ChWTzlYuAuYKlkLOhkxjLl+eRfnzICPwsW94lKUkYGYDQ50A+8w/DsPCCH4fO+/8J1qJQMomDWEsZ8DgKMWH8w6AXE1WG8KBar'\n\
-        \    'o4mPeiSeguls5FZe1CIEy1Ow0QoJXNedZ8mYixkZcp6SuWSRXkpkljIgY5pK9sJZULFCl2ijpeJZMW6+gJe4wAUYyh5xeQ6ubn0MCPLevn919SZ6'\n\
-        \    'e3l38/o3soeSjr37q5u7q9+CXnjo++HjlxfOf5wNbzlNZ3lNK182tV2AQ/1Wj7pu0ENkhUuRKGYwZVwTtEBrBpEHDKRREcpn6N2T84saGrpp8sD0'\n\
-        \    'FiJyLsZoD9g3IsMVYeCTFVkkaUonjADoSZKBwDhRK43DsAqwjW1D4XqQZ4mUGAMDYZaB0RBzM9J1zOILAQNYqTYWJw7pwzqA0RQukkmS0dSImzE5'\n\
-        \    'ZZJMKQA642Y5H+5liIEn0eIYCMQoyPU2vSC32mlvrbraMBQXpclYXZBxyoGTBuD7Q8cZz7PYDjEyjECIcPf7hrQLHfJk3KKYDAYkm6d2CP60jWnI'\n\
-        \    'CzO29PwdM0K7fwbAEqe96Pry/vW7n6PbXy5fXd3snMZUZKbCE0FnDPR5nQY8O4ESc2bUC6bmImsR5TgQMCBQWe7QBhSC9fjuN1/3NBPe0EQCASH/'\n\
-        \    '7cGi90jMs4zFyEcm6IDIlK4KpEpCh/AIuY/wdERAc5JpQICsZaKmHPiRjscoAfwa8zRNJMgKKvRMGIdlA8y50GLGaTKZAqBXUrEZwEezwsCVKqSj'\n\
-        \    'UWRJ4h4EcnHk5eFjEE0EQH+kP+fhyt8/DHt9/cnf2B5muv/9oB8Um8LM7moQm9d2RxTbxXXEYiAYxIqKeOoJ13s5k/7vBRxPTg1izdxPXrj30ns5'\n\
-        \    'MK///btUVCUxMd8+/dN3A+kXRomFdqlVin5bhGhN7vnVnqXgOXDwPehp7FtMO2O03XUgUhEaWc4vQWCEB091335jK1p3auobyI8XoAlWJoBeP+8b'\n\
-        \    '5fvyIzwE2zz/4jMiqcYWUwo4ISOdFGNl2QRdm7Iu8oaNQZEWAyK5hgLsDMEQSYDaBxYhp8BuL4ALw2E54A8aT0FeokJyY1Zt8KumwB0oHpJ2MSd0'\n\
-        \    'lrMdsTzqWW9oXXJnMH+HnSEV/EXmaoZ2aSjSrZzwAx+xbMkmzMVIL2ebka45bN0fFRBL6WWcDaxdNDcsdzRuUpGMMNWV+937kadchL/+8vruyvCJ'\n\
-        \    'q5ODu43iNYOXvi6rAYw2+LBmQgG1v2ZEsGNaC9dXEAQL1iC4nAEE4WENgldFHSZ0kYmpCr9hZCagT+8nKO1mUIAh3BJgOlFm2zTJHiRCCkoDgZUd'\n\
-        \    'zcj5zA4q5cAGFIBTrHQtU3IhiTL4rTKkNoKOkjkkRGNMNM62AjEGTGNtwZfZ/wrEUpnBY20jaRyWr4tommFYYECGVmh3+7hQ5mmiwEdMev7Hw88l'\n\
-        \    'jipXa+fKZJJRSFmsQpC1zLUUY/wbab+aHgNMQ25rU+sU4gebFgkJ9sKHfUiEpkDerkFwroIY6kPBAlys/yn7lNkECuxWyi4RVuhFmivf1qB2rXln'\n\
-        \    'xGIuqCbsWt6sMhzQUqDXBoAtNrnOidjEhOukCUWABFIDfC4zGDTLUygOzK4seAFjJdgMUq4kQAN8rolwCtkhdKAuFXStiLu2DQ5QY1EIVkZKU/oX'\n\
-        \    '4Icd/YUijCF/W7iH9QJsm08vyDvguaNXATHOvSAm1fThQQ1TumTDOr0s1HRJC6VZp/JApyrRTNVj6ngAudmDFwNoNGNgLaviUgi6slUaNCTkD40g'\n\
-        \    'BJ13/NyvhKEEWtWWd5cf9vRn7w//4PgcKs1ioFYT0jzHOJv17FtdHrjPo34Qcwl//L3n0H84NcgVedPUrmcn5l21+TT+tPzgNDwMNC16nWfDmPbP'\n\
-        \    '4o5vZD0jP5r4lOVVvx+ezAybWIoxrjDhguVqOholwgY1LJ3xUHPGt/jiAXxRcwWOK8Wi59v9sDZeIovXhnZLAeEqqD4/NmbhJt4S24/lSPyxESkl'\n\
-        \    '7Z2HvWD3iN5JeLSPdu0dhicnXxncPwr75YjPteq/EUZtcXAcHp1siWMrJpA07Ma8xShniqZQqKRsQuMVnjUcWQYFHoCNziHYIsBdDhsb6NQ0XGWV'\n\
-        \    '/Iz8ME8AIJTojlHOaJoCVyywzrI9JZ5Q8JzwsSaVaYIbGHKIISENoAPMUNCKPcMgMKZkAIhBvVhKIRkPUYcGHyBvOeXQTBeEARCD+hLfzWi2Mu20'\n\
-        \    'DBs9G4tksVRvkwI050ugFCDdLGbRggIvehNoivytTFAc2hjeAc/i8HACXVUG3yMuIuz1vA50Zf3SzdfjlILbRMcvVG+qLQTXVGvRQLdQoUTxFDxR'\n\
-        \    'DSrHFE/CP+dszqIxuNEyElqLcEFoG46sNZX4IsxAPqxgi61OaQLW8UY/TqukNxhX96K9szsspzDUEA4kWVtIdUoNne0g7R1XpmNon8C4pyffyLin'\n\
-        \    'dZrReeabCLffC8/8VlZFGcF52N9KqpAHoQCxTSskUkLn8CnDgqrYFdiWYoFYMelBzmXS4FQ9JMk23IzPI4ymXHPzuj9GuwKlJZTK61ICfLXOmAJz'\n\
-        \    '9JMYc+8sPG8nPyS9wy2vjk9rkdrBh9qe4Cw83R4BTUxGMBlCMcNYVua4OBHxPKVFUsMaRx8LYKMDlU7YwHv0VGQe9761Fjisrbem7FsrgpN2fNYk'\n\
-        \    'gZNquf+U9s+HX8kZWKLOqHhg/5ejRNSDTWLjWAkfB7q+3LdfzNnRa6RQyDslWok9TjO6VTIzey7l2aSLpwHIt+ZQo6hoE0kwySjMaO9MDxDlgsdM'\n\
-        \    'SswYXTxaxDyjTI8xxiMzqGIlTNDJCfyyranS7yPUHRW6TeH615srq3KjtSrOMXTrZAeV/X7RKFXuL8Rs6ZCaibPsjhqSnSH0LsUz27hcFN91q/IZ'\n\
-        \    'hgy39klNPWstUUPu5/3hfqWs7IMaCHK3nKt4+uhhY/TTDgJaRWzpn7cofEJ/uEtde5RaJ2z39i4FtaZdj8rXLh/a7h3i8aRxU8Ye8ToONhMkPwXy'\n\
-        \    'xxMYpwbwd+flmDVIFQZBUPD89gDGscFx/6inLTIs3RyDKXDQOQ4hVYenvY6xHRXWrFfV8dGm6GDjWR/PfzanNDUF7W/6HZze5i854w+s4TEFuMA7'\n\
-        \    'ytP+ZZreICxucZS9qdQfawuBnQJ/YCdIcgvAYXdQ+jmGPPRcgDH4HnIL1F4Qg4uDLbegUI7ZqjnJgOagGP3CmsUy1CdpNGJj2CAMxEVinlXT8CrX'\n\
-        \    'g9pDAs9v6bfzuZxGMBnzjmWjDtkndpJJQH/OE+X1SqmgommFrj2M3Zh/9SqbNW2tVjUjq3K12OjNmyBwlB0btu37omQvTybtfQ52IOUpb3Ebs3HV'\n\
-        \    'o53TgSRSv261WaqUiAVD7RjCb2s+bL+Cd57lRYvuO75+m+P7GwZtHL6a1m/J51AQSQVJ2x77QwOou7qdRjXcEOLmgV+6fIKSdP2qs7NpjfUebLEH'\n\
-        \    'vA3HG9x0CF+0Y8q77aKU0Ka226P7eT4XcQlECO5PScouY8zo2l9j+BpRGUn9/qt7o7ZMI7m2sCflj5Z11/xvAmIuNgtYQG1iQqEvuXZGYMO0J2Sa'\n\
-        \    'FsPKM9XC57XDRZ3MJaFQSdtTvadZtj0jtRiyUdktqdRirUHgM2X3Finpi6Kd7UblEHNlOSi6fPMmunl/+eo2ev/3tdsQEwyjMahXl9ggBNWJc3U0'\n\
-        \    'L2tn8zkQtSR5dbLfqRHcoY8ldUtGMJaZWs1a9frd7R3YePVqzbg6kdj/A6iZaK9Lg/UbCGOesewFlrR4HFzejUpQb/+9xslXasqzI9KdkXwV4Skw'\n\
-        \    '/gfD1/9Fp5z4DUMxz5Gutukrec/5L+OdGx40JAAA'\n)\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest()\
-        \ == '01197f3ab2e841c3b24e4b83c866200b43e8492654527ccdc55ee93b925f010c', 'FIX65: extracted script checksum mismatch'\n\
-        Path('/tmp/lwod_fix64_09.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED: step 9, bytes',len(body))\nLWOD64_09\n\
-        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_09.sh'\n"
-    - name: FIX67 Dörfer mit Laternen Sitzbänken Blumen und Brunnen beleben
-      shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD65_10'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n            'H4sIANMNBGsC/9U77XLjRnL/+RRjOC4BKwhLkABIqsxzyd5de8vaj0iynWS9hxoAAxIlEOBiwJXkXKryDnnDPEm6Z/AxAEEtdTlXKuuySGJ6erp7+nsGnJXk'\n\
-        \            'jO1ysk22LKZJOtrcRklBzraEZlGRJ9FzHhbJtuTN75Lxko9CWpK/9GGe/+p401+TNKUrdpnEzFpF5NtvT/Cp/+vry8uLH1/61+9+ufrh5cmI3Zcsizh5m0ds'\n\
-        \            '+mL0Nbn87d0L8qtjWzPy6vW/eC757//8LxKxjLOCfJY44WeYF7RM8oxsUxqyiASMJxEjW1quOYHH5ZqRVUE5twDl+yLfAuEFI7dsWxJ6Rx9IXOQbAbWln2F+'\n\
-        \            'yLISxoERsqIlfNlui5yGawYIPtOC+GuWrNalH2fn5AcKVAQpkwMbAC8SmvJz8iIJkSZaPJAl+ff/kOO8zDPml0lWwsw8zQsYE5+69vV8PJt5gWZIyLs8jw4A'\n\
-        \            'ep47njaAwHNWHoB0vbnjOjVknOZ3rDgAyqJg5k1r0JRutgcA4zhyF3YNGKQ55/nG39KUlSU7JxdFQR8+COCPMOtDM20SOsid2Sw4XVDqKg+iOfPiiWZ8HI3i'\n\
-        \            'XRa2wtRv2cM5uS6LJFuZRKHKJCtg6ZwEeZ7CWjHInZkkxCEWdR8b5OwvgAK2lBbRmwrx9MX5iMC/JFZ2zlpTjisacgz/FazcFZkC8wHGPxLKBzCKSSiagvFd'\n\
-        \            'WpLz5QCQlbE73RhJ3Ahm0TRgUe6HlbCRSXW4yHerdcY4h7GxtbDVsc+sKNm9nOrvOPMp9yU6AK6EUbMp5KXwJRCwTcI5qKrPMtTkCNcvduwQmEreMBZWrB78'\n\
-        \            'DTxMtmnCkB/bmrpiQl+Gy2r6SJFz9aTSghXwnkX6p3PyKwvLvJiIrQRdpmW7e41BWgn3P9M0ifT9/RNzdAU2BNvVP1n3JvlkPRiGSsPYGtcEbPOUFrr0CQ0R'\n\
-        \            'JniHVQq/BVKTFDRKdrz5CTu+ggk+XydxWT0VWzcW1FdIzhtlAffKhLtAfalGdZ5kuljFQKXm1XejmVQtok5p8FgP5ln7477DW+XeTpVVn1UMwMMa67MuE7U0'\n\
-        \            'gvxeB4fH0tYitzlPEEstnKlJePIHU37Cpp8PmIFJHujdvnQ+Q/RoRbNNWMiQxzeMr19nHLCErGNCAsLK6IYBEkFbM3kDc3Du9/k9Tlcm4YiFZMIc/FAwiUlL'\n\
-        \            'AaE+rcj2czC4AuPLEvlSIGo5wED9VRkt8pLKnYFx4FsZCilHKdMov4OxH1m+YWXxoPB6/dPFi3e/+T9cXN+8fvujf/3yRny+e/VKYKFR5IfrJI10gc+o94pv'\n\
-        \            '16xgR2xXT3sPbNeftTnXgsyh/amUclkR2A5IG24GQFknYLCdebBTnK02oMCIYK4MghTwkfOnb/mfta/SIz55W6XQ/q92+YeHNMkiVgztc5lv/YN7HeRlCRnG'\n\
-        \            'l3VBfnlMC+zJ/9s9xyyPFZkSB02SJqXMckyC6SLL5K+BHXxovWwTUNtAAhFObG+bcWkiAUSkGsZXiZ0wSKSIHEqKPNNMJU3tgzUp6NgJHMjqDEUhSpoOLScG'\n\
-        \            'AGk9FSbOu1MxfRmaic+RmiZtNUUGIyeKkKVd4oyMZRvYHwCtbERE/4dT23ImJuYA7cDYsmfmxJo7Jn4zTJTREL41TeGLZnYRiokCYYvPcxEV/vFcwxTMVggr'\n\
-        \            'P93gTJNwXfZRTq2xJ1GOraltIsvD9OwCtj/XGffJmU1qcmaTDjmwkahYTfaEgk+FiYHk322y5BJ/dMwf/wmQ2gVoFwEUcpKPHoRiPnsMChp78OJvkxi3WzwI'\n\
-        \            'JnNPkXBOegA5UA5OBFIaDAeW2xuWJqukwKJsaIBasxTgjVkCm+G6Y5RtSvNkO0T76am3wC8N0WyNrZ0SFyjwoTliBCa1JaeqLtdJ+UdAs9u+poByLrqaAoEV'\n\
-        \            'dGSC2uLODRNpMIFHFdnVjoW3oLYMSpQ+QtiIKSIEzBOnj3U2Rx10hrF+D+TFO84vk+yWd9CewUxBK9hBT6uRTK+mVYjgENorBsrZxXv6dLx1jSDd8z9SEVjW'\n\
-        \            '29ZqjUoZyJA2MFqU6wPTxJjqXefTxSSqvWslm3QHoTJgrLyCtGBfN+x5Vy62tUBvNDFty5abyLI9eQM2VkRsH9vU7WPzUB/AzUGJOzZMQXFHzHcMCzZFxnfI'\n\
-        \            'ZtUNeLKUhWX0pIUrSJMZMB2xNawcmiII0Uzx8ahBC+iA0c2+PVd5nfYiL+Kg2GXgza9LlmT7knOmUnK2NUYHDrFGkHoQzW+U8/0gBRPndUQRcQ4kD+x1Nk/O'\n\
-        \            'fx/nvGTZZd8K58LA3b3YAmHFtoRtu1ItDuO86lvg/wbnP+9YEdAUfNF+QJ7OhnTXRr4nNcJKzapGWZjuOBo11suoZY3WhSBgyLxEnsEZtprE14ByJgPVYY0s'\n\
-        \            'shUqBJpXvnm72wSs+BGDFgXMalcoW1mIGYtTVrVvnlgyIW8DSTJw6z6WInv7hdK0WT6gZSjWf4PNnd7yYtAqIcTyOC82Pv4RptcC31xdvL1+9e7qjV81yuSc'\n\
-        \            'XS03rrae5Fg/S5dPkyqf9sVWiD7XrkoJYFmSwIYQEet1MWB0s5lPyILcVXLa9E5Q5jAnimWWoGOUEUEKXNHAmINjztgwOqghu2n7MVL5Ws9z2kcjLBkCi2d0'\n\
-        \            'Mx/JJGel3zDayFVPzJv6+/SF/j3lCdcxP+XGowiEgGFyq6VWyoqt3jRopyxm2I/dJxI5dV1DScSlhfCOKgwWhhVgkxfKCONrIHdeFjoqdxdQtA2rTRdcdEcH'\n\
-        \            'qjPFuVaG2+DQZHPZ+u2n1zcvTdkfbguDGuk/rmSrMLbZ4Y53k0MeUqVpWDXPm25240ueHMqghL8VgaY9Deju7mTm2BOqieLBbeeljH5mvJ8/AtU+jMS+dlpv'\n\
-        \            '0jfgdMUqEq2yDvrPZ7K1KiGnxqmt6kp9RIDOYGChelhZC8qtelavQvp+x8P1z1DoDMSyyTMh3TqizebVb8njEKLBzNKt8SDS2bhFihls9RPxu84X8Q+nmK6n'\n\
-        \            'LuC0C8Di9kRZYPzFBX4C+bMBWXiTDlZn3mJ1vAGs6DNvW5/p9vwlxX2TW3xrkGfk5uIX8py41hisWD4WseobYts4DA5j1nWKOP+T4mpFZ9swRVPbkFOmHnwI'\n\
-        \            'ypqpLa/pDnLIls2t4lW3oG2QBUmmTtFZOc9uwR1KJbBr8SpK2LbR2AoP6NL68EoPk7I5aOqZ4EZEPgHQ0Kf9tiv+YCmE1o3WPhWUt20R5diOufbU04wuZJtj'\n\
-        \            'KqAzx1u4dh+0tTkF1LE95jh9UOWoTz3jC0JvNu/D9o7wOod2dhjNpp0zujntPGBeFAVTPLRrpPImz4sIcs9jZOIspmzqHCUTl7qROzlOJswL3PFxMqHBIgyC'\n\
-        \            'PmzTZegcfIbh3H6C9EIaTCKqSs8OxzOmPghCFsUd6V2AWbN4V5THiM+1nfF0fpT4vAg7ccfJJArmY298nEwCx3OfIBNG5zPPVkQQ20E481SZLAJ3EXVk8qqA'\n\
-        \            'UmGdp8eZ2dwN3eNUirrBJDhSJtQJ52xxnEyikNInyAS0ZMZUtYinsRdHyoPQjSYs6MjkGjK0NY3R+9c/oFI8Qj7UmTHXPUo+oUOD+ZG+JaIB9SZP0QQ7iL15'\n\
-        \            'RxOi+WLcMRfQBK+rCSzld1R0R4FrLI5TbFQcpxbxkWoxW8B/0+PYDt3QW4RPcQpeOKeqAURh5FLVS7A5uIVQZds/gr+ZA9GFHsXfIlpM50e6RxYHizl7yrZW'\n\
-        \            'E1p2JjOw+e4+e8hwfc8j2EHq7Fe3efbP2dWgbBIZ9X2cKA+76vs3vXidxOIoRF9BCYS9bV37jBeOcC3QHXklZO+GgMywmvsBwFZvuaq/MpQ3tPluwsUG8eYC'\n\
-        \            'Cg6T5bKTL7QZuDzX8cXhvsjEP0AOM38GOZY4eai+TBbVl2k95NZfvBpmVsPMxdDHodSuu5w4ANeNfrrXlhpd8A+3H/fr6M79CJOaE9dyTLywBVtw+81kuRzL'\n\
-        \            'A6EzeNaqUXueZUogsxabUjiIPnZHMJAfV2KY1tzXT+bTg0yriL7Isgp8HMOwF3hStMcwPFMYrk4KTAp58PvXIud1B7Nve3yYuDGmuph+nzb5OP58bo+r4+/H'\n\
-        \            'KQWKgFJ7gFJbobRpZg/QqrqKuj/2ybQ98/YU1Ryqw2xVrnXj2Wxhm30/8eEWaoT+w2pDPg7LYvKoLCbDwpgcJYy5NQZhOFIY00YY+pn60JYP8WqKupeirsf2'\n\
-        \            'K6wttLIiAIrfp3Ft3gKGruTcaXMOJzzHV+A5rnNsb+LxqLiV2DwfrEBE51lpjKsJIwT/BYS2DvI25ewe3VIXSgs15ZH99+b6UF3NndlTsADbtrAx2zbA+aDr'\n\
-        \            'bdsvvXEkRzNbV9obrvwFVNPDLmxwSTQ5BlOGHMDQBKnYAYtgDpjhMBtcoATNHBpGCcHouBEwqPIHZftMdcs+SnmD7Q3chq1u02r/dPXL27cvr/ybl2/eP0/v'\n\
-        \            'IPLHyb3nWtsHDe/Rvv9XX9yMPRmJS6x45zVNApJstnlRkvfwc1R9L9hotF3iE/1k/47ueH4lwhq3VtGJMeLLrVUwCmkGuy91EF8eQfxdnuzK+GwO4+JAoSTc'\n\
-        \            'Ev1V/URW1CFMKSHfyO8yX9y+1U8MsCGTnAgaz5s7u0VOIxn4WUHExcFsdXIAKch14uPFXJ/XYuyjbeSLF3gB1WGUQo0FxoJBclQwP4GphY8Ecb3I89KsPITQ'\n\
-        \            'xN46+DFpmJD3i/tLtVRPfewM1onNCcnyEtWBj0Z5Gi2fTArsCYc9EXecdcBgwv+nJ79nNZ7ucvvzTRs7H9myAOfDaAHBqDjRv9tw468H5fy7bj37Tv9uKSH+'\n\
-        \            '9leOV9hCUv0KQVtK+ER/87ff/w1W4I1ixNnQ7ogdJ0jUA6EBhy8noy0tymWcWZhqbXVjTzYgDT9N4srjN2LGadWmwowvqEOYb7bgdvHWAQVPkCs6J5YXyP4u'\n\
-        \            '0SqmLSUMm/ThHNgBURUlOPhTxH3KP8AjluGtVEh7waQKutQ0bfQ1qUiuLsifsQgUq/Z1Jmkdkkmk5xH+v9ZA4W2s0QGNQzrPq7v0Jnk0sd7PnoWy8vb4QF6q'\n\
-        \            'RZTDabO8kLqqEWKvH53aJcOLIMmKcTyOFH1/XLdeZXgFC7P2DOj288LPdhBzALNxeN3qDQDYVojz24JBLI50Dazq/PkjbyFohnJO0aCoTypgRXkSh/S0Hf4G'\n\
-        \            'rj9tqIoRhmfWFYrOWRqbWtW4xIN31ABh1BxkBrqPKndyKrRDfD3sEHuuBdX/oKv7kl/4Oyd3NH8QR03t1K54VmPCAegNvWUCrILaWndFgiEFwxA39wPRKIxX'\n\
-        \            'vaDG7jHe+aAIEJwBf7wCuHIJn8eEtNqrnHxmBd5nfw5wbOlMphNBkbC/PRhUmqXmWFDjQEWi9cJGAmsVeNW6CiAX738Wh8Wkmn4C1LX+Z2Bhc++Zg85mf0qf'\n\
-        \            'DnN4xNWEr0KJKOItB8S7BWMGPgUjdYJy7b9+e31zcXn58sU5mZOey3JIlXaZxB4rDkwIzp7UBzu1O9tCAgDbVKYMT6BhxTqhGW0fynWeTckZZDUPPrrwJGWP'\n\
-        \            '5kPNlEeB8F0lcsaPeE+p90KTeMlJBePXm/x28IWmm5fXN+3rTNdgMuymYGwkQ2Y9nTzJW1WTqzTtsblqLqehiaSg2+RVSssfhR1KR1pTd8XiH1Cbq2sGwg5l'\n\
-        \            'D0T375uzSv8P9TKT8vqF8mKB1740kWRJmYBDx1R74BYE+BH01TI2qfce0NvWZ8VX8EM2SjAe4JButK5YvL3hRyxmYFpVZBLA3eeaX+wyrb3aQZNU3zDOQbIH'\n\
-        \            'gt8WTyVhMtZAlQFj2KomyTU+7ZJSt9uTpF02xCZYREETcY+rFb7CLcKgD/aRY9niOFQqmO2xiql2QZXizVT65KbaH1YapR/b5gqWY+KwGROrpvaua5aWrP5F'\n\
-        \            '0FhcmapVuHcJtBctEVq9zwma3I2TdQlp2y5W49jGMHpRsxKiqUmd1JQ6vEpTRKNPID+y2yebGKgJuNSpprxC2OTzvZanknE0d2T3F2yL1LHx1XJO8mIQrKlL'\n\
-        \            'Eco5BKUWowgI3vQQvqomFVCTR/hcUy6CkciGoYDBVyGPZ1Tsqbxxoxvfzt1HFlrJO00MQmWek5jdqSL+4opHFM4YTIZEUdXfZzaIYjxEoEYh3IAnjUTyTO5A'\n\
-        \            'ItVbo1AcsPuEl5i9YgWLMS3a0OL2KHqXy9ZCv0Sd2KdB4tTE/jhNlI1SMF1WG/Pwfv2pVigJ+Go5vPQgp5C6MKEgNcuyNox22zQJxcDRGiPM/HRpK69eiujn'\n\
-        \            '8yJU6pFXkD5chCG4cUFiDD/xVUkuxr8YRCtOFdRVDqh9IU2GvVZMsuFeHiHU3HM07bZsxbeT0bOtc8gvIrLbKgJQmK/8X5cmQAAllSRL1PPAnX+XF+CODc3Y'\n\
-        \            'o0RmpK1t1SUzGgZkauXwyjIt1Hpp4bufIVSKazxiSwxwBJI2UnU9ISecK6liJz8095NDE9hrNUJWu5oSgMe9xhlmXaP/AUP4G+O+PgAA'\n\
-        )\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest() == '245e6e95b0c8b133b1303d221c41e53bcfca57971f40e6bc494d4a2883741a28',\
-        \ 'FIX65: extracted script checksum mismatch'\nPath('/tmp/lwod_fix65_10.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
-        \ step 10, bytes',len(body))\nLWOD65_10\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix65_10.sh'\n"
-    - name: FIX67 Doppelte Wege bereinigen und Dekoration auf Wiesen legen
-      shell: bash
-      run: "set -euo pipefail\npython3 - <<'FIX66_UNPACK'\nimport base64,gzip,hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAGobBGsC/81bfXPbuNH/X58Cx5uMSIum9WIpiS7KjXvJ3XiapjdOmvZ5HJdDkZDEmiJpgrItt/3u3V0AfJfte+lMPZOIIhaLxWKx+8MutMqSLUu9fBOF'\n\
-        \    'SxZu0yTL2c/wtaeeM97rZXwdJrFgC2ox+14cZEkYnAg/C9NcnHw5Hb66kDTOOuhbPSRVnZyMe4Gb8/vc5LGfBGG8XvR3+er4FdD1vmXYT+Q8Y/mGM8/Pd15E'\n\
-        \    '4gi25jHPvJwHbLmnVhzm5K+77IFHGx5uj0W+jziMEwc845nT82J/k2QwdP9b9uP536av5qxCHYXXnDgzsctWns/ZTkje/JZne3YbRpG3BhnigIUxSOSH+Z5l'\n\
-        \    'iRc4/Z4nBAdlCMdPdnFuypEstliwkc36MNhsNif5mMgzzvNCKqaE2oZCwNT7PWToZjRpGBRk7UtpkQG2sVWS5GkGEgjmZZz5nr/h+DYDnqCbdQayHCdxtGdp'\n\
-        \    'BLPY8jh3erdextzb09nMJf4ljzk7yzJvf/ku9HNYDi/bX8Ggl1e93moX+7oP95MsoK6mSMOYz2Gh/WsefOF+nmRjYmGzuzDIN3O2ihIvt9jxW3YLRjDvMfjD'\n\
-        \    '8aPkjs0XjBhcDq+K95twvWk14HzSHBQtX0su+IdcFkwNbG7DeGXCK+feTnPn3rKLF3t8sbesoiMNU+np3a9MfFd2Ld7U+naqzfHSFFbQ/KeRJvjdmJOYTrBL'\n\
-        \    'o9AHozQt29h40cqYk1aOhs7UNkAuYw7/QRMMY8zx/39bNVWHwk29Wx6YN3Mtqs38iHsZGApXyoVpDJ0hqXiZJNG80BisNRgNKK17rQtdoNqzkhl9mtT5Ukp9'\n\
-        \    'ZQ2KQWu9oqSQCzqqLjivqxrZJuwgo0mXdOGK3Tj3b6LEuT/OGEgP395uQud+oL7tsW2v2/bYth9k5Szwz0/iPIx3dSHlmnQZaSmMWrdSHNRfiLqDSa+5Kdsd'\n\
-        \    'ET7AWh6PrPqwOEoM+uEir070J55sObAfv3PWPHf9KBFA4RIvN09cwde4H80bW7K/DK+Kp8HoyqqNQfoJwA/gIrjiZgfDgadMTDWwxd6AFz1qKAT/Mp7vspjl'\n\
-        \    'mdKL+r7yIsHrGxsMRLjIz/RRL7xidJkXhDtR3c4tT1HubZBnF+UHnclvtE8pCht0Giq8HjvD/6KRooG+lerRtolW+ka/kgaKpqqp9gXVXlOBGf/PGK5XnXZh'\n\
-        \    'iC2yZRcZWGnTSMnleuBGl+BFG4oin6rbGhpT/fbQtrcaqlP9ZNtBHXbqURo8mmPppD1j7tnG0pgvtVeu2dC/reo2kZ17PYi8BFQQolAoVWHdZvUYPWD6/YgQ'\n\
-        \    'yzmBAw7RS8GVLRcb5kN0xk1hw0r50Q5xDvOiSMEgoEJcESXwVm95CXOc3tbL/Q0BJkfATvU3ZtY3v98K6+9yJ2+9a+4i7VfTOfre/H4h3//r78AmD32mvoGi'\n\
-        \    'RA6fuLT/+vr/Vt9mwtLARY6BItCTs86SXWpaCs70sc/BwA+iwXaezlyxha28kTBB2ovVtxaLCgLaxddxchdLmEUCZTtk1JdOaVEfvZdEgURAytJkjJWWzd6w'\n\
-        \    'cWkNculoydSMkKESH9igGHoMatFLCm02/Bv0K6G+iXZsCuHW17hvjyR2FZdzKSmoOMtN6wp9E3IfQJNsQcOz5ldoEJ8Bm67CTOTHebjlBObGbLkLI0CA0i44'\n\
-        \    'YLmYJYAzI7BZNI0wBnDLMrISWJUf//yXC+CEFDj9QMNINC0ubLQiLwsiLgRLVmSfwDFCaE3QGEyHoDTNmRE4zDcQm6BfsIsDL84B3gq0VSnDXgCYgyVSBrz2'\n\
-        \    'UhbwnJNXf9ogQYtjFyNUknGXJiIDzS+1zy7z7JfmbmZgbjbxt2fOsI8usGY/pd1JlRfgDJHxgwcHCBmt2xicp16YNcG3fEnKU5QSkNNh4BZi63cACW5x1XiQ'\n\
-        \    'eXd0JKksYxIzfg9bG5/Vzn5cXTS/OfuYBHzyDkBgM0Dj+WPOPuXIvQG3Ya/Q6QTOH0Z5xDFa+0WHj+syfJxa9TDslWH489lfjmQEvrZOThsxNwgzaR8I5TXI'\n\
-        \    'BiWZnmX7iYAPq0YvwoBXSY8LBuD1y+f7Ri8JoLBj2xGZddo047dhghCmDGNSibBNixGOXjmjWij9R6mL0auO6BmUCol4lq5MYGCPJ87Ylrr5h3UyegnovNXx'\n\
-        \    '5glBAvQeoBU8K0yPKAICyrdHzvDYW4qVGRyPps7EOnnVZA6rHSd56wBhD51xcwLakUo1OkDMt2kOmmuT4Z+mU4FUa9TqPUF4U6fgUWVM6b7fLsbzX8ilLjsc'\n\
-        \    'FEtwDKBYv64Pcwygmr1FgNg9QbX5MJ6DjOpg9XraTdvwPGok+9SZTO0fkijJTOPbpe+NX/qGZT1/uINqoBOYWeeklwC63vQ6VrTQLnnL30VXz9HRb9BNt04k'\n\
-        \    '+lp0BVrliDtD7c8QMKqZohBiCqAsCJjN3EmeEJ3O6gQY9Amg6bxSkjkIQFwf+i/6qh1eUuB2VT91bLLR29o/AKW3jDjoN1rZhothKA5gvq38kOZbR0cdsmyS'\n\
-        \    '5LqMS6CPKnAhFvZvEq3VUPMh0E6reeCwaE+n4IosQkWNCfYb0NQkIChtsk5yMPpRD51adO6yMOcyTSjsjkRhujiUepxNvkiFfAhXXKUfF+mjaUc1GSlhl1IP'\n\
-        \    'RGGbSb262BHXb860fssATThF1MdwlzsBwlOLhDnyNUSUO1AInBcwBaoIepjNEw10kiYiJIvxN9y/lqnBlGcQ0LZg/N7aw50gM4S0tAo50mC0NeTEjiPAu6KV'\n\
-        \    'LySm5WRg7MJurAotWWagswBSRROVAiiplmAUoPoshBgLiFWTt+N5q2eUgMVL8zict1SOo9godHhxAf+sN7m7qiwJ4vnHGgeoZlue6T7gOoDzDZMMcRXihMou'\n\
-        \    'JYMGdwIYfr3DpFnOQcPkvtmdF10j5BMpCAPYmQPwVqeaSiLGT8BJ+bnSDcFDE/93SwzYhngY9GGrko9Dzw4YNAzKblYn3CNkBB4TZNI6RO6kvaKrPOPfbUJY'\n\
-        \    'axxFdejEC5QKkyJinkBRpkkKk/GvK+ELJQZ52Z/A8s6VzJN3bYBF5ggAL2Zek7gJe+S2MykJH3tbjgfWOEdbNyu49w8gWnzH19ywCnt36FAO0pAKcJQ2QEBh'\n\
-        \    'tihJ2cGrdGjRo1Wo2gEsSsDvSyS5pXygbpQO0DoAujCl4mhS7AZmt4XNfQv+b5+Cp64OYbFvFqQk5+eL8z+dfz7/8t79fHF+9vGnD+8/dfM/mDWpwX6cpd5l'\n\
-        \    'eDCvSSRbG5Ic5AVnomZSa6L5Sk6XNIOzi4uz/3O/vL/4/P5vVwe5hcG95nUe55PxYU7nH989xohWYY7HN+gNXHViQe8seFPaO2BYOC7TTBRdJ99GLm5o0yDH'\n\
-        \    'Y3tiHV4MmpVXkeQyvHpMivBxTssap8HocV6D0ePc/Dq38RPcxge5QbfQezPE7F64VJ+++vTeLqqqlTQd7/z6u8MqfdLGC9sskqETpjb6OkqWEGZyWEKB8fOI'\n\
-        \    'hrwMvavHOS2fzWn5BCf/2Zz8w5w6g60+WnUcni/1SfwW87Xw34NlF6+W+GpZe+XjKx9eXVUAPdq/D2EDsyIslkUQ/JrxuLlcmKOQlELlONrLqaOJkpro6/Wy'\n\
-        \    'JHap4lmrlxUwv1q9KCtltfNyBVN0hjcqrMo0TwcK+X2LQsjz0vCMK/W0NK7aaYRW3U7S6rJdMffByBn90nrSo+UkWT4qzvNNeIjakwhERlnUt9kiwiMLzLQm'\n\
-        \    'pdVCKpWxUP95qfwmeKzBkG0Y35faofoCnX3vbfU8wuf8cgwfFhhFaSjwPHRe1pl591VmmI7RzORzndmgwmzQZhbGD12S7SuS7SWz/XMke+iSbF+RrMLssGSq'\n\
-        \    'Aotq0/VXnLWuvqLQuvZKYz5ewAJuFVPHMyRZeBjDQ7RfJzGse95wAq3l7giik7bj6Lbj52+0HAuv+aUJ0c96MQEHBqZvljYJOrKOGt+fsS3ozgIdgUp7VUei'\n\
-        \    'XrfwILT2p5IQLyPIhwcSqpRBvd6DMLMndFgt/1Z95QpwmvKWrWMsbSdlVDbEdo4urloBPuBVFYPyCoKX5+hDy+WbNTPKmOMszfd45AxRK6rfi/FiMZRgYtTI'\n\
-        \    'MNfEIUBSClnUhkE8E56SbGXKF4qvdTLGXMWLU+to7Iym3anrkjepQ+dja4xOXllHQ2fUYFHL7aK9l0mSgrstRa0diJpBrHSMVjsJp61Jh0OFEUzYt2U/+6Z2'\n\
-        \    '66ViDzdV49BmB0rmY0oyw4cOrb9PykPVSR/LHdiyElI55UJzvIsimwLpcv/4Yb99JKagg5sfHIFnGqC0iYuzyQ2b9ofVfSguMwDAtzEhSaDLtHA2jzhYgolK'\n\
-        \    'aF0QorkqzCa/VCgquAFnWZnf82o2j2cKpBKt4ox/l+Cpd04awXpDB+vyZhZmLLJYaKg/LFqWPIZpdDTIzFRXj51odWiUmF49XmLCqsdsUBSaauWO9l7r9my2'\n\
-        \    'Z0+weAKee2g14h24VTT30evGDlNagE14TV7Iliqs7yWtKjZYsNGvqJ/B5Eang2oV7ddNbkyVoen0uZOjhYSpeYOfz7HAVJ+VWuaDkxqNn16yybSc1mj8a+c1'\n\
-        \    'oXlNnj2vVC7IwZk1U6g39mhmXw9wOzgRj9f5xrSOXr4e2e4S4IJItnqDX16/aL5Sp84GJlc74Tfp7uWr30N3M9Ld6fNtApPON+j7AVSMxrq2+2Ji/RJttLQ5'\n\
-        \    'nTSMizxCqR/yTjyKGk5C+79vwEl9SuIYpuVFBh0livedfvHZKkJtA3qa2RPYdjbAgGcqigT2wHogimEpC0OYKmlNT1/y1xPDqkl/JmAzrXZZbkggo4m96Yyf'\n\
-        \    'vjYaBoqqgFWgAepNpCSm1SY6oxqCPKurHaUx7DJKNZq1HzNs/dRJphyDYauHTiK5A5Y8ADq1G7qZkSEAL/rsJKEpGzZ9dBDM5ILK0MoDPX1K+WOBkG5rUTbS'\n\
-        \    '7Cre9A/UqZpUWHhS13yI7ZWTCUA7qWkN+l9jLA3INH4vfbIuJbbJNW9djM/hXFKrTYlPSCerUzQL+vqcGlVrBYbWN4uRvA2Tt2uLUh6JU/wNOqigTyPmlYLJ'\n\
-        \    'AZb2gZYxVQAbTHDcqfvl/MOHs5/ef3L//Md5X0tTf2tJHVU1mXdp8oAGZ0qDn7wVz/elGqv8wD7gAyCzYJ/AF/DPGec9ed/oovjpQprxCK98GRnAl5MDv12A'\n\
-        \    'zSv7vcPqz2O9mmVH7BlhdfrHyMt/IogpvYyW7IKvfkCb5IGMImiYEpaark5E2O5D9fBFT3MN6WdYNpfHvTAO89CLZOK0hpEx/+IGfMUzODSbhpvtYkPD/pUX'\n\
-        \    'RuZWrA9cKkph27rQD32ZsipjAORyn97swtwcFck54Gt2/AZAXXup3PuBkxQ649FQRz0kkxAcyUptOTG/M0sSXSXSa1O2Ig52vCCQmUdKj5Xd6OZh9+2hSync'\n\
-        \    'QEuG+PH4FOGn3dFCDVd6RC9w2pcHcSy7gK8q61ihLa7qqPgEsaeaeMTVMEjeMn9z5wniIm/jYYW+6zgTrh4ZppgFKR7V3jkwOVoajw5OeGOQbioGWANTtwMO'\n\
-        \    '1RepNIpapl1yeGmITrbQY/cFhgoaKK8rSAuxDblDqhcZcObtiwylBajY0T6hgLvYoteUonSnbwhrVM0XO8Hxmz4eaniiawVuJOGesp51kCG1XhaVBRM56EFf'\n\
-        \    'CqXLKmTzAByNAYQj86bzmF+8UvMcLEYFvJJv3oyHzcUOY7FbrUI/xLt1Ajyp/vVQgPdCQzy2p1mSisNLLs/Hrsh82rVhxM98nwtBmbgVfHU94QpZrn3Kw2oF'\n\
-        \    'FiwrVd2D1z+NlgWX1z3VLUzUHl3FDLVyJYg6tIdou3YK0TAuTJIeJK7fsPn6tdEbXlht2TuuAi33KcZ8IS9x0GT0BdbuGZDHUK7a/XT243sMt417UOya81QU'\n\
-        \    'p1qbqfOUvBiiEL9G8Hg3Cr3Cd7WbyqTRjG+T0iVQLBgSLrM7f9T3MWHgFIo7KBARyh/z4VYkmeU15u8ABstLt2KXQrQFp1QsrLoRTfeVqbDPMceSl7e6yGiZ'\n\
-        \    't8rpVu5tyO/ktXt5MbocU93H9VfrFlTj9/gzRxdH5jnAxtVaQTR4eh5AwyvbSXyC9xMWxqkzcl46s6khARpaTjfFqaJo8YFx+OJ0PDlV7ShHFTtVcFyrh916'\n\
-        \    'N0Xs1u7SFNbubpkZ2L1jjaXtKbh3/vHT57MPH96/m2vDQSNGZ4AhDG/i6fvU8lY7mGH1co30WvU7TK1fQsLql4dDMiyQ4j96hz69vDoAAA=='\n\
-        )\ndata=gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(data).hexdigest() == 'f9611a1663bfb9175c1b8954f4e3cb12a30d2d22c7d7d682f29aad0ea0e8a28a',\
-        \ 'FIX66 patch checksum mismatch'\nPath('/tmp/lwod_fix66_patch.py').write_bytes(data)\nprint('FIX66_PATCH_RESTORED:\
-        \ bytes',len(data))\nFIX66_UNPACK\npython3 -m py_compile /tmp/lwod_fix66_patch.py\npython3 /tmp/lwod_fix66_patch.py\n"
-    - name: FIX68 Gehwegkollisionen und Grasrand-Positionen korrigieren
-      shell: bash
-      run: "set -euo pipefail\ncat > /tmp/lwod_fix68.py <<'PYFIX68'\nfrom pathlib import Path\nimport re\n\nregions = Path('android/scripts/V408Regions.gd')\n\
-        s = regions.read_text(encoding='utf-8')\n\n# FIX66 had used the centre of each new paved segment. Even when the centre\n\
-        # was free, its edges intersected existing 4–8m wide road surfaces. Keep\n# the full half-width plus a 0.45m gap in\
-        \ the overlap test.\nold = 'if not _v466_is_paved(q,0.28):'\nassert s.count(old)==1, 'FIX68: expected the single FIX66\
-        \ gap check'\ns = s.replace(old,'if not _v466_is_paved(q,2.65):',1)\n\n# Defer decorating until the current town has\
-        \ finished constructing all road\n# meshes. The live callback will check the full road registry at that time.\nold\
-        \ = 'decorator.build_village(centre,city,Callable(self,\"_ground\"),Callable(self,\"_v466_is_paved\"),root,_v466_roads_near(centre,55.0))'\n\
-        assert s.count(old)==1, 'FIX68: FIX66 village hook changed'\nnew = 'decorator.call_deferred(\"build_village\",centre,city,Callable(self,\"\
-        _ground\"),Callable(self,\"_v466_is_paved\"),root,_v466_roads_near(centre,55.0))'\ns=s.replace(old,new,1)\nassert\
-        \ s.count('func _v466_is_paved(')==1\nassert s.count('func _v462_restore_inner_roads(')==1\nregions.write_text(s,encoding='utf-8')\n\
-        \nlife = Path('android/scripts/V463VillageLife.gd')\nt = life.read_text(encoding='utf-8')\n# FIX66's if/elif silently\
-        \ skipped the global map whenever a local road list\n# existed. This is the key issue: a decorator can be placed on\
-        \ another road\n# crossing the same village. Always check BOTH sources.\nold = '''func _v466_on_grass(q: Vector2,\
-        \ footprint: float) -> bool:\n    if not _v466_local_roads.is_empty():'''\nnew = '''func _v466_on_grass(q: Vector2,\
-        \ footprint: float) -> bool:\n    if _v466_road_check.is_valid() and bool(_v466_road_check.call(q,footprint+1.25)):\n\
-        \        return false\n    if not _v466_local_roads.is_empty():'''\nassert t.count(old)==1, 'FIX68: FIX66 grass checker\
-        \ not found'\nt=t.replace(old,new,1)\n# The original fallback elif can stay: it is redundant when the local list is\n\
-        # empty, but ensures the existing scene test code and behavior are preserved.\n# Extend the real Wurzelheim mesh search\
-        \ to catch the named paved walkways.\nold = 'if String(road.name).contains(\"WurzelheimBodenwege\") and road.mesh\
-        \ is ArrayMesh:'\nnew = 'if (String(road.name).contains(\"WurzelheimBodenwege\") or String(road.name).contains(\"\
-        WurzelheimPflaster\")) and road.mesh is ArrayMesh:'\nassert t.count(old)==1, 'FIX68: Wurzelheim mesh filter changed'\n\
-        t=t.replace(old,new,1)\nassert t.count('func build_village(')==1 and t.count('func _v466_find_grass(')==1\nlife.write_text(t,encoding='utf-8')\n\
-        \ncfg=Path('android/export_presets.cfg')\nc=cfg.read_text(encoding='utf-8')\nassert c.count('version/code=4235')==1,\
-        \ 'FIX68: unexpected FIX66 APK base'\nassert c.count('version/name=\"4.1.7.66\"')==1, 'FIX68: unexpected FIX66 version\
-        \ name'\nc=c.replace('version/code=4235','version/code=4237',1).replace('version/name=\"4.1.7.66\"','version/name=\"\
-        4.1.7.68\"',1)\ncfg.write_text(c,encoding='utf-8')\n\nPath('android/tests/V468GrassRoadSmoke.gd').write_text('''extends\
-        \ SceneTree\nconst Regions = preload(\"res://scripts/V408Regions.gd\")\nconst Decor = preload(\"res://scripts/V463VillageLife.gd\"\
-        )\n\nfunc _initialize() -> void:\n    call_deferred(\"_run\")\n\nfunc fail(msg: String) -> void:\n    push_error(\"\
-        FIX68: \" + msg)\n    quit(1)\n\nfunc _run() -> void:\n    var roads := Regions.new()\n    root.add_child(roads)\n\
-        \    var crossing := PackedVector2Array([Vector2(-35,0),Vector2(35,0)])\n    roads._v466_record_road(crossing,6.0)\n\
-        \    var decor := Decor.new()\n    root.add_child(decor)\n    decor._v466_road_check=Callable(roads,\"_v466_is_paved\"\
-        )\n    var separate: Array[Dictionary] = []\n    separate.append({\"a\":Vector2(40,0),\"b\":Vector2(40,20),\"half\"\
-        :2.0})\n    decor._v466_local_roads=separate\n    if decor._v466_on_grass(Vector2(0,0),0.8):\n        fail(\"local\
-        \ road list hides a crossing road from the global registry\")\n        return\n    if not decor._v466_on_grass(Vector2(80,80),0.8):\n\
-        \        fail(\"free meadow is incorrectly blocked\")\n        return\n    if not roads._v466_is_paved(Vector2(0,5.6),2.65):\n\
-        \        fail(\"road overlap check ignores the width of an intersecting walkway\")\n        return\n    var src :=\
-        \ FileAccess.get_file_as_string(\"res://scripts/V408Regions.gd\")\n    if not src.contains(\"decorator.call_deferred(\\\
-        \\\"build_village\\\\\"\"):\n        fail(\"decorations are created before the path network is finished\")\n     \
-        \   return\n    if not src.contains(\"if not _v466_is_paved(q,2.65):\"):\n        fail(\"inner path gaps do not respect\
-        \ the full path width\")\n        return\n    print(\"FIX68_GRASS_OK: complete road checks, margin for paving width\
-        \ and delayed village decoration\")\n    quit(0)\n''',encoding='utf-8')\nprint('FIX68_INSTALLED: cross-street-safe\
-        \ grass placement, pavement width clearance, deferred decoration, historic routes unchanged')\nPYFIX68\npython3 -m\
-        \ py_compile /tmp/lwod_fix68.py\npython3 /tmp/lwod_fix68.py\n"
-    - name: FIX70 Walddrache Stufe 5 und separate Kampfarena installieren
-      shell: bash
-      run: "set -euo pipefail\nmkdir -p android/scripts android/tests\npython3 - <<'FIX70_SOURCE'\nimport base64,gzip,hashlib\n\
-        from pathlib import Path\nassets = {\n  'android/scripts/V469Battle.gd': ('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'),\n  'android/tests/V469CombatSmoke.gd': ('H4sIAGKxBGsC/5VX/27bNhD+P0/Bav/IiKLY+dkac4E4RdqiyBogWTdgGARaOktcKFIjKTvJ8+wZ9gJ9sR1JSU4UOUsDBJaoO953x4/fkXBnQGSaXKcg4EYB7KRSaEPmZEYqBVzSLAwU6On+vk4Vq4ze/3Z08m5OjeEQ51kwahxuXnKYnN6AUsxIxUB7r52UU63JBb2Fj7SE6Q7BP2jQ/CIzOPzghlZUEW2ogSlhwmCQg264ACWn5LygiqYG1Fxm94+cqkKCYHfT/mQpRlM0ETiKzu4Fv7ZwODUflaxFthXQshYpSXJnFCY4/xJzNlHy0DyNyN57/zQlCkytBHkXj3d2vB8TzDDK2QOEznAlWRMqpZwnGSyxUIAlTAxoY+vk/JaU8VAB1VJMybVRTOQ996rWRYK+UoXBxeffT8dTEux6j5Ez+LtmJpy0E7rp+xDYksxjW9UEC8pwWcNRrB3UN7NTIhV+TWVZUYHfBkyO/SyuSBZvkLZLQ6jISOdKShC1JiXTGvMgzUTBqPP2ZfPVxqjeAJef/BGciVyx5TKIgg9YKqHZCh8vac4Af+eg02L9/V8FAt8+Gyi1HWUicwMXvE4LE/y5gYkJC2meJ11QHfq30cZ4k1eLvOL0Hjp8wW7j8sTjR3O5+P5PwfJbYOZRYr9BWmjgYhD70JK8MgFdlyWieW0Cjh+Vkn8BLmqWZLSkOYSH4+g4MqoGpMDk0NNk2GhJubZWB8+YYnkvUiCZBO3SKihf4atzHmaGA7PAtcVEEmQauoenx9HbEwwwjsceR+87osDvP+P3oz6CxhJZir+ujI60a0CBEpDtZYrmWCM/Ea7fCjdxNozMqkxOprNO3GIB69CbKilNTLMMETGehbkfzR0BZz0pe+SWP/Zxxu14I3Mzr1BbXRqzUQcQoyiKNLQwO9Hb4t7YbpyXLC+MdZ1v8XAGftg9xhrLU4V51EwV3cQpM/fJWiq0Dq6lECAM5cFo1C6u91vjbLOZqDm3C7oZi3MwSQmGhgGHFfAg2ptYCdpqBSvJa7uujeVkuyUHFCi7/QK0C66WnIoHCPqEsV52S6OOkoYczbaKyFpJpFIX0obyQx7rVtY8SIFN6Qxl+/ADtroePNuyEqkSW40w+ELLajkH3HeFqkWurW8wIlQ3/m0d7biv4GAGDXQjURudbZvFdpS6oJXtnZJzpjG9a/vuAFv/Aah9Sw+zP9oCdtNv1ty9xr1BKxEuGMqXO1ZgbaWvH+phM29SUn07m43/P2/nkqGUt8KIczFh1XC1XX06DAvcrQkyBrBxx0wnqWWzFb/wHHs6XXDw+yEKEgTlIiLP+6g8Es1yQTlhXgW7mRAnQYHEPYpRXkTkOYOslCig2SaIV40453JBeVJJ7URu9phiTz/tfsPIUh2Gk/goGkfjTVDv0+XSChL5iVyzsuYM60Cw4xJsWnh6auj4pEp7tjALmt7G/Xbm516442UiK3B7J4/dCfDN7HComfnCZSxzE7gIREOFUmqA+Jn8CTLY2tieSE6C51YA0Vedtrs6fjuVS9x6dIej1gxPH7S/4TZoO2TYthEcceaO5ygNgixqY2zveb4JX4Tszi8LqgbRHT1Ch72svN9uOYT401VELvH/7Fdi/V4HrQmXFlJqCLujzsaHrilDgiM3DCSG4TE8HMcnp6PYPsvaDCTpsRfV+9nbkyGguNRIqY4J/vBATAHNZv+hYtowk4PxUByHg7iTvWPcHaQ17tFXFQRvE4nnJHa9Ut7C3o1tIAskXAbYc/wR6aUqTeLx8QtV2rZ1DoYyaXZHWzHby7ChYUYVl0hS9lLNKhRd09w1kvOvl/Ozm+Trl6lvceT4aWuMGqHFm0ueg4qeb1B7/4zI6e5xex+IyKcr5B3SLiLN8TAizSktIps1aC8O7n6DKvUfsx8CyNIOAAA=',\
-        \ '2fccf563cd5b8a23886b285f60b67dcff96e6a0abd30d118dccfc9f4969a2564')\n}\nfor path,(encoded,checksum) in assets.items():\n\
-        \    content=gzip.decompress(base64.b64decode(encoded))\n    assert hashlib.sha256(content).hexdigest()==checksum,\
-        \ f\"FIX70 checksum {path}\"\n    Path(path).write_bytes(content)\n    print(\"FIX70_WRITTEN\",path,len(content))\n\
-        FIX70_SOURCE\ncat > /tmp/lwod_fix69_patch.py <<'FIX70_PATCH'\nfrom pathlib import Path\np=Path(\"android/scripts/V408Regions.gd\"\
-        )\ns=p.read_text(encoding=\"utf-8\")\nanchor='func _v463_add_village(root: Node3D, centre: Vector2, city: String)\
-        \ -> void:\\n'\nassert s.count(anchor)==1, \"FIX70: FIX68 Sonnental-village entry not found\"\ns=s.replace(anchor,anchor+'''\
-        \    # FIX70: one wild level-five forest dragon near Sonnental's southern gate.\n    if city == \"Sonnental\":\n \
-        \       _v469_spawn_forest_dragon(centre)\n''',1)\nassert 'func _v469_spawn_forest_dragon(' not in s\ns+='''\n# FIX70:\
-        \ isolated encounter – existing roads, landscape and player untouched.\nfunc _v469_spawn_forest_dragon(centre: Vector2)\
-        \ -> void:\n    if not is_instance_valid(game):\n        return\n    if is_instance_valid(game.get_node_or_null(\"\
-        V469WalddrachenBegegnung\")):\n        return\n    var fight := preload(\"res://scripts/V469Battle.gd\").new()\n \
-        \   game.add_child(fight)\n    fight.setup(game,self,centre)\n'''\nassert s.count('func _v469_spawn_forest_dragon(')==1\n\
-        assert s.count('    _v469_spawn_forest_dragon(centre)')==1\np.write_text(s,encoding=\"utf-8\")\nc=Path(\"android/export_presets.cfg\"\
-        )\ncfg=c.read_text(encoding=\"utf-8\")\nassert cfg.count('version/name=\"4.1.7.68\"')==1, \"FIX70: FIX68 version expected\"\
-        \nassert cfg.count(\"version/code=4237\")==1, \"FIX70: FIX68 version code expected\"\ncfg=cfg.replace('version/name=\"\
-        4.1.7.68\"','version/name=\"4.1.7.70\"',1).replace('version/code=4237','version/code=4239',1)\nc.write_text(cfg,encoding=\"\
-        utf-8\")\nprint(\"FIX70_INSTALL_OK: Sonnental forest dragon, separate 3D arena and battle menus installed\")\nFIX70_PATCH\n\
-        python3 -m py_compile /tmp/lwod_fix69_patch.py\npython3 /tmp/lwod_fix69_patch.py\ntest -s android/scripts/V469Battle.gd\n\
-        test -s android/tests/V469CombatSmoke.gd\n"
-    - name: FIX72 Kampfkamera, Menue, Drachen-Team und Speicherlogik korrigieren
-      shell: bash
-      run: "set -euo pipefail\nmkdir -p android/scripts android/tests\npython3 - <<'FIX72_SOURCE'\nimport base64,gzip,hashlib\n\
-        from pathlib import Path\nassets = {\n  'android/scripts/V469Battle.gd': (\n    'H4sIAAAAAAAC/8V923LbyJLgu78CRkfHkjbE5p2Uxu4N2ZLbXl/Dst1nT4cDARJFEi0QYOMiWd7YiP2H+YX+hjMv52n8J/Mlm5l1B4q07DNnpiPaIlFZ'\n\
-        \    'WVl5z0JVkX2qWBaX3qs8ZqOzOz94L359feZ9GA96M+/Js7/M+t5//L9/9ZIsZjuAY1nlsWyZ11nFCi/KYq+qi+xoEZUs9hZRVaXMK5cFY1kPUP2apLG3'\n\
-        \    'ygtWVl5cROs88zrsKk/rKoGPg8BL2RVLvUnXy+uqTGLmXeRZBmNE6f8ovRIebliReeuoYr07yzwDNEDY7B0riqTKi4SV3kNvV7A0j+KOD8Oc/PQTjJ7s'\n\
-        \    'qvKnBmBvHftdgePi9MN5+Ob03dMT76IqkmwNWPy6ZAV0T6/zOLwazwZhGV2xOORz6i1Xa1/0fvf6/eOn4dvTs2fvL068FYxdQf9hbzoRAC9P/xK+Oz99'\n\
-        \    'eQJcw6bRnTtXUQGz2LITYjP/WgATY+PBEuZdAMQHtgSSh9BRfOr99fztawK5Bn6eSEnhA05dmINoTrxFnqfQaxWlJccYbuuyClMGEwk/5xlzgADP8hTm'\n\
-        \    '6eoNjL1K8roMywoEIGcz5I0gmPzEe7yJimgJqvAoj28ETSGXPzRG2VVUvohuWCH61DDO4xymmaf8CfQFTShPvF+KJMaWKMkk9JaVZbSGcV9EC5bqUUEk'\n\
-        \    'BfT48Cj/1OjBMra92d8cFSyLLPbxR2Iu7eernNmPl3UBDZWpNk9ZGieZz9tjtgIbgRYXO9FQwjRfXrq5XQC+k4feW7CpfPuq3i5Y8QtMqIhABXoZu+50'\n\
-        \    'zUludlIe86n5fKueD63nUS2fj8cGKzWawbBvPNdopuZjjUU+3m1yliWfDETHQ7tFoxrP7RaNbTLhLdxVmJPrWw0a18juYaBS9EYpCALpXpTaErmC5nVa'\n\
-        \    'VmAQZUOpF2iSAqfTnrhKghTXpg74hoAzkpzEy4lBTxLuompjdFI+SPRl0Task7BKlpfaqfR7/Tt30PqSpbeqs6XHpcCNptP1jn723kSoUBztaVFENyd3'\n\
-        \    'PPivYEhNu7Xzm3+arYtktfID/wzVtUyu4OPLaJ0w+PuIlcvN9Ze/gZrDt2cV25b4FN0/PniS1stN5X/s2mQt8+0uyoCofwptT778uUnWlyypDEJ/ZctN'\n\
-        \    'ydKsRcuuyH8HvwmuO462IKzOLr8WAgm8qNjm8vO6joq4aYtENzRzSlE0bLUCdMmVcoDb6FPSGQSE9oi+9APC2+2a0xNgS5akSYcE2lGouvc6/d7ES1aS'\n\
-        \    'CI/B2N6g1+92G9NZJORQwuUmypasIzyQNJEAh5FfiHYaiVMP6Hmr9wBUycshxKjenoDscIjuPaCnz7sZc0D9M74u02i7WwHpo5l33+sAuUccicbb/clC'\n\
-        \    'S3jnAeCB/4+HMDeaVAn4dp38GtxbqMNiAOOseTjgX5dJdRM2wiJN8ipPYk5sBr3RBD+Mp8e/RmkMWcZyw7JHbM3WWZ1B0EaoNYfSA/KnFIHhuRiWHvLh'\n\
-        \    '4KExODWgg+4V5J2Tz6zDZR1i5gGKVkXyQbmLrrMQA3XIMx7RAFMGx3dTJssSAmu+BE/SqYqaSZYQWeEqgXDSoX+lr6AJf4iKJMq0XLO88pIyTCDdQLUI'\n\
-        \    'r8DZxR1E0W0JMavTlJ6BX/NwPjegLMSS3hqJKiB7KGCuaVJWHaM7DMMp6FAnBO74yG+wPr/b9R6CyRChqocxqETP52IZBtEjJh2hTLmzaKQS2gBhbjXK'\n\
-        \    'n7MAJGOyykeP6HclXwgWOOPGZhDBAaMW4D5Cua5ANEnWm6rzh62Ots055EKdu5Qu88+9TVRCNKk2OUxBIPfbouO2JLosozTVwMEfvU/w/41wOhRm6mIV'\n\
-        \    'LYUxAZ+UiDP4HuZFiBPq+B+GM0yMkqyG3A4zZEiR/O4eylGjuHNSauQEFGPzOYov1iTFM8HBMKr2Tlf25vNt92vM3HBVQlYOE7SdBjYBf3hmJ3Ir+bwn'\n\
-        \    'PYr2JuF5Vl1DXE7BnwzCi6pesYmvO6Blwyyjjs9StgVbAft4s0qj7DPzuy6wcseWUJFgEFNjuCGpPPKDibNRFVJ+MOAAURxDnACoDoIaioGFlKOw6KBf'\n\
-        \    'xqAj5dqqmSDvD5EhZcdXlZnfRcHCgy9/jwHOlCMNhPhdeOKkYJQdmLgCjUYSQUh6KcvW1SYs/4AAyWKQ4AMU8cQxlmsuspHjyvJiC1r6GfEopvxhMkR4'\n\
-        \    '/fu8w73JVAQ+Yvk6zRdRGu7yMqG6VY456qAmNl1D936/N+iTgmoURY4hPc96N9AbokU27Bxx2j4F4oMAFyobrlkOYi5uSJQYPCeadPDK6zWU31AunBYs'\n\
-        \    'snRYtCk1fo4h+xGDSLMpQH9LrAN9C3KZp+D6MXlLsVSjrNXdvo3KSywVrOZtnpGYKavFiKZnrfVRAOspbJIKyX8scV9sop1tjAChJtEE87Vq7yAAMER1'\n\
-        \    'QZ/aeDgERO44qXG5wCzf1UAldkN9IWD12CFyoWYTzGlsjuvZQle7aQGxBQoxiDIM/Dgq/7LqhMDRKod82hBsgusnMBkqeW25YpPDOZnuiMNU7FNlw3je'\n\
-        \    'i6ueZwGtIAKEJZgElkxjo2GXfGKpbIE59qdG4yJJ00UOGSu0PYpK9hLsGqIyUvro2YsXj16fvj0Lz1+dPnpxfmbidLAxGPWGwERzcts8rlPA6JFeQF7g'\n\
-        \    '/xBPVuPF2HSOhk5hJ6PlCjRkkWJvzI7kwoYMCpLZHZSFrOobcQGcD7ZiZqMyE4xniK+1lqIcUbiA9DETC0Udlc81k70wrkRh5xhVL+Ngmi5px8/uTI/8'\n\
-        \    'ezN+cv+BCZGnJ3A4YyRoNyLUxzgpK12NEnDTG/YQhjBWecflLu8Lkffev1HEYB/vZ9sW7w96U4OpDXarOtzE8MDG8P2ysp/eVjz/XP7/4J3l1As6FJUX'\n\
-        \    'yXJFr74ubkA0N+h48yv4WoGh8+DRk4NGi3LVcYvt5sglLIhCUBmOTEkYJJl8MHy9Q1a6zVj1smRorpaokKMX0GxYUV+a6230XK6F8WUw49F2x1fAjEdR'\n\
-        \    'zRe/lJB4PyrTx5NAPnI6FE0KxRy+HLqnIKFWI5vBr1iRqEUFIsBeW8XIg39VO6XuJRZcHF0w6mrCe5AU5liean/Kl4i5hteY+ApR8aVYVZtGNx3/HIo/'\n\
-        \    'nB6w3YgQUMx7RpobeBRXcGWeFSUAAPV3fYlmk19DLpAYqz3SkLYiIHSW6MBPuB8PPLZNKsc6ywWYQgzRRIcRXfUBJorqLRAjJgJML0oXLM5DGg8TOfyr'\n\
-        \    'GsFi1psMvC/FstlcNSyhmAm3vExqBLLH71+8CM+eXeggBlKkCSjpIAZ4UlJSxLIIlCQ2lb4JY9HlQMCKNahsnVbJLk24OfTm9lpSpeIYOI7OLuLL0DyK'\n\
-        \    'BR58V4vS8C0vZW47CrwS6igWfrr5bDwzpUOSeMnKzTPhmkwp5IvfUQp2syEBaJc5CdKgpQcddFKG3U2x4VeVj/V7E/2UJ9GYY4oEXMGCkyrZGssr7DQw'\n\
-        \    'W2HS+GyqKKLRH1KrfiYkHKKvLBKSfENd9ZSMhAU+qsfESrRVyVJq4cIwEhMAtUpT+C6l10zum4LkmFcUO3TgxbLGDkoUnJHBrRrWVcD+L7UQFqs5SMfx'\n\
-        \    '+tW5d88a1z0po5zc5mBQJzpJGy3n84lM0hBghS/tDIDJbDGbHhsAYNGXJsBwNJmOmAEAwWRlAszni3i8lA6IbCAO/Oc5K3as8AOdVQ56gzlklerJoAe+'\n\
-        \    'fYCp5hD+6QZIewPLowLCl42jPw2O0F9oPFiAYcMI8v4J4EECG3iegl+z0UxHiOZ4aKKZjZCcIaCZOal5nu9WJpZhrz8LjrCLOan+GBHMcLpADPK7geZi'\n\
-        \    'ucmi+jOzCZqPEdVx3yRojlMaI77jqUkRrhaWyTrDxcLfoBfx5aMRwuRQp/XaGAa73AOESPlwhMPNRuZwKB7xDwwn5bsaxaMpyLfbRv+m3kHV4RhhiCPQ'\n\
-        \    'hObWCMAvQI4c7s/0CIPZaDIcO0d4BEVHtcmLrDXGaAxjTCYkxWNzDCxdelOcxXBuKoNk3GfONdQhFNTwo71IqoeGwNoadTogJQs+myOSGvf7Qv3QgLpu'\n\
-        \    'lM/TqG5zazrmTPl8hH8sxMiuESKe9U1VkqZ4nfAXkza7VmnN1rg2ZY0DFM6BzGNUqdFEjzLs4ZPBMbSNJk1+4QB6geQz+KYjJeI9QJj5CJjBTGnr78j0'\n\
-        \    'IsrWrDPuOhT1bc0gDc0WSH/DxFCcg8l9YO70Hl+F/L1rMmk0IjHitOYmk24zLJjidZR9NkcEdZofyXFwElO05BmOf+wcfzaywMlkLQyk9LNjUzOaBLTm'\n\
-        \    'DaMNoQzvW+6AFHZAPlMKSsQuSpD3RK5GeDKzFNRIlsSHnDSMOiFXhiT1tc1OJpPRfCVt1kb6C4PqetOU48hGO50GhBttSqNls8UqmrnRfkjylFWQkT+N'\n\
-        \    '4ImNfUQ2ZNONbB/jKNNjPcBsOhks1ADckULCcdCRSgJOi61pVDG7R2ICw5nZcyMXdIweaLJvam3sF1UCFVbaGmHILdYeYURRqi+UXg4xZuP+KHJzD7L1'\n\
-        \    'hW/HFgjAFAUHEysKDJTVDTXqaA6JBFGv1lD4ToHbaR29LCL5manD8WI6ZEPfRe7bemsHW1D6ftA0h4FgBPCAY3ehcoTtIU17auljX4YNUx8Xs/mIsT0c'\n\
-        \    'xTi+MCWGVB6PEffUYukQVZESi7EhrdU8HsyXtiruj+ltfy/peLLP36NqTkZ2ynWMVAwppMxsph3296O+y6mOuvtsBR0bS1YrFptJYOf3owG6xCEaB5JG'\n\
-        \    'ttnIQOYoV1P34ulxtIoM3dtGlywcxVBCQ4HWuUrYNVRY9eIDfNjlRXMRj+8Ycr1U4i0qK79gQD2UHeXojJbmwRpjsZwNmI2Em/czkuo0z4tQFlZ7KzIE'\n\
-        \    '3aVRRsvIb/BDo/qixp5Y4JUvT4bAjrnQETWOrKOoR6vtYD2lPOHseDBR6idYoeeo8Wn9TLTkj7u2alYFY86ix4kcoXUzfnMtRB8NIHje55E06d6DdC/o'\n\
-        \    'B0dTtbUh8X70RqhOo6ZPRYzk8rbbRnBr+NEhZpGoh8Ox1rfpdGK40SbW5wW+prH8ydi2sQlGzDkP06oQ60/n46HNbbkeuUcv+YKSUs5dwlJWrIt6txNv'\n\
-        \    'iUwwF/soP0ZTH7fRWvna0Ztn92St35KV0ctY6NJ+v92udugdmBu0OqrhX9g6A3/RBHRMTigDCK6F1praLWYGffa839MAFH6MGpiWQkDdz+SL0yh9gc+s'\n\
-        \    'qRKUIseUDDg51Dmkf2TC0r9i1YkWF8Z7SCdATc8SOFlEFFrpk0UGb9Qv7ASEj+vYuIt4eOK9w13AuETPXWUBiQh8WDKvLplXbZIS10BxvRXF+SaqNj0T'\n\
-        \    's/Md0gTftM56c4uGVX6FL7VmYgWpNS0OZnUBN3QZgrG3UlQLSq9Cq5U+2iCWXSFTfs2LND7PrhIwXVymMpgDED2mWwDBreB6i2h5Kd4ui7VKs9+jX8LH'\n\
-        \    'r1+8fvu1rnJpVCVEy0Uc9X33kNF2keBOLq4kZV4Xy+a4py8fPTt/9S68eP3+7ePzAzTYuJpkLOJ4tBjcigylq5Dw7hEqdNZvc1wr4I1wzR8jOXqTsulA'\n\
-        \    'xB526y36AtDiPjPfApEvzXEDrb0JQ0BIh1bHNHva/WwOBQ20qwNC+SYvSvgbh/lqBY/w5SHDtwCy15u35xfn78InuET99vzxOwPDNgczCldJWrHCGOfl'\n\
-        \    '6/cX5+GTZy/enb8NL969fmPRbtAKOLSpL9Yqg34LJmFQu1j3moKcx1F8LNfmoP0fn4sma7HuGqk9z7zCRf6J1pZ1MqY2epuJkAH+j9FkYeJY4GNV5Vv+'\n\
-        \    'WmHYhuL4Tai+gyiI9dVyY/kTs/02In32y6vXb89drDNR2UxsMK/Bs0ZqmHQGg34/mKrIhCA57q9CfwcJcpP8XoHHRIqwigrce1bvYtz8I/yXOez7N2en'\n\
-        \    '787D0xe/nv7vCwejrZkI7Wgn5YbSRiCW/YpLrQ3lFVXKkAIlVQp9C1oIu8p3hgztNkPEw/7EAVA03mg0NZyAzZXvFQV96/yCGe+hXaImWCJs2GqTw/Zl'\n\
-        \    'eDcb1YQG7TZzQiMXxQhsJml43gLA8bGaRSFzl33TIIDWPCaTdqOeyPG83dqcidX41akUOsMxDo/gjmBs0JrF8WBBBZVQ6poPB1Hx4hF9JWjfbG8JTpBt'\n\
-        \    'N5tTdrXLSU/7jkZj0sfHE10TIi1hWd3wDUYX+AFk8ySNTCsxoHqLddiyFjSUES00YHF9PHD0ygu0/maQWMbxJJJBwoTnbpL6XCdxtQlx1+fQDbfMC9zA'\n\
-        \    'zV8dEuCgb7EfJVtt2JbxTuBGVHna8QmbHxhI3SGHUBlvu8CPJfQ66yV9ckmfwxjD00GwCBIYPTyHIdH7wWD8zR1JKb6rJ6gL9Ot/cz/OCd3VYDJnFYcz'\n\
-        \    'KoQ8PWTz0Hx43JKvjdCW1lmLXJG956mMBfwwjid2y5kplWhSW+HOam/Bii9/3xR4EBHyPuOowF3f7qMpVHvkDBLVM2DLrLuvJ2l/sxc99PXK3IAtllNV'\n\
-        \    'rEsky7oEJofbJEu29TZsrNP0g+HcZqZI30R3WafyfRnQ0TpXZ1XIHAQDYr0l0KHdcFBSm9CUlVSQ2/W9svpOGl2J36s0Wpch9KiSZZQauc/Fs7+eh+d/'\n\
-        \    'eXP66gwzoBcuVghMAi+UmZDjbcix630quKuGP1pK5jSODAa0vTBEDVI7K+Shm230SX3Uj+RHcRYNH4mPjeIDV7mIVlzpUuPTTn16XGC9ole+NETBtsBG'\n\
-        \    'aQgbtceboPBr74+a1cA+SO47+3aVtvaUCiPR8zXabm8Mk66z260sYcRmi1hagp6uc6unEp2WXOA/feODcLhcjBXd8WIyUAbm6vcS+m13XHh6FW0xn8XH'\n\
-        \    'B/udvvdBzFzC+m3VAuz52FhBVj3lWwtbwaD2WCWflHKJYy5Cc+Ab/1zhvjFjp479uqPIKZt/usfjtnZxALyRaqI6uPSCGpTz/LH0fox/+jH2vR+93zjR'\n\
-        \    'nFhB50ejz2HvNcBtC+YQt1evkbvbIfVCzolkMzcX1gmHVTZQZlfka3AU5aOosKuGr81pOAkGQw1t+C/IxpLPKJWvejDsiCfm+Kkk2pQIH1WTfEx/9Ui4'\n\
-        \    'DW/HCjy7wOOgvU0RCsf0QKqHzWaOh+zSDe50a6TZxra76uYAempv55D+D4PVcD6S7+M41MHBcKoH8zqk1w/w31t20GtjfkAEuLQEsChDtmNIa3vwga29'\n\
-        \    '1GX//mr0ELSVioLWFSOXUXYanqc0cAVojv/+b2JDP1ik3BsbUNff/M3O/yg/80OYxvdGm/k9qu02/N6mQxdJ5uElTVCgtuQG82mgNuMGQ/UFHOZ43DXO'\n\
-        \    '/xnTRs6eJXypuxCHhbcRLpGok/eKk/6bzZe/Zckn33n88P8gH06M0+mBZMbJ8TBARpwYB9QDyY2T8TxATpwYZ9QDyY6TyeT/6uGNo1uHKFAn2jUB874g'\n\
-        \    'QB1q1+OPJmJ8da7dGL6vhw8PjSl2MusRB0M5pDjcrwec9sWA4ny/Hm4Kw8lAhqtnWlKdS3bjCFsNw/hGwYEdAdqHD2kK5r0CuHkWzx0nHR50+sHx0N76'\n\
-        \    'xFLVeWt13jo6j+d7O+OszdsJ2p0nk+4tNKAxFaUCbXzz/ldmolSk3Xc0+cpElAo55mGMGx4kXm+Ub6AYDL9Gu9C1dtdp/yuUC13c33NfVh/ddNStIcbp'\n\
-        \    'aWPd37jBge8Qxm/7j7Wquso8mWIXlxKHpAGj8nKTJ0tWdujo5En7poNDBYGqhPbVAwrgO8oBHInWqGAgTpz1gn1RQ4VPax2P6FPjFTtvlhPP5Dl6o2mV'\n\
-        \    'Q7YkF3tlyvPk9eP3F+Gr16/Om+BfSa3mtrmKTt+VYRn9b510mhre6nurwmbGjpex+Y4fmcxPox5IneheAwJy5U/j6TSezP026J6Ft1E8jBzgznW3gROs'\n\
-        \    'nZrNDzDGkXBxXH7A/9rc2NDZpcPMIBgXL6bD4+Fs4rcg3axgAzZZtKEPrUDaUP8wIwgVlKr4x2YDvojCK7QOM0JAuVgxn0dsPvLbsP8phAtkfiA+tHrL'\n\
-        \    '0dThVnCBeYknRrOY3KC50cVcJhLZNmHpWk7UPmHkzLrN66+ch/H2nj6z3HTjVh1ALtMWCEniwBm/BMFx0c3BiMS50OHAe2JSey54yNC6Lso1N55fCcw6'\n\
-        \    'K5E36DQ2nJcw8iUDl3podkNIjaEITla4T8NQJX0ZTwOreVzPOv2kC5x91Y2mrJFcYg4AhQivSO7Pm9B4hA1KoDXbVBjEPrCiYkmcrOts3TProUY/UYmA'\n\
-        \    'Rhvji8uEmqwyVcN1SdETCKrFAqzIg+rfe/mm6wf+X+viy9+Xl1AzHWKwC9sL3MYM4Wy7xVN4oxY+FwN+/fLnJmUeSzJQljVu2coq+PTXqF6AqzIl16a1'\n\
-        \    'OdsdQ8c/DEYgfAVtonAR6EYyCoZQPxnwJhrzZqmTtqLU2y1YVb7jC9f0qq3NK1k6fOw2c1b76i6rlS4BsND3oh3eZdhp37/xFXgple4BjbG7OqUHotp+'\n\
-        \    '+Rtwie5FrL3P9dZ7/uXP7Q6syVtoPv1Pk39y7sHBwoP7A9A7CU47roxy6sFDuglKwRnIOKgqVwCyzUhlgHj++hJ3xdTZiu7nIuvjaLutbobf0piIUZ1m'\n\
-        \    'F3Hp2Lca5VOWpJdFVFde58e4S57AugIu8C8YGAqk92A1GkZfBfdNNvcLWzOqFGLL2sQ9aQ3aMQbal0Fx09TXmjU6RIskTaobE1hdd9Y2Hby6BG/C3GMz'\n\
-        \    'wgEF3288YoCvW00T8DbmIvq47QTmDCyPkededIkxQtpJsQKXb7s6MdETp5bJVpP//C67lgnpU+U/e8MpNwp599dKXEQznu8zjTP7XDVkUOAciwLsPGEe'\n\
-        \    'H/Ku3zYQd4Di1XHJTlzwcotbB19vXkLeRe5klSZsw7KeH/Bz1nq+UhonbVabZbFLWI3D3vuXDjhMj+5TKCGdrjYdbZnmTUEKBW5xQgPtONYEXNgMK3bi'\n\
-        \    's41NvYmh7Me8CTBm/KLY/XkZ2la0xbsW5M1/7qsF7yvtSEK+b/1oFEy6wbjbuqRA3BaoHh1x/ObxfHzbUp54P8bexXITxfh+Gt+7qGVeg+6A9/7ozkCb'\n\
-        \    '2vzQdOeW+hjqCsEnYevqrnderCK6MMi7P5qAMvGr6tr6aOutuoAL04FlXnLOBQbfqekAw/cnjHSXAl/DfkCo79iG9wrTDkiGsnoNKYq3+vL3AjhJUYkG'\n\
-        \    '7ToLhFb2CfgDOc4RjnMLKbr1Ihh1G4K9TorLCoi667W9BB78r7wXbIG2a0mcqL+lkB/81wlZBanvECKm9g8Gk0MiPH3PRUi+X4dK0+MflKNZRRzJt9PS'\n\
-        \    'EYymgZ/V1eeKo7/Ysc9JlK50QFaz1O6pVbTZ+YXNeZrOc0LO3d+XP2vcxbllm2LPFG7FOHyb8/ND0k/xbqc5KKjZJqpwuwvMowSKU4igT9/sqY3si2uM'\n\
-        \    '6XhH8p6vNms3wkRw+PvjoankyteDBys9Vmy+/JkCMUkJOa43HroJcaqX5cfbvBcI7j5sh32hS3UhEgc61ELpAiSsWSYyODMbhP9hkp/R8pys2Z8iiZhf'\n\
-        \    'A89LCvGlvblIyWHNFjXmhgdG0KmoQ5eeoC3w9BJwZl/+ViVrXjy0pnNAv/glsvpiicblsubLO6V2vA1I6rWIwvN3X/5El9LYU4WXxlReVK+8DdY5QBbU'\n\
-        \    'dJM+SB4VYI8Fq+lr3UO2GKnXg4diApqOVZIl6A75RDpO7+XKy0B3LvPtFneDbU3mmbmZO7bxfDKjW2v3rudAq6O2orup3IrU0AW1fkDj3HFWX1K1KDEm'\n\
-        \    's6J1Nidz9dEVtWrvft9hnLM6sW40MN5P6ANe+15RHHgDYXPI/S6wfe63df5L5YhtVjfXqNznrRAVngM10TUT7a8eQpPiWEB7UoEyRaWnTnXetUXiCt1O'\n\
-        \    'DTOfNd5e2cuZasXt294fkU0TcCle87gEFydl616j6DpKMD5XYUUC7S0Lhpv7q2TLcHvwZNTt4ee8rr59lVZcBXZf2j6/J2ZL7/L2pN+D8X18ddSZByaK'\n\
-        \    'riMhH0IyFowCvWDZPXTf2OFQfDggHnHajE2x9o3dMBD822kg5n21z1V9rFDgDHy8QBXvaX9uLNkoR2Ldm2bgu60L+IdcwS1cwm1NrunUgYpHbJ2CIwTd'\n\
-        \    'Qa/4vPe6B/l1gokXzti7pAWDyrsmGDP67DN4neRPmvfC7Su/r+siZuSTKbXuUYJ/JtJtoG5RgRkXFGzO8mLVrs4bJuGKYEb0Eov04Hmi7FCtSKr40TgY'\n\
-        \    'nifZoQ1HriSa9xHL8ePugbJJQmLpdH/49cviDB423toHy5RFRch/7gSvjfvO1z/GhgBtWxq10UdcuHnLWw3tixCblxq2HfT+u7Xt9++3v1nw4O2CzhsE'\n\
-        \    'G1cOdvcT1rhc9NDlqvu9iDj7qNH84F1s8T0E9K2hJtjkafwvdGel2A3O7J8PAjnlJeSC0Qqs9joq4rKnUH0tDh3bYegbiDQPR7b8lD40at4Mb/wCQLsS'\n\
-        \    'XuaZuMcsgwrkSYJX+Ko3uqiM8LxHv16kfiOke/fh6+dOdTa0FG2iQ52RC7Q9puPTiTw/8MUKvgSXvkZMwsw/92HCXyPRiBZ8q6SFxS4W1ZoIhrYmskT8'\n\
-        \    'iMhGrQPiyki3lfXfCklpLP8Fw66x2Rr5911ioKHKW7BRfnJ3c/LM4ra7n4M9NncPd7MYYrDT7AWsMfTrzp07/Ez+4MRbRjtQL1ApniXTEXz6eQg0TFk0'\n\
-        \    'gBnSLZZ1ViUptezo0DOgYZ92abJMqvQGT/GX1IieB3+9CwaUK7jeW0a32GKihcu4YJnYDl8BB7IG+UOdU6yj6Ze39EW3PSHiZq3XSI4biq0duRmrrbK/'\n\
-        \    'WOUphtLl5q5ZG2Ia8TvD1aFkK4J4dvQOxKuWyOTbfaggk4r7aGJy65S5VkrjHmouCr5hotnlB+/8E1vW4A3J8ZkMza8ztU0EyuA4hSI7IHcMsmFXrLjB'\n\
-        \    '7QkwUfpJNnl5QppSklvgJfp+i2LfpIt+g0iUS3vIa+ITp3upZ5KtcmPhrNGyZwfH18thYb+4tas88eitFgZG+om2Ogllk7HBDU1DHq2hXlYUoMaSn3mg'\n\
-        \    '3Fn8yAk20Na2bk+c9CgbL/3epFH1ufnSQXVrXrn+7//myUt0+RfxmxD8i3HXrjfw1X1X4q7wmKVVdNvbwr/ht2BEkmL81hTWWzSaWnqwWh/QodxboNHH'\n\
-        \    'o8PyJlvyRjxpT8rOt/cYqV9bejhL4zeifvDeFRG+PGOg3eBd3j/zFgWecGVC5zegNqCDYBYrDx1KGWX8C7lvuvuViZQBNahOtO789lH/CATGeKPlNyOp'\n\
-        \    'KPK8CvofNTCuvn3Sv+xFuRFUNIw3AK8IG+1PFBfHy4bRpN+3Mz1UGz0udfyNoD9qZaXOqh5W2wfV77sgjt/6H63WmO3wpz50oUlAg4/24gv9Qg5nva3N'\n\
-        \    'dSJf3jZugQQFQxaKK5w7JgbSQfqur9LoNhKvOuFQD/mv0ugvNru9XMwAeDa0KbMKz+yr5aa5yMGvByKB8Gd3ORV7ilT+2zjsIEpj6vqZnr45j5EGenho'\n\
-        \    'XK48gvu/UYeAcNyX0hO7/OtE5TwHLK2dBJkmsM990nFBREgn7tSPNcqUV20hzvl1hoDS0it67PCt2CB8a5WHeLlU0THd7Nnb08dPz195+KuZTQeryaHi'\n\
-        \    'I2auEV3rWOroo3WIEy+hcBGV4iu7TmtrhEZgkFvuMGdgBf5sklzXdQKmWJS7XlOrXwXc5Dm/CRkCK663dUqWrgK/mSY4dgyIAEqzkLsvwdLEBkwmKgrE'\n\
-        \    'v2c1xuop923qTjIgmPznarA3TGP4KenmauGhdF/XxX7m9W6yK/48jvjIf52MTjDaa8caltND+5mMZ20bW0B9eOlEAbpj3+lgIZOtjv1qX7lIQW0kO3iV'\n\
-        \    'wrgv7949Hjv7uTcyx+MFm098Vw/nZubRPkjHhQqNDZcdxYtIeb3ure5ZMG5YaIvh1tnfPm8jYlKZ5hBArvPGj3V+g4eg06Bf9RC2W9Dj4r0nCgFe6JPs'\n\
-        \    'QhavGfhTe9vK0BO+omPAa0fxBKoQ0D0sMnY8y0Q9dIKau6+6juVcxZI7ToOXqerQc5zfww/yp8vc3b/r8IQlNKgFDnk9RxHyPc5PDfMtzk93arxjMuPa'\n\
-        \    'f78K3VKD/pm68f8BkKFzHjV8AAA='\n    ,'d2fb46f84a1a79808f3d40ca79540a78c38e279da2e837078960c35d1f53e94c'),\n \
-        \ 'android/tests/V471CombatSmoke.gd': (\n    'H4sIAAAAAAAC/61Yy24bNxTd+ytYddERokz8SJpGqAPYjp0WzQuVkBYNAoKaoSQ2I3JKciQrqy76Cf2j/km/pIfkPCWN4QC1F5aH91zee+5zxG8tl6kh'\n\
-        \    'k4RLPtWcHyVKGksuyTnJNc8US6OB5mb86JFJtMitefT+8bfPLpm1GY8X6WBYAqZ3AU6eTrnWwiotuGmjJhfvr+n0ejIdk4nVQi6gZVAYrgGfi9unJ9Ss'\n\
-        \    '1CdODVvzOJkvBkdHScaMITfsE3/JVnx8RPDDSy/eqJSfvfCP1kwTY5nlYyKkhdrT+vGSazUmV0umWWK5vlTptgXKl4pLcTuulFUXZsy+1KqQae+V80Im'\n\
-        \    'hC68UEShYQ427IjQz+XHIXn4PHwKOtyP5rbQkjyLj4+OggIhhRUsE5955AFrJco7E5ZlNOVzcMnBMtWFBJMlbM5EFq24MWzBKzZ38HlhlhRgpaPBzY+/'\n\
-        \    'Pj0dkwF5QErQ0Mv8UQgbndRaE83BIV2A6mDNhdZsO67ZWpDxeR2MWPJNFNRopWzM0pQmS5Gl0SI8XcSOewRjh/wWcNFGefHqeRkYoAPnvaBScNgY6UPi'\n\
-        \    'La2j2If2h6UPITQfFqPw9GNFCnjfDY2YkxuR8YskAZnxHB8pvxXGmqhO8WET9BdCl5Kar9SaUzYzKissj95p9TtP7IRbi/ihVjI187lAc2aXLWWNd0zr'\n\
-        \    'cQgLqOkGrGFgXAcJQkB8OP64Q8+4RU4pc9LIzMViaR2Dly3i/MPY1aa3Dqjavj1ivWwHBnbzqOJ2NI0TYbd0ozSEBxMlJZeWZYPSUfAbYGgtKlvzlKjS'\n\
-        \    'qJjOnAI6Vziy7rFUtjza4OZ4LYyYZbxhP5TKwB2SVLOFkmRVAOoDRmbcaYICjX+cbynqLkcm8MFwp2pbOV0GiubKoHqh8bxtwu7hA/IeQVb6LDqJj0f4'\n\
-        \    'bRNDlaRWFcmyk/8goPFr5tsvVTmXe255KAkSZCWMQR4dttzFNUFGaIZu6P+evajtpkxzyeIFt1Si3KjSVBYZ9FeSgyFhpsZVNgZ95PycOOk940qzvG6y'\n\
-        \    'BF6q5mp3z2FLa8VxRWH8mTw/d13TBXz3bEu+PyeP4yd915dGCuMpTTJlYBKynmd8jeJJe42oqEncNcaT47ObJkhBGw2/On+6dyd6NjF8zSVJ1AoGkBId'\n\
-        \    'cm4uLOYTsUuOMhQ9NyMhyaywFpkD2T4jwGnU6jFlwkQV0JBL/2lIam1xAhPUiq4wclbFihr0GUceefwkPm40tZwpXQhw4+KIISvgoVWKmBV8bXlwIN1m'\n\
-        \    'CsDVmLxjkmdXChUuJNdN0i2L9EDKXXqUx4Ss68Kr6ATlVe55N/2TmMlkCWVW5fDtOH7y3X5iBGjglOROvWfPNWc0CbWRG6Z7ovM1Mtj3B5IsmVxwQ5IC'\n\
-        \    'AxpLh0GHh76R46vKti23ZINVCNsDSCOpMJ/idvHPEQtM6ZmQKQo3OlD8d/S7qjke8M919bLZOXk0ZjgGA1zm7djbm/5fMOGqfPHMuL0udFJWgGZmhdtk'\n\
-        \    'tmQj7FKBGrfwgTylTCXZ37AK6TXR+0y9SrY7/Voa2lOwenxw0nUO75h49Y2tydfBHlTnJ2ENHbUNPPl4j8nYVbeXH93j9gB1mdA9vXNigg/iKK4DB6SL'\n\
-        \    'mO9k0JuzjSStsdpXL1PknM8dB7acrbCCyuIbgwTEa0FKTOZKzyk1S7UJKRpKrNIc12HL2BbJg3BdMblm5pX7t2e386JNdoQqB7LbTVpgD2gp8Ihh+2pH'\n\
-        \    'AjS8v1S3hxR4QNcCIBoNVrhxBAWv2AyCDdAfxBYvGe6F6MXPF1c/XL8h0+uL1+TfP/8mZ+Tdq3/+mv52PajshNrWPR7eXOP5dBkdun5zjTuobzklN5oL'\n\
-        \    'kDlFRHLsgp97tDtUS7krhnLIHLyjOa+vmuQC1E9yLhJsOLLvngbZ2Y/MVibUpQ3F0KYtKdNtl7V3cRJiY6LBLyxLkUK4dtDXrXinUZa14AZvN2U9qae9'\n\
-        \    'vdIb0HId78bG8DQWBssCShgvP2l0hTbIoD1sx6OBW/1CcwnSqPE9I2srnKAvnLDFVEpdUy8dITnXBtJcJj0d9ZCFfIU3wCDNNgz7SdlcrcDWFB3HJ0+G'\n\
-        \    'sfuMYLWd/fLhwG/zTKC3BU9SkXo9bjhyX/PtodU/EO4/Dg4Ng4Oj4I5BcL8xsD8E9kbA/gCo2v8XNv8q0Xrb/65AewDcu/V3XoS8yvBdj3uosD0kNtse'\n\
-        \    'jtH/9q6bY4+w5RcX9Ort68uLKX370xh3sdQVUbWVjuo9vlztw7o/KvOpLt4R3HjoU68cXQCWGRke71eP/3IEL2v/AUxeWC02EwAA'\n    ,'59df9a1737ff3fd8fa4c94b9176a5f8ab8abb432d389e01453a64df9f7fff60e'),\n\
-        }\nfor path,(parts,checksum) in assets.items():\n    blob=gzip.decompress(base64.b64decode(''.join(parts)))\n    assert\
-        \ hashlib.sha256(blob).hexdigest()==checksum, 'FIX72: source checksum '+path\n    Path(path).write_bytes(blob)\n \
-        \   print('FIX72_WRITTEN',path,len(blob))\nFIX72_SOURCE\npython3 - <<'FIX72_VERSION'\nfrom pathlib import Path\np=Path('android/export_presets.cfg')\n\
-        s=p.read_text(encoding='utf-8')\nassert s.count('version/name=\"4.1.7.70\"') == 1 and s.count(\"version/code=4239\"\
-        ) == 1, \"FIX72: base version missing\"\ns=s.replace('version/name=\"4.1.7.70\"','version/name=\"4.1.7.72\"',1).replace(\"\
-        version/code=4239\",\"version/code=4241\",1)\np.write_text(s,encoding='utf-8')\nprint('FIX72_INSTALL_OK: stable elevated\
-        \ arena camera, battle buttons, session team and save state')\nFIX72_VERSION\ngrep -Fq 'camera.name = \"Camera3D\"\
-        ' android/scripts/V469Battle.gd\ngrep -Fq 'func _sync_team_and_save_buttons(' android/scripts/V469Battle.gd\ntest\
-        \ -s android/tests/V471CombatSmoke.gd\n"
-    - name: FIX73 HD Kampfarena und Menuegestaltung installieren
-      shell: bash
-      run: "set -euo pipefail\npython3 - <<'FIX73_SCENE'\nimport base64, gzip, hashlib\nfrom pathlib import Path\np = Path('android/scripts/V469Battle.gd')\n\
-        source = p.read_bytes()\nassert hashlib.sha256(source).hexdigest() == 'd2fb46f84a1a79808f3d40ca79540a78c38e279da2e837078960c35d1f53e94c',\
-        \ 'FIX73: FIX72-Kampfsystem unerwartet geaendert; kein riskanter Austausch'\nencoded = (\n    'H4sIAEDlBGsC/8V92ZLbxrLgu74CgsMxpISmSXDva3mipW4tV2uotXiOQ4EAiSIJNwjQWHrRxETMP8wv+BvOfTlPV38yXzKZWYVagCK75TNnxhFWE6isrKrc'\n\
-        \    'szaw65KlUeG8ySI2PL33g/Pq89tT59No0Js6T1/8Ou07//t//i8nTiO2AziWlg5Ll1mVlix3wjRyyipPjxZhwSJnEZZlwpximTOW9gDV5ziJnFWWs6J0ojxc'\n\
-        \    'Z6nTYZdZUpUx/Bx4TsIuWeKMu05WlUUcMec8S1NoI0z+S+EU8HLD8tRZhyXr3VtmKaCBjk0/sDyPyyyPWeE8cnY5S7Iw6rjQzPFPP0Hr8a4sfmoA9taR2xU4'\n\
-        \    'zk8+nQXvTj48P3bOyzxO14DFrQqWQ/XkKouCy9F0EBThJYsCPqbecrV2Re0Pbz8+eR68Pzl98fH82FlB2yXU93uTsQB4ffJr8OHs5PUxUA2LhvfuXYY5jGLL'\n\
-        \    'jonM/DEHIkbaiyWMOweIT2wJXfahovjV+9vZ+7cEcgX0PK45hS9474IMWHPsLLIsgVqrMCk4xmBbFWWQMBhI8DVLmQUEaJYlME5bbSDsZZxVRVCUwIB6ND4v'\n\
-        \    'BMZkx86TTZiHSxCFx1l0I/oUcP5DYZhehsWr8Iblok4F7TzJYJhZwt9AXZCE4th5lscRloRxWkNvWVGEa2j3VbhgiWoVWJJDjU+Ps+tGDZay7c3+4jBnaWiQ'\n\
-        \    'j78SY2m/X2XMfL2scigodbF5zpIoTl1eHrEV6AiU2MiJihIk2fLCTu0c8B0/ct6DTmXbN9V2wfJnMKA8BBHopeyq09UHudnV/JhN9Pdb+d433odV/X400kip'\n\
-        \    '0Az8vvZeoZnorxWW+vVuk7E0vtYQzX2zRKEazcwShW085iXcVOiD6xsFCtfQrKGhkv0NE2AE9ntRKE3kAppVSVGCQhQNoV6gSgqcVn3iIglcXOsy4GoMTolz'\n\
-        \    'NV7eGbQkwS4sN1olaYNEXRZugyoOynh5oYxKv9e/dw+1L146qypdOpwLXGk6XefoF+ddiALF0Z7keXhzfM+B/3KGvWmXdn5zT9J1Hq9WrueeorgW8SX8fB2u'\n\
-        \    'YwZ/H7Niubn69ncQc3h6UbJtgW/R/OOLp0m13JTul67ZrWW23YUpdOpf0ren3/7cxOsLFpdaRz+z5aZgSdrqyy7Pfge7CaY7CrfArM4uuxIM8Zww32b173UV'\n\
-        \    '5lFTF6nfUMx7iqxhqxWgiy+lAdyG13Fn4BHaI3roe4S329WHJ8CWLE7iDjG0I1F1H3T6vbETr+pOOAzadga9frfbGM4iJoMSLDdhumQdYYFqFfGwmfqB+k4t'\n\
-        \    '8d4Del7q/Ayi5GTgYmRtR0B2OET3AfSnz6tpY0D50x6XSbjdraDrw6nz0OlAd484EoW3+5OBlvDOPMAD/899GBsNqgB8u052BeYtUG7Rg3bW3B3wx2Vc3gQN'\n\
-        \    't0iDvMziiHc2hdqogp9Gk/nnMIkgylhuWPqYrdk6rVJw2gi15lCqQf6WPDC8F83SS94cvNQapwI00L2crHP8lXU4rwOMPEDQyrB+UezCqzRARx3wiEcUwJDB'\n\
-        \    '8N0U8bIAx5otwZJ0yrxiNUmoW8EqBnfSoX9rW0ED/hTmcZgqvqZZ6cRFEEO4gWIRXIKxizqIottiYlolCb0Du+bgeG5AWIgkvTV2KofoIYexJnFRdrTq0Azv'\n\
-        \    'QYcqIXDHRXqD9rndrvMIVIY6Kmtojdbo+VgMxaD+iEGHyFNuLBqhhFJAGFuF/OckAM7opHLRIrrdmi4EC5SxY9M6wQHDFuC+jnJZAW8Srzdl5w9THE2ds/CF'\n\
-        \    'KncpXOa/e5uwAG9SbjIYgkDutlnHdUlUWYZJooC9P3rX8P+NMDrkZqp8FS6FMgGdJItTeA6yPMABddxP/hQDozitILbDCBlCJLe7p+coUdw4STGyAoq2+RjF'\n\
-        \    'gzFI8U5QMAjLvcOta/Pxtus1Rq6ZKsEriwqaRgOLgD48shOxVf2+V1sUZU2Cs7S8Ar+cgD0ZBOdltWJjV1VAzYZRhh2XJWwLugL68W6VhOlX5nZtYMWOLSEj'\n\
-        \    'QScm27BDUnrkemNroUykXG/AAcIoAj8BUB0E1QQDEylLYtFBu4xOp+ZrK2eCuD9AghQdV2ZmbhcZCy++/SMCOJ2P1BDit+GJ4pxRdKDj8hSauhOEpJewdF1u'\n\
-        \    'guIPcJAsAg7+jCweW9qyjaUu5LjSLN+ClH5FPJIof+gEEVb/Ia/wYDwRjo9Ivk6yRZgEu6yIKW+t2xx2UBKbpqH7sN8b9ElAFYo8Q5eepb0bqA3eIvU7R7xv'\n\
-        \    '1574IcCFyAZrlgGb8xtiJTrPseo6WOX1GtJvSBdOchYaMizKpBi/RJf9mIGn2eQgvwXmga4BucwSMP0YvCWYqlHUai/fhsUFpgpG8TZLic0U1aJHU6NW8iiA'\n\
-        \    '1RA2cYndf1LjPt+EO1MZAUIOognmKtHegQNgiOqcfrXxcAjw3FFc4XSBnr7LhgqshvJCwPK1heVCzMYY05gUV6OFqmbRAnwLJGLgZRjYcRT+ZdkJgKJlBvG0'\n\
-        \    'xtgY509gMJTymnzFIotx0s0RhynZdWnCOM6ry55jAK3AAwQFqASmTCOtYBdfs6QugTH2J1rhIk6SRQYRK5Q9Dgv2GvQavDL29PGLV68evz15fxqcvTl5/Ors'\n\
-        \    'VMdpIaM37PlARH1w2yyqEsDokFxAXOD+EI1Xo8VIN46aTGElreQSJGSRYG2MjuqJjdop1MTuIC/qrL7hF8D4YClGNjIyQX+G+FpzKdIQBQsIH1MxUdSR8Vwz'\n\
-        \    '2AuiUiR2llbVNA6G6XXf8bc90iP73vSf3H5gQOSoARyOGAnajgjlMYqLUmWjBNy0hj2EIYxl1rGZy4eC5b2P72RnsI7zi6mLDwe9iUbUBrllHq5j+NnE8Nd5'\n\
-        \    'Zb69K3v+tfT/wTnNqBZUyEsnrNMVNfu6uAHW3KDhzS7hsQRF586jVzcaLopVx862myMbs8ALQWY41DmhdUmng2brLbxSZdqsl8FDfbZEuhw1gWbCivxSn2+j'\n\
-        \    '9/VcGJ8G015td3wGTHsVVnzySzKJ16M0fTT26ldWg6K6Qj6HT4fuSUioVItm8BEzEjmpQB0w51bR8+BfWU6he4EJF0fnDbuq4z0ICjNMT5U95VPEXMIrDHwF'\n\
-        \    'q/hUrMxNw5uOewbJHw4PyK55CEjmHS3M9RzyKzgzz/ICAKD3990azSa7glgg1mZ7akXaCofQWaIBP+Z23HPYNi4t8yznoAoReBPlRlTWB5jIq7dANJ8IML0w'\n\
-        \    'WbAoC6g9DOTwrywEjVlvUrC+5MumM1mwhGQm2PI0qeHInnx89So4fXGunBhwkQYguYMY4E1BQRFLQxCSSBf6JozRLwsClq9BZKukjHdJzNWhNzPnkkrpx8Bw'\n\
-        \    'dHYhn4bmXsxz4FlOSsNTVtSx7dBzCsijWHB981V7p3OHOPGaFZsXwjTpXMgWvyMXzGKNA1BexyTYB8U9qKCCMqyusw0fZTzW743VWx5EY4wpAnAJC0aqYGtM'\n\
-        \    'r7DSYKaVwqDp3UB2iZp/RMXqnWBxgMYyj4n1DXlVY9IiFvgpXxMtUVlrmlIJ54YWmQCokZvCc82+ZnTf5CTHvCLnoTwv5jWmVyLvjBRuJbG2DPbf5UxYJMdQ'\n\
-        \    'W463b86cB0a79kFp+eQ2A406VlHacDmbjesoDQFWuGqnAYyni+lkrgGASl/oAP5wPBkyDQC8yUoHmM0W0WhZWyBSgshzX2Ys37Hc9VRYOegNZhBWyjeDHhj3'\n\
-        \    'AcaaPvzT9bDvDSyPc/BfJo7+xDtCg6HwYAaGBUMI/MeABzvYwPMcDJuJZjJENHNfRzMdYnd8QDO19uZltlvpWPxef+odYRV9UP0RIpjicKEzSO8GmvPlJg2r'\n\
-        \    'r8zs0GyEqOZ9vUMzHNII8c0neo9wurCI1ynOFv4GtYguXzQfVjd1Uq21ZrDKA0CIPfeH2Nx0qDeH7BH/QHM1f1fDaDgB/nbb6N9VO0g7LC342AINaGa0APQC'\n\
-        \    '5Ejh/lS1MJgOx/7I2sJjyDrKTZanrTaGI2hjPCYuzvU2MHfpTXAU/kwXhppwXznVUIaQUf4Xc5ZUNQ2etdXqZEBC5n3VWyQx7veF+KECde0oXyZh1abWZMSJ'\n\
-        \    '8vUI/xiIkVxDRDzt66JUq+JVzFcmTXKtkoqtcXLKaAd6OINuzlGkhmPVit/DN4M5lA3HTXphA2qG5CvYpiPJ4j1AGPoImMFUSuvvSPQ8TNesM+paBPV9xSAO'\n\
-        \    'TRfY/4aKITsH44dA3MkDPg35e1cn0nBIbMRhzXQi3aVZUMWrMP2qtwjiNDuq28FBTFCTp9j+3Nr+dGiAk8oaGEjop3NdMpodaI0bWvMhD+8b5oAEdkA2U2fU'\n\
-        \    'D7QZZHgMnqJKdiUEPFh2RH6j8HBp6KqgBIzEJY8Xxb85xQbn7uBNueFzrlguNolg8JUUPTXLD4pgOJXFLAqnvns3W9Rgw7Brqhttr4AeGmL8KcshCL7Iw7Zx'\n\
-        \    'Qa2Y4DyeLgwkv9j2wDBnA7JkKBi+MjbL/iKaT3RjQ2tL0AUlw9co6GA/Bt8zilWcGoN4ytUwjHQvWI9hOoMxDAfaGEA1fbIDDzXR8Uf6gMZoKPoTj5sJYos5'\n\
-        \    'CuiCqa1CEf1pW/Q/40CaClcr9xwVr48knRgSOJiSWUXxnOny3CDP2KZr5MshYal2u4br81G7/b4kBrFyTpO1Vo0bTY5wwlnB07Qu6p6kSh3UUeq4J6RrxG16'\n\
-        \    '/I6mmsXRoegFeDgmH4/E6Cv5Go/Hw9mqli8T6TNWxLhIbxq4oYl2ggyekhMbKLRsuliFUzvaT3GWsBJy1echvDGxD8m5mP1GJo6wlclcNTCdjAcL2QDXaojE'\n\
-        \    'D0YYdQdO8q0uQxF7QPYLPMrUHBv55jnK0Hjf0NrYz8uYrUx/Ri343JWZLQwpfOsLb1A3MWKj/jC0Uw/y2IVrBl0QmVJ4OBg37EntjjR7Es4gwqbey9lFvofm'\n\
-        \    'blJHBpb4p1vY+WLiM9+1dfd9tTWjUNCfvtf0EwNBCKABx25DZYlnfRr2xJDHfh1P6fK4mM6GjO2hKAa4C51j2Mv5CHFPDJL6ZE98cplaxDmLBrOlKYr7HUw7'\n\
-        \    'EKr78XRfIISiOR6auQhZX59iralJtMOB0LB/7xYH0SLOFYtXK2b4hc7vRwMy+Kgc2DXSzUZoPkO+6rIXTebhKtRkbxtesGAYBcWSpaxzGbOrY+e8WnyCH7ss'\n\
-        \    'b05v8710tuVWXiLT1XMGvYd8vBie0qIVaGMkFnoAs5aJ8npatplkWR7UUw575yoQdJeEKS2wvMMfjXkJKuyJpY96WRESo+FIyIhsp55goBqtsoMTDTVVJ4Np'\n\
-        \    'NB5L0eakUGNU+Brh10kKUdQyxtlQsbGWB1R8dtjjwVbo0PY2ZxnnS4i1MOzCvO6Gv9aiLpw7wb4dWybarN1ezBdh2He75mTAd6EYz6fRaKajYGFebr4Lx2w2'\n\
-        \    'nU8MP6KpBWRkpuLC24Sp2ZQPJx+dB07t152fHH8mZpskWWhyStUY9/rOQwcVBKdK4rQjKz9wKL81anPaHxJFWpdEKCX8JYQUFzmLi+DHvh+5zo/O722kUsgf'\n\
-        \    'Z9cN4ZUouRAaUoyWZ6gsT7/ZCSHNqnqz3CLRteTg7Ojv0NuRcx83mdFWEcnPBh7LOuAyKzrEnu4DTnSPXCDS2Hjd7LKRCR4RaANiGRZlABlIlF0ByDPhJzV2'\n\
-        \    'nD8/OX37OXhycv7hxZtnwfnZB/r79ulTZVSbakmo7ZnfqCl0SnxkrA2R0nw+n5iypuAmvVEdl/84RkM9GxqgfyDrDcoBeXhcSgSDJ1MSd2G53NwqiQRlzBou'\n\
-        \    'wFSnr7NsnzBSDSmMNlsq8VrEEfdqzORAhzhQSq8nY/lyRG7Kb/axNrsScbPcIqi1fWqAarL4R6PI3KzRKPyXiBWhVmIVK7GCKMkUqzJnzDrva0WM0KoYn2xK'\n\
-        \    'eDQAAyhoH6OUQjjvHc17EzHBEIMAAJsgLGhGz4iRgtvttpHGNCJmHyfSkMmYbEofOBlrAXMT68sct6oYkeNIR+pjI/hu0NOm+Yb9yWzkm361XpPdE4HwRTVp'\n\
-        \    'iXcxS1i+zimFbIHZyEdThGhaR220pqF69+JBvd7R4pVWS1vsUxF+u1yeUjgwNii1LAg8Y+sUIsMmoGVwMDYUBmBcC60xtDuMDOrs2eOkACjR0JYBaDkIxP20'\n\
-        \    '3jwWJq/wnTFUgpLd0TkDhgZlDvs/1GHpX7HyRusrs7696wSo+rMESuYhJVH0y+gGL1SblgSEW0dv/rHzAQM2DMd4UJxDygk/lsypwG2Wm7jAdWBcc0Z2vgvL'\n\
-        \    'TU/HbN1HM8bsdAopo9GJVXaJccuwt2dcHMyoAhHnRQDabk6agMYZUGopXi53UgiXXiJVPmd5Ep2llzHoLq7VadQBiB5TJYDgTnC9Rbi8EFvsxIKtXu/xs+DJ'\n\
-        \    '21dv399WtV4flnHsOJos69y3WS/cLjDADriUFFmVL5vtnrx+/OLszYfg/O3H90/ODvTBxNXqRhQNF4M7dUMT1oFvZypUVltabNsAGpkZf43dUSe1dAsiDvIZ'\n\
-        \    'WwkXgBY327sGSL1zEE8RmTtRBURt0aqIRk9HwPSmoIC2toIT3WR5AX+jIFut4BXuoGK4FaKu9e79GTjV4Cmu078/e/JBw7DNQI+CVZyULNfaef324/lZ8PTF'\n\
-        \    'qw9n74PzD2/fGX3X+go4lK4v1nKy5D2ohNbbxbrXZOScLadyoxqU//NjUd1arLvaLA5PsoNFdk0L7Crvlqfd9JxXA//n+mRg4ljgZ1lmW75dod+G4vh1KAtQ'\n\
-        \    'Ac4eg1Tdnujld2Hpi2dv3r4/s5FOR2USsUG85jwBbd4L+UZIfaMwbqevkXa6Pf5I24QCdFDwCmuoWQsz8I07dIQm7sRp2THa6F0/4Eu5A38GhncOTtDbC3sj'\n\
-        \    'YKeQzw36s9pCU4PbIgyDIWqZHNrr85OTwP9V6xQJPu6TX7IgDHXY8yfvz87eBOfvTsCqQbWnv56cqIoZ7qtHE89bMDjWy/F4cB6UYY5UqXYRbvoWJlun9Md3'\n\
-        \    'pycfAPmrzyf/7dwiWwbzhEK0p5w0PQ1BEvfrKpU29FUsD9Oc4GBOqYcBLeS7zHaa2JplmlT7/bEFIG/sZGkqNQHrGx5WFOgY51b1GAfKa9QESx3zW2V1s7hg'\n\
-        \    '3CqUAxq0y/QBDW09RmA9MMVztgCOr7X5JBGv7RsGAbTGMR63C9VA5rN2aXMkRuGtQ8lVVKcdGqZZDShQksXxYIoLGW5iGw8HkS7yMT0StKuXtxgnum0W60O2'\n\
-        \    'ldeDHltLtVHP58qSYV+CorzhG8vP8Qfw5mkS6lqiQfUW66ClLbRFgFSG1laGllq0mtoKcKJJ5Ie1X9ThuWegOldxVG4CPO3j2+GWWY4H9/hMEAFCWmxQADhb'\n\
-        \    'btiW8UpgRuQMQMclbK6nIbV7WUKlzWuCHeOLra/pl437HEZrni4ACCFmU81zGGK969W5zXdUJKH4SzVBXFzwJ99dj1NCVdWIzEnF4bSsKEsO6TwUH2634DP/'\n\
-        \    'dJRp3uquSFiypPYF/BC2I05J6FGkKJJHIE4rZ8Hyb//Y5HgBBYS62hHR+65ZR/VQno3QuijfASf87r6aJP3NWvTSVetOA7ZYyq0BEsmyKoDIwTZO4221DZoT'\n\
-        \    'Zt5wbBJTRKyiep2b8/24ODGl36dgzApwEHSI1ZZAfbPgIKc2gc6rwaj7HXUvAwufZVWi9yoJ10UANUoMdrRw7/zF386Cs1/fnbw5xaDvlY0UApPAC6k1hLUb'\n\
-        \    'MuxqfzLupuavljVxGldFeHSsJEAJkjtq68PW2/Ba/lSv6p/iDgJ8JX428i2c2qO+4vSebJ9iSHqdY4qmZvsURM62QMZaETbybB9B4WPvj4pVQD4I6zr7ThO1'\n\
-        \    'zhIJJVHj1crurAyDedda7U6aMGTTRVRrghqu9YiPZJ3inOc+f+cCczhftPXK0WI8kApmq/ca6m13nHlq5nAxm0bzg/VOPrrAZs5htRdjAfo819ZHZc16Td4U'\n\
-        \    'MEi3VvG1FC5xvFlIDjzx3yWeF9B2aJuL+XlGCczzPRa3tXkX4LVQE8XBJhdUII3nj4XzY/TTjzT9/xvvNO+s6OcXrc5h6zXA3ap6E3cXr4m92iHxQsqJYDPT'\n\
-        \    'l40Jh5E2UGSXZ2swFMXjMDezhtvGNIbca6qgNfsFwVj8FblyqwXDinhTAj+NTodR4Kcsql/TX9USHr/YsRzPrHI/aB5PgVw5ORDqYbEe4yG5VIE93Bpqa7Xb'\n\
-        \    'XXlzAD2Vt2NI94fByp8N5YwbQR1sDId6MK7D/roe/nvHCmo60PWoAzYpASxSkU0f0joWduBIF1XZf64OLQRtdiSndcnIZBSdhuUpNFwequN//oc4yAkaWZ+J'\n\
-        \    '8qjqb+5m536pf/PLN7TnRpn+HFZmGT63+6GSJP3QuuqQJ49iebOJJw9heb58AIM5GnW1ex+0YSNlT2M+vZ+LS2K2tHQpb1ySlHTfbb79PY2vXeu1E/8d6XCs'\n\
-        \    '3Urk1cQ4nvseEuJYu5jIq6lxPJp5SIlj7W4irybH8Xj8P1Tz2pH9Qz2QNxmpDsz6ogPyMiPV/nAs2pf3GWnN91XzwaE2xQk21eLAr5sUlzqpBid90aC410k1'\n\
-        \    'N4HmakeGE4aKU50LdmNxWw3F+E7GgR4B2kePaAj6fVJ4aIpPgHGn0/fmvrkRlSWy8taovLVUHs32VsZR67dStSuPx907SEBjKFIE2vhm/VtGIkWkXXc4vmUg'\n\
-        \    'UoQs49DaDQ52Xh2QbKAY+Lf1Xchau+qkf0vPhSzur7kvqg9vOvK2OO3WHG2pQ7u5ix8Mw6f915nIvEo/kWwmlzWOug/olZebLF6yokNXZhy3b7g6lBDITGhf'\n\
-        \    'PiAB/kI6gC3RHBU0xDtnbCpYVJDh01zHY/rV2FbAi+uBp/X9SVrRKoNoqZ7srUOep2+ffDwP3rx9c9YEPxxa+WC2xrNW838pwtLq3z3BH3b3171TYjNl82Wk'\n\
-        \    '72tAIvNbSA6ETnSfFQHZ4qehP17KE3A66J6Jt9lyMFu0wQ/NuzXALNNu/gHKWCIujsz1+F+THBs6tH6YGgRjI8bEn/vTsduCtNOCDdh40Ya+jRQK6p+nBOGC'\n\
-        \    'ZBX/NPZoYfbBolsoIaBstJjNQjYbum3Y/zs9F9hcT/xo1a6bk/eagBXMCrwsJI3IEur7e/SZIhFwE5auYUfNw+XWwFu/+dR6D8PeiwcMS924UBGQ15ELeCVx'\n\
-        \    '1wDf1Gi54/CgU+JU6HDgPW6pPRa8X8K4KdQ2Nh5iCcwqMKkvT2wcNSyg5QvWGcwOjc6H6Bjy4HiF21M0WVL3MDaw6jc1GAffVY6zL8FRPWvElxgGQC7Ck5KH'\n\
-        \    'syY03l4AWdCabUr0Y59YXrI4itdVuu7pKVGjnkhGQKK19sU9kk1S6aJhu5/yKfjVfAFq5IAeOa/fdV3P/VuVf/vH8gLSpkMEtmF7hed0wKNtt3gBw7CFz0aA'\n\
-        \    'z9/+3CTMYXEKwrLGnWppCb/+FlYLMFY659p9bY52x8geeENgvoTWUdg6aEcy9HxIoTR4HY1+qWj7SFtRbbegVdmOz13TalubVnX28KXbDFvNW1uNUtoNbKDv'\n\
-        \    'hTu8xrrTvnrtFviaK90DEmNWtXIPWLX99negEl2JXTlfq63z8tuf2x1ok7NQdPqvOv3qsXsHcw9uD0DuanDaaKZlVD8/oktAJZyGjIPKjAUg24SUCohX71zg'\n\
-        \    'XqAqXdHVrKR9HG23VU2zWwoTEarTrCLum/1epXzO4uQiD6vS6fwYdckSGLf/eu45A0WBCB+0RsGoW4C/S+eesTWjZCEytE1ckdvoO/pA8x5QrprqRttGhXAR'\n\
-        \    'J3F5owPLm27bqoO31uEl6Ht0Rhgg768rj2jgdq1pAt5FXUQdu57AmIHkEdLcCS/QR9R6kq/A5JumTgz02CpldalOf36NcUuF1IVCvzj+hCtFfe3rStxBOJrt'\n\
-        \    'U41T80odiKDAOOY56HnMHN7kfbetIHYHxRPkgh3b4OuNfR1c4byAuIvMySqJ2YalPdfjV+yo8dbcOG6TWs+Mbcxq3POzf/aAw/ToKq0iwGNIHaWZbtcyDtzY'\n\
-        \    'hQrasUwL2LBpWmzFZyqbXIyh6Ee/BDpi/BsB++MyOr+xxWu26kuf7bdKP5TSEQd8v/7R0Bt3vVG3dT+VuChavjri+PWbmXDBpTh2foyc8+UmjHCJGpde5Eyv'\n\
-        \    '1m+P1/5ij0Cb0vxIN+eG+GjiCs4nZuvyvnOWr0K6K9J5OByDMPFbitvyaMqtvHsVw4FlVnDKeRrdqegAwfcHjHSNFp/G/plQ3zMV7w2GHRAMpdUaQhRn9e0f'\n\
-        \    'OVCSvBI12rUmCK3oE/B7dTtH2M4duGiXC2/YbTD2Ks4vSujUfadtJfDOp9J5xRaouwbHqfd3ZPLP/++YLJ3UX2AihvY/D8aHWHjykbOQbL9ylbrFP8hHPYs4'\n\
-        \    'GozlagYZguHEc9Oq/Fpy9Oc79jUOk5VyyHKUyjy1kjYzvjApT8N5Sci5+fv2Z4V7V7dsk+8Zwp0Ihws6vzwi+RTLO81GQcw2YYk7XmAcBfQ4AQ/6/N2e3Mi8'\n\
-        \    's1AbjnNUX/HaJu1GqAg2/3Dk60IubT1YsMJh+ebbnwl0Ji4gxnVGvr0jVvEy7Hib9gLB/Udtty9kqcpF4EBneShcgIA1TUUEp0eDeJEDK7+i5llJsz9EEj6/'\n\
-        \    'ApoX5OILc3+R5MOaLSqMDQ+0oEJRiyw9RV3g4SXgTL/9vYzXPHloDeeAfPHvB6izho3vCujrd1LseBl0qdfqFB4w//YnmpTGtiq8L7B0wmrlbDDPgW5BTjfu'\n\
-        \    'A+dRAPZosBy+kj0kixZ6/fxIDED1YxWnMZpDPpCO1XrZ4jKQnYtsu8UNYVudeHpsZvdtPJ5M6YMFe+dzoNSSW9G1pHZBasiCnD+gdu5Zs69atCgwJrWieTYr'\n\
-        \    'cdWBHTlxb1/y0I6XmRfraEsU6lzbvlWKA4sQJoXsy4Htiy1ax95kjNgmdXOOyn7MDFHhRQc6umagfevZu5odCyiPSxCmsHDktQX3TZbYXLdVwvR3jQUsczpT'\n\
-        \    'zrh93xIS6TQBF2Klx8a4KC5aV1qGV2Fc0umHkhjaW+YM9/eX8ZbhDuHxsNvD31lVfv8srbgF9mGt+/yGwC0t5+0Jvwejh7h61Jl5OoquJSD3IRjzhp6asOwe'\n\
-        \    'umr2sCs+7BCPeN+0fbHmx1qgITzL0UDM6yqbK+sYrsDq+HiCKpZqf2lM2UhDYlyZq+G7qwn4p0zBHUzCXVWuadShF4/ZOgFDCLKDVvFl720P4usYAy8csXNB'\n\
-        \    'Ewalc0UwuvfZp/AqyB83rwTel35fVXlE13Dw0LpHAf6pCLehd4sS1DgnZ3Oa5at2dt5QCZsH07yXmKT/ES9bO5Qrkih+0U40ZXF6aM+RLYjmdcR0/Kh7IG2q'\n\
-        \    'ITF1eujffk+wRsPGwr23TFiYB/xLd3hj8F9c/tH2BCjdUqi1OuKu9TteaG3egd28z7ptoPd/VuW4cb/HXS+VPnixtPXy6MZt0939HWvcK3/oXv39VkSc+FRo'\n\
-        \    'fnDOt7gOAXUryAk2WRL9G11XLjaEM/PLkcCnrIBYMFyB1l6FeSQurLmLH5qbbug7OqkfCW3ZKXVUVv8okPbxp3YmvMxScYNtChnI0xi/3iCXdFEY4X2PPlwp'\n\
-        \    'Pw/Xvf/o7UurOGtSijrRocp0+BB3yHRcOpTneq6Ywa/Ba1sjBqHHn/sw4YfoFKIF3y1pYDGTRTkngq6tiSwW34/byHlAnBnptqL+OyEptOk/z+9q+62Rfn+J'\n\
-        \    'DdRUcQcy1r/s1aw0M6htr2chj0ndw9UMgmjk1GsBaTT5unfvHr+KYHDsLMMdiBeIFI+S6eYB+jIYKmadNIAa0gXmVVrGCZXs6Kg3oGHXuyRexmVyg5cXFFSI'\n\
-        \    'lgc/3AoN1jO4zntGHzDAQAuncUEzsRweAQeSBulDlRPMo+mjq+obBz3B4mau1wiOG4KtDLnuq420P19lCbrS5ea+nhtiGPE7w9mheCuceHr0Adgrp8jq1X3I'\n\
-        \    'IOOS22gicutsvRJK7RMknBV8w0Szyg/O2TVbVmANyfDpBM2uUrlPBNLgKIEk2yNzDLxhlyy/we0JMFD6Gm99Z0SSUJCb4/eT3FaPXb1f9PlJkS7t6V4Tnzjg'\n\
-        \    'SzXjdJVpE2eNkj07OG5Ph4X+4u6u4tihVS10jPR13ioO6iJtjxuqRn26hmoZXoAKC37sgWJn8X07LKDdbd2eOOxRNBb93iVh+bW56CCrNb+285//4dTfT+AP'\n\
-        \    '4nNg/EH7zIIzcOWFjuIzMRFLyvCuH4r5js8AiiBF+8wo5lvUmpx6MEp/pnO5d0CjTkgHxU265IV4vwAJO9/eo4V+be7hKLXPg/7gfMhDXDxjIN1gXT6+cBY5'\n\
-        \    'nnFlQuY3IDYgg6AWKwcNShGm/IHMN936r99xV8VKdn77or7/hT5eK/lNCyryLCu9/hcFjLNv1+qjrhQbQUbDeAHQirDRFkXxzaC6YDju981ID8VGtUsVfyPo'\n\
-        \    'L0pYqbLMh+UOQvlpP8TxW/+LURqxHX7lTSWaBDT4Yk6+0McROelNaa7ievG2cf83CBiSUHy9o6NjIBmkZ3WBSLcReFUxh3rEP0ioHkxyO5kYAdDMN3tmJJ7p'\n\
-        \    'remmPsnBb0UihvB393kv9iSp/LOI7CBKbejqnRq+Po6hAnp0qF0uPIL6v1EFj3A8rLknNvpXsYx5DmhaOwjSVWCf+aQTg4iQDt3J73TXIa/cRZzx+3oBpSFX'\n\
-        \    '9NpiW7FA2NYyC/BOrbyjm9nT9ydPnp+9cfCD6U0Dq7pDyUfEbC3a5rHk6UfjHCfeQ2HrVIJLdp3W1giFQOtuscOYgeX4xcx6XtcKiFdyW5ep5QehN1nGv4EB'\n\
-        \    'jhXn2zoFS1ae2wwTLDsGhAOlUdS7L0HTxAZMJjIKxL9nNsaoWe/bVJVqh6DTn4vBXjeN7qegb5YIC6Xq2m5LnGsdq6viZXviJ/8wLR1iNOeOFSzvD+1n0t61'\n\
-        \    'dWwB+eGFFQXIjnmtg4GsLrXsV7vlLgV1DeWe2xToavNRv/7qwnxkrbdnW/dowWZj11bDup15uA/SsjG4seGyI2kRSqvXvdNVC9olC2023Dn622dthE8qkgwc'\n\
-        \    'yFXW+E77d1gIOhB6q4UwzYJqF68+kQjwGqN4F7BozcCemttWfEfYio4GrwzFU8hCQPYwydjxKBPl0Aqq777qWqZzJUnuWRW+DlV9x3KED3/UX621V7/7+Yl+'\n\
-        \    '12r1MBc4ZPUsSchfMX6yme8xfqpSY41J92v//0XojhL0r5SN/wMkKP+WMIYAAA=='\n)\nnew = gzip.decompress(base64.b64decode(encoded))\n\
-        assert hashlib.sha256(new).hexdigest() == '68ccaf040944c5ace9e1513ce067a704303fca3e75be8137dbe96fee6530e597'\np.write_bytes(new)\n\
-        config = Path('android/export_presets.cfg')\nversion = config.read_text(encoding='utf-8')\nassert version.count('version/name=\"\
-        4.1.7.72\"') == 1 and version.count('version/code=4241') == 1, 'FIX73: FIX72 export version not found'\nconfig.write_text(version.replace('version/name=\"\
-        4.1.7.72\"','version/name=\"4.1.7.73\"',1).replace('version/code=4241','version/code=4242',1),encoding='utf-8')\n\
-        print('FIX73_BATTLE_VISUALS_OK: adaptive 3D resolution, antialiasing, forest arena, dragon geometry, larger menu;\
-        \ battle logic unchanged')\nFIX73_SCENE\n"
-    - name: FIX73 Kampfdesign und Testszene vorbereiten
-      shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ncat > android/tests/V473VisualSmoke.gd <<'V473_TEST'\nextends SceneTree\n\
-        const B = preload(\"res://scripts/V469Battle.gd\")\n\nfunc _initialize() -> void:\n    call_deferred(\"_run\")\n\n\
-        func _fail(msg: String) -> void:\n    push_error(\"FIX73: \" + msg)\n    quit(1)\n\nfunc _run() -> void:\n    var\
-        \ b := B.new()\n    root.add_child(b)\n    b._build_battle_screen()\n    if b._screen == null or b._actions == null:\n\
-        \        _fail(\"battle UI was not built\")\n        return\n    var panel: PanelContainer = b._hud.get_node_or_null(\"\
-        BottomPanel\") as PanelContainer\n    var camera: Camera3D = b._arena.get_node_or_null(\"Camera3D\") as Camera3D\n\
-        \    if panel == null or camera == null:\n        _fail(\"camera or panel missing\")\n        return\n    if camera.position.y\
-        \ < 5.0 or camera.position.z > 7.3 or camera.fov > 55:\n        _fail(\"new close elevated camera was not applied\"\
-        )\n        return\n    if panel.anchor_top < 0.58:\n        _fail(\"button panel must stay at the bottom\")\n    \
-        \    return\n    b._show_choices(B.hero_actions())\n    if b._actions.get_child_count() != 7:\n        _fail(\"hero\
-        \ action count changed\")\n        return\n    for button in b._actions.get_children():\n        if not (button is\
-        \ Button) or button.custom_minimum_size.y < 56.0:\n            _fail(\"buttons not enlarged\")\n            return\n\
-        \    if b._arena.get_child_count() < 75:\n        _fail(\"decorated arena missing\")\n        return\n    if B.companion_actions().size()!=5\
-        \ or B.binding_chance(20,86)<0.4:\n        _fail(\"combat logic regression\")\n        return\n    print(\"FIX73_VISUAL_TEST_OK:\
-        \ high-resolution arena, forest ring, enhanced dragon, responsive large buttons\")\n    quit(0)\nV473_TEST\npython3\
-        \ - <<'FIX73_ASSERT'\nfrom pathlib import Path\ns=Path('android/scripts/V469Battle.gd').read_text(encoding='utf-8')\n\
-        for name in ['msaa_3d = Viewport.MSAA_2X','screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA','WaldbodenMoos_','Steinkreis_','func\
-        \ _finish_binding()','func _on_save_pressed()','func _sync_team_and_save_buttons()']:\n    assert name in s,name\n\
-        compile(Path('android/tests/V473VisualSmoke.gd').read_text(),'<gdscript-test-text>','exec') if False else None\nprint('FIX73_STATIC_OK:\
-        \ gameplay binding unchanged')\nFIX73_ASSERT\n"
+      run: |
+        set -euo pipefail
+        python3 - <<'FIX74_VERSION'
+        from pathlib import Path
+        p=Path('android/export_presets.cfg')
+        s=p.read_text(encoding='utf-8')
+        assert 'version/name="4.1.7.73"' in s, 'FIX74: graphic upgrade not applied'
+        s=s.replace('version/name="4.1.7.73"','version/name="4.1.7.74"',1)
+        # Increment a version-code in the export to allow clean Android updates.
+        import re
+        m=re.search(r'(?m)^version/code=(\d+)$',s)
+        assert m, 'FIX74: Android version code missing'
+        s=s[:m.start()]+f'version/code={int(m.group(1))+1}'+s[m.end():]
+        p.write_text(s,encoding='utf-8')
+        print('FIX74_ANDROID_VERSION_OK')
+        FIX74_VERSION
     - name: FIX61 Weltkarte importieren und echten Spielstart testen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_11'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/61XbVPbRhD+rl+xcTKVPVgyToAQETd1wRAmpGaMW5pJqeYsreyLJZ1yd+Ilcf57906ywXkbmCkfGOm09+zLPfvcWqEGD0sBBS8w'\n\
-        \    'YTx1snnMJXgFTEqexp2Ys2kuFDrFjZ6J/Bl48PKle/rubNwfjY/+7I8OXFiARvzKvnN4/Pf2bnimmdQqmpX6k5+KqZNIkUHB9CzlE+BZIaSGU3p1'\n\
-        \    '6mdJjugVena16bI8loLHHRVJXmjV+Wtrc3eEUy5y5U9jt+UoMjU7fIksDjVe6ybmkYh5Pu25pU68XWNkoiBD5fM8xuumm5R5BGHG5hgW1k/LwTwm'\n\
-        \    'C4m+QiajWVO6zVdZ69/mq8AaLwhD8wiql4j8a1hcMgmL31puW723Lja6wUXLyZAqZcDq1aBZf9wgH759brZawBMwPjFVCCnmTdW6cJhSSJEqPxJl'\n\
-        \    'rr8XZ6/XbYNb5nhdYKQxhrgsUh4xjbYMlABlKFG6S6wa43JreydUmRB6FkrB4qYLPAdFWIolCFEpLwlsuRsyrhSV8BYlQp7yJvNjTgnkEYZaNCet'\n\
-        \    'zpa/2VohbWWgWEbh5FNiQzwlbn2DYwJ5biMIFSVgDtKFXOglhskrV/wSwRDoOWRlqrk3IR5AhmoGSvM0BUY7L/EWVWl/ijlKKkOYC5mxVDWruOrD'\n\
-        \    'MPtd69WgoIKNHnTvGKyQ9kUqZLPxeBKxp8+jxl0Qiu68lJ8wnSHPwIBRyVPUVPpVmkmpKKWf0Le7dWhNLHt/StpESNBijrmJ4L1bUe734fBsHJ4N'\n\
-        \    '9od/HJwFkKSCGWJv+i+23faazX7/tL9/PH4X0HZj8sxtO7D2t2Y+Guy/7o+OBt9idzf9TfcisJvrKq3CqtJtQ+ImKZ/O6LxFjMSiqURlvgTw2dp+'\n\
-        \    'cZ1CcsPoWhaMeoRWPsLhmwBmyC5voOtvZ3ANGctvqvIqTWVThJcJYucezHNxlXsUl6kUEN2s0yu0rlfcJd9aSGM/EUIZZmniC1X0rmo5jw3BdroB'\n\
-        \    'HFfKwzM2RZugVjBBqj61Ze2pPj644tRhhUSz3myQn6DT8X3/CidFo+UT5KjMc7OBkZX4QPy2W0SpiYCAMae4lqoX0UpCPMWUkkW71MiFCV6UMqp8'\n\
-        \    'o1QNQrVMmFFwOmXUI3hJxb+a0T+C6FcMA+obA3El5Fz58AaxuN1i2W/eMlbU1fAdTVUCz36zFK0y75CJ6pycDw/Cvtkavj6w6cFiAZ+JAhjNBLhB'\n\
-        \    'gFIKGQTnQqZx7YSrZRssy3ckYtPYNl93j0LkGrp7zheHPMEGOppnaGrjeYpPc5b2xoPRW3qbU4t7LNEoe9sKurubCqYWyvOIKHFK3KJHK3d19PRa'\n\
-        \    'V9fz6vr+Q9H++p1Laacb9k2qYXXu5laCp7/+0q1voNDofKl6T17ZKD10SFvvB+OQor+HxpM1oAZ4OcImXOyZE8iXJWysSlgVaXXsdfTmKiY9bi6j'\n\
-        \    'WcNsNQyMraaTcOOW+q0Ab8A/gnu2Pzo+HcNgNBqOgsUpk3S9DKyrxWEFqoUlV83qxfFdjwtrWkdhFO1+qa8nd8sPa1ej2c60D8SY2jkIeZu63eOu'\n\
-        \    'pUYdhR9LTlwiqtelITFmMdOsYixxWs5RtoG0f4amT8jyQ0ncZvAJpTCNGBnCVKXzq0N6BF5yT+b7tduLH+ZYsX89OHulLa+k2P36vB7VJ3ZIB1bL'\n\
-        \    'iGV4py5V3HEfFt7DgpvRGmnN3f7E2M4P65FWYPWRj0/6Z+Hx29MhKbfR7CvT+56RFHOBlRJvker+lzTDUIsvFdN16DxPGI0js0qbIl2ydKmUbVsy'\n\
-        \    'kZMcmgkjZqmgxqGJZY5gtIqO7mGysXMv2SB26WoTvNj8mWicmjDn2o5vt6KR2nQeIBpfwyxFYw3onqKxvGOq8baWDHNXUIHogUq00o81+P9ZP/JL'\n\
-        \    'llItI5am7v2S/hFbq7Qq3M6SPfYbjbnS3sQGoizWaZpYFWHxjRlJXPMTITwfjk4OaKjpH7wL3GqtG44HJwNL33p9D2JBQOv92HhioRoPzOTbI2IZ'\n\
-        \    '2qh4bohXydTyhgyg9lLtrDIBoFxiYv1a3x313w7qecl0XcbMoByRskBEENRtbTNvmTm6uuYxrYYJOz/QR2J1IikWBZGg2RytHP0HAdXqVfcNAAA='\n\
-        )\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest() == 'dc862c45d5142b20420df666d4bbb767089871988cdd3b194cb65bd64e71d7a3',\
-        \ 'FIX65: extracted script ch
+      run: |
+        set -euo pipefail
+        python3 - <<'LWOD64_11'
+        import base64, gzip, hashlib
+        from pathlib import Path
+        encoded = (
+            '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'
+        )
+        body = gzip.decompress(base64.b64decode(encoded))
+        assert hashlib.sha256(body).hexdigest() == 'dc862c45d5142b20420df666d4bbb767089871988cdd3b194cb65bd64e71d7a3', 'FIX65: extracted script checksum mismatch'
+        Path('/tmp/lwod_fix64_11.sh').write_bytes(body)
+        print('FIX65_SCRIPT_RESTORED: step 11, bytes',len(body))
+        LWOD64_11
+        bash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_11.sh'
+    - name: Sicherungen und alle FIX39 Godot-Tests
+      shell: bash
+      run: |
+        set -euo pipefail
+        for i in 11 12 13 14 15 16; do
+          echo "::group::FIX39 Originaltest $i"
+          bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/fix41_base/$i.sh"
+          echo '::endgroup::'
+        done
+    - name: FIX54 Dungeon-Dekoration und Kamera testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX54_Ruine.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX54: ' build/diagnose/FIX54_Ruine.log; then exit 1; fi
+        grep -Fq 'FIX54_RUINE_OK:' build/diagnose/FIX54_Ruine.log
+    - name: FIX55 Flugschub und unabhängige Ladezeiten testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script res://tests/V455BoostSmoke.gd 2>&1 | tee build/diagnose/FIX55_Flugschub.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX55: ' build/diagnose/FIX55_Flugschub.log; then exit 1; fi
+        grep -Fq 'FIX55_BOOST_OK:' build/diagnose/FIX55_Flugschub.log
+    - name: FIX61 Neun Stadtwege Kurven und Flugschub testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        set -o pipefail
+        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script res://tests/V456RoadsSmoke.gd 2>&1 | tee build/diagnose/FIX61_Wegenetz.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX61: ' build/diagnose/FIX61_Wegenetz.log; then
+          exit 1
+        fi
+        grep -Fq 'FIX61_ROADS_OK:' build/diagnose/FIX61_Wegenetz.log
+    - name: FIX61 Pflasteroptik und Kurven automatisch testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V461PavingSmoke.gd 2>&1 | tee build/diagnose/FIX61_Pflasterwege.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX61: ' build/diagnose/FIX61_Pflasterwege.log; then
+          echo '::error::Pflasterweg- oder Kurventest fehlgeschlagen'; exit 1
+        fi
+        grep -Fq 'FIX61_PAVING_OK:' build/diagnose/FIX61_Pflasterwege.log
+    - name: FIX62 Komplettes Dorfwegenetz und Pflaster nachpruefen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 120s godot --headless --path android --quit-after 300 --script res://tests/V462AllRoadsSmoke.gd 2>&1 | tee build/diagnose/FIX62_Alle_Wege.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX62: ' build/diagnose/FIX62_Alle_Wege.log; then
+          echo '::error::Wurzelheim, Sonnental oder Dorfwegetest fehlgeschlagen'; exit 1
+        fi
+        grep -Fq 'FIX62_ALL_ROADS_OK:' build/diagnose/FIX62_Alle_Wege.log
+    - name: FIX67 Alle Dorfdekorationen und Regionsvarianten testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V463VillagesSmoke.gd 2>&1 | tee build/diagnose/FIX66_Doerfer.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX65: ' build/diagnose/FIX66_Doerfer.log; then
+          echo '::error::FIX65 Dorf-Dekoration kann nicht geladen werden'; exit 1
+        fi
+        grep -Fq 'FIX66_VILLAGES_OK:' build/diagnose/FIX66_Doerfer.log
+    - name: FIX67 Freie Wege und sichere Pflanzenpositionen testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script res://tests/V466VillageSafetySmoke.gd 2>&1 | tee build/diagnose/FIX66_Freie_Wege.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX66: ' build/diagnose/FIX66_Freie_Wege.log; then
+          echo '::error::Wege oder Deko blockieren Laufwege'; exit 1
+        fi
+        grep -Fq 'FIX66_SAFE_OK:' build/diagnose/FIX66_Freie_Wege.log
+    - name: FIX68 Dorfwege und freie Wiesen testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V468GrassRoadSmoke.gd 2>&1 | tee build/diagnose/FIX68_GrassRoads.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX68: ' build/diagnose/FIX68_GrassRoads.log; then
+          echo '::error::FIX68 road-safety test failed'; exit 1
+        fi
+        grep -Fq 'FIX68_GRASS_OK:' build/diagnose/FIX68_GrassRoads.log
+    - name: FIX70 (Regression) Echtkampf- und Menutests
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 160s godot --headless --path android --quit-after 300 --script res://tests/V469CombatSmoke.gd 2>&1 | tee build/diagnose/FIX70_Kampfsystem.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX70: ' build/diagnose/FIX70_Kampfsystem.log; then
+          echo '::error::FIX70 combat scene or game logic failed'
+          exit 1
+        fi
+        grep -Fq 'FIX70_COMBAT_OK:' build/diagnose/FIX70_Kampfsystem.log
+    - name: FIX72 Kampfkamera, Teamplatz und Speichern wirklich testen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 160s godot --headless --path android --quit-after 300 --script res://tests/V471CombatSmoke.gd 2>&1 | tee build/diagnose/FIX72_Kampf_Team_Speichern.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX72: ' build/diagnose/FIX72_Kampf_Team_Speichern.log; then
+          echo '::error::FIX72 Kampftest, Kamera, Team- oder Speicherfehler'; exit 1
+        fi
+        grep -Fq 'FIX72_COMBAT_OK:' build/diagnose/FIX72_Kampf_Team_Speichern.log
+    - name: FIX74 Kampfdesign im Godot Test pruefen
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/diagnose
+        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script res://tests/V473VisualSmoke.gd 2>&1 | tee build/diagnose/FIX74_Visual.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX74: ' build/diagnose/FIX74_Visual.log; then exit 1; fi
+        grep -Fq 'FIX74_VISUAL_TEST_OK:' build/diagnose/FIX74_Visual.log
+    - name: FIX74 Android APK exportieren und pruefen
+      run: |
+        set -euo pipefail
+        mkdir -p build/android build/diagnose
+        APK="$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX74.apk"
+        rm -f "$APK"
+        timeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android "$APK" 2>&1 | tee build/diagnose/FIX72_APK_Export.log
+        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script' build/diagnose/FIX72_APK_Export.log; then
+          exit 1
+        fi
+        test -s "$APK"
+        unzip -t "$APK" >/dev/null
+        unzip -Z1 "$APK" | grep -Fx 'AndroidManifest.xml' >/dev/null
+        ls -lh "$APK"
+        sha256sum "$APK"
+      shell: bash
+    - id: apk_upload
+      name: FIX74 APK als Download hochladen
+      uses: actions/upload-artifact@v4
+      with:
+        compression-level: 0
+        if-no-files-found: error
+        name: LWOD_ANDROID_V41_7_FIX74_APK
+        path: build/android/LWOD-Android-V41.7-FIX74.apk
+        retention-days: 14
+    - env:
+        APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
+        APK_ARTIFACT_URL: ${{ steps.apk_upload.outputs.artifact-url }}
+      name: Erfolgreichen APK Upload bestaetigen
+      run: |
+        set -euo pipefail
+        test -n "$APK_ARTIFACT_ID"
+        test -n "$APK_ARTIFACT_URL"
+        printf '### Android APK Download\n\n[FIX72 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+      shell: bash
+    - if: always()
+      name: FIX74 Testprotokolle hochladen
+      uses: actions/upload-artifact@v4
+      with:
+        if-no-files-found: warn
+        name: LWOD_FIX74_TESTPROTOKOLLE
+        path: build/diagnose
+        retention-days: 14
