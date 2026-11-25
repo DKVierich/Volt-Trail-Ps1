@@ -1,4 +1,9 @@
-name: LWOD Android V41.7 FIX76 Kompaktes Kampfmenue und 3D Design
+# Lydra World Of Dragon — vollständiger GitHub-Actions-Workflow
+# FIX76.1: FIX72-Test an die kompakte FIX76-Kampfoberfläche angleichen.
+# Unveränderte Originalschritte werden aus dem unveränderlichen FIX76-Commit
+# geladen und vor der Ausführung anhand der Git-Blob-Prüfsumme geprüft.
+# Diese Datei ersetzt .github/workflows/blank-ps1.yml vollständig.
+name: LWOD Android V41.7 FIX76.1 Kampfmenue Testkorrektur
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +15,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX76 APK
+    name: LWOD Android V41.7 FIX76.1 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -19,525 +24,176 @@ jobs:
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
       ANDROID_HOME: /usr/lib/android-sdk
     steps:
+    - name: Unveränderte FIX76-Originalquelle laden
+      uses: actions/checkout@v4
+      with:
+        ref: d8a75b1b92b7018f0448618c2909c791b5d1dedd
+    - name: Python und YAML bereitstellen
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1; then
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-yaml
+        fi
+    - name: Vollständige FIX76-Originalschritte prüfen und sichern
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY_SOURCE'
+        import hashlib, os, subprocess, yaml
+        from pathlib import Path
+        raw = Path('.github/workflows/blank-ps1.yml').read_bytes()
+        sha = hashlib.sha1(('blob %d\0' % len(raw)).encode() + raw).hexdigest()
+        assert sha == 'b0b6e77e05a357f047b9f6c278f4d830be8634dc', 'FIX76: original source checksum mismatch'
+        steps = yaml.safe_load(raw)['jobs']['android']['steps']
+        assert len(steps) == 27, 'FIX76: original step count changed'
+        assert steps[0]['with']['ref'] == '9b01d317fffd8d5abf0b2d0afbffb8846c44f1c6'
+        assert steps[3]['with']['ref'] == 'a50b23c0dbeebc464305c0451b98245a0632aebc'
+        expected = {
+            2: 'FIX39 Schritte sichern',
+            4: 'FIX67 Alte Spielbasis mit Neustartschutz rekonstruieren',
+            5: 'FIX75 Vollstaendige bewährte FIX72 Spielbasis und Kampflogik installieren',
+            6: 'FIX75 HD Kampfarena und Menuegestaltung installieren',
+            7: 'FIX75 Kampfdesign und Testszene vorbereiten',
+            8: 'FIX76 Android Updateversion eindeutig setzen',
+            9: 'FIX76 Kompaktes Kampf-UI Kamera und detailliertere Modelle installieren',
+            10: 'FIX61 Weltkarte importieren und echten Spielstart testen',
+            11: 'Sicherungen und alle FIX39 Godot-Tests',
+            12: 'FIX54 Dungeon-Dekoration und Kamera testen',
+            13: 'FIX55 Flugschub und unabhängige Ladezeiten testen',
+            14: 'FIX61 Neun Stadtwege Kurven und Flugschub testen',
+            15: 'FIX61 Pflasteroptik und Kurven automatisch testen',
+            16: 'FIX62 Komplettes Dorfwegenetz und Pflaster nachpruefen',
+            17: 'FIX67 Alle Dorfdekorationen und Regionsvarianten testen',
+            18: 'FIX67 Freie Wege und sichere Pflanzenpositionen testen',
+            19: 'FIX68 Dorfwege und freie Wiesen testen',
+            20: 'FIX70 (Regression) Echtkampf- und Menutests',
+            21: 'FIX72 Kampfkamera, Teamplatz und Speichern wirklich testen',
+            22: 'FIX76 Kampfgrafik und kompaktes UI testen',
+            23: 'FIX76 Android APK exportieren und pruefen',
+        }
+        target = Path(os.environ['RUNNER_TEMP']) / 'lwod_fix76_steps'
+        target.mkdir(parents=True, exist_ok=True)
+        for i, name in expected.items():
+            step = steps[i]
+            assert step['name'] == name, (i, name, step['name'])
+            assert step['shell'] == 'bash' and set(step) == {'name', 'shell', 'run'}, (i, step.keys())
+            script = target / f'{i:02d}.sh'
+            script.write_text(step['run'] + '\n', encoding='utf-8')
+            subprocess.run(['bash', '-n', str(script)], check=True)
+        print('FIX76_ORIGINAL_OK:', len(expected), 'original scripts verified and preserved')
+        PY_SOURCE
     - name: FIX39 Sicherung laden
       uses: actions/checkout@v4
       with:
         ref: 9b01d317fffd8d5abf0b2d0afbffb8846c44f1c6
-    - name: Python und YAML bereitstellen
-      shell: bash
-      run: "set -euo pipefail\nif ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null\
-        \ 2>&1; then\n  apt-get update -qq\n  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3\
-        \ python3-yaml\nfi\n"
     - name: FIX39 Schritte sichern
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'PYREPLAY'\nimport hashlib,os,subprocess,yaml\nfrom pathlib import\
-        \ Path\nraw=Path('.github/workflows/blank-ps1.yml').read_bytes()\nassert hashlib.sha1(('blob %d\\0'%len(raw)).encode()+raw).hexdigest()=='148a908318b1d91002357f1acfa18fbf60e347c3','FIX39\
-        \ source checksum mismatch'\nsteps=yaml.safe_load(raw)['jobs']['android']['steps']\nassert len(steps)==21\
-        \ and steps[10]['name'].startswith('FIX39 Sichtweite und Terrain') and steps[16]['name'].startswith('FIX39\
-        \ Sichtweite und Chunk')\nfolder=Path(os.environ['RUNNER_TEMP'])/'fix41_base';folder.mkdir(exist_ok=True)\n\
-        for i in range(2,17):\n    s=steps[i];assert s.get('shell')=='bash' and 'if' not in s\n    f=folder/('%02d.sh'%i);f.write_text(s['run']+'\\\
-        n',encoding='utf-8');subprocess.run(['bash','-n',str(f)],check=True)\n    print('FIX39 gesichert',i,s['name'],flush=True)\n\
-        PYREPLAY\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/02.sh"
     - name: Erfolgreichen FIX19 Stand laden
       uses: actions/checkout@v4
       with:
         ref: a50b23c0dbeebc464305c0451b98245a0632aebc
     - name: FIX67 Alte Spielbasis mit Neustartschutz rekonstruieren
       shell: bash
-      run: "set -euo pipefail\n# FIX67: A failure in the deeply nested V7 -> V40.2 source recovery must\n#\
-        \ not silently discard the underlying game. Keep immutable original scripts.\ntest -s \"$RUNNER_TEMP/fix41_base/02.sh\"\
-        \ntest -s \"$RUNNER_TEMP/fix41_base/10.sh\"\nLOGDIR=\"$RUNNER_TEMP/lwod_fix67_recovery\"\nmkdir -p\
-        \ \"$LOGDIR\" build/diagnose\nfor attempt in 1 2; do\n  echo \"::group::FIX67 Basisaufbau – Versuch\
-        \ $attempt/2\"\n  if [ \"$attempt\" -eq 2 ]; then\n    # Clear only generated project files. The pinned\
-        \ FIX19 checkout and\n    # original replay scripts in RUNNER_TEMP remain untouched.\n    git reset\
-        \ --hard HEAD\n    git clean -fdx\n    mkdir -p build/diagnose\n  fi\n  logfile=\"$LOGDIR/FIX67_Basis_Versuch_${attempt}.log\"\
-        \n  echo \"FIX67_VERSUCH_START=$attempt\" | tee \"$logfile\"\n  failed=0\n  for i in 02 03 04 05 06\
-        \ 07 08 09 10; do\n    echo \"::group::FIX39 Originalinstallation $i\"\n    set +e\n    bash --noprofile\
-        \ --norc -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\" 2>&1 | tee -a \"$logfile\"\n    status=${PIPESTATUS[0]}\n\
-        \    set -e\n    echo '::endgroup::'\n    if [ \"$status\" -ne 0 ]; then\n      echo \"FIX67_BASIS_FEHLER:\
-        \ Versuch $attempt, Schritt $i, Exit $status\" | tee -a \"$logfile\"\n      failed=1\n      break\n\
-        \    fi\n  done\n  echo '::endgroup::'\n  cp -f \"$LOGDIR\"/*.log build/diagnose/ || true\n  if [ \"\
-        $failed\" -eq 0 ]; then\n    echo 'FIX67_BASE_REBUILT_OK: vollständige Originalspielbasis vorhanden'\n\
-        \    exit 0\n  fi\n  if [ \"$attempt\" -eq 1 ]; then\n    echo '::warning::Alte Basisrekonstruktion\
-        \ fehlgeschlagen; einmaliger sauberer Wiederholungsversuch'\n  fi\ndone\necho '::error::Auch der zweite\
-        \ Basisaufbau ist gescheitert. Siehe FIX67_Basis_Versuch_*.log in Testprotokolle.'\nexit 1\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/04.sh"
     - name: FIX75 Vollstaendige bewährte FIX72 Spielbasis und Kampflogik installieren
       shell: bash
-      run: "set -euo pipefail\n# Restore known-successful FIX72 gameplay modules from immutable historical\
-        \ workflow.\n# This avoids copying ~110 KB of pre-encoded installation steps onto a mobile GitHub editor.\n\
-        wget -q --tries=3 --timeout=60 --https-only \\\n  -O \"$RUNNER_TEMP/lwod_fix72_source.yml\" \\\n  'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/4a5bc925bdafad616f3a28a6fbd2c72662169fc1/.github/workflows/blank-ps1.yml'\n\
-        test -s \"$RUNNER_TEMP/lwod_fix72_source.yml\"\ntest \"$(git hash-object \"$RUNNER_TEMP/lwod_fix72_source.yml\"\
-        )\" = 'c9e6973851d76b26b16c03eab5edcb49b6db7b1e' || {\n  echo '::error::FIX72 source checksum mismatch';\
-        \ exit 1;\n}\npython3 - <<'FIX75_REPLAY'\nimport os, subprocess, yaml\nfrom pathlib import Path\nsource\
-        \ = Path(os.environ['RUNNER_TEMP'])/'lwod_fix72_source.yml'\nsteps = yaml.safe_load(source.read_text(encoding='utf-8'))['jobs']['android']['steps']\n\
-        assert len(steps) == 31, 'FIX72 workflow structure changed'\nassert 'Dungeon' in steps[5]['name'] and\
-        \ 'Kampfkamera' in steps[14]['name']\n# Only replay original FIX72 installation steps, not its test/export/upload\
-        \ steps.\nfor i in range(5,15):\n    step = steps[i]\n    print(f'FIX75_RESTORE_STEP_{i}: {step[\"\
-        name\"]}', flush=True)\n    subprocess.run(['bash','--noprofile','--norc','-e','-o','pipefail','-c',step['run']],\
-        \ check=True)\nprint('FIX75_BASE_OK: FIX72 gameplay fully installed', flush=True)\nFIX75_REPLAY\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/05.sh"
     - name: FIX75 HD Kampfarena und Menuegestaltung installieren
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'FIX75_SCENE'\nimport base64, gzip, hashlib\nfrom pathlib import\
-        \ Path\np = Path('android/scripts/V469Battle.gd')\nsource = p.read_bytes()\nassert hashlib.sha256(source).hexdigest()\
-        \ == 'd2fb46f84a1a79808f3d40ca79540a78c38e279da2e837078960c35d1f53e94c', 'FIX75: FIX72-Kampfsystem\
-        \ unerwartet geaendert; kein riskanter Austausch'\nencoded = (\n    'H4sIAAAAAAAC/8V92XLbSLbgu78CZoXjkjbEIgmuqlJPyLa8THkLy3bVdIUDARJJEhYIsABQsnyjI+Yf7i/UN/R96afrP7lfMuec3IEkJbunZyqiLCKXk5ln'\n\
-        \    'P7myzxXL4tJ7lccseHznB+/Fr68fex+G/e7Ee/L8t0nP++///R9eksVsC+VYVnksW+S7rGKFF2WxV+2K7GgelSz25lFVpcwrFwVjWRdA/ZqksbfMC1ZWXlxE'\n\
-        \    'qzzz2uwyT3dVAj/7vpeyS5Z6o46X76oyiZl3nmcZtBGl/1Z6JSSuWZF5q6hi3TuLPAMw0LHJO1YUSZUXCSu9E29bsDSP4nYLmjn+8UdoPdlW5Y+1gt1V3OoI'\n\
-        \    'GOenH87CN6fvnh1751WRZCuA0tqVrIDq6VUeh5fDST8so0sWh3xM3cVy1RK1371+/+hZ+Pb08fP358feEtquoP6gOx6JAi9PfwvfnZ2+PAasYVZw585lVMAo'\n\
-        \    'NuyY0Mw/C0BibCQsYNwFlPjAFtDlAVQUv7p/PXv7mopcAT6PJaUwgfcuzIE0x948z1OotYzSkkMMN7uyClMGAwm/5BlzFAGc5SmM01UbEHuZ5LsyLCsggBzN'\n\
-        \    'gGcCYfJj79E6KqIFsMLDPL4WfQo5/SEzyi6j8kV0zQpRZwftPMphmHnKU6AucEJ57D0tkhhzoiSTpTesLKMVtPsimrNUtwokKaDGh4f551oNlrHN9f7sqGBZ'\n\
-        \    'ZKGPJ4mxNNOXObOTF7sCMiqTbZ6xNE6yFs+P2RJkBHJc6ERBCdN8ceHGdgHwjk+8tyBT+ebVbjNnxVMYUBEBC3QzdtXumINcbyU9pmMzfaPSB1Z6tJPpw6GB'\n\
-        \    'Sg2mP+gZ6RrM2EzWUGTydp2zLPlsAJoN7BwNaji1czS00YjncFVhDq5nZWhYgV3DAKX6G6VACOz3vNSSyBk036VlBQJR1ph6jiIpYDrlibMkUHFl8kDLIHBG'\n\
-        \    'lJNweWdQk4TbqFoblZQOEnVZtAl3SVgliwutVHpdMRpQSKNwgcxjZ95B0UwW3nKXLTxOIi5R7Y539BfvTYTcxts8LYro+viOB/8VDLvazG3/3jrNVkWyXLb8'\n\
-        \    '1mPk5TK5hJ8vo1XC4O9DVi7WV1//DjIAX88rtikxFW0DJjxJd4t11frYsbu1yDfbKINO/Uv69uTrn+tkdcGSyujor2yxLlmaNfqyLfJPoFRBr8fRBijZ3uZX'\n\
-        \    'glq+FxWbXP5e7aIirgsq9RuyeU+RMGy5BHDJpdKOm+hz0u77BPaIPno+we10zOGJYguWpEmbCNpWoDr3273uyEuWshMeg7a9frfX6dSGM09I24SLdZQtWFuo'\n\
-        \    'Jyk/PjYjP6jv1BLvPYDnud7PwEpeDvZH1fZEyTYv0bkP/enxasYYkP+Mz0UabbZL6How8R54bejuEQei4XZ+tMAS3KkPcOD/2QDGRoMqAd62nV+B7gu1zfSh'\n\
-        \    'nRW3FfxzkVTXYc1m0iAv8yTmnc2gNsrnh+F49muUxuCCLNYse8hWbJXtMrDoWGrFS+kGeSqZZ0gXzVIibw4SjcYpA7V3tyDVnXxhbU7rEN0SYLQqkgnlNrrK'\n\
-        \    'QrTiIXeHRAYMGbTidZksSrC6+QLUTLsqdkyihLoVLhOwNW36VyoSGvCHqEiiTNM1yysvKcMEfBFki/ASNGHcRhCdBhGzXZpSGig9D8dzDcxCKOmusFMFuBYF'\n\
-        \    'jDVNyqptVIdmeA/aVAkLt1uIb5C+VqfjnYDIUEdVDaNRCZ6PxRIM6o8YdIQ05cqi5mdoAYSx7ZD+HAVAGRNVLdSIrY7EC5UFzLihGZ3gBaNGwX0d5bwCpiZZ'\n\
-        \    'rav2HzY72jLnoAtV7pAvzX9311EJpqZa5zAEAbzVJB2XJVFlEaWpLuz/0f0M/18LpUM2aFcso4UQJsCTInEG32FehDigduvDYIJeU5LtwPFD9xn8p1ZnT8+R'\n\
-        \    'o7hyUmzkLCja5mMUH9YgRZrAYBhVe4cra/PxNuvVRm6oKkErhwjaSgOzAD/c7ROOl0zvSo2itUl4llVXYLRT0Cf98LzaLdmopSugZMMoo3aLpWwDsgLy8WaZ'\n\
-        \    'RtkX1uq4ipVbtoBwBY2YasNdkmKnlj9yZqooq+X3eYEojsFOQKk2FjUYA6MsR9TRRr2MRkfStRFQQVAQIkLKdkuFba0OEhYSvv4jhnImHakhhO+CEycFI+/A'\n\
-        \    'hOVrMLITBKSbsmxVrcPyDzCQLAYK/owkHjnaco1FZnJYWV5sgEu/IByFlD9MhAit/4BXuD8aC8NHKF+l+TxKw21eJhTUyjaDNnJiXTV0HvS6/R4xqAZR5GjS'\n\
-        \    '86x7DbXBWmSD9hHv22df/BDFBcuGK5YDmYtrIiUaz5HuOmjl1Qpic4glTgsWWTws8hQb/4Im+yEDS7MugH9LDBJbVslFnoLqR+ctxTiOXFp3/iYqLzCOsLI3'\n\
-        \    'eUZkJpcXLZoeteZHUVgPYZ1U2P1HEvb5Otrawggl1CDqxVqatbdgABiCOqdfTTi8BFjuONnhXIIZ26uGSqyG/EKFVbKD5ILNRujT2BjXo4WqdtYcbAtEaWBl'\n\
-        \    'GOhxZP5F1Q4Bo1UO/rRB2AQnV2AwFA/bdMUsh3Iy1REvU7HPlV3G815cdj2r0BIsQFiCSGA8NTQytslnlsocGGNvbGTOkzSd5+CxQt7DqGQvQa7BKmNPHz5/'\n\
-        \    '8eLh69O3j8OzV6cPX5w9NmE60OgH3QEg0RzcJo93KUD0iC/AL2j9EI+Ww/nQVI4GT2ElI+cSOGSeYm30juSshzQKEtltpIUM+Wt2AZQP5qJnozwTtGcIrzHR'\n\
-        \    'ohRROAf3MROzSG3lz9WdvTCuRGDnaFXP8aCbLvuOv92eHun3uv3k+gMdIk8P4LDHSKXdgJAf46SsdDRKhevasItlCGKVt13q8oEgeff9G9UZrOP9xZbFB/3u'\n\
-        \    '2EBqDd0qSDch/GxD+H5a2am3Jc+/Fv8/eI9zqgUVisqLZLiip2bn10Caa1S8+SV8ViDo3Hh0ZaPRvFy23WS7PnIRC6wQRIaBSQmjSyYeDF3voJXOM6bELBqa'\n\
-        \    'UynK5OjZNbusiC/NyThKlxNlfI7MSNps+fSYkRTt+MyYIhKvR2H6cOTLJKdC0V0hm8PnSvcEJJRreDP4iRGJmlSgDtgTr2h58K/KJ9e9xICLg/ODju54F5zC'\n\
-        \    'HMNTrU/5/DHn8B06voJUfJ5WxabRdbt1BsEfDg/QblgICOY9w831PbIrOG3PihIKQO/vtiSYdX4FvkBizPZIQdoIg9BeoAI/5nrc99gmqRzzLOcgCjFYE21G'\n\
-        \    'dNQHkMiqN4oYNhHKdKN0zuI8pPbQkcO/KhMkZrXOQPuSLZtMVcYCgplww8OkmiF79P7Fi/Dx83NtxICKNABFHYQAKSU5RSyLgElik+nrZax+OQCwYgUsu0ur'\n\
-        \    'ZJsmXBy6U3suqVJ2DBRHexvxOWpuxXwPvtWMNXzlpfRtA98rIY5i4efrL0aaSR2ixEtWrp8L1WRSIZ9/QirY2QYFIF/6JNgHTT2ooJ0yrG6SDT+VP9brjnQq'\n\
-        \    'd6LRxxQOuCoLSqpkKwyvsFJ/auTCoCmtr7pEzZ9Qtk4TJA5RWRYJkb7Gr3pMhscCP1Uy4RKFVeKUcjg1DM8EilqxKXxL8tW9+zolOeQlGQ9teTGusa0SWWfE'\n\
-        \    'cCOIdUWw/1PNhMVqDFJzvH515t232nUPyognNzlI1LH20oLFdDqSXhoWWOKSnlFgNJlPxjOjAIj0hVlgEIzGATMKgDVZmgWm03k8XEgNREIQ+61fclZsWdHy'\n\
-        \    'tVvZ7/an4FaqlH4XlHsffc0B/NPxse81KA8LsF82jN7YP0KFoeFgBIYZATj+I4CDHazBeQaKzQYzDhDMbGCCmQTYnQGAmTh780u+XZpQBt3exD/CKuagekME'\n\
-        \    'MMHhQmcQ3zUw54t1Fu2+MLtD0yGCmvXMDk1xSEOENxubPcLpwjJZZThb+DvUIrx8NGyYbOp0tzKawSr3ASD2fBBgc5PAbA7JI/6B5iR9l0EcjIG+nSb4N7st'\n\
-        \    'hB2OFgbYAg1oarUA+ALgiOHeRLfQnwSjwdDZwkOIOqp1XmSNNoIhtDEaERVnZhsYu3THOIrB1GQGibgvHGvIQ0iowUd7llQ3DZa10eq4T0zmfzFbJDbu9QT7'\n\
-        \    'oQB13CB/SaNdE1vjIUfKlyP8YwFGdAUIeNIzWUmK4lXCly1tdC3THVvh5JTVDvRwCt2cIUsFI93KoIsp/RnkBaM6vrABPUPyBXTTkSLxnkLo+ogy/Yni1k+I'\n\
-        \    '9CLKVqw97DgY9e2OgR+azbH/NRFDcvZHDwC54/t8GvJTx0RSEBAZcVhTE0m3aRZE8SrKvpgtAjtNj2Q7OIgxSvIE2585258EVnESWQsCMf1kZnJGvQONcUNr'\n\
-        \    'A4jDe5Y6IIbtk840CfUD7RQJjsFS7NJtBQ4P5h2R3Sh9XBq6KikAI3Ypknn5k1euce4OUqo1n3PFfLGDBJ2vtOzqWX4QBMuozKdxNBm0bqeLamQIOra40d4L'\n\
-        \    '6KHFxh/yApzgiyJqKheUijHO45nMQPyLbfctddYnTYaMMdDKZtGbx7OxqWxobQm6oHn4MzI66I/+t4ximWTWIJ5wMYxi0wrKMUymMIagb4wBRHNAeuCBwTqD'\n\
-        \    'oTmgESqK3tjnaoLIYo8CumBLqxDEwaTJ+r/iQOoCJ4V7hoLXQ5SOLQ7sT0itIntOTX6uoWfkkjWy5RCw7LbbmukboHQPegoZRMoZTdY6JW44PsIJZ12epnVR'\n\
-        \    '9hRW4D8tGiMQjQ3yknBeuGQQy6Np8WJWRUkKkcR2HdH0Gsbry6QoK0/N5HcNZgcH9TaGN0uT2ERtzBC1AaAWbCwaX8uHIawKlq0bEQX2FQREGUSY6wbcAfou'\n\
-        \    'UzCHA0u7C5CkgnqzOtwDKtL09kLumDYMTYOYoi9jsoeCqJ/QQo/lh9UzVJXkbgVB3brhf7rpOlNTK/3Bt0gnBHAu6WzwP4AGH248wP4G2F+QywkaZhgISadM'\n\
-        \    'Nyg3lE7NqFc3oHwKdVs3j5xktxadN7hiVWyxrzXRCYiw2KtgZPcqGCvtN9Pab9KLglGE2k9EPTS3sifmqQU2ZoCLvgwz2bvp3oOSG5ETLBCjIo7RKJgupQK2'\n\
-        \    'gT5lZYK7WGwPILDBjnFQE/Ly+hosm8yX0cQN9kOSpwxw5z2LIMWGHhD17H4jUofYythE3XjUn6sGbqcJZAdOi01DSsDAc/o1nNcZysVo39Ca0M+rhC1th0/q'\n\
-        \    'BOQLu4WA4puecJdkE0M27AWRG3vnVTRv2VFJH/UYSkVd1Uh/zTC40RRC0D2EebpjRWX2nPtfdo+nZBeRTCMjaJj3ot5k7gb7S4Ez32laNnsOMYOj5yTCAcUM'\n\
-        \    'Q6OJRdRb9r+P4uDY7dIKhJZEt0n8PsagtYESK3KimXw3Go8PUR95uqyKiK2zpioeTJAkwqgYlEIWG/Vr4x2PhkE0MJSD3Ct4O/1AviJJmukszubjARu0XGR6'\n\
-        \    'u9vYATW4Aj2/7vL2BcsCt3LoToo3Q/MBkdka9rgnQ0NTc8wn04CxPbyPsfrc5lCwCENu1CwWmkhrNjTkajmN+9OFzUL7feVmTCf78WRfTIdKZBTY0yrkSA4o'\n\
-        \    'bJzYSDsc0wW9OzdY0wZyrliyXDLLxW1/OuqT70o8FggtWptlmCJdTS0Rj2fRMrqtrN3GHWcR7l93oBK7y12+sm75cUYILfyEW/4hjz1r5p7mMIKadViMZ1O2'\n\
-        \    'rIcVohMNdBv23+7cGy5x5CundVPYR5weoQ9p9YcUBnFfz7IZoyXNqUhhpl2sYscuX7Di62nnawxR5DS7Nc1PKTRZbJUxpjRp0YUydTFzhZ8nLPh0fqvVusNT'\n\
-        \    'wup6y7xyC0iJ0p/uFHi2oeCz/jT/HyclTd3/dIfPs67bl2wx8LYd79/VjiTcGwZky9pxXrW3PhZo9weTbt8P+uBcdzqd+8NgMppC2DQKOj95fxOwMg2LDwG/'\n\
-        \    'khPIBMRtoSAlLE94A5DAOfJkeX95vw0hOXjYEJaIZLkKkHxu4//rdtLx4Z8HvDekeXsQuyy7nzu+KMDz5J6YWvG+Lr7sXkMjf7uDChZHSzPsbavX25P3H+5T'\n\
-        \    '3QC1/GAEtUV3aag4Y3iStbegKMYwMJ4IQSKjRCotEufJitJAYgUEABt4ZZ6kJ/hLzrNQlDLomWVWRQSt4OBEQfL4uJQMMSBbKLdjSBYHuBeaEyBOXzw8e/ya'\n\
-        \    'qmNjPkGj6Q/0aWf3y02eV+uyYlsZI00CPhNKO3VnfTEXAIMSEN++fv/02auz8/MTnDZFDCLfibUdzr+CY08Ef9bWc6iMS2qE0qgvQ6MySrQyApNja/RIrxa8'\n\
-        \    'O30votak82NfbmWSBY1lhXF3JuYBkntD1KbDqVX0DxQ3qQMWedmOOvcLboBQJPDLnios8sWF1oX8iIXfepkDJisImcN7vUHcupf4f5jzDaRZiHCmP9KfzCc9'\n\
-        \    'U9Mh7No+qm/S1EWexc2+PYkK3q3wHvTs98T/9NH/40HDykzF7E99soS4kKYFxobXOIpms1GP76n8dHLS4xso1WrJbBIMhw0ljv2rjQ+ZU01OHPU738oIkgnu'\n\
-        \    'QwAym83GwT5GmHYDxQgBDnjcq1ljiS9cU5qDm1AxRUwXgww1g5hGpKdk1iB1zOb9eC52oN4bNPDFgkU8DQyHkaQliVPWjllaRXt31eDmidrWjT27MNRZoM6N'\n\
-        \    'hfZv2DBOcHgPTjzqG89Q4Lt6nwXfXTUc3UdEGVWBVmJTlNFgo96gWa/fnRrra7TMKF1o2o6i+tDcEVxbKOzgvmhxJkput+En++6e0DZgm+Eu9EkYUx7JxQQ2'\n\
-        \    'FVtSsFVaSCxwP4Itn9AALy2bVRPJYi0TrLq16GBXVy4CeDyap9GhQ8gXWL2nDlg0arapaTXijsuNwulANBW9qYNcw5ok43/EAX2bYTdbNPVuNj3Ik3u3Z213'\n\
-        \    'OCjQaYuC4Q7b6kpv9qC8LqWoLf4GUL9Fc14tc0kRBROCjj4tm9F0xfdAwgVlcmiNTSEXLAzisFywjLUvE3Z17J3v5h/gxzYv6oLLIbu2Z/Mctbx9zsCfhWGX'\n\
-        \    'wWPa5LpkaSw2hgJkY+Wa1zNWp9EJC+UWhb17GwjDaZQRht/gj9o+Bsrsiq2SchvycOgHw450j0Q7ckMC1WjkuTYmuPxoEwl6dBpSbaHmNAMxWiS4b0qcz+XK'\n\
-        \    'kIPz+bJM5NEpOW+RFIuUkdyh33PNk431Gdxlgdsljh1bcqydFCrgnc2jSFlwuW3gm0CMZpN4ODVBsKio1t8EYzqdzMbWhJrhKAymdeOZrVJmeVLefU+uAHg/'\n\
-        \    'eoNp3ZuibSy6Bri73gMP40/cVAG6QlW+79FKuFWb4/4QE1J8g6U026MndVEwUBlkgb173qcmUMXeD/PPNbZVIDn7WfyLeiDQgX2v3gnBx7p6Pd/By5JzyBuC'\n\
-        \    '3g7RjAiFrOhZg+PYMUzuBZIHnApCOl/JID/DTK532XKpjqhorcQiAiFDJz2/giJPxTSUQY7zZ6ePX/8aPjo9f/f81dPw/Owd/X395In2kupiSaDda8TDmzy2'\n\
-        \    'T8pj2++5D+UK3r0ROmzT4FaeO7iqbs8dguTF+kZOpFLW/qI5KOkMHfw9zEg1FDO6tKiC62BHjGCnaqDkmVKAOB6pRIpbBoN6H6XCVYDr+Q5GlfqpVtTgxT9q'\n\
-        \    'WXvCEZ75L2ErAn27QKAqGHPuEHMCxtI6G79cQnjUBwX4wIgrhn7PP5p1x2IrQgIMAGTqd/v1iWSESLP8m01tPae2dDDALTdBfdJ4PDJWDupQfynyrLbgMjSB'\n\
-        \    'DrARTMMZGwUz6I2nw4GakXXG4HVHfL9bwv10paS3CUtZsSpo6XKvO29ilvYZodYdNsHaOuzN8/ty02SDjGaUYmx1VnPrzXzlyB0YG4YNzV2FT9kqY0VrX4xj'\n\
-        \    'DA7GhnwCNG2AtYZ2i5GhQ+w+KGW4pDjFb+wlpD2lIAmP5Qm0KH2BadZQqZTqjkkZ0EHIjtj/wCxL/4rtu7RJc9pzd50K6v4sAJNFRMsX9MvqBs/UJ59EiZZ0'\n\
-        \    '7AbH3jv05dBT455ywZYMfiyYtytxVwFEUbgkBd4ckvNNVK27JmTnYZwRruBNur2R1YllfokuTdDdMy5ezKoCzuhFCIrA3nkBwmiV0vv51Z5p8u6yS8TKr3mR'\n\
-        \    'xmfZZQJijdORBnagRJfpHABwq3LdebS4EOf0xK5vs97Dp+Gj1y9ev72pqtxkrlzcUTxeyFWner1oM0ffO+RcUua7YlFv9/Tlw+dnr96F56/fv310dqAPNqxG'\n\
-        \    'N+I4mPdv1Q2DWfszN1Ghsj4X4zpLUAvXeDJ2R98FY2oQcVWQdR5xDmDxxH7LKiKPH+I9JfZxVlFCarRdTKOnS2bMpiCDzseCfV3nRQl/4zBfLiEJj2ExPE8h'\n\
-        \    'a715ewb2NnyCm/3fnj16Z0DY5CBH4TLBhVWjnZev35+fhU+ev3h39jY8f/f6jdV3o68AQ8v6fKWWKd+CSBi9na+6dULO2GKiTrtB/j8/Ft2t+apjrJ/yyDuc'\n\
-        \    '559pRUUH4+o+HTMQNor/c32yIHEo8LOq8g0/89BrluLwzVKOQiX4Aei/mvrEzL8NSZ8/ffX67ZkLdSYoG4k15NUnD+gEYMRPU5qnjXEuTAJtd7r8k84ahWig'\n\
-        \    'IAlr6KkM2ydO2nQPR9JOsqpttdH9fJ/vB+8PpqB4Z7hUt7fstSg7gVCv35tKDU0NbsooCgOUMjW0l+enp+HgN6NTxPh42H7Bwigyy54/ent29io8f3MKWg2q'\n\
-        \    'Pfnt9FRXzPFwPqp43oJFsa5YpKuiArGy28Y4ryVUtonp928en74D4C9+Pf1f5w7esognBKI5D2XIaQScuF9WKbcmr2I7Fq3G01aH8cgqLfi7yrcG29p5BlcP'\n\
-        \    'eiNHgaJ2HKYu1FTYPDWxJEfHuhnL9HEgX4KmsnwyuZEnm8Vd541MNaB+M88cUODqMRY2HVO8yQuKY7Ix1ST8tX3DoAKNcYxGzUw9kNm0mVsfiZV541AK7dUZ'\n\
-        \    '15LRhAdkaM7icDD6heA3dY2HF1Em8iF9UumWmd8gnOi2nW0O2ZUvBz1y5hqjns20JsO+hGV1zTdonuMPoM2TNDKlxCjVna/ChrRM5EIf338WOGrRluyGgxOP'\n\
-        \    '40Ek7aJZnlsGqnOVxNU6xCtDBu5yi7zA23/4JBEVhIjZwgBQtlqzDeOVQI2oyYF2i6C1fAOo28oSKGPKE/QY37H9kn65qM/LGM3TFYMR+Gy6eV6GSN/yZWzz'\n\
-        \    'DRWJKb6rJrBLC+zJN9fjmNBVDSRzVPFyRlSUp4dkHrIPt1vy5QC6D2XW6K4IWPJU2gJ+zZsnrlowvUiRpe5ReLzz5qz4+o81btWOwdU17pm627Lr6B6qCxaM'\n\
-        \    'Lqo0oMSws68mcX+9FiW29I6vPpsv1PkCBWSxKwHJ4SbJks1uE9bn0vxgZCNTeKyiuozN+aFenLMyb2y0ZgV4ETSIuw0VHdgZBym1Dk1a9Yedb6h7GTrorKoS'\n\
-        \    'vpdptCpDqFGhs2O4e+fP/3oWnv325vTVY3T6XrhQISAJuBBag1u7JsWuDznjkWyetJDIqV1G6dPdFCFykDqWK29s20Sf1U+dJH+KWw4xSfx07AOhvuLMn2p/'\n\
-        \    '7/KqLlGwDaBRCsJaXRBEpfCz+8eO7QB94Na1911J0riQRAiJHq+Rd3thCDrOareShIBN5rGUBD1c5z0hinSacn7r2ZsWEIfTxdgpOJyP1K5cZ72XUG+z5cTT'\n\
-        \    'k4rz6SSeHax3+r4FZOYU1ltG5iDPM2OTg6opd8PaDAbh1jL5rJhL3JEmOAe++O8KLx0wjnnb22iLnAKYZ3s0buMEMJQ3XE1kBxdfUIZSnvdK71784z1aGfid'\n\
-        \    'd5p3VvTzo1HnsPbqo6NtNnFr9upP3dUOsRdiTjibubmWTDCssIE8uyJfgaIoH0aFHTXcNKZRTzE/ljb0FzhjyRekyo0aDCvidYv8Sju60QJ+qiyZTH91S3iH'\n\
-        \    'w5YVePEVt4P2HRcQK6cHXD3MNn08RJfOcLtbgbGMu9lW1wfAU37Th2z90F8OpoGacaNSBxvDoR7067C/LR//vWUFPR3Y8qkDLi4BKEqQbRty290fKjjav/sD'\n\
-        \    'NQSdmCSjdclIZag1C22kNCwfxfG//lPcBgUSKS9W8anq7631tvVR/uY3eBrftTzzO9rZefjd7IcOksyb73SHfHWfiz8d++omF3+gPkBhDocd4/JIY9iI2ccJ'\n\
-        \    'n94vxE2zG1rVVHc6K0y23qy//j1LPrecd1f+O+Lh2Lj32JfIOJ4NfETEsXH1sS+xcTyc+oiJY+P2Y1+i43g0+ptu3rj371AP1F3JugPTnuiAui5Ztx+MRPvq'\n\
-        \    'xmSj+Z5uPjzUprgGR7fYH8gmxbXRusFxTzQobo7WzY2hOWnIcMJQU6p9wa4dZqsmGN9IONzmxa5PTmgI5o3VePMKnwDjRqfnzwb2bi2Wqsobq/LGUXk43VsZ'\n\
-        \    'R23ee92sPBp1bsEBtaEoFmjCm/ZuGIlikWbdYHTDQBQLOcZhtBse7Ly+ZakGoj+4qe+C15pVx70bei54cX/NfV59dN1W99EbV+8aSx3G3eD8dhn82n8nqoqr'\n\
-        \    'zGvN7OBSwpB9QKu8WOfJgpVtunfzuHlN9qGAQEVC++IBVeA7wgFsieaooCHeOWu/wXwHET7NdTykX7UdBzxbDjyTlzAbWcscvCU52StdnievH70/D1+9fnVW'\n\
-        \    'L37YtRoMbF4Rlb7LwzLq3z6mGXX2171VYDNhs0VsbnlAJPOrTA+4TnQpNhVy+U+DyXAxlEuFZlH3xNuyH8+jUbP4oXm3WjHHtNvgAGYcHhcH1vL5Xxsda7r5'\n\
-        \    '7jA2qIwLGePBbDAxRydKunHB+mw0b5a+CRW61D+PCYIFwSr+qW3fwuiDxTdgQpRy4WI6jRhusm+U/b/TcwGt5YsfjdqyOXU5KmjBvMQbR7OYNKG59cecKRIO'\n\
-        \    'N0HpWHrUvqHuptMB7i39e28vtDR17VUGAC49F7BK4sJCvt/R8VDCQaPEsdDmhfeYJfdJB+stEtfYuIslIGvHRL7AULuvqISWL1i7Pz00OojQWxAHJ0vcnmLw'\n\
-        \    'kn7MoQbVvO7Ruj1Pxzj7Ahzds5p/iW4AxCI8KHkwrZfGKxAhClqxdYV27AMeDU/iZLXLVl0zJKrVE8EIcLTRvniMoo4qkzVcj1w8AbtazEGMPJAj7+WbTstv'\n\
-        \    '/XVXfP3H4gLCpkMIdkF7gQc4waJtNniLY9CA50LAr1//XKfMY0kGzLLCnWpZBb/+Gu3moKxMyjX7Wh/tlpE+8IOBr0ubIFwddAMJ/AGEUEZ5E4z5MknzeFe5'\n\
-        \    '22xAqvItn7um1bYmrmT08LFTd1vtd2Ea5zls8N1oiw9ltZv3t99QXlKlc4Bj7KpO6gGpNl//DliiR7d23pfdxvvl65+bLUiTN9d4+h8m/uTY/YOxB9cHwHey'\n\
-        \    'OG00MyKqn0/oJRFVzgDGi6qIBUo2EakEEO/vvcC9QLtsSe+7kPRxsM3zNIbe0pAIUe16FfFozbcK5TOWpBdFtKu89r24Q5rAel/Ib50zEJSMDjLqMvqdoW+S'\n\
-        \    'uadsxShYiC1pE+/s1PqONtB+TISLpn4Wp1YhmidpUl2bhdVzOU3Rwavv8Zm1PTIjFJD//cIjGrhZauoFbyMuoo5bTmDMgPIYce5FF2gjpJwUS1D5tqoTAz12'\n\
-        \    'cpnMNfHP30JqiJC+lfgv3mDMhUK+HbMUDxkMp/tE47F9Ly94UKAciwLkPGEeb/JuqykgbgPFA+SSHbvKy419bVzhvAC/i9TJMk3YmmXdls/v6dXjldQ4bqLa'\n\
-        \    'jIxdxKpdFrx/9oCX6dJ93GWIJ5TaWjJbHcc4cGMXCmjbMS3ggmZIsROeLWxqMYa8H/MlqZjxVwj3+2V0tGODd3XLA5Lup6keKO5IQr6V/yjwRx1/2Glcci1e'\n\
-        \    'm1JJRxy+uYNdHjO8Y2nbe+Wxdy/2zhd4FD27S6sxavLXGIrPAX50O6V1Bj8xNbzFUQYHgz1K2Kq6650Vy4jeoPAeBCPgL/76UZNFbVZWb7qgh7DIS45M3yAF'\n\
-        \    'ZR2gwX4fkq7n5jPbPxPoO7YsvkJPBPyjbLcCr8Vbfv1HAZgkQ0WNdpwxQ8MhBfi+bOcI27kFYd2s4gedGmGvkuKigk7d9ZqKA++SrrwXbI7ibFGcen9LIv/8'\n\
-        \    '/47Iym59BxHR2/+5PzpEwtP3nIRkDrT1NI3AQTqagcVRf6QWOEg3BGO/le2qLxUHf75lX5IoXWobrUapNVYjjrNdDhvzNJxfCDjXiF//3OF21g1bF3uGcCvE'\n\
-        \    '4RrPX06IP8WKT71RYLM13t7BILSrSuhxCkb12Zs94ZL9FoIxHO9IPh3TRO1aiAg2/2A4MJlcqX/QYKXHivXXP1O8SqQEt9cbDtwdcbKXpdqbuBcA7p40PQHB'\n\
-        \    'S7tC+BJ0vIc8CPBhs0w4daaDiBdEsuoLSp4TNfu9JuEG7ADnJVn90t5ypOiwYvMduosHWtDeqYOXnqAscI8TYGZf/14lKx5PNIZzgL/4u4T6ZGLtvUJzSU+x'\n\
-        \    'Hc+DLnUbncLbnr7+iSqlttMK3yGovGi39NYY+kC3IMwb9YDyyAB7JFgNX/MeosXwxn4+EQPQ/VgmWYLqkA+k7dReLlcNeOci32xwj9jGRJ7prrltG3cxM3oI'\n\
-        \    'ce8UD+Q6wi167sTNSDVeUFMK1M4dZ0AmWYt8ZRIrmnpzIlef4VFz+e5VEOe9GbVVC33U7dA9EXvWJWwMuVcIm7fMNU7CKbexier6tJX75BmCwlvHTHB13/vG'\n\
-        \    '43iSHHPITypgpqj01PUGd22SuEy3k8PMtNqalj3DqSbhvm1ViWSaCpdi8cdFOHnfltlOdBUlFR2IqIigXXmVRbJhBd0O1Oni73xXffvErXhd5oGUff7ywIZW'\n\
-        \    '+PZ45P3hA1xQak99E0TH4aMPwBnzA1/PYXYOPWFz2BQfNohHvG/GVln7EVhoCI931ADzulrnqjqWKXAaPh6zitXbv9RmcZQisZ7iMeDdVgX8U6rgFirhtiJX'\n\
-        \    'V+rQi4dslYIiBN5BrfhL93UX/OsEHS8csXdBcwiVd0VlTOuzT+C1kz+qPzW0LyK/2hUxXdrBXesuOfiPhbsNvZtXIMYFGZvHebFsBuw1kXBZMMN6iXn7e3hj'\n\
-        \    '9aFYkVjxo3HIKU+yQ9uQXE40ryNm6IedA2GTLImh04PBze8PGTisreX7i5RFBb0Kyl8i+s4VIWObgJYtDdqoI95wu+VDWfbbWvV3spoKev9zrce120Bu+1jV'\n\
-        \    'wQernI9S1V6x6uzvWO29ukPv9e3XIuIQqAbzg3eON65j3R3EBOs8jX+ia9XFHnEmHxsQZ1QXaV7ilexLkNqrqIjF9Ta3sUMz2wx9QyfNU6INPaVPz5qPDRuP'\n\
-        \    'Sjcj4UWeiZdxMohAniT4KqRa5UVmhPQuQmirN+k7d09e/+JkZ4NLUSbaVJnOI+KmmXaLzum1/JaY1JfFpa4RgzD9z32QKhZtNKA530BpQbGDRTUngqatDiwR'\n\
-        \    '79Kv1dQgzox0Gl7/rYCUxoygP+gYW7ARf99FBmqqvAUa5S93NSfOLGy76znQY2P3cDULIQY6zVqAGoO/7ty5w28n6B97i2gL7AUsxb1kuoyAXhxHwZRBA4gh'\n\
-        \    'PYy2y6okpZwtnf4GMOzzNk0WSZVe430GJWWi5vk3gAQNykld7y2jhxHR0cKZXZBMzIdPgIGoQfxQ5RTjaKxqvJ3YFSSux3o157jG2FqRm7baCvuLZZ6iKV2s'\n\
-        \    '75qxIboRnxjODiUbYcSzo3dAXjVFJhf8IYJMKq6jCcmN4/aaKY2nTTkp+B6KepUfvLPPbLEDbUiKz0RofpWprSMQBscpBNk+qWOgDbtkxTXuWICBeqgx5DUS'\n\
-        \    'eHUu3jmB7zK3Gj1umf1CDpbh0p7u1eGJM79UM8mWuTFxVsvZs6nj5nBYyC9u+CqPPVroEneu9cNdEsosY9sbioY8cEO1LCtAmSU/CUG+M3c52phBG946XXH+'\n\
-        \    'o6ytA75Jo+pLfR1CVau/4vtf/+nJdxn5h3hmnH8Yzzd6/Za6XV08P3vgqsz6hZqdPe+eureq13wOKwhDSgFCq6R+JSaGHVbuz3SA9xZg9FHqsLzOFjwTLyIg'\n\
-        \    'EeD7gAyHsElTHDuRXErHuyLCVTYGPA865/1zb17gYVgmJGENzAScCcKy9FDNlNAYfZBSpzcGzXvydonmqN8/6tfG0fIbOb8brkaR55Xf+6gL45zcZ/tWzSuI'\n\
-        \    'cxjPAFwRNNrLKF4olhnBqNez/T9kJt0uVfydSn/ULEyVVZSsthry60MxugQYv/c+Wrkx2+Kb8jr8pEL9j/aUDIqF2Fpp8/gukau8tdfGgMEQheKt0LYJgXiQ'\n\
-        \    'vvVNI52aO7ZLeKmTE9Jx+sNGt5eLEQDOBnbPrHA0uzEINac+jMtLedpd3os9oSuMKslqm57qII2h6zQ9fHMcgS50cqhdzjwC+79TBZ9gPJDUEycCdonyhA5I'\n\
-        \    'WtM1MkVgn1Klo4UIkE7nHatxCkdYbTfO+fX8ANLiK0p2aFzMEBq3ykO8fKtom8r38dvTR8/OXnnvzk5f1tWu7g6FJDFzteia3VLHJK0Dn3hhhatTKS7ktRt7'\n\
-        \    'KDQAo7vlFj0JVmQt/RC5syA+AOZcz6YQEOm1znP+4iaYW5yFa5csXfqtuvPg2FogzCqNQm7TBEkTOzWZiDMQ/p45Gqum3OCpK0mDYOK/fs9wzXij+SnphVSh'\n\
-        \    'oXRd142LM6Njsipe2Cd+kozz0472jLIuy/tDG5+MtKaMzSFqvHCCAN6x73+wgMlcx8a2Gy5d0FdZ7rl2ge4uH/bkG4+zobPenosXhnM2HbVcNZz7noN9JR07'\n\
-        \    'iGs7M9sKF5HSep1b3clg3MbQJMOtfcJ92kbYpDLNwYBc5fYr1t+iIejk6I0awlYLul28I0UBwPuOkm3I4hUDfWrvbxl4Qle0jfJaUTyB2AR4D0OPLfc9kQ+d'\n\
-        \    'Rc1tWh3HJK9CyR2nwEsHduA5zvrhD+G8ttzVb3/Qotdxaj2MEA5pPUdo8j3KTzXzLcpPV6qtPJl27f8/C92Sg/6VvPF/AKIt6967lgAA'\n\
-        )\nnew = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(new).hexdigest() == '190c938a9cdde0d0a4b0588aefc1d3d3df5ed4f9fa2d57760baa7d3666c0ea6d'\n\
-        p.write_bytes(new)\nconfig = Path('android/export_presets.cfg')\nversion = config.read_text(encoding='utf-8')\n\
-        assert version.count('version/name=\"4.1.7.72\"') == 1 and version.count('version/code=4241') == 1,\
-        \ 'FIX75: FIX72 export version not found'\nconfig.write_text(version.replace('version/name=\"4.1.7.72\"\
-        ','version/name=\"4.1.7.73\"',1).replace('version/code=4241','version/code=4242',1),encoding='utf-8')\n\
-        print('FIX75_BATTLE_VISUALS_OK: adaptive 3D resolution, antialiasing, forest arena, dragon geometry,\
-        \ larger menu; battle logic unchanged')\nFIX75_SCENE\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/06.sh"
     - name: FIX75 Kampfdesign und Testszene vorbereiten
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ncat > android/tests/V473VisualSmoke.gd <<'V473_TEST'\n\
-        extends SceneTree\nconst B = preload(\"res://scripts/V469Battle.gd\")\n\nfunc _initialize() -> void:\n\
-        \    call_deferred(\"_run\")\n\nfunc _fail(msg: String) -> void:\n    push_error(\"FIX76: \" + msg)\n\
-        \    quit(1)\n\nfunc _run() -> void:\n    var b := B.new()\n    root.add_child(b)\n    b._build_battle_screen()\n\
-        \    if b._screen == null or b._actions == null:\n        _fail(\"battle UI was not built\")\n    \
-        \    return\n    var panel: PanelContainer = b._hud.get_node_or_null(\"BottomPanel\") as PanelContainer\n\
-        \    var camera: Camera3D = b._arena.get_node_or_null(\"Camera3D\") as Camera3D\n    if panel == null\
-        \ or camera == null:\n        _fail(\"camera or panel missing\")\n        return\n    if camera.position.y\
-        \ < 5.0 or camera.position.z > 7.0 or camera.fov > 55:\n        _fail(\"new close elevated camera was\
-        \ not applied\")\n        return\n    if panel.anchor_top < 0.98 or panel.offset_left < -210.0 or panel.offset_right\
-        \ > 210.0:\n        _fail(\"compact menu not anchored at bottom\")\n        return\n    b._show_choices(B.hero_actions())\n\
-        \    if b._actions.get_child_count() != 7:\n        _fail(\"hero action count changed\")\n        return\n\
-        \    for button in b._actions.get_children():\n        if not (button is Button) or button.custom_minimum_size.y\
-        \ < 38.0 or button.custom_minimum_size.y > 48.0:\n            _fail(\"buttons not enlarged\")\n   \
-        \         return\n    if b._arena.get_child_count() < 75:\n        _fail(\"decorated arena missing\"\
-        )\n        return\n    if B.companion_actions().size()!=5 or B.binding_chance(20,86)<0.4:\n       \
-        \ _fail(\"combat logic regression\")\n        return\n    var ground_mesh: MeshInstance3D = b._arena.get_child(0)\
-        \ as MeshInstance3D\n    if ground_mesh == null or not (ground_mesh.material_override is ShaderMaterial):\n\
-        \        _fail(\"forest ground shader missing\")\n        return\n    var moss_count: int = 0\n   \
-        \ for child in b._arena.get_children():\n        if String(child.name).begins_with(\"Moosstein_\"):\n\
-        \            moss_count += 1\n    if moss_count < 16:\n        _fail(\"moss rocks and fern clusters\
-        \ missing\")\n        return\n    if not b.has_method(\"_v475_idle\") or not b.has_method(\"_v475_impact\"\
-        ):\n        _fail(\"idle animation or impact feedback missing\")\n        return\n    for button in\
-        \ b._actions.get_children():\n        if button is Button and button.get_theme_font_size(\"font_size\"\
-        ) < 18:\n            _fail(\"new larger button font missing\")\n            return\n    print(\"FIX76_VISUAL_TEST_OK:\
-        \ high-resolution arena, forest ring, enhanced dragon, responsive large buttons\")\n    quit(0)\nV473_TEST\n\
-        python3 - <<'FIX75_ASSERT'\nfrom pathlib import Path\ns=Path('android/scripts/V469Battle.gd').read_text(encoding='utf-8')\n\
-        for name in ['func _v475_forest_ground(','func _v475_idle(','func _v475_impact(','msaa_3d = Viewport.MSAA_2X','screen_space_aa\
-        \ = Viewport.SCREEN_SPACE_AA_FXAA','WaldbodenMoos_','Steinkreis_','func _finish_binding()','func _on_save_pressed()','func\
-        \ _sync_team_and_save_buttons()']:\n    assert name in s,name\ncompile(Path('android/tests/V473VisualSmoke.gd').read_text(),'<gdscript-test-text>','exec')\
-        \ if False else None\nprint('FIX75_STATIC_OK: gameplay binding unchanged')\nFIX75_ASSERT\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/07.sh"
     - name: FIX76 Android Updateversion eindeutig setzen
       shell: bash
-      run: 'set -euo pipefail
-
-        python3 - <<''FIX75_VERSION''
-
-        from pathlib import Path
-
-        p=Path(''android/export_presets.cfg'')
-
-        s=p.read_text(encoding=''utf-8'')
-
-        assert ''version/name="4.1.7.73"'' in s, ''FIX75: graphic upgrade not applied''
-
-        s=s.replace(''version/name="4.1.7.73"'',''version/name="4.1.7.76"'',1)
-
-        # Increment a version-code in the export to allow clean Android updates.
-
-        import re
-
-        m=re.search(r''(?m)^version/code=(\d+)$'',s)
-
-        assert m, ''FIX75: Android version code missing''
-
-        s=s[:m.start()]+f''version/code={int(m.group(1))+2}''+s[m.end():]
-
-        p.write_text(s,encoding=''utf-8'')
-
-        print(''FIX76_ANDROID_VERSION_OK'')
-
-        FIX75_VERSION
-
-        '
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/08.sh"
     - name: FIX76 Kompaktes Kampf-UI Kamera und detailliertere Modelle installieren
       shell: bash
-      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lwod_fix76.py\" <<'FIX76_PY'\nfrom pathlib import Path\n\
-        p = Path('android/scripts/V469Battle.gd')\ns = p.read_text(encoding='utf-8')\nassert 'func _finish_binding()'\
-        \ in s and 'func _on_save_pressed()' in s\nassert s.count('func _show_choices(')==1\nassert 'bottom.anchor_left\
-        \ = 0.015' in s and 'button.size_flags_horizontal = Control.SIZE_EXPAND_FILL' in s\n\ndef rep(a,b):\n\
-        \    global s\n    assert s.count(a)==1, 'FIX76 expected exactly one original UI anchor: '+a[:100]\n\
-        \    s=s.replace(a,b,1)\n\n# Retain a detailed 3D viewport; cover entire background so no flat green\
-        \ margin appears.\nrep('    viewport_box.anchor_bottom = 0.80','    viewport_box.anchor_bottom = 1.0')\n\
-        rep('    bg.color = Color(\"#9ec7b4\")','    bg.color = Color(\"#91aa9a\")')\nrep('    bar_bg.color\
-        \ = Color(0.12,0.22,0.19,0.65)', '    bar_bg.color = Color(0.08,0.11,0.19,0.65)')\n\n# Fixed compact\
-        \ action panel: no near-full-screen green rectangle and no stretched buttons.\nrep('''    bottom.anchor_left\
-        \ = 0.015\n    bottom.anchor_right = 0.985\n    bottom.anchor_top = 0.585\n    bottom.anchor_bottom\
-        \ = 0.99''', '''    bottom.anchor_left = 0.5\n    bottom.anchor_right = 0.5\n    bottom.anchor_top\
-        \ = 1.0\n    bottom.anchor_bottom = 1.0\n    bottom.offset_left = -186.0\n    bottom.offset_right =\
-        \ 186.0\n    bottom.offset_top = -218.0\n    bottom.offset_bottom = -8.0''')\nrep('panel_style.bg_color\
-        \ = Color(0.17,0.32,0.25,0.93)','panel_style.bg_color = Color(0.075,0.11,0.22,0.82)')\nrep('panel_style.border_color\
-        \ = Color(\"#d6d2a4\")','panel_style.border_color = Color(\"#bda46c\")')\nrep('    panel_style.set_corner_radius_all(16)','\
-        \    panel_style.set_corner_radius_all(10)')\nrep('    margin.add_theme_constant_override(\"margin_left\"\
-        ,20)','    margin.add_theme_constant_override(\"margin_left\",10)')\nrep('    margin.add_theme_constant_override(\"\
-        margin_right\",20)','    margin.add_theme_constant_override(\"margin_right\",10)')\nrep('    margin.add_theme_constant_override(\"\
-        margin_top\",12)','    margin.add_theme_constant_override(\"margin_top\",6)')\nrep('    margin.add_theme_constant_override(\"\
-        margin_bottom\",12)','    margin.add_theme_constant_override(\"margin_bottom\",6)')\nrep('    col.add_theme_constant_override(\"\
-        separation\",9)','    col.add_theme_constant_override(\"separation\",4)')\nrep('    _message.add_theme_font_size_override(\"\
-        font_size\",24)','    _message.add_theme_font_size_override(\"font_size\",17)')\nrep('    _message.custom_minimum_size\
-        \ = Vector2(0,35)','    _message.custom_minimum_size = Vector2(0,24)')\nrep('    _actions.add_theme_constant_override(\"\
-        h_separation\",14)','    _actions.add_theme_constant_override(\"h_separation\",6)')\nrep('    _actions.add_theme_constant_override(\"\
-        v_separation\",9)','    _actions.add_theme_constant_override(\"v_separation\",5)')\nrep('    _actions.size_flags_vertical\
-        \ = Control.SIZE_EXPAND_FILL','    _actions.size_flags_vertical = Control.SIZE_SHRINK_CENTER')\nrep('\
-        \    _actions.size_flags_vertical = Control.SIZE_SHRINK_CENTER\\n    col.add_child(_actions)', '  \
-        \  _actions.size_flags_vertical = Control.SIZE_SHRINK_CENTER\\n    _actions.size_flags_horizontal =\
-        \ Control.SIZE_SHRINK_CENTER\\n    col.add_child(_actions)')\nrep('    button.custom_minimum_size =\
-        \ Vector2(220,60)','    button.custom_minimum_size = Vector2(165,39)')\nrep('    button.size_flags_horizontal\
-        \ = Control.SIZE_EXPAND_FILL','    button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER')\nrep('\
-        \    button.add_theme_font_size_override(\"font_size\",25)','    button.add_theme_font_size_override(\"\
-        font_size\",19)')\nrep('    button.add_theme_color_override(\"font_color\",Color(\"#f7e9cd\"))',' \
-        \   button.add_theme_color_override(\"font_color\",Color(\"#f8f1dd\"))')\nrep('    normal.bg_color\
-        \ = Color(\"#274c41\")','    normal.bg_color = Color(\"#263957\")')\nrep('    normal.border_color =\
-        \ Color(\"#f1dba5\")','    normal.border_color = Color(\"#bba477\")')\nrep('    normal.set_corner_radius_all(12)','\
-        \    normal.set_corner_radius_all(7)')\nrep('    hover.bg_color = Color(\"#629275\")','    hover.bg_color\
-        \ = Color(\"#435d8a\")')\nrep('    pressed.bg_color = Color(\"#88ae83\")','    pressed.bg_color = Color(\"\
-        #62568b\")')\nrep('    hover.set_corner_radius_all(12)','    hover.set_corner_radius_all(7)')\nrep('\
-        \    pressed.set_corner_radius_all(12)','    pressed.set_corner_radius_all(7)')\n\n# Top status labels:\
-        \ make shorter, sharper, and separate from button panel.\nrep('    title.add_theme_font_size_override(\"\
-        font_size\",23)','    title.add_theme_font_size_override(\"font_size\",19)')\nrep('    label.custom_minimum_size\
-        \ = Vector2(122,0)','    label.custom_minimum_size = Vector2(108,0)')\nrep('    label.add_theme_font_size_override(\"\
-        font_size\",18)','    label.add_theme_font_size_override(\"font_size\",16)')\nrep('    bar.custom_minimum_size\
-        \ = Vector2(150,23)','    bar.custom_minimum_size = Vector2(150,16)')\n\n# Camera and composition:\
-        \ cinematic elevated three-quarter view, models remain on screen.\nrep('    camera.position = Vector3(0,5.35,7.05)','\
-        \    camera.position = Vector3(-0.55,5.65,6.40)')\nrep('    camera.fov = 53.0','    camera.fov = 49.0')\n\
-        rep('    camera.look_at(Vector3(0,1.25,0))','    camera.look_at(Vector3(0,1.35,0))')\nrep('    _arena_hero.position\
-        \ = Vector3(-2.55,0,0.4)','    _arena_hero.position = Vector3(-2.26,0,0.35)')\nrep('    _arena_foe.position\
-        \ = Vector3(2.5,0,-0.2)','    _arena_foe.position = Vector3(2.27,0,-0.20)')\n\n# Higher silhouette\
-        \ clarity without requiring external textures/models. For actual\n# high-poly assets we will eventually\
-        \ need model imports rather than primitive meshes.\nrep('    mesh.radial_segments = 18','    mesh.radial_segments\
-        \ = 28')\nrep('    mesh.rings = 11','    mesh.rings = 18')\n\n# Upgrade detail in procedural creatures\
-        \ using geometry already supported by FIX75.\nanchor='''    for j in range(5):\n        _oval(d,\"\
-        Panzerplatte\",Vector3(0,1.37,0.02+0.35*j),Vector3(0.36,0.16,0.39),Color(\"#70a35a\"))'''\nextra='''\
-        \    for j in range(5):\n        _oval(d,\"Panzerplatte\",Vector3(0,1.37,0.02+0.35*j),Vector3(0.36,0.16,0.39),Color(\"\
-        #70a35a\"))\n    # FIX76: leaf-shaped horn ridges, belly plates and more defined feet.\n    for side\
-        \ in [-1.0,1.0]:\n        for j in range(4):\n            var ridge := _oval(d,\"Blattrippen\",Vector3(side*(1.20+0.27*float(j)),1.97,0.30+0.15*float(j)),Vector3(0.43,0.07,0.12),Color(\"\
-        #aad57b\"))\n            ridge.rotation.y = side*0.25\n        for j in range(3):\n            _oval(d,\"\
-        Hornstruktur\",Vector3(side*(0.35+0.06*float(j)),2.54+float(j)*0.19,-0.97+float(j)*0.16),Vector3(0.15,0.25,0.21),Color(\"\
-        #5d8649\"))\n        for j in range(3):\n            _oval(d,\"Hinterkralle\",Vector3(side*(0.55+0.14*float(j)),0.18,0.80),Vector3(0.09,0.12,0.32),Color(\"\
-        #c1bc95\"))'''\nrep(anchor,extra)\n\nanchor='''    for side in [-1.0,1.0]:\n        _oval(parent,\"\
-        Schulterpanzer\",Vector3(side*0.51,1.68,0),Vector3(0.34,0.23,0.39),Color(\"#7566a7\"))\n        _oval(parent,\"\
-        Haarstraehne\",Vector3(side*0.27,2.0,0.16),Vector3(0.19,0.51,0.24),Color(\"#6543a2\"))'''\nextra='''\
-        \    for side in [-1.0,1.0]:\n        _oval(parent,\"Schulterpanzer\",Vector3(side*0.51,1.68,0),Vector3(0.34,0.23,0.39),Color(\"\
-        #7566a7\"))\n        _oval(parent,\"Haarstraehne\",Vector3(side*0.27,2.0,0.16),Vector3(0.19,0.51,0.24),Color(\"\
-        #6543a2\"))\n        _oval(parent,\"Stulpen\",Vector3(side*0.52,1.07,-0.06),Vector3(0.27,0.18,0.28),Color(\"\
-        #a59ec4\"))\n        _oval(parent,\"Stiefelrand\",Vector3(side*0.23,0.63,-0.05),Vector3(0.35,0.14,0.41),Color(\"\
-        #877056\"))\n    _oval(parent,\"Haarzopf\",Vector3(0,1.80,0.28),Vector3(0.25,0.69,0.29),Color(\"#6748a3\"\
-        ))\n    _oval(parent,\"Tunikanhaenger\",Vector3(0,0.64,-0.14),Vector3(0.40,0.48,0.30),Color(\"#3d4073\"\
-        ))'''\nrep(anchor,extra)\nanchor='''    _oval(parent,\"PhoenixBrustlicht\",Vector3(0,1.29,-0.43),Vector3(0.23,0.37,0.20),Color(\"\
-        #e7b5f4\"))'''\nextra='''    _oval(parent,\"PhoenixBrustlicht\",Vector3(0,1.29,-0.43),Vector3(0.23,0.37,0.20),Color(\"\
-        #e7b5f4\"))\n    # FIX76: staggered pinion feathers replace the flat-wing impression.\n    for side\
-        \ in [-1.0,1.0]:\n        for j in range(6):\n            var plume := _oval(parent,\"Flugfeder_%d\"\
-        %j,Vector3(side*(0.85+float(j)*0.25),1.44-0.035*float(j),0.19+float(j%2)*0.14),Vector3(0.22,0.11,0.64),Color(\"\
-        #a677ec\") if j%2==0 else Color(\"#d1a6ff\"))\n            plume.rotation.z = -side*0.22\n    _oval(parent,\"\
-        Kopfgefieder\",Vector3(0,2.46,0.07),Vector3(0.20,0.53,0.33),Color(\"#c293f5\"))'''\nrep(anchor,extra)\n\
-        \n# Soft-lit arena: preserve the existing procedural texture, but add two colored\n# fills for a clearer\
-        \ silhouette and a light contrasting environment.\nrep('    light.light_energy = 1.80','    light.light_energy\
-        \ = 2.05')\nrep('    env.environment.background_color = Color(\"#b5d6c2\")','    env.environment.background_color\
-        \ = Color(\"#9bb5ab\")')\nrep('    env.environment.ambient_light_energy = 1.19','    env.environment.ambient_light_energy\
-        \ = 1.34')\nrep('    _arena.add_child(env)','''    _arena.add_child(env)\n    var fill_light := OmniLight3D.new()\n\
-        \    fill_light.name = \"Kampffuelllicht\"\n    fill_light.position = Vector3(-5.0,5.5,4.0)\n    fill_light.light_color\
-        \ = Color(\"#d9dcff\")\n    fill_light.light_energy = 1.1\n    fill_light.omni_range = 18.0\n    fill_light.shadow_enabled\
-        \ = false\n    _arena.add_child(fill_light)''')\n\n# Retain three-value HP/MP/AU interface and battle\
-        \ save/team logic unchanged.\nfor token in ['func _finish_binding()','func _commit_game_save()','func\
-        \ _on_save_pressed()', 'func _choose(action: String)', 'func _bind_dragon()', 'func _enemy_move()']:\n\
-        \    assert token in s, token\nfor token in ['bottom.offset_left = -186.0','button.custom_minimum_size\
-        \ = Vector2(165,39)', 'camera.position = Vector3(-0.55,5.65,6.40)']:\n    assert token in s, token\n\
-        p.write_text(s,encoding='utf-8')\nprint('FIX76_APPLIED: compact 2x4 actions, sharper 3D models, three-quarter\
-        \ camera; combat functions preserved')\nFIX76_PY\npython3 -m py_compile \"$RUNNER_TEMP/lwod_fix76.py\"\
-        \npython3 \"$RUNNER_TEMP/lwod_fix76.py\"\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/09.sh"
     - name: FIX61 Weltkarte importieren und echten Spielstart testen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_11'\nimport base64, gzip, hashlib\nfrom pathlib import Path\n\
-        encoded = (\n    'H4sIAAAAAAAC/61XbVPbRhD+rl+xcTKVPVgyToAQETd1wRAmpGaMW5pJqeYsreyLJZ1yd+Ilcf57906ywXkbmCkfGOm09+zLPfvcWqEGD0sBBS8w'\n\
-        \    'YTx1snnMJXgFTEqexp2Ys2kuFDrFjZ6J/Bl48PKle/rubNwfjY/+7I8OXFiARvzKvnN4/Pf2bnimmdQqmpX6k5+KqZNIkUHB9CzlE+BZIaSGU3p1'\n\
-        \    '6mdJjugVena16bI8loLHHRVJXmjV+Wtrc3eEUy5y5U9jt+UoMjU7fIksDjVe6ybmkYh5Pu25pU68XWNkoiBD5fM8xuumm5R5BGHG5hgW1k/LwTwm'\n\
-        \    'C4m+QiajWVO6zVdZ69/mq8AaLwhD8wiql4j8a1hcMgmL31puW723Lja6wUXLyZAqZcDq1aBZf9wgH759brZawBMwPjFVCCnmTdW6cJhSSJEqPxJl'\n\
-        \    'rr8XZ6/XbYNb5nhdYKQxhrgsUh4xjbYMlABlKFG6S6wa43JreydUmRB6FkrB4qYLPAdFWIolCFEpLwlsuRsyrhSV8BYlQp7yJvNjTgnkEYZaNCet'\n\
-        \    'zpa/2VohbWWgWEbh5FNiQzwlbn2DYwJ5biMIFSVgDtKFXOglhskrV/wSwRDoOWRlqrk3IR5AhmoGSvM0BUY7L/EWVWl/ijlKKkOYC5mxVDWruOrD'\n\
-        \    'MPtd69WgoIKNHnTvGKyQ9kUqZLPxeBKxp8+jxl0Qiu68lJ8wnSHPwIBRyVPUVPpVmkmpKKWf0Le7dWhNLHt/StpESNBijrmJ4L1bUe734fBsHJ4N'\n\
-        \    '9od/HJwFkKSCGWJv+i+23faazX7/tL9/PH4X0HZj8sxtO7D2t2Y+Guy/7o+OBt9idzf9TfcisJvrKq3CqtJtQ+ImKZ/O6LxFjMSiqURlvgTw2dp+'\n\
-        \    'cZ1CcsPoWhaMeoRWPsLhmwBmyC5voOtvZ3ANGctvqvIqTWVThJcJYucezHNxlXsUl6kUEN2s0yu0rlfcJd9aSGM/EUIZZmniC1X0rmo5jw3BdroB'\n\
-        \    'HFfKwzM2RZugVjBBqj61Ze2pPj644tRhhUSz3myQn6DT8X3/CidFo+UT5KjMc7OBkZX4QPy2W0SpiYCAMae4lqoX0UpCPMWUkkW71MiFCV6UMqp8'\n\
-        \    'o1QNQrVMmFFwOmXUI3hJxb+a0T+C6FcMA+obA3El5Fz58AaxuN1i2W/eMlbU1fAdTVUCz36zFK0y75CJ6pycDw/Cvtkavj6w6cFiAZ+JAhjNBLhB'\n\
-        \    'gFIKGQTnQqZx7YSrZRssy3ckYtPYNl93j0LkGrp7zheHPMEGOppnaGrjeYpPc5b2xoPRW3qbU4t7LNEoe9sKurubCqYWyvOIKHFK3KJHK3d19PRa'\n\
-        \    'V9fz6vr+Q9H++p1Laacb9k2qYXXu5laCp7/+0q1voNDofKl6T17ZKD10SFvvB+OQor+HxpM1oAZ4OcImXOyZE8iXJWysSlgVaXXsdfTmKiY9bi6j'\n\
-        \    'WcNsNQyMraaTcOOW+q0Ab8A/gnu2Pzo+HcNgNBqOgsUpk3S9DKyrxWEFqoUlV83qxfFdjwtrWkdhFO1+qa8nd8sPa1ej2c60D8SY2jkIeZu63eOu'\n\
-        \    'pUYdhR9LTlwiqtelITFmMdOsYixxWs5RtoG0f4amT8jyQ0ncZvAJpTCNGBnCVKXzq0N6BF5yT+b7tduLH+ZYsX89OHulLa+k2P36vB7VJ3ZIB1bL'\n\
-        \    'iGV4py5V3HEfFt7DgpvRGmnN3f7E2M4P65FWYPWRj0/6Z+Hx29MhKbfR7CvT+56RFHOBlRJvker+lzTDUIsvFdN16DxPGI0js0qbIl2ydKmUbVsy'\n\
-        \    'kZMcmgkjZqmgxqGJZY5gtIqO7mGysXMv2SB26WoTvNj8mWicmjDn2o5vt6KR2nQeIBpfwyxFYw3onqKxvGOq8baWDHNXUIHogUq00o81+P9ZP/JL'\n\
-        \    'llItI5am7v2S/hFbq7Qq3M6SPfYbjbnS3sQGoizWaZpYFWHxjRlJXPMTITwfjk4OaKjpH7wL3GqtG44HJwNL33p9D2JBQOv92HhioRoPzOTbI2IZ'\n\
-        \    '2qh4bohXydTyhgyg9lLtrDIBoFxiYv1a3x313w7qecl0XcbMoByRskBEENRtbTNvmTm6uuYxrYYJOz/QR2J1IikWBZGg2RytHP0HAdXqVfcNAAA='\n\
-        )\nbody = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(body).hexdigest() == 'dc862c45d5142b20420df666d4bbb767089871988cdd3b194cb65bd64e71d7a3',\
-        \ 'FIX65: extracted script checksum mismatch'\nPath('/tmp/lwod_fix64_11.sh').write_bytes(body)\nprint('FIX65_SCRIPT_RESTORED:\
-        \ step 11, bytes',len(body))\nLWOD64_11\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_11.sh'\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/10.sh"
     - name: Sicherungen und alle FIX39 Godot-Tests
       shell: bash
-      run: "set -euo pipefail\nfor i in 11 12 13 14 15 16; do\n  echo \"::group::FIX39 Originaltest $i\"\n\
-        \  bash --noprofile --norc -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\"\n  echo '::endgroup::'\n\
-        done\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/11.sh"
     - name: FIX54 Dungeon-Dekoration und Kamera testen
       shell: bash
-      run: 'set -euo pipefail
-
-        mkdir -p build/diagnose
-
-        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script
-        res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX54_Ruine.log
-
-        if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX54: '' build/diagnose/FIX54_Ruine.log;
-        then exit 1; fi
-
-        grep -Fq ''FIX54_RUINE_OK:'' build/diagnose/FIX54_Ruine.log
-
-        '
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/12.sh"
     - name: FIX55 Flugschub und unabhängige Ladezeiten testen
       shell: bash
-      run: 'set -euo pipefail
-
-        mkdir -p build/diagnose
-
-        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script
-        res://tests/V455BoostSmoke.gd 2>&1 | tee build/diagnose/FIX55_Flugschub.log
-
-        if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX55: '' build/diagnose/FIX55_Flugschub.log;
-        then exit 1; fi
-
-        grep -Fq ''FIX55_BOOST_OK:'' build/diagnose/FIX55_Flugschub.log
-
-        '
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/13.sh"
     - name: FIX61 Neun Stadtwege Kurven und Flugschub testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\nset -o pipefail\ntimeout --signal=TERM --kill-after=5s\
-        \ 150s godot --headless --path android --quit-after 300 --script res://tests/V456RoadsSmoke.gd 2>&1\
-        \ | tee build/diagnose/FIX61_Wegenetz.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load\
-        \ script|Invalid call|FIX61: ' build/diagnose/FIX61_Wegenetz.log; then\n  exit 1\nfi\ngrep -Fq 'FIX61_ROADS_OK:'\
-        \ build/diagnose/FIX61_Wegenetz.log\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/14.sh"
     - name: FIX61 Pflasteroptik und Kurven automatisch testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 120s godot --headless\
-        \ --path android --quit-after 300 --script res://tests/V461PavingSmoke.gd 2>&1 | tee build/diagnose/FIX61_Pflasterwege.log\n\
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX61: ' build/diagnose/FIX61_Pflasterwege.log;\
-        \ then\n  echo '::error::Pflasterweg- oder Kurventest fehlgeschlagen'; exit 1\nfi\ngrep -Fq 'FIX61_PAVING_OK:'\
-        \ build/diagnose/FIX61_Pflasterwege.log\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/15.sh"
     - name: FIX62 Komplettes Dorfwegenetz und Pflaster nachpruefen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 120s godot --headless\
-        \ --path android --quit-after 300 --script res://tests/V462AllRoadsSmoke.gd 2>&1 | tee build/diagnose/FIX62_Alle_Wege.log\n\
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX62: ' build/diagnose/FIX62_Alle_Wege.log;\
-        \ then\n  echo '::error::Wurzelheim, Sonnental oder Dorfwegetest fehlgeschlagen'; exit 1\nfi\ngrep\
-        \ -Fq 'FIX62_ALL_ROADS_OK:' build/diagnose/FIX62_Alle_Wege.log\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/16.sh"
     - name: FIX67 Alle Dorfdekorationen und Regionsvarianten testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 140s godot --headless\
-        \ --path android --quit-after 300 --script res://tests/V463VillagesSmoke.gd 2>&1 | tee build/diagnose/FIX66_Doerfer.log\n\
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX65: ' build/diagnose/FIX66_Doerfer.log;\
-        \ then\n  echo '::error::FIX65 Dorf-Dekoration kann nicht geladen werden'; exit 1\nfi\ngrep -Fq 'FIX66_VILLAGES_OK:'\
-        \ build/diagnose/FIX66_Doerfer.log\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/17.sh"
     - name: FIX67 Freie Wege und sichere Pflanzenpositionen testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 150s godot --headless\
-        \ --path android --quit-after 300 --script res://tests/V466VillageSafetySmoke.gd 2>&1 | tee build/diagnose/FIX66_Freie_Wege.log\n\
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX66: ' build/diagnose/FIX66_Freie_Wege.log;\
-        \ then\n  echo '::error::Wege oder Deko blockieren Laufwege'; exit 1\nfi\ngrep -Fq 'FIX66_SAFE_OK:'\
-        \ build/diagnose/FIX66_Freie_Wege.log\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/18.sh"
     - name: FIX68 Dorfwege und freie Wiesen testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 140s godot --headless\
-        \ --path android --quit-after 300 --script res://tests/V468GrassRoadSmoke.gd 2>&1 | tee build/diagnose/FIX68_GrassRoads.log\n\
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX68: ' build/diagnose/FIX68_GrassRoads.log;\
-        \ then\n  echo '::error::FIX68 road-safety test failed'; exit 1\nfi\ngrep -Fq 'FIX68_GRASS_OK:' build/diagnose/FIX68_GrassRoads.log\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/19.sh"
     - name: FIX70 (Regression) Echtkampf- und Menutests
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 160s godot --headless\
-        \ --path android --quit-after 300 --script res://tests/V469CombatSmoke.gd 2>&1 | tee build/diagnose/FIX70_Kampfsystem.log\n\
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX70: ' build/diagnose/FIX70_Kampfsystem.log;\
-        \ then\n  echo '::error::FIX70 combat scene or game logic failed'\n  exit 1\nfi\ngrep -Fq 'FIX70_COMBAT_OK:'\
-        \ build/diagnose/FIX70_Kampfsystem.log\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/20.sh"
+    - name: FIX76.1 Alten Kampfbutton-Test korrigieren
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY_TEST'
+        from pathlib import Path
+        p = Path('android/tests/V471CombatSmoke.gd')
+        s = p.read_text(encoding='utf-8')
+        old = 'button.custom_minimum_size.y < 45.0'
+        new = 'button.custom_minimum_size.y < 38.0'
+        assert s.count(old) == 1, 'FIX76.1: original FIX72 size check missing or ambiguous'
+        assert '_fail("combat buttons are still too small")' in s
+        p.write_text(s.replace(old, new, 1), encoding='utf-8')
+        print('FIX76_1_TEST_OK: minimum height 38; all other FIX72 checks preserved')
+        PY_TEST
     - name: FIX72 Kampfkamera, Teamplatz und Speichern wirklich testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 160s godot --headless\
-        \ --path android --quit-after 300 --script res://tests/V471CombatSmoke.gd 2>&1 | tee build/diagnose/FIX72_Kampf_Team_Speichern.log\n\
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX72: ' build/diagnose/FIX72_Kampf_Team_Speichern.log;\
-        \ then\n  echo '::error::FIX72 Kampftest, Kamera, Team- oder Speicherfehler'; exit 1\nfi\ngrep -Fq\
-        \ 'FIX72_COMBAT_OK:' build/diagnose/FIX72_Kampf_Team_Speichern.log\n"
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/21.sh"
     - name: FIX76 Kampfgrafik und kompaktes UI testen
       shell: bash
-      run: 'set -euo pipefail
-
-        mkdir -p build/diagnose
-
-        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script
-        res://tests/V473VisualSmoke.gd 2>&1 | tee build/diagnose/FIX75_Visual.log
-
-        if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX76: '' build/diagnose/FIX75_Visual.log;
-        then exit 1; fi
-
-        grep -Fq ''FIX76_VISUAL_TEST_OK:'' build/diagnose/FIX75_Visual.log
-
-        '
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/22.sh"
     - name: FIX76 Android APK exportieren und pruefen
-      run: "set -euo pipefail\nmkdir -p build/android build/diagnose\nAPK=\"$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX76.apk\"\
-        \nrm -f \"$APK\"\ntimeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug\
-        \ Android \"$APK\" 2>&1 | tee build/diagnose/FIX76_APK_Export.log\nif grep -Eiq 'SCRIPT ERROR:|Parse\
-        \ Error:|Failed to load script' build/diagnose/FIX76_APK_Export.log; then\n  exit 1\nfi\ntest -s \"\
-        $APK\"\nunzip -t \"$APK\" >/dev/null\nunzip -Z1 \"$APK\" | grep -Fx 'AndroidManifest.xml' >/dev/null\n\
-        ls -lh \"$APK\"\nsha256sum \"$APK\"\n"
       shell: bash
+      run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/23.sh"
     - id: apk_upload
-      name: FIX76 APK als Download hochladen
+      name: FIX76.1 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX76_APK
+        name: LWOD_ANDROID_V41_7_FIX76_1_APK
         path: build/android/LWOD-Android-V41.7-FIX76.apk
         retention-days: 14
-    - env:
+    - name: Erfolgreichen APK Upload bestaetigen
+      shell: bash
+      env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
         APK_ARTIFACT_URL: ${{ steps.apk_upload.outputs.artifact-url }}
-      name: Erfolgreichen APK Upload bestaetigen
-      run: 'set -euo pipefail
-
+      run: |
+        set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
-
         test -n "$APK_ARTIFACT_URL"
-
-        printf ''### Android APK Download\n\n[FIX76 APK herunterladen](%s)\n'' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-
-        '
-      shell: bash
-    - if: always()
-      name: FIX76 Testprotokolle hochladen
+        printf '### Android APK Download\n\n[FIX76.1 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+    - name: FIX76.1 Testprotokolle hochladen
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX76_TESTPROTOKOLLE
+        name: LWOD_FIX76_1_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
