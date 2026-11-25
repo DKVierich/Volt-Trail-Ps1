@@ -1,4 +1,4 @@
-name: LWOD Android V41.7 FIX75 3D Kampfgrafik Wald-Upgrade
+name: LWOD Android V41.7 FIX76 Kompaktes Kampfmenue und 3D Design
 'on':
   workflow_dispatch: {}
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX75 APK
+    name: LWOD Android V41.7 FIX76 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -25,14 +25,16 @@ jobs:
         ref: 9b01d317fffd8d5abf0b2d0afbffb8846c44f1c6
     - name: Python und YAML bereitstellen
       shell: bash
-      run: "set -euo pipefail\nif ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1; then\n\
-        \  apt-get update -qq\n  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 python3-yaml\nfi\n"
+      run: "set -euo pipefail\nif ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null\
+        \ 2>&1; then\n  apt-get update -qq\n  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3\
+        \ python3-yaml\nfi\n"
     - name: FIX39 Schritte sichern
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'PYREPLAY'\nimport hashlib,os,subprocess,yaml\nfrom pathlib import Path\nraw=Path('.github/workflows/blank-ps1.yml').read_bytes()\n\
-        assert hashlib.sha1(('blob %d\\0'%len(raw)).encode()+raw).hexdigest()=='148a908318b1d91002357f1acfa18fbf60e347c3','FIX39\
-        \ source checksum mismatch'\nsteps=yaml.safe_load(raw)['jobs']['android']['steps']\nassert len(steps)==21 and steps[10]['name'].startswith('FIX39\
-        \ Sichtweite und Terrain') and steps[16]['name'].startswith('FIX39 Sichtweite und Chunk')\nfolder=Path(os.environ['RUNNER_TEMP'])/'fix41_base';folder.mkdir(exist_ok=True)\n\
+      run: "set -euo pipefail\npython3 - <<'PYREPLAY'\nimport hashlib,os,subprocess,yaml\nfrom pathlib import\
+        \ Path\nraw=Path('.github/workflows/blank-ps1.yml').read_bytes()\nassert hashlib.sha1(('blob %d\\0'%len(raw)).encode()+raw).hexdigest()=='148a908318b1d91002357f1acfa18fbf60e347c3','FIX39\
+        \ source checksum mismatch'\nsteps=yaml.safe_load(raw)['jobs']['android']['steps']\nassert len(steps)==21\
+        \ and steps[10]['name'].startswith('FIX39 Sichtweite und Terrain') and steps[16]['name'].startswith('FIX39\
+        \ Sichtweite und Chunk')\nfolder=Path(os.environ['RUNNER_TEMP'])/'fix41_base';folder.mkdir(exist_ok=True)\n\
         for i in range(2,17):\n    s=steps[i];assert s.get('shell')=='bash' and 'if' not in s\n    f=folder/('%02d.sh'%i);f.write_text(s['run']+'\\\
         n',encoding='utf-8');subprocess.run(['bash','-n',str(f)],check=True)\n    print('FIX39 gesichert',i,s['name'],flush=True)\n\
         PYREPLAY\n"
@@ -42,39 +44,43 @@ jobs:
         ref: a50b23c0dbeebc464305c0451b98245a0632aebc
     - name: FIX67 Alte Spielbasis mit Neustartschutz rekonstruieren
       shell: bash
-      run: "set -euo pipefail\n# FIX67: A failure in the deeply nested V7 -> V40.2 source recovery must\n# not silently discard\
-        \ the underlying game. Keep immutable original scripts.\ntest -s \"$RUNNER_TEMP/fix41_base/02.sh\"\ntest -s \"$RUNNER_TEMP/fix41_base/10.sh\"\
-        \nLOGDIR=\"$RUNNER_TEMP/lwod_fix67_recovery\"\nmkdir -p \"$LOGDIR\" build/diagnose\nfor attempt in 1 2; do\n  echo\
-        \ \"::group::FIX67 Basisaufbau – Versuch $attempt/2\"\n  if [ \"$attempt\" -eq 2 ]; then\n    # Clear only generated\
-        \ project files. The pinned FIX19 checkout and\n    # original replay scripts in RUNNER_TEMP remain untouched.\n \
-        \   git reset --hard HEAD\n    git clean -fdx\n    mkdir -p build/diagnose\n  fi\n  logfile=\"$LOGDIR/FIX67_Basis_Versuch_${attempt}.log\"\
-        \n  echo \"FIX67_VERSUCH_START=$attempt\" | tee \"$logfile\"\n  failed=0\n  for i in 02 03 04 05 06 07 08 09 10; do\n\
-        \    echo \"::group::FIX39 Originalinstallation $i\"\n    set +e\n    bash --noprofile --norc -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\"\
-        \ 2>&1 | tee -a \"$logfile\"\n    status=${PIPESTATUS[0]}\n    set -e\n    echo '::endgroup::'\n    if [ \"$status\"\
-        \ -ne 0 ]; then\n      echo \"FIX67_BASIS_FEHLER: Versuch $attempt, Schritt $i, Exit $status\" | tee -a \"$logfile\"\
-        \n      failed=1\n      break\n    fi\n  done\n  echo '::endgroup::'\n  cp -f \"$LOGDIR\"/*.log build/diagnose/ ||\
-        \ true\n  if [ \"$failed\" -eq 0 ]; then\n    echo 'FIX67_BASE_REBUILT_OK: vollständige Originalspielbasis vorhanden'\n\
-        \    exit 0\n  fi\n  if [ \"$attempt\" -eq 1 ]; then\n    echo '::warning::Alte Basisrekonstruktion fehlgeschlagen;\
-        \ einmaliger sauberer Wiederholungsversuch'\n  fi\ndone\necho '::error::Auch der zweite Basisaufbau ist gescheitert.\
-        \ Siehe FIX67_Basis_Versuch_*.log in Testprotokolle.'\nexit 1\n"
+      run: "set -euo pipefail\n# FIX67: A failure in the deeply nested V7 -> V40.2 source recovery must\n#\
+        \ not silently discard the underlying game. Keep immutable original scripts.\ntest -s \"$RUNNER_TEMP/fix41_base/02.sh\"\
+        \ntest -s \"$RUNNER_TEMP/fix41_base/10.sh\"\nLOGDIR=\"$RUNNER_TEMP/lwod_fix67_recovery\"\nmkdir -p\
+        \ \"$LOGDIR\" build/diagnose\nfor attempt in 1 2; do\n  echo \"::group::FIX67 Basisaufbau – Versuch\
+        \ $attempt/2\"\n  if [ \"$attempt\" -eq 2 ]; then\n    # Clear only generated project files. The pinned\
+        \ FIX19 checkout and\n    # original replay scripts in RUNNER_TEMP remain untouched.\n    git reset\
+        \ --hard HEAD\n    git clean -fdx\n    mkdir -p build/diagnose\n  fi\n  logfile=\"$LOGDIR/FIX67_Basis_Versuch_${attempt}.log\"\
+        \n  echo \"FIX67_VERSUCH_START=$attempt\" | tee \"$logfile\"\n  failed=0\n  for i in 02 03 04 05 06\
+        \ 07 08 09 10; do\n    echo \"::group::FIX39 Originalinstallation $i\"\n    set +e\n    bash --noprofile\
+        \ --norc -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\" 2>&1 | tee -a \"$logfile\"\n    status=${PIPESTATUS[0]}\n\
+        \    set -e\n    echo '::endgroup::'\n    if [ \"$status\" -ne 0 ]; then\n      echo \"FIX67_BASIS_FEHLER:\
+        \ Versuch $attempt, Schritt $i, Exit $status\" | tee -a \"$logfile\"\n      failed=1\n      break\n\
+        \    fi\n  done\n  echo '::endgroup::'\n  cp -f \"$LOGDIR\"/*.log build/diagnose/ || true\n  if [ \"\
+        $failed\" -eq 0 ]; then\n    echo 'FIX67_BASE_REBUILT_OK: vollständige Originalspielbasis vorhanden'\n\
+        \    exit 0\n  fi\n  if [ \"$attempt\" -eq 1 ]; then\n    echo '::warning::Alte Basisrekonstruktion\
+        \ fehlgeschlagen; einmaliger sauberer Wiederholungsversuch'\n  fi\ndone\necho '::error::Auch der zweite\
+        \ Basisaufbau ist gescheitert. Siehe FIX67_Basis_Versuch_*.log in Testprotokolle.'\nexit 1\n"
     - name: FIX75 Vollstaendige bewährte FIX72 Spielbasis und Kampflogik installieren
       shell: bash
-      run: "set -euo pipefail\n# Restore known-successful FIX72 gameplay modules from immutable historical workflow.\n# This\
-        \ avoids copying ~110 KB of pre-encoded installation steps onto a mobile GitHub editor.\nwget -q --tries=3 --timeout=60\
-        \ --https-only \\\n  -O \"$RUNNER_TEMP/lwod_fix72_source.yml\" \\\n  'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/4a5bc925bdafad616f3a28a6fbd2c72662169fc1/.github/workflows/blank-ps1.yml'\n\
-        test -s \"$RUNNER_TEMP/lwod_fix72_source.yml\"\ntest \"$(git hash-object \"$RUNNER_TEMP/lwod_fix72_source.yml\")\"\
-        \ = 'c9e6973851d76b26b16c03eab5edcb49b6db7b1e' || {\n  echo '::error::FIX72 source checksum mismatch'; exit 1;\n}\n\
-        python3 - <<'FIX75_REPLAY'\nimport os, subprocess, yaml\nfrom pathlib import Path\nsource = Path(os.environ['RUNNER_TEMP'])/'lwod_fix72_source.yml'\n\
-        steps = yaml.safe_load(source.read_text(encoding='utf-8'))['jobs']['android']['steps']\nassert len(steps) == 31, 'FIX72\
-        \ workflow structure changed'\nassert 'Dungeon' in steps[5]['name'] and 'Kampfkamera' in steps[14]['name']\n# Only\
-        \ replay original FIX72 installation steps, not its test/export/upload steps.\nfor i in range(5,15):\n    step = steps[i]\n\
-        \    print(f'FIX75_RESTORE_STEP_{i}: {step[\"name\"]}', flush=True)\n    subprocess.run(['bash','--noprofile','--norc','-e','-o','pipefail','-c',step['run']],\
+      run: "set -euo pipefail\n# Restore known-successful FIX72 gameplay modules from immutable historical\
+        \ workflow.\n# This avoids copying ~110 KB of pre-encoded installation steps onto a mobile GitHub editor.\n\
+        wget -q --tries=3 --timeout=60 --https-only \\\n  -O \"$RUNNER_TEMP/lwod_fix72_source.yml\" \\\n  'https://raw.githubusercontent.com/DKVierich/Volt-Trail-Ps1/4a5bc925bdafad616f3a28a6fbd2c72662169fc1/.github/workflows/blank-ps1.yml'\n\
+        test -s \"$RUNNER_TEMP/lwod_fix72_source.yml\"\ntest \"$(git hash-object \"$RUNNER_TEMP/lwod_fix72_source.yml\"\
+        )\" = 'c9e6973851d76b26b16c03eab5edcb49b6db7b1e' || {\n  echo '::error::FIX72 source checksum mismatch';\
+        \ exit 1;\n}\npython3 - <<'FIX75_REPLAY'\nimport os, subprocess, yaml\nfrom pathlib import Path\nsource\
+        \ = Path(os.environ['RUNNER_TEMP'])/'lwod_fix72_source.yml'\nsteps = yaml.safe_load(source.read_text(encoding='utf-8'))['jobs']['android']['steps']\n\
+        assert len(steps) == 31, 'FIX72 workflow structure changed'\nassert 'Dungeon' in steps[5]['name'] and\
+        \ 'Kampfkamera' in steps[14]['name']\n# Only replay original FIX72 installation steps, not its test/export/upload\
+        \ steps.\nfor i in range(5,15):\n    step = steps[i]\n    print(f'FIX75_RESTORE_STEP_{i}: {step[\"\
+        name\"]}', flush=True)\n    subprocess.run(['bash','--noprofile','--norc','-e','-o','pipefail','-c',step['run']],\
         \ check=True)\nprint('FIX75_BASE_OK: FIX72 gameplay fully installed', flush=True)\nFIX75_REPLAY\n"
     - name: FIX75 HD Kampfarena und Menuegestaltung installieren
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'FIX75_SCENE'\nimport base64, gzip, hashlib\nfrom pathlib import Path\np = Path('android/scripts/V469Battle.gd')\n\
-        source = p.read_bytes()\nassert hashlib.sha256(source).hexdigest() == 'd2fb46f84a1a79808f3d40ca79540a78c38e279da2e837078960c35d1f53e94c',\
-        \ 'FIX75: FIX72-Kampfsystem unerwartet geaendert; kein riskanter Austausch'\nencoded = (\n    'H4sIAAAAAAAC/8V92XLbSLbgu78CZoXjkjbEIgmuqlJPyLa8THkLy3bVdIUDARJJEhYIsABQsnyjI+Yf7i/UN/R96afrP7lfMuec3IEkJbunZyqiLCKXk5ln'\n\
+      run: "set -euo pipefail\npython3 - <<'FIX75_SCENE'\nimport base64, gzip, hashlib\nfrom pathlib import\
+        \ Path\np = Path('android/scripts/V469Battle.gd')\nsource = p.read_bytes()\nassert hashlib.sha256(source).hexdigest()\
+        \ == 'd2fb46f84a1a79808f3d40ca79540a78c38e279da2e837078960c35d1f53e94c', 'FIX75: FIX72-Kampfsystem\
+        \ unerwartet geaendert; kein riskanter Austausch'\nencoded = (\n    'H4sIAAAAAAAC/8V92XLbSLbgu78CZoXjkjbEIgmuqlJPyLa8THkLy3bVdIUDARJJEhYIsABQsnyjI+Yf7i/UN/R96afrP7lfMuec3IEkJbunZyqiLCKXk5ln'\n\
         \    'P7myzxXL4tJ7lccseHznB+/Fr68fex+G/e7Ee/L8t0nP++///R9eksVsC+VYVnksW+S7rGKFF2WxV+2K7GgelSz25lFVpcwrFwVjWRdA/ZqksbfMC1ZWXlxE'\n\
         \    'qzzz2uwyT3dVAj/7vpeyS5Z6o46X76oyiZl3nmcZtBGl/1Z6JSSuWZF5q6hi3TuLPAMw0LHJO1YUSZUXCSu9E29bsDSP4nYLmjn+8UdoPdlW5Y+1gt1V3OoI'\n\
         \    'GOenH87CN6fvnh1751WRZCuA0tqVrIDq6VUeh5fDST8so0sWh3xM3cVy1RK1371+/+hZ+Pb08fP358feEtquoP6gOx6JAi9PfwvfnZ2+PAasYVZw585lVMAo'\n\
@@ -199,41 +205,46 @@ jobs:
         \    'iGs7M9sKF5HSep1b3clg3MbQJMOtfcJ92kbYpDLNwYBc5fYr1t+iIejk6I0awlYLul28I0UBwPuOkm3I4hUDfWrvbxl4Qle0jfJaUTyB2AR4D0OPLfc9kQ+d'\n\
         \    'Rc1tWh3HJK9CyR2nwEsHduA5zvrhD+G8ttzVb3/Qotdxaj2MEA5pPUdo8j3KTzXzLcpPV6qtPJl27f8/C92Sg/6VvPF/AKIt6967lgAA'\n\
         )\nnew = gzip.decompress(base64.b64decode(encoded))\nassert hashlib.sha256(new).hexdigest() == '190c938a9cdde0d0a4b0588aefc1d3d3df5ed4f9fa2d57760baa7d3666c0ea6d'\n\
-        p.write_bytes(new)\nconfig = Path('android/export_presets.cfg')\nversion = config.read_text(encoding='utf-8')\nassert\
-        \ version.count('version/name=\"4.1.7.72\"') == 1 and version.count('version/code=4241') == 1, 'FIX75: FIX72 export\
-        \ version not found'\nconfig.write_text(version.replace('version/name=\"4.1.7.72\"','version/name=\"4.1.7.73\"',1).replace('version/code=4241','version/code=4242',1),encoding='utf-8')\n\
-        print('FIX75_BATTLE_VISUALS_OK: adaptive 3D resolution, antialiasing, forest arena, dragon geometry, larger menu;\
-        \ battle logic unchanged')\nFIX75_SCENE\n"
+        p.write_bytes(new)\nconfig = Path('android/export_presets.cfg')\nversion = config.read_text(encoding='utf-8')\n\
+        assert version.count('version/name=\"4.1.7.72\"') == 1 and version.count('version/code=4241') == 1,\
+        \ 'FIX75: FIX72 export version not found'\nconfig.write_text(version.replace('version/name=\"4.1.7.72\"\
+        ','version/name=\"4.1.7.73\"',1).replace('version/code=4241','version/code=4242',1),encoding='utf-8')\n\
+        print('FIX75_BATTLE_VISUALS_OK: adaptive 3D resolution, antialiasing, forest arena, dragon geometry,\
+        \ larger menu; battle logic unchanged')\nFIX75_SCENE\n"
     - name: FIX75 Kampfdesign und Testszene vorbereiten
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ncat > android/tests/V473VisualSmoke.gd <<'V473_TEST'\nextends SceneTree\n\
-        const B = preload(\"res://scripts/V469Battle.gd\")\n\nfunc _initialize() -> void:\n    call_deferred(\"_run\")\n\n\
-        func _fail(msg: String) -> void:\n    push_error(\"FIX75: \" + msg)\n    quit(1)\n\nfunc _run() -> void:\n    var\
-        \ b := B.new()\n    root.add_child(b)\n    b._build_battle_screen()\n    if b._screen == null or b._actions == null:\n\
-        \        _fail(\"battle UI was not built\")\n        return\n    var panel: PanelContainer = b._hud.get_node_or_null(\"\
-        BottomPanel\") as PanelContainer\n    var camera: Camera3D = b._arena.get_node_or_null(\"Camera3D\") as Camera3D\n\
-        \    if panel == null or camera == null:\n        _fail(\"camera or panel missing\")\n        return\n    if camera.position.y\
-        \ < 5.0 or camera.position.z > 7.3 or camera.fov > 55:\n        _fail(\"new close elevated camera was not applied\"\
-        )\n        return\n    if panel.anchor_top < 0.58:\n        _fail(\"button panel must stay at the bottom\")\n    \
-        \    return\n    b._show_choices(B.hero_actions())\n    if b._actions.get_child_count() != 7:\n        _fail(\"hero\
-        \ action count changed\")\n        return\n    for button in b._actions.get_children():\n        if not (button is\
-        \ Button) or button.custom_minimum_size.y < 56.0:\n            _fail(\"buttons not enlarged\")\n            return\n\
-        \    if b._arena.get_child_count() < 75:\n        _fail(\"decorated arena missing\")\n        return\n    if B.companion_actions().size()!=5\
-        \ or B.binding_chance(20,86)<0.4:\n        _fail(\"combat logic regression\")\n        return\n    var ground_mesh:\
-        \ MeshInstance3D = b._arena.get_child(0) as MeshInstance3D\n    if ground_mesh == null or not (ground_mesh.material_override\
-        \ is ShaderMaterial):\n        _fail(\"forest ground shader missing\")\n        return\n    var moss_count: int =\
-        \ 0\n    for child in b._arena.get_children():\n        if String(child.name).begins_with(\"Moosstein_\"):\n     \
-        \       moss_count += 1\n    if moss_count < 16:\n        _fail(\"moss rocks and fern clusters missing\")\n      \
-        \  return\n    if not b.has_method(\"_v475_idle\") or not b.has_method(\"_v475_impact\"):\n        _fail(\"idle animation\
-        \ or impact feedback missing\")\n        return\n    for button in b._actions.get_children():\n        if button is\
-        \ Button and button.get_theme_font_size(\"font_size\") < 25:\n            _fail(\"new larger button font missing\"\
-        )\n            return\n    print(\"FIX75_VISUAL_TEST_OK: high-resolution arena, forest ring, enhanced dragon, responsive\
-        \ large buttons\")\n    quit(0)\nV473_TEST\npython3 - <<'FIX75_ASSERT'\nfrom pathlib import Path\ns=Path('android/scripts/V469Battle.gd').read_text(encoding='utf-8')\n\
+      run: "set -euo pipefail\nmkdir -p build/diagnose\ncat > android/tests/V473VisualSmoke.gd <<'V473_TEST'\n\
+        extends SceneTree\nconst B = preload(\"res://scripts/V469Battle.gd\")\n\nfunc _initialize() -> void:\n\
+        \    call_deferred(\"_run\")\n\nfunc _fail(msg: String) -> void:\n    push_error(\"FIX76: \" + msg)\n\
+        \    quit(1)\n\nfunc _run() -> void:\n    var b := B.new()\n    root.add_child(b)\n    b._build_battle_screen()\n\
+        \    if b._screen == null or b._actions == null:\n        _fail(\"battle UI was not built\")\n    \
+        \    return\n    var panel: PanelContainer = b._hud.get_node_or_null(\"BottomPanel\") as PanelContainer\n\
+        \    var camera: Camera3D = b._arena.get_node_or_null(\"Camera3D\") as Camera3D\n    if panel == null\
+        \ or camera == null:\n        _fail(\"camera or panel missing\")\n        return\n    if camera.position.y\
+        \ < 5.0 or camera.position.z > 7.0 or camera.fov > 55:\n        _fail(\"new close elevated camera was\
+        \ not applied\")\n        return\n    if panel.anchor_top < 0.98 or panel.offset_left < -210.0 or panel.offset_right\
+        \ > 210.0:\n        _fail(\"compact menu not anchored at bottom\")\n        return\n    b._show_choices(B.hero_actions())\n\
+        \    if b._actions.get_child_count() != 7:\n        _fail(\"hero action count changed\")\n        return\n\
+        \    for button in b._actions.get_children():\n        if not (button is Button) or button.custom_minimum_size.y\
+        \ < 38.0 or button.custom_minimum_size.y > 48.0:\n            _fail(\"buttons not enlarged\")\n   \
+        \         return\n    if b._arena.get_child_count() < 75:\n        _fail(\"decorated arena missing\"\
+        )\n        return\n    if B.companion_actions().size()!=5 or B.binding_chance(20,86)<0.4:\n       \
+        \ _fail(\"combat logic regression\")\n        return\n    var ground_mesh: MeshInstance3D = b._arena.get_child(0)\
+        \ as MeshInstance3D\n    if ground_mesh == null or not (ground_mesh.material_override is ShaderMaterial):\n\
+        \        _fail(\"forest ground shader missing\")\n        return\n    var moss_count: int = 0\n   \
+        \ for child in b._arena.get_children():\n        if String(child.name).begins_with(\"Moosstein_\"):\n\
+        \            moss_count += 1\n    if moss_count < 16:\n        _fail(\"moss rocks and fern clusters\
+        \ missing\")\n        return\n    if not b.has_method(\"_v475_idle\") or not b.has_method(\"_v475_impact\"\
+        ):\n        _fail(\"idle animation or impact feedback missing\")\n        return\n    for button in\
+        \ b._actions.get_children():\n        if button is Button and button.get_theme_font_size(\"font_size\"\
+        ) < 18:\n            _fail(\"new larger button font missing\")\n            return\n    print(\"FIX76_VISUAL_TEST_OK:\
+        \ high-resolution arena, forest ring, enhanced dragon, responsive large buttons\")\n    quit(0)\nV473_TEST\n\
+        python3 - <<'FIX75_ASSERT'\nfrom pathlib import Path\ns=Path('android/scripts/V469Battle.gd').read_text(encoding='utf-8')\n\
         for name in ['func _v475_forest_ground(','func _v475_idle(','func _v475_impact(','msaa_3d = Viewport.MSAA_2X','screen_space_aa\
         \ = Viewport.SCREEN_SPACE_AA_FXAA','WaldbodenMoos_','Steinkreis_','func _finish_binding()','func _on_save_pressed()','func\
         \ _sync_team_and_save_buttons()']:\n    assert name in s,name\ncompile(Path('android/tests/V473VisualSmoke.gd').read_text(),'<gdscript-test-text>','exec')\
         \ if False else None\nprint('FIX75_STATIC_OK: gameplay binding unchanged')\nFIX75_ASSERT\n"
-    - name: FIX75 Android Updateversion eindeutig setzen
+    - name: FIX76 Android Updateversion eindeutig setzen
       shell: bash
       run: 'set -euo pipefail
 
@@ -247,7 +258,7 @@ jobs:
 
         assert ''version/name="4.1.7.73"'' in s, ''FIX75: graphic upgrade not applied''
 
-        s=s.replace(''version/name="4.1.7.73"'',''version/name="4.1.7.75"'',1)
+        s=s.replace(''version/name="4.1.7.73"'',''version/name="4.1.7.76"'',1)
 
         # Increment a version-code in the export to allow clean Android updates.
 
@@ -261,15 +272,110 @@ jobs:
 
         p.write_text(s,encoding=''utf-8'')
 
-        print(''FIX75_ANDROID_VERSION_OK'')
+        print(''FIX76_ANDROID_VERSION_OK'')
 
         FIX75_VERSION
 
         '
+    - name: FIX76 Kompaktes Kampf-UI Kamera und detailliertere Modelle installieren
+      shell: bash
+      run: "set -euo pipefail\ncat > \"$RUNNER_TEMP/lwod_fix76.py\" <<'FIX76_PY'\nfrom pathlib import Path\n\
+        p = Path('android/scripts/V469Battle.gd')\ns = p.read_text(encoding='utf-8')\nassert 'func _finish_binding()'\
+        \ in s and 'func _on_save_pressed()' in s\nassert s.count('func _show_choices(')==1\nassert 'bottom.anchor_left\
+        \ = 0.015' in s and 'button.size_flags_horizontal = Control.SIZE_EXPAND_FILL' in s\n\ndef rep(a,b):\n\
+        \    global s\n    assert s.count(a)==1, 'FIX76 expected exactly one original UI anchor: '+a[:100]\n\
+        \    s=s.replace(a,b,1)\n\n# Retain a detailed 3D viewport; cover entire background so no flat green\
+        \ margin appears.\nrep('    viewport_box.anchor_bottom = 0.80','    viewport_box.anchor_bottom = 1.0')\n\
+        rep('    bg.color = Color(\"#9ec7b4\")','    bg.color = Color(\"#91aa9a\")')\nrep('    bar_bg.color\
+        \ = Color(0.12,0.22,0.19,0.65)', '    bar_bg.color = Color(0.08,0.11,0.19,0.65)')\n\n# Fixed compact\
+        \ action panel: no near-full-screen green rectangle and no stretched buttons.\nrep('''    bottom.anchor_left\
+        \ = 0.015\n    bottom.anchor_right = 0.985\n    bottom.anchor_top = 0.585\n    bottom.anchor_bottom\
+        \ = 0.99''', '''    bottom.anchor_left = 0.5\n    bottom.anchor_right = 0.5\n    bottom.anchor_top\
+        \ = 1.0\n    bottom.anchor_bottom = 1.0\n    bottom.offset_left = -186.0\n    bottom.offset_right =\
+        \ 186.0\n    bottom.offset_top = -218.0\n    bottom.offset_bottom = -8.0''')\nrep('panel_style.bg_color\
+        \ = Color(0.17,0.32,0.25,0.93)','panel_style.bg_color = Color(0.075,0.11,0.22,0.82)')\nrep('panel_style.border_color\
+        \ = Color(\"#d6d2a4\")','panel_style.border_color = Color(\"#bda46c\")')\nrep('    panel_style.set_corner_radius_all(16)','\
+        \    panel_style.set_corner_radius_all(10)')\nrep('    margin.add_theme_constant_override(\"margin_left\"\
+        ,20)','    margin.add_theme_constant_override(\"margin_left\",10)')\nrep('    margin.add_theme_constant_override(\"\
+        margin_right\",20)','    margin.add_theme_constant_override(\"margin_right\",10)')\nrep('    margin.add_theme_constant_override(\"\
+        margin_top\",12)','    margin.add_theme_constant_override(\"margin_top\",6)')\nrep('    margin.add_theme_constant_override(\"\
+        margin_bottom\",12)','    margin.add_theme_constant_override(\"margin_bottom\",6)')\nrep('    col.add_theme_constant_override(\"\
+        separation\",9)','    col.add_theme_constant_override(\"separation\",4)')\nrep('    _message.add_theme_font_size_override(\"\
+        font_size\",24)','    _message.add_theme_font_size_override(\"font_size\",17)')\nrep('    _message.custom_minimum_size\
+        \ = Vector2(0,35)','    _message.custom_minimum_size = Vector2(0,24)')\nrep('    _actions.add_theme_constant_override(\"\
+        h_separation\",14)','    _actions.add_theme_constant_override(\"h_separation\",6)')\nrep('    _actions.add_theme_constant_override(\"\
+        v_separation\",9)','    _actions.add_theme_constant_override(\"v_separation\",5)')\nrep('    _actions.size_flags_vertical\
+        \ = Control.SIZE_EXPAND_FILL','    _actions.size_flags_vertical = Control.SIZE_SHRINK_CENTER')\nrep('\
+        \    _actions.size_flags_vertical = Control.SIZE_SHRINK_CENTER\\n    col.add_child(_actions)', '  \
+        \  _actions.size_flags_vertical = Control.SIZE_SHRINK_CENTER\\n    _actions.size_flags_horizontal =\
+        \ Control.SIZE_SHRINK_CENTER\\n    col.add_child(_actions)')\nrep('    button.custom_minimum_size =\
+        \ Vector2(220,60)','    button.custom_minimum_size = Vector2(165,39)')\nrep('    button.size_flags_horizontal\
+        \ = Control.SIZE_EXPAND_FILL','    button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER')\nrep('\
+        \    button.add_theme_font_size_override(\"font_size\",25)','    button.add_theme_font_size_override(\"\
+        font_size\",19)')\nrep('    button.add_theme_color_override(\"font_color\",Color(\"#f7e9cd\"))',' \
+        \   button.add_theme_color_override(\"font_color\",Color(\"#f8f1dd\"))')\nrep('    normal.bg_color\
+        \ = Color(\"#274c41\")','    normal.bg_color = Color(\"#263957\")')\nrep('    normal.border_color =\
+        \ Color(\"#f1dba5\")','    normal.border_color = Color(\"#bba477\")')\nrep('    normal.set_corner_radius_all(12)','\
+        \    normal.set_corner_radius_all(7)')\nrep('    hover.bg_color = Color(\"#629275\")','    hover.bg_color\
+        \ = Color(\"#435d8a\")')\nrep('    pressed.bg_color = Color(\"#88ae83\")','    pressed.bg_color = Color(\"\
+        #62568b\")')\nrep('    hover.set_corner_radius_all(12)','    hover.set_corner_radius_all(7)')\nrep('\
+        \    pressed.set_corner_radius_all(12)','    pressed.set_corner_radius_all(7)')\n\n# Top status labels:\
+        \ make shorter, sharper, and separate from button panel.\nrep('    title.add_theme_font_size_override(\"\
+        font_size\",23)','    title.add_theme_font_size_override(\"font_size\",19)')\nrep('    label.custom_minimum_size\
+        \ = Vector2(122,0)','    label.custom_minimum_size = Vector2(108,0)')\nrep('    label.add_theme_font_size_override(\"\
+        font_size\",18)','    label.add_theme_font_size_override(\"font_size\",16)')\nrep('    bar.custom_minimum_size\
+        \ = Vector2(150,23)','    bar.custom_minimum_size = Vector2(150,16)')\n\n# Camera and composition:\
+        \ cinematic elevated three-quarter view, models remain on screen.\nrep('    camera.position = Vector3(0,5.35,7.05)','\
+        \    camera.position = Vector3(-0.55,5.65,6.40)')\nrep('    camera.fov = 53.0','    camera.fov = 49.0')\n\
+        rep('    camera.look_at(Vector3(0,1.25,0))','    camera.look_at(Vector3(0,1.35,0))')\nrep('    _arena_hero.position\
+        \ = Vector3(-2.55,0,0.4)','    _arena_hero.position = Vector3(-2.26,0,0.35)')\nrep('    _arena_foe.position\
+        \ = Vector3(2.5,0,-0.2)','    _arena_foe.position = Vector3(2.27,0,-0.20)')\n\n# Higher silhouette\
+        \ clarity without requiring external textures/models. For actual\n# high-poly assets we will eventually\
+        \ need model imports rather than primitive meshes.\nrep('    mesh.radial_segments = 18','    mesh.radial_segments\
+        \ = 28')\nrep('    mesh.rings = 11','    mesh.rings = 18')\n\n# Upgrade detail in procedural creatures\
+        \ using geometry already supported by FIX75.\nanchor='''    for j in range(5):\n        _oval(d,\"\
+        Panzerplatte\",Vector3(0,1.37,0.02+0.35*j),Vector3(0.36,0.16,0.39),Color(\"#70a35a\"))'''\nextra='''\
+        \    for j in range(5):\n        _oval(d,\"Panzerplatte\",Vector3(0,1.37,0.02+0.35*j),Vector3(0.36,0.16,0.39),Color(\"\
+        #70a35a\"))\n    # FIX76: leaf-shaped horn ridges, belly plates and more defined feet.\n    for side\
+        \ in [-1.0,1.0]:\n        for j in range(4):\n            var ridge := _oval(d,\"Blattrippen\",Vector3(side*(1.20+0.27*float(j)),1.97,0.30+0.15*float(j)),Vector3(0.43,0.07,0.12),Color(\"\
+        #aad57b\"))\n            ridge.rotation.y = side*0.25\n        for j in range(3):\n            _oval(d,\"\
+        Hornstruktur\",Vector3(side*(0.35+0.06*float(j)),2.54+float(j)*0.19,-0.97+float(j)*0.16),Vector3(0.15,0.25,0.21),Color(\"\
+        #5d8649\"))\n        for j in range(3):\n            _oval(d,\"Hinterkralle\",Vector3(side*(0.55+0.14*float(j)),0.18,0.80),Vector3(0.09,0.12,0.32),Color(\"\
+        #c1bc95\"))'''\nrep(anchor,extra)\n\nanchor='''    for side in [-1.0,1.0]:\n        _oval(parent,\"\
+        Schulterpanzer\",Vector3(side*0.51,1.68,0),Vector3(0.34,0.23,0.39),Color(\"#7566a7\"))\n        _oval(parent,\"\
+        Haarstraehne\",Vector3(side*0.27,2.0,0.16),Vector3(0.19,0.51,0.24),Color(\"#6543a2\"))'''\nextra='''\
+        \    for side in [-1.0,1.0]:\n        _oval(parent,\"Schulterpanzer\",Vector3(side*0.51,1.68,0),Vector3(0.34,0.23,0.39),Color(\"\
+        #7566a7\"))\n        _oval(parent,\"Haarstraehne\",Vector3(side*0.27,2.0,0.16),Vector3(0.19,0.51,0.24),Color(\"\
+        #6543a2\"))\n        _oval(parent,\"Stulpen\",Vector3(side*0.52,1.07,-0.06),Vector3(0.27,0.18,0.28),Color(\"\
+        #a59ec4\"))\n        _oval(parent,\"Stiefelrand\",Vector3(side*0.23,0.63,-0.05),Vector3(0.35,0.14,0.41),Color(\"\
+        #877056\"))\n    _oval(parent,\"Haarzopf\",Vector3(0,1.80,0.28),Vector3(0.25,0.69,0.29),Color(\"#6748a3\"\
+        ))\n    _oval(parent,\"Tunikanhaenger\",Vector3(0,0.64,-0.14),Vector3(0.40,0.48,0.30),Color(\"#3d4073\"\
+        ))'''\nrep(anchor,extra)\nanchor='''    _oval(parent,\"PhoenixBrustlicht\",Vector3(0,1.29,-0.43),Vector3(0.23,0.37,0.20),Color(\"\
+        #e7b5f4\"))'''\nextra='''    _oval(parent,\"PhoenixBrustlicht\",Vector3(0,1.29,-0.43),Vector3(0.23,0.37,0.20),Color(\"\
+        #e7b5f4\"))\n    # FIX76: staggered pinion feathers replace the flat-wing impression.\n    for side\
+        \ in [-1.0,1.0]:\n        for j in range(6):\n            var plume := _oval(parent,\"Flugfeder_%d\"\
+        %j,Vector3(side*(0.85+float(j)*0.25),1.44-0.035*float(j),0.19+float(j%2)*0.14),Vector3(0.22,0.11,0.64),Color(\"\
+        #a677ec\") if j%2==0 else Color(\"#d1a6ff\"))\n            plume.rotation.z = -side*0.22\n    _oval(parent,\"\
+        Kopfgefieder\",Vector3(0,2.46,0.07),Vector3(0.20,0.53,0.33),Color(\"#c293f5\"))'''\nrep(anchor,extra)\n\
+        \n# Soft-lit arena: preserve the existing procedural texture, but add two colored\n# fills for a clearer\
+        \ silhouette and a light contrasting environment.\nrep('    light.light_energy = 1.80','    light.light_energy\
+        \ = 2.05')\nrep('    env.environment.background_color = Color(\"#b5d6c2\")','    env.environment.background_color\
+        \ = Color(\"#9bb5ab\")')\nrep('    env.environment.ambient_light_energy = 1.19','    env.environment.ambient_light_energy\
+        \ = 1.34')\nrep('    _arena.add_child(env)','''    _arena.add_child(env)\n    var fill_light := OmniLight3D.new()\n\
+        \    fill_light.name = \"Kampffuelllicht\"\n    fill_light.position = Vector3(-5.0,5.5,4.0)\n    fill_light.light_color\
+        \ = Color(\"#d9dcff\")\n    fill_light.light_energy = 1.1\n    fill_light.omni_range = 18.0\n    fill_light.shadow_enabled\
+        \ = false\n    _arena.add_child(fill_light)''')\n\n# Retain three-value HP/MP/AU interface and battle\
+        \ save/team logic unchanged.\nfor token in ['func _finish_binding()','func _commit_game_save()','func\
+        \ _on_save_pressed()', 'func _choose(action: String)', 'func _bind_dragon()', 'func _enemy_move()']:\n\
+        \    assert token in s, token\nfor token in ['bottom.offset_left = -186.0','button.custom_minimum_size\
+        \ = Vector2(165,39)', 'camera.position = Vector3(-0.55,5.65,6.40)']:\n    assert token in s, token\n\
+        p.write_text(s,encoding='utf-8')\nprint('FIX76_APPLIED: compact 2x4 actions, sharper 3D models, three-quarter\
+        \ camera; combat functions preserved')\nFIX76_PY\npython3 -m py_compile \"$RUNNER_TEMP/lwod_fix76.py\"\
+        \npython3 \"$RUNNER_TEMP/lwod_fix76.py\"\n"
     - name: FIX61 Weltkarte importieren und echten Spielstart testen
       shell: bash
-      run: "set -euo pipefail\npython3 - <<'LWOD64_11'\nimport base64, gzip, hashlib\nfrom pathlib import Path\nencoded =\
-        \ (\n    'H4sIAAAAAAAC/61XbVPbRhD+rl+xcTKVPVgyToAQETd1wRAmpGaMW5pJqeYsreyLJZ1yd+Ilcf57906ywXkbmCkfGOm09+zLPfvcWqEGD0sBBS8w'\n\
+      run: "set -euo pipefail\npython3 - <<'LWOD64_11'\nimport base64, gzip, hashlib\nfrom pathlib import Path\n\
+        encoded = (\n    'H4sIAAAAAAAC/61XbVPbRhD+rl+xcTKVPVgyToAQETd1wRAmpGaMW5pJqeYsreyLJZ1yd+Ilcf57906ywXkbmCkfGOm09+zLPfvcWqEGD0sBBS8w'\n\
         \    'YTx1snnMJXgFTEqexp2Ys2kuFDrFjZ6J/Bl48PKle/rubNwfjY/+7I8OXFiARvzKvnN4/Pf2bnimmdQqmpX6k5+KqZNIkUHB9CzlE+BZIaSGU3p1'\n\
         \    '6mdJjugVena16bI8loLHHRVJXmjV+Wtrc3eEUy5y5U9jt+UoMjU7fIksDjVe6ybmkYh5Pu25pU68XWNkoiBD5fM8xuumm5R5BGHG5hgW1k/LwTwm'\n\
         \    'C4m+QiajWVO6zVdZ69/mq8AaLwhD8wiql4j8a1hcMgmL31puW723Lja6wUXLyZAqZcDq1aBZf9wgH759brZawBMwPjFVCCnmTdW6cJhSSJEqPxJl'\n\
@@ -293,16 +399,17 @@ jobs:
         \ step 11, bytes',len(body))\nLWOD64_11\nbash --noprofile --norc -e -o pipefail '/tmp/lwod_fix64_11.sh'\n"
     - name: Sicherungen und alle FIX39 Godot-Tests
       shell: bash
-      run: "set -euo pipefail\nfor i in 11 12 13 14 15 16; do\n  echo \"::group::FIX39 Originaltest $i\"\n  bash --noprofile\
-        \ --norc -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\"\n  echo '::endgroup::'\ndone\n"
+      run: "set -euo pipefail\nfor i in 11 12 13 14 15 16; do\n  echo \"::group::FIX39 Originaltest $i\"\n\
+        \  bash --noprofile --norc -e -o pipefail \"$RUNNER_TEMP/fix41_base/$i.sh\"\n  echo '::endgroup::'\n\
+        done\n"
     - name: FIX54 Dungeon-Dekoration und Kamera testen
       shell: bash
       run: 'set -euo pipefail
 
         mkdir -p build/diagnose
 
-        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script res://tests/V441RuineSmoke.gd
-        2>&1 | tee build/diagnose/FIX54_Ruine.log
+        timeout --signal=TERM --kill-after=5s 140s godot --headless --path android --quit-after 300 --script
+        res://tests/V441RuineSmoke.gd 2>&1 | tee build/diagnose/FIX54_Ruine.log
 
         if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX54: '' build/diagnose/FIX54_Ruine.log;
         then exit 1; fi
@@ -316,8 +423,8 @@ jobs:
 
         mkdir -p build/diagnose
 
-        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script res://tests/V455BoostSmoke.gd
-        2>&1 | tee build/diagnose/FIX55_Flugschub.log
+        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script
+        res://tests/V455BoostSmoke.gd 2>&1 | tee build/diagnose/FIX55_Flugschub.log
 
         if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX55: '' build/diagnose/FIX55_Flugschub.log;
         then exit 1; fi
@@ -327,85 +434,90 @@ jobs:
         '
     - name: FIX61 Neun Stadtwege Kurven und Flugschub testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\nset -o pipefail\ntimeout --signal=TERM --kill-after=5s 150s godot\
-        \ --headless --path android --quit-after 300 --script res://tests/V456RoadsSmoke.gd 2>&1 | tee build/diagnose/FIX61_Wegenetz.log\n\
-        if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX61: ' build/diagnose/FIX61_Wegenetz.log;\
-        \ then\n  exit 1\nfi\ngrep -Fq 'FIX61_ROADS_OK:' build/diagnose/FIX61_Wegenetz.log\n"
+      run: "set -euo pipefail\nmkdir -p build/diagnose\nset -o pipefail\ntimeout --signal=TERM --kill-after=5s\
+        \ 150s godot --headless --path android --quit-after 300 --script res://tests/V456RoadsSmoke.gd 2>&1\
+        \ | tee build/diagnose/FIX61_Wegenetz.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load\
+        \ script|Invalid call|FIX61: ' build/diagnose/FIX61_Wegenetz.log; then\n  exit 1\nfi\ngrep -Fq 'FIX61_ROADS_OK:'\
+        \ build/diagnose/FIX61_Wegenetz.log\n"
     - name: FIX61 Pflasteroptik und Kurven automatisch testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 120s godot --headless --path\
-        \ android --quit-after 300 --script res://tests/V461PavingSmoke.gd 2>&1 | tee build/diagnose/FIX61_Pflasterwege.log\n\
+      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 120s godot --headless\
+        \ --path android --quit-after 300 --script res://tests/V461PavingSmoke.gd 2>&1 | tee build/diagnose/FIX61_Pflasterwege.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX61: ' build/diagnose/FIX61_Pflasterwege.log;\
-        \ then\n  echo '::error::Pflasterweg- oder Kurventest fehlgeschlagen'; exit 1\nfi\ngrep -Fq 'FIX61_PAVING_OK:' build/diagnose/FIX61_Pflasterwege.log\n"
+        \ then\n  echo '::error::Pflasterweg- oder Kurventest fehlgeschlagen'; exit 1\nfi\ngrep -Fq 'FIX61_PAVING_OK:'\
+        \ build/diagnose/FIX61_Pflasterwege.log\n"
     - name: FIX62 Komplettes Dorfwegenetz und Pflaster nachpruefen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 120s godot --headless --path\
-        \ android --quit-after 300 --script res://tests/V462AllRoadsSmoke.gd 2>&1 | tee build/diagnose/FIX62_Alle_Wege.log\n\
+      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 120s godot --headless\
+        \ --path android --quit-after 300 --script res://tests/V462AllRoadsSmoke.gd 2>&1 | tee build/diagnose/FIX62_Alle_Wege.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX62: ' build/diagnose/FIX62_Alle_Wege.log;\
-        \ then\n  echo '::error::Wurzelheim, Sonnental oder Dorfwegetest fehlgeschlagen'; exit 1\nfi\ngrep -Fq 'FIX62_ALL_ROADS_OK:'\
-        \ build/diagnose/FIX62_Alle_Wege.log\n"
+        \ then\n  echo '::error::Wurzelheim, Sonnental oder Dorfwegetest fehlgeschlagen'; exit 1\nfi\ngrep\
+        \ -Fq 'FIX62_ALL_ROADS_OK:' build/diagnose/FIX62_Alle_Wege.log\n"
     - name: FIX67 Alle Dorfdekorationen und Regionsvarianten testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 140s godot --headless --path\
-        \ android --quit-after 300 --script res://tests/V463VillagesSmoke.gd 2>&1 | tee build/diagnose/FIX66_Doerfer.log\n\
+      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 140s godot --headless\
+        \ --path android --quit-after 300 --script res://tests/V463VillagesSmoke.gd 2>&1 | tee build/diagnose/FIX66_Doerfer.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX65: ' build/diagnose/FIX66_Doerfer.log;\
         \ then\n  echo '::error::FIX65 Dorf-Dekoration kann nicht geladen werden'; exit 1\nfi\ngrep -Fq 'FIX66_VILLAGES_OK:'\
         \ build/diagnose/FIX66_Doerfer.log\n"
     - name: FIX67 Freie Wege und sichere Pflanzenpositionen testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 150s godot --headless --path\
-        \ android --quit-after 300 --script res://tests/V466VillageSafetySmoke.gd 2>&1 | tee build/diagnose/FIX66_Freie_Wege.log\n\
+      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 150s godot --headless\
+        \ --path android --quit-after 300 --script res://tests/V466VillageSafetySmoke.gd 2>&1 | tee build/diagnose/FIX66_Freie_Wege.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX66: ' build/diagnose/FIX66_Freie_Wege.log;\
-        \ then\n  echo '::error::Wege oder Deko blockieren Laufwege'; exit 1\nfi\ngrep -Fq 'FIX66_SAFE_OK:' build/diagnose/FIX66_Freie_Wege.log\n"
+        \ then\n  echo '::error::Wege oder Deko blockieren Laufwege'; exit 1\nfi\ngrep -Fq 'FIX66_SAFE_OK:'\
+        \ build/diagnose/FIX66_Freie_Wege.log\n"
     - name: FIX68 Dorfwege und freie Wiesen testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 140s godot --headless --path\
-        \ android --quit-after 300 --script res://tests/V468GrassRoadSmoke.gd 2>&1 | tee build/diagnose/FIX68_GrassRoads.log\n\
+      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 140s godot --headless\
+        \ --path android --quit-after 300 --script res://tests/V468GrassRoadSmoke.gd 2>&1 | tee build/diagnose/FIX68_GrassRoads.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX68: ' build/diagnose/FIX68_GrassRoads.log;\
         \ then\n  echo '::error::FIX68 road-safety test failed'; exit 1\nfi\ngrep -Fq 'FIX68_GRASS_OK:' build/diagnose/FIX68_GrassRoads.log\n"
     - name: FIX70 (Regression) Echtkampf- und Menutests
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 160s godot --headless --path\
-        \ android --quit-after 300 --script res://tests/V469CombatSmoke.gd 2>&1 | tee build/diagnose/FIX70_Kampfsystem.log\n\
+      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 160s godot --headless\
+        \ --path android --quit-after 300 --script res://tests/V469CombatSmoke.gd 2>&1 | tee build/diagnose/FIX70_Kampfsystem.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX70: ' build/diagnose/FIX70_Kampfsystem.log;\
-        \ then\n  echo '::error::FIX70 combat scene or game logic failed'\n  exit 1\nfi\ngrep -Fq 'FIX70_COMBAT_OK:' build/diagnose/FIX70_Kampfsystem.log\n"
+        \ then\n  echo '::error::FIX70 combat scene or game logic failed'\n  exit 1\nfi\ngrep -Fq 'FIX70_COMBAT_OK:'\
+        \ build/diagnose/FIX70_Kampfsystem.log\n"
     - name: FIX72 Kampfkamera, Teamplatz und Speichern wirklich testen
       shell: bash
-      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 160s godot --headless --path\
-        \ android --quit-after 300 --script res://tests/V471CombatSmoke.gd 2>&1 | tee build/diagnose/FIX72_Kampf_Team_Speichern.log\n\
+      run: "set -euo pipefail\nmkdir -p build/diagnose\ntimeout --signal=TERM --kill-after=5s 160s godot --headless\
+        \ --path android --quit-after 300 --script res://tests/V471CombatSmoke.gd 2>&1 | tee build/diagnose/FIX72_Kampf_Team_Speichern.log\n\
         if grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX72: ' build/diagnose/FIX72_Kampf_Team_Speichern.log;\
-        \ then\n  echo '::error::FIX72 Kampftest, Kamera, Team- oder Speicherfehler'; exit 1\nfi\ngrep -Fq 'FIX72_COMBAT_OK:'\
-        \ build/diagnose/FIX72_Kampf_Team_Speichern.log\n"
-    - name: FIX75 Kampfdesign im Godot Test pruefen
+        \ then\n  echo '::error::FIX72 Kampftest, Kamera, Team- oder Speicherfehler'; exit 1\nfi\ngrep -Fq\
+        \ 'FIX72_COMBAT_OK:' build/diagnose/FIX72_Kampf_Team_Speichern.log\n"
+    - name: FIX76 Kampfgrafik und kompaktes UI testen
       shell: bash
       run: 'set -euo pipefail
 
         mkdir -p build/diagnose
 
-        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script res://tests/V473VisualSmoke.gd
-        2>&1 | tee build/diagnose/FIX75_Visual.log
+        timeout --signal=TERM --kill-after=5s 150s godot --headless --path android --quit-after 300 --script
+        res://tests/V473VisualSmoke.gd 2>&1 | tee build/diagnose/FIX75_Visual.log
 
-        if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX75: '' build/diagnose/FIX75_Visual.log;
+        if grep -Eiq ''SCRIPT ERROR:|Parse Error:|Failed to load script|Invalid call|FIX76: '' build/diagnose/FIX75_Visual.log;
         then exit 1; fi
 
-        grep -Fq ''FIX75_VISUAL_TEST_OK:'' build/diagnose/FIX75_Visual.log
+        grep -Fq ''FIX76_VISUAL_TEST_OK:'' build/diagnose/FIX75_Visual.log
 
         '
-    - name: FIX75 Android APK exportieren und pruefen
-      run: "set -euo pipefail\nmkdir -p build/android build/diagnose\nAPK=\"$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX75.apk\"\
-        \nrm -f \"$APK\"\ntimeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug Android\
-        \ \"$APK\" 2>&1 | tee build/diagnose/FIX75_APK_Export.log\nif grep -Eiq 'SCRIPT ERROR:|Parse Error:|Failed to load\
-        \ script' build/diagnose/FIX75_APK_Export.log; then\n  exit 1\nfi\ntest -s \"$APK\"\nunzip -t \"$APK\" >/dev/null\n\
-        unzip -Z1 \"$APK\" | grep -Fx 'AndroidManifest.xml' >/dev/null\nls -lh \"$APK\"\nsha256sum \"$APK\"\n"
+    - name: FIX76 Android APK exportieren und pruefen
+      run: "set -euo pipefail\nmkdir -p build/android build/diagnose\nAPK=\"$GITHUB_WORKSPACE/build/android/LWOD-Android-V41.7-FIX76.apk\"\
+        \nrm -f \"$APK\"\ntimeout --signal=TERM --kill-after=5s 900s godot --headless --path android --export-debug\
+        \ Android \"$APK\" 2>&1 | tee build/diagnose/FIX76_APK_Export.log\nif grep -Eiq 'SCRIPT ERROR:|Parse\
+        \ Error:|Failed to load script' build/diagnose/FIX76_APK_Export.log; then\n  exit 1\nfi\ntest -s \"\
+        $APK\"\nunzip -t \"$APK\" >/dev/null\nunzip -Z1 \"$APK\" | grep -Fx 'AndroidManifest.xml' >/dev/null\n\
+        ls -lh \"$APK\"\nsha256sum \"$APK\"\n"
       shell: bash
     - id: apk_upload
-      name: FIX75 APK als Download hochladen
+      name: FIX76 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX75_APK
-        path: build/android/LWOD-Android-V41.7-FIX75.apk
+        name: LWOD_ANDROID_V41_7_FIX76_APK
+        path: build/android/LWOD-Android-V41.7-FIX76.apk
         retention-days: 14
     - env:
         APK_ARTIFACT_ID: ${{ steps.apk_upload.outputs.artifact-id }}
@@ -417,15 +529,15 @@ jobs:
 
         test -n "$APK_ARTIFACT_URL"
 
-        printf ''### Android APK Download\n\n[FIX75 APK herunterladen](%s)\n'' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        printf ''### Android APK Download\n\n[FIX76 APK herunterladen](%s)\n'' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
 
         '
       shell: bash
     - if: always()
-      name: FIX75 Testprotokolle hochladen
+      name: FIX76 Testprotokolle hochladen
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX75_TESTPROTOKOLLE
+        name: LWOD_FIX76_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
