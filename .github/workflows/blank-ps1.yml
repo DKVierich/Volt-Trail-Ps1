@@ -1,9 +1,4 @@
-# Lydra World Of Dragon — vollständiger GitHub-Actions-Workflow
-# FIX76.1: FIX72-Test an die kompakte FIX76-Kampfoberfläche angleichen.
-# Unveränderte Originalschritte werden aus dem unveränderlichen FIX76-Commit
-# geladen und vor der Ausführung anhand der Git-Blob-Prüfsumme geprüft.
-# Diese Datei ersetzt .github/workflows/blank-ps1.yml vollständig.
-name: LWOD Android V41.7 FIX76.1 Kampfmenue Testkorrektur
+name: LWOD Android V41.7 FIX76.2 Diagonale Kampfaufstellung
 'on':
   workflow_dispatch: {}
   push:
@@ -15,7 +10,7 @@ permissions:
   contents: read
 jobs:
   android:
-    name: LWOD Android V41.7 FIX76.1 APK
+    name: LWOD Android V41.7 FIX76.2 APK
     runs-on: ubuntu-latest
     timeout-minutes: 55
     container:
@@ -113,6 +108,54 @@ jobs:
     - name: FIX76 Kompaktes Kampf-UI Kamera und detailliertere Modelle installieren
       shell: bash
       run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/09.sh"
+    - name: FIX76.2 Kampfpositionen 7 und 1 Uhr mit mehr Abstand
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY_FORMATION'
+        from pathlib import Path
+        import re
+        p = Path('android/scripts/V469Battle.gd')
+        s = p.read_text(encoding='utf-8')
+        def replace_once(old, new):
+            global s
+            assert s.count(old) == 1, 'FIX76.2: missing or ambiguous anchor: ' + old
+            s = s.replace(old, new, 1)
+        # Model fronts point along -Z. Both groups face each other on the ground.
+        # Positive Z is the foreground; camera looks toward negative Z.
+        replace_once('_arena_hero.position = Vector3(-2.26,0,0.35)',
+                     '_arena_hero.position = Vector3(-2.65,0,2.25)')
+        replace_once('_arena_foe.position = Vector3(2.27,0,-0.20)',
+                     '_arena_foe.position = Vector3(2.65,0,-2.25)')
+        replace_once('_arena_hero.rotation.y = -PI*0.5',
+                     '_arena_hero.rotation.y = -atan2(5.3, 4.5)')
+        replace_once('_arena_foe.rotation.y = PI*0.5',
+                     '_arena_foe.rotation.y = PI - atan2(5.3, 4.5)')
+        # Slightly wider elevated framing to keep both models on screen.
+        replace_once('camera.position = Vector3(-0.55,5.65,6.40)',
+                     'camera.position = Vector3(0,7.2,6.8)')
+        replace_once('camera.fov = 49.0', 'camera.fov = 54.0')
+        replace_once('camera.look_at(Vector3(0,1.35,0))',
+                     'camera.look_at(Vector3(0,1.1,0))')
+        assert 'button.custom_minimum_size = Vector2(165,39)' in s
+        p.write_text(s, encoding='utf-8')
+        # A new Android version code allows installation over FIX76.1.
+        cfg = Path('android/export_presets.cfg')
+        t = cfg.read_text(encoding='utf-8')
+        assert t.count('version/name="4.1.7.76"') == 1
+        t = t.replace('version/name="4.1.7.76"', 'version/name="4.1.7.76.2"', 1)
+        t, n = re.subn(r'(?m)^version/code=(\d+)$', lambda m: 'version/code='+str(int(m.group(1))+1), t, count=1)
+        assert n == 1, 'FIX76.2: version/code missing'
+        cfg.write_text(t, encoding='utf-8')
+        # The original exporter is retained; only its output filename is changed.
+        import os
+        exporter = Path(os.environ['RUNNER_TEMP']) / 'lwod_fix76_steps' / '23.sh'
+        export = exporter.read_text(encoding='utf-8')
+        assert export.count('LWOD-Android-V41.7-FIX76.apk') == 1
+        exporter.write_text(export.replace('LWOD-Android-V41.7-FIX76.apk', 'LWOD-Android-V41.7-FIX76.2.apk', 1), encoding='utf-8')
+        print('FIX76_2_FORMATION_OK: diagonal positions, distance 6.95, camera, Android version')
+        PY_FORMATION
+        bash -n "$RUNNER_TEMP/lwod_fix76_steps/23.sh"
     - name: FIX61 Weltkarte importieren und echten Spielstart testen
       shell: bash
       run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/10.sh"
@@ -146,7 +189,7 @@ jobs:
     - name: FIX70 (Regression) Echtkampf- und Menutests
       shell: bash
       run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/20.sh"
-    - name: FIX76.1 Alten Kampfbutton-Test korrigieren
+    - name: FIX76.2 Button-Test erhalten und Kampfaufstellung testen
       shell: bash
       run: |
         set -euo pipefail
@@ -158,7 +201,36 @@ jobs:
         new = 'button.custom_minimum_size.y < 38.0'
         assert s.count(old) == 1, 'FIX76.1: original FIX72 size check missing or ambiguous'
         assert '_fail("combat buttons are still too small")' in s
-        p.write_text(s.replace(old, new, 1), encoding='utf-8')
+        s = s.replace(old, new, 1)
+        anchor = '    if fight._actions.get_child_count()!=7:'
+        assert s.count(anchor) == 1, 'FIX76.2: old runtime test anchor missing'
+        formation = """    var player_group: Node3D = fight._arena.get_node_or_null("Spielergruppe") as Node3D
+            var enemy_group: Node3D = fight._arena.get_node_or_null("WalddracheGegner") as Node3D
+            if player_group == null or enemy_group == null:
+                _fail("FIX76.2: arena groups missing")
+                return
+            var hp: Vector3 = player_group.position
+            var ep: Vector3 = enemy_group.position
+            if hp.x >= -2.5 or hp.z <= 2.0 or ep.x <= 2.5 or ep.z >= -2.0:
+                _fail("FIX76.2: 7/1 o'clock formation missing")
+                return
+            if hp.distance_to(ep) < 6.8:
+                _fail("FIX76.2: combat groups still too close")
+                return
+            var toward: Vector3 = Vector3(ep.x-hp.x,0,ep.z-hp.z).normalized()
+            if (-player_group.transform.basis.z).normalized().dot(toward) < 0.98 or (-enemy_group.transform.basis.z).normalized().dot(-toward) < 0.98:
+                _fail("FIX76.2: combat groups do not face each other")
+                return
+            if camera.position.y < 7.0 or camera.position.z > 7.0 or camera.fov < 53.0 or camera.fov > 55.0:
+                _fail("FIX76.2: adjusted camera framing missing")
+                return
+            print("FIX76_2_POSITION_TEST_OK: diagonal formation and facing")
+        """
+        # Strip only the indentation introduced for the multiline Python literal.
+        lines = formation.splitlines()
+        formation = lines[0] + '\n' + '\n'.join(line for line in lines[1:] if line.strip()) + '\n'
+        s = s.replace(anchor, formation + anchor, 1)
+        p.write_text(s, encoding='utf-8')
         print('FIX76_1_TEST_OK: minimum height 38; all other FIX72 checks preserved')
         PY_TEST
     - name: FIX72 Kampfkamera, Teamplatz und Speichern wirklich testen
@@ -167,17 +239,17 @@ jobs:
     - name: FIX76 Kampfgrafik und kompaktes UI testen
       shell: bash
       run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/22.sh"
-    - name: FIX76 Android APK exportieren und pruefen
+    - name: FIX76.2 Android APK exportieren und pruefen
       shell: bash
       run: bash --noprofile --norc -e -o pipefail "$RUNNER_TEMP/lwod_fix76_steps/23.sh"
     - id: apk_upload
-      name: FIX76.1 APK als Download hochladen
+      name: FIX76.2 APK als Download hochladen
       uses: actions/upload-artifact@v4
       with:
         compression-level: 0
         if-no-files-found: error
-        name: LWOD_ANDROID_V41_7_FIX76_1_APK
-        path: build/android/LWOD-Android-V41.7-FIX76.apk
+        name: LWOD_ANDROID_V41_7_FIX76_2_APK
+        path: build/android/LWOD-Android-V41.7-FIX76.2.apk
         retention-days: 14
     - name: Erfolgreichen APK Upload bestaetigen
       shell: bash
@@ -188,12 +260,12 @@ jobs:
         set -euo pipefail
         test -n "$APK_ARTIFACT_ID"
         test -n "$APK_ARTIFACT_URL"
-        printf '### Android APK Download\n\n[FIX76.1 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-    - name: FIX76.1 Testprotokolle hochladen
+        printf '### Android APK Download\n\n[FIX76.2 APK herunterladen](%s)\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+    - name: FIX76.2 Testprotokolle hochladen
       if: always()
       uses: actions/upload-artifact@v4
       with:
         if-no-files-found: warn
-        name: LWOD_FIX76_1_TESTPROTOKOLLE
+        name: LWOD_FIX76_2_TESTPROTOKOLLE
         path: build/diagnose
         retention-days: 14
